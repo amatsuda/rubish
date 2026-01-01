@@ -60,15 +60,15 @@ class TestShift < Test::Unit::TestCase
     execute('shift')
 
     # $1 should now be 'second'
-    result = @repl.send(:expand_variables, '$1')
+    result = @repl.send(:expand_single_arg, '$1')
     assert_equal 'second', result
 
     # $# should be 2
-    result = @repl.send(:expand_variables, '$#')
+    result = @repl.send(:expand_single_arg, '$#')
     assert_equal '2', result
 
     # $@ should be 'second third'
-    result = @repl.send(:expand_variables, '$@')
+    result = @repl.send(:expand_single_arg, '$@')
     assert_equal 'second third', result
   end
 

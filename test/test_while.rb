@@ -193,4 +193,87 @@ class TestWhile < Test::Unit::TestCase
     assert_match(/end/, content)
     assert_no_match(/inside/, content)
   end
+
+  # Variable expansion tests - these require runtime expansion
+  def test_while_with_counter_variable
+    script = File.join(@tempdir, 'counter.sh')
+    File.write(script, <<~SCRIPT)
+      export count=3
+      while test $count -gt 0; do
+        echo $count >> #{output_file}
+        export count=$(expr $count - 1)
+      done
+    SCRIPT
+
+    execute("source #{script}")
+
+    assert_equal "3\n2\n1\n", File.read(output_file)
+  end
+
+  def test_while_with_shift
+    script = File.join(@tempdir, 'shift.sh')
+    File.write(script, <<~SCRIPT)
+      set -- a b c
+      while test $# -gt 0; do
+        echo $1 >> #{output_file}
+        shift
+      done
+    SCRIPT
+
+    execute("source #{script}")
+
+    assert_equal "a\nb\nc\n", File.read(output_file)
+  end
+
+  def test_while_with_string_variable
+    script = File.join(@tempdir, 'strvar.sh')
+    File.write(script, <<~SCRIPT)
+      export val=start
+      while test $val != done; do
+        echo $val >> #{output_file}
+        if test $val = start; then
+          export val=middle
+        elif test $val = middle; then
+          export val=done
+        fi
+      done
+      echo finished >> #{output_file}
+    SCRIPT
+
+    execute("source #{script}")
+
+    assert_equal "start\nmiddle\nfinished\n", File.read(output_file)
+  end
+
+  def test_while_variable_in_body_changes
+    script = File.join(@tempdir, 'bodyvar.sh')
+    File.write(script, <<~SCRIPT)
+      export x=1
+      while test $x -le 3; do
+        echo "x=$x" >> #{output_file}
+        export x=$(expr $x + 1)
+      done
+    SCRIPT
+
+    execute("source #{script}")
+
+    assert_equal "x=1\nx=2\nx=3\n", File.read(output_file)
+  end
+
+  def test_while_combined_with_for
+    script = File.join(@tempdir, 'while_for.sh')
+    File.write(script, <<~SCRIPT)
+      export n=2
+      while test $n -gt 0; do
+        for letter in a b; do
+          echo "$n$letter" >> #{output_file}
+        done
+        export n=$(expr $n - 1)
+      done
+    SCRIPT
+
+    execute("source #{script}")
+
+    assert_equal "2a\n2b\n1a\n1b\n", File.read(output_file)
+  end
 end

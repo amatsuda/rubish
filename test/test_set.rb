@@ -42,13 +42,13 @@ class TestSet < Test::Unit::TestCase
   def test_set_updates_special_vars
     execute('set -- first second third')
 
-    result = @repl.send(:expand_variables, '$1')
+    result = @repl.send(:expand_single_arg, '$1')
     assert_equal 'first', result
 
-    result = @repl.send(:expand_variables, '$#')
+    result = @repl.send(:expand_single_arg, '$#')
     assert_equal '3', result
 
-    result = @repl.send(:expand_variables, '$@')
+    result = @repl.send(:expand_single_arg, '$@')
     assert_equal 'first second third', result
   end
 

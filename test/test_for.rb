@@ -63,14 +63,12 @@ class TestFor < Test::Unit::TestCase
     assert_equal "in\n", File.read(output_file)
   end
 
-  # FIXME: Variable expansion happens at parse time, not at runtime.
-  # These tests represent the desired behavior but are currently broken.
-  def pend_test_for_simple_iteration
+  def test_for_simple_iteration
     execute("for x in a b c; do echo $x >> #{output_file}; done")
     assert_equal "a\nb\nc\n", File.read(output_file)
   end
 
-  def pend_test_for_in_script
+  def test_for_in_script
     script = File.join(@tempdir, 'for.sh')
     File.write(script, <<~SCRIPT)
       for item in one two three; do
@@ -82,7 +80,7 @@ class TestFor < Test::Unit::TestCase
     assert_equal "one\ntwo\nthree\n", File.read(output_file)
   end
 
-  def pend_test_for_nested
+  def test_for_nested
     script = File.join(@tempdir, 'nested.sh')
     File.write(script, <<~SCRIPT)
       for i in 1 2; do

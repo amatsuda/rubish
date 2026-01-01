@@ -247,6 +247,9 @@ module Rubish
           read_double_quoted_string
         elsif char == "'"
           read_single_quoted_string
+        elsif char == '$' && @input[@pos + 1] == '('
+          # Command substitution $(...)
+          read_command_substitution
         else
           @pos += 1
         end
@@ -275,6 +278,27 @@ module Rubish
       @pos += 1 # skip opening '
       @pos += 1 while @pos < @input.length && @input[@pos] != "'"
       @pos += 1 # skip closing '
+    end
+
+    def read_command_substitution
+      # $(...)
+      @pos += 2 # skip $(
+      depth = 1
+      while @pos < @input.length && depth > 0
+        char = @input[@pos]
+        if char == '('
+          depth += 1
+        elsif char == ')'
+          depth -= 1
+        elsif char == '"'
+          read_double_quoted_string
+          next
+        elsif char == "'"
+          read_single_quoted_string
+          next
+        end
+        @pos += 1
+      end
     end
   end
 end

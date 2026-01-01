@@ -84,14 +84,16 @@ module Rubish
     def execute(line)
       line = Builtins.expand_alias(line)
       line = expand_tilde(line)
-      line = expand_variables(line)
+      # Variable expansion now happens at runtime in generated Ruby code
       tokens = @lexer_class.new(line).tokenize
       ast = @parser_class.new(tokens).parse
       return unless ast
 
       # Check for builtins (simple command only)
       if ast.is_a?(AST::Command) && Builtins.builtin?(ast.name)
-        result = Builtins.run(ast.name, ast.args)
+        # Expand variables in args for builtins
+        expanded_args = expand_args_for_builtin(ast.args)
+        result = Builtins.run(ast.name, expanded_args)
         @last_status = result ? 0 : 1
         return
       end
@@ -99,6 +101,118 @@ module Rubish
       code = @codegen.generate(ast)
       result = eval_in_context(code)
       @last_status = extract_exit_status(result)
+    end
+
+    def expand_args_for_builtin(args)
+      args.map { |arg| expand_single_arg(arg) }
+    end
+
+    def expand_single_arg(arg)
+      return arg unless arg.is_a?(String)
+
+      # Single-quoted strings: no expansion, strip quotes
+      if arg.start_with?("'") && arg.end_with?("'")
+        return arg[1...-1]
+      end
+
+      # Double-quoted strings: strip quotes, expand variables
+      if arg.start_with?('"') && arg.end_with?('"')
+        return expand_string_content(arg[1...-1])
+      end
+
+      # Unquoted: expand variables
+      expand_string_content(arg)
+    end
+
+    def expand_string_content(str)
+      result = +''
+      i = 0
+
+      while i < str.length
+        char = str[i]
+
+        if char == '\\'
+          # Escape sequence
+          result << str[i + 1] if i + 1 < str.length
+          i += 2
+        elsif char == '$'
+          expanded, consumed = expand_variable_at(str, i)
+          if consumed > 0
+            result << expanded
+            i += consumed
+          else
+            result << char
+            i += 1
+          end
+        else
+          result << char
+          i += 1
+        end
+      end
+
+      result
+    end
+
+    def expand_variable_at(str, pos)
+      return ['', 0] unless str[pos] == '$'
+
+      # Command substitution $(...)
+      if str[pos + 1] == '('
+        depth = 1
+        j = pos + 2
+        while j < str.length && depth > 0
+          j += 1 and next if str[j] == '('  && (depth += 1)
+          j += 1 and next if str[j] == ')'  && (depth -= 1) > 0
+          break if depth == 0
+          j += 1
+        end
+        if depth == 0
+          cmd = str[pos + 2...j]
+          return [`#{cmd}`.chomp, j - pos + 1]
+        end
+        return ['', 0]
+      end
+
+      # Special variables
+      two_char = str[pos, 2]
+      case two_char
+      when '$?'
+        return [@last_status.to_s, 2]
+      when '$$'
+        return [Process.pid.to_s, 2]
+      when '$!'
+        return [@last_bg_pid ? @last_bg_pid.to_s : '', 2]
+      when '$0'
+        return [@script_name, 2]
+      when '$#'
+        return [@positional_params.length.to_s, 2]
+      when '$@', '$*'
+        return [@positional_params.join(' '), 2]
+      end
+
+      if str[pos + 1] =~ /[1-9]/
+        n = str[pos + 1].to_i
+        return [@positional_params[n - 1] || '', 2]
+      end
+
+      # ${VAR} form
+      if str[pos + 1] == '{'
+        end_brace = str.index('}', pos + 2)
+        if end_brace
+          var_name = str[pos + 2...end_brace]
+          return [ENV.fetch(var_name, ''), end_brace - pos + 1]
+        end
+      end
+
+      # $VAR form
+      if str[pos + 1] =~ /[a-zA-Z_]/
+        j = pos + 1
+        j += 1 while j < str.length && str[j] =~ /[a-zA-Z0-9_]/
+        var_name = str[pos + 1...j]
+        return [ENV.fetch(var_name, ''), j - pos]
+      end
+
+      ['', 0]
     end
 
     def extract_exit_status(result)
@@ -155,106 +269,6 @@ module Rubish
               end
               i = j
             end
-          else
-            result << char
-            i += 1
-          end
-        else
-          result << char
-          i += 1
-        end
-      end
-
-      result
-    end
-
-    def expand_variables(line)
-      # Expand ${VAR} and $VAR (but not inside single quotes)
-      result = +''
-      i = 0
-      in_single_quotes = false
-      in_double_quotes = false
-
-      while i < line.length
-        char = line[i]
-
-        if char == "'" && !in_double_quotes
-          in_single_quotes = !in_single_quotes
-          result << char
-          i += 1
-        elsif char == '"' && !in_single_quotes
-          in_double_quotes = !in_double_quotes
-          result << char
-          i += 1
-        elsif char == '$' && !in_single_quotes
-          if line[i + 1] == '?'
-            # Special variable $? - last exit status
-            result << @last_status.to_s
-            i += 2
-          elsif line[i + 1] == '$'
-            # Special variable $$ - current shell PID
-            result << Process.pid.to_s
-            i += 2
-          elsif line[i + 1] == '!'
-            # Special variable $! - last background PID
-            result << (@last_bg_pid ? @last_bg_pid.to_s : '')
-            i += 2
-          elsif line[i + 1] == '0'
-            # Special variable $0 - script/shell name
-            result << @script_name
-            i += 2
-          elsif line[i + 1] =~ /[1-9]/
-            # Positional parameters $1-$9
-            idx = line[i + 1].to_i - 1
-            result << (@positional_params[idx] || '')
-            i += 2
-          elsif line[i + 1] == '#'
-            # Special variable $# - number of positional parameters
-            result << @positional_params.length.to_s
-            i += 2
-          elsif line[i + 1] == '@'
-            # Special variable $@ - all positional parameters
-            result << @positional_params.join(' ')
-            i += 2
-          elsif line[i + 1] == '('
-            # Command substitution $(cmd)
-            depth = 1
-            j = i + 2
-            while j < line.length && depth > 0
-              if line[j] == '('
-                depth += 1
-              elsif line[j] == ')'
-                depth -= 1
-              end
-              j += 1
-            end
-            if depth == 0
-              cmd = line[i + 2...j - 1]
-              output = `#{cmd}`.chomp
-              result << output
-              i = j
-            else
-              result << char
-              i += 1
-            end
-          elsif line[i + 1] == '{'
-            # ${VAR} form
-            end_brace = line.index('}', i + 2)
-            if end_brace
-              var_name = line[i + 2...end_brace]
-              result << ENV.fetch(var_name, '')
-              i = end_brace + 1
-            else
-              result << char
-              i += 1
-            end
-          elsif line[i + 1] =~ /[a-zA-Z_]/
-            # $VAR form
-            j = i + 1
-            j += 1 while j < line.length && line[j] =~ /[a-zA-Z0-9_]/
-            var_name = line[i + 1...j]
-            result << ENV.fetch(var_name, '')
-            i = j
           else
             result << char
             i += 1

@@ -50,7 +50,7 @@ module Rubish
     def generate_arg(arg)
       case arg
       when String
-        escape_string(arg)
+        generate_string_arg(arg)
       when AST::ArrayLiteral
         arg.value  # Already valid Ruby: [1, 2, 3]
       when AST::RegexpLiteral
@@ -58,6 +58,155 @@ module Rubish
       else
         arg.inspect
       end
+    end
+
+    def generate_string_arg(str)
+      # Single-quoted strings: no expansion, strip quotes
+      if str.start_with?("'") && str.end_with?("'")
+        return str[1...-1].inspect
+      end
+
+      # Double-quoted strings: strip quotes, expand variables
+      if str.start_with?('"') && str.end_with?('"')
+        inner = str[1...-1]
+        return generate_interpolated_string(inner)
+      end
+
+      # Check for special variables as standalone first
+      special = generate_special_variable(str)
+      return special if special
+
+      # Unquoted: expand variables
+      # If it's just a simple variable (not special), return the expression directly
+      if str =~ /\A\$([a-zA-Z_][a-zA-Z0-9_]*)\z/
+        return "ENV.fetch(#{$1.inspect}, '')"
+      end
+
+      # Check if string contains any variables
+      if str.include?('$')
+        generate_interpolated_string(str)
+      else
+        str.inspect
+      end
+    end
+
+    def generate_special_variable(str)
+      case str
+      when '$?'
+        '@last_status.to_s'
+      when '$$'
+        'Process.pid.to_s'
+      when '$!'
+        '(@last_bg_pid ? @last_bg_pid.to_s : "")'
+      when '$0'
+        '@script_name'
+      when /\A\$([1-9])\z/
+        "(@positional_params[#{$1.to_i - 1}] || '')"
+      when '$#'
+        '@positional_params.length.to_s'
+      when '$@', '$*'
+        '@positional_params.join(" ")'
+      else
+        nil
+      end
+    end
+
+    def generate_interpolated_string(str)
+      # Build a Ruby string with interpolation for variables
+      result = +'"'
+      i = 0
+
+      while i < str.length
+        char = str[i]
+
+        if char == '\\'
+          # Escape sequence - keep as-is
+          result << str[i, 2]
+          i += 2
+        elsif char == '$'
+          # Variable expansion
+          var_expr, consumed = parse_variable(str, i)
+          if var_expr
+            result << '#{' << var_expr << '}'
+            i += consumed
+          else
+            result << '$'
+            i += 1
+          end
+        elsif char == '"'
+          # Escape double quotes in the output
+          result << '\\"'
+          i += 1
+        else
+          result << char
+          i += 1
+        end
+      end
+
+      result << '"'
+      result
+    end
+
+    def parse_variable(str, pos)
+      return nil unless str[pos] == '$'
+
+      # Check for command substitution $(...)
+      if str[pos + 1] == '('
+        depth = 1
+        j = pos + 2
+        while j < str.length && depth > 0
+          if str[j] == '('
+            depth += 1
+          elsif str[j] == ')'
+            depth -= 1
+          end
+          j += 1
+        end
+        if depth == 0
+          cmd = str[pos + 2...j - 1]
+          return ["`#{cmd}`.chomp", j - pos]
+        end
+        return nil  # Unclosed, treat as literal
+      end
+
+      # Check for special variables first
+      two_char = str[pos, 2]
+      case two_char
+      when '$?'
+        return ['@last_status.to_s', 2]
+      when '$$'
+        return ['Process.pid.to_s', 2]
+      when '$!'
+        return ['(@last_bg_pid ? @last_bg_pid.to_s : "")', 2]
+      when '$0'
+        return ['@script_name', 2]
+      when '$#'
+        return ['@positional_params.length.to_s', 2]
+      when '$@', '$*'
+        return ['@positional_params.join(" ")', 2]
+      when /\$[1-9]/
+        n = str[pos + 1].to_i
+        return ["(@positional_params[#{n - 1}] || '')", 2]
+      end
+
+      # ${VAR} form
+      if str[pos + 1] == '{'
+        end_brace = str.index('}', pos + 2)
+        if end_brace
+          var_name = str[pos + 2...end_brace]
+          return ["ENV.fetch(#{var_name.inspect}, '')", end_brace - pos + 1]
+        end
+      end
+
+      # $VAR form
+      if str[pos + 1] =~ /[a-zA-Z_]/
+        j = pos + 1
+        j += 1 while j < str.length && str[j] =~ /[a-zA-Z0-9_]/
+        var_name = str[pos + 1...j]
+        return ["ENV.fetch(#{var_name.inspect}, '')", j - pos]
+      end
+
+      nil
     end
 
     def generate_pipeline(node)
