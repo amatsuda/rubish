@@ -306,13 +306,13 @@ class TestVariableExpansion < Test::Unit::TestCase
 
   def test_variable_in_redirect_target
     ENV['TARGET'] = output_file
-    execute("echo redirected > $TARGET")
+    execute('echo redirected > $TARGET')
     assert_equal "redirected\n", File.read(output_file)
   end
 
   def test_braced_variable_in_redirect_target
     ENV['OUT'] = output_file
-    execute("echo braced > ${OUT}")
+    execute('echo braced > ${OUT}')
     assert_equal "braced\n", File.read(output_file)
   end
 
@@ -332,5 +332,64 @@ class TestVariableExpansion < Test::Unit::TestCase
     ENV['MIDDLE'] = 'two three'
     execute("for x in one $MIDDLE four; do echo $x >> #{output_file}; done")
     assert_equal "one\ntwo\nthree\nfour\n", File.read(output_file)
+  end
+
+  # Arithmetic expansion tests
+  def test_arithmetic_basic_addition
+    execute("echo $((1+2)) > #{output_file}")
+    assert_equal "3\n", File.read(output_file)
+  end
+
+  def test_arithmetic_subtraction
+    execute("echo $((10-3)) > #{output_file}")
+    assert_equal "7\n", File.read(output_file)
+  end
+
+  def test_arithmetic_multiplication
+    execute("echo $((4*5)) > #{output_file}")
+    assert_equal "20\n", File.read(output_file)
+  end
+
+  def test_arithmetic_division
+    execute("echo $((20/4)) > #{output_file}")
+    assert_equal "5\n", File.read(output_file)
+  end
+
+  def test_arithmetic_modulo
+    execute("echo $((17%5)) > #{output_file}")
+    assert_equal "2\n", File.read(output_file)
+  end
+
+  def test_arithmetic_with_variable
+    ENV['x'] = '10'
+    ENV['y'] = '3'
+    execute("echo $((x+y)) > #{output_file}")
+    assert_equal "13\n", File.read(output_file)
+  end
+
+  def test_arithmetic_with_dollar_variable
+    ENV['a'] = '5'
+    ENV['b'] = '7'
+    execute("echo $(($a+$b)) > #{output_file}")
+    assert_equal "12\n", File.read(output_file)
+  end
+
+  def test_arithmetic_complex_expression
+    execute("echo $(((2+3)*4)) > #{output_file}")
+    assert_equal "20\n", File.read(output_file)
+  end
+
+  def test_arithmetic_exponentiation
+    execute("echo $((2**8)) > #{output_file}")
+    assert_equal "256\n", File.read(output_file)
+  end
+
+  def test_arithmetic_in_assignment
+    execute('export calc=$((5*6))')
+    assert_equal '30', ENV['calc']
+  end
+
+  def test_arithmetic_in_builtin
+    assert_equal '15', expand('$((10+5))')
   end
 end

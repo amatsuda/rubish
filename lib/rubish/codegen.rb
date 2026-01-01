@@ -151,6 +151,25 @@ module Rubish
     def parse_variable(str, pos)
       return nil unless str[pos] == '$'
 
+      # Check for arithmetic expansion $((...))
+      if str[pos + 1] == '(' && str[pos + 2] == '('
+        depth = 2
+        j = pos + 3
+        while j < str.length && depth > 0
+          if str[j] == '('
+            depth += 1
+          elsif str[j] == ')'
+            depth -= 1
+          end
+          j += 1
+        end
+        if depth == 0
+          expr = str[pos + 3...j - 2]
+          return ["__arith(#{expr.inspect})", j - pos]
+        end
+        return nil  # Unclosed, treat as literal
+      end
+
       # Check for command substitution $(...)
       if str[pos + 1] == '('
         depth = 1

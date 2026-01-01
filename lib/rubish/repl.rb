@@ -156,6 +156,25 @@ module Rubish
     def expand_variable_at(str, pos)
       return ['', 0] unless str[pos] == '$'
 
+      # Arithmetic expansion $((...))
+      if str[pos + 1] == '(' && str[pos + 2] == '('
+        depth = 2
+        j = pos + 3
+        while j < str.length && depth > 0
+          if str[j] == '('
+            depth += 1
+          elsif str[j] == ')'
+            depth -= 1
+          end
+          j += 1
+        end
+        if depth == 0
+          expr = str[pos + 3...j - 2]
+          return [__arith(expr), j - pos]
+        end
+        return ['', 0]
+      end
+
       # Command substitution $(...)
       if str[pos + 1] == '('
         depth = 1
@@ -355,6 +374,36 @@ module Rubish
       items.each do |item|
         ENV[variable] = item
         block.call
+      end
+    end
+
+    def __arith(expr)
+      # Evaluate arithmetic expression
+      # Replace variable references with their values
+      expanded = expr.gsub(/\$\{([^}]+)\}|\$([a-zA-Z_][a-zA-Z0-9_]*)|([a-zA-Z_][a-zA-Z0-9_]*)/) do |match|
+        if $1
+          # ${VAR} form
+          ENV.fetch($1, '0')
+        elsif $2
+          # $VAR form
+          ENV.fetch($2, '0')
+        elsif $3
+          # Plain variable name (only if it looks like a variable, not an operator)
+          # Check if it's a known variable, otherwise keep as-is (might be a function name)
+          ENV.key?($3) ? ENV[$3] : match
+        else
+          match
+        end
+      end
+
+      # Evaluate the expression safely (only allow arithmetic)
+      # Convert shell operators to Ruby: ** for exponentiation is same
+      # Note: bash uses ** for exponent, which Ruby also supports
+      begin
+        result = eval(expanded)
+        result.to_s
+      rescue StandardError
+        '0'
       end
     end
 

@@ -201,7 +201,7 @@ class TestWhile < Test::Unit::TestCase
       export count=3
       while test $count -gt 0; do
         echo $count >> #{output_file}
-        export count=$(expr $count - 1)
+        export count=$((count - 1))
       done
     SCRIPT
 
@@ -251,7 +251,7 @@ class TestWhile < Test::Unit::TestCase
       export x=1
       while test $x -le 3; do
         echo "x=$x" >> #{output_file}
-        export x=$(expr $x + 1)
+        export x=$((x + 1))
       done
     SCRIPT
 
@@ -268,7 +268,7 @@ class TestWhile < Test::Unit::TestCase
         for letter in a b; do
           echo "$n$letter" >> #{output_file}
         done
-        export n=$(expr $n - 1)
+        export n=$((n - 1))
       done
     SCRIPT
 
