@@ -72,6 +72,7 @@ module Rubish
 
     def execute(line)
       line = Builtins.expand_alias(line)
+      line = expand_tilde(line)
       line = expand_variables(line)
       tokens = @lexer_class.new(line).tokenize
       ast = @parser_class.new(tokens).parse
@@ -85,6 +86,62 @@ module Rubish
 
       code = @codegen.generate(ast)
       eval_in_context(code)
+    end
+
+    def expand_tilde(line)
+      # Expand ~ and ~user (but not inside single quotes)
+      result = +''
+      i = 0
+      in_single_quotes = false
+      in_double_quotes = false
+
+      while i < line.length
+        char = line[i]
+
+        if char == "'" && !in_double_quotes
+          in_single_quotes = !in_single_quotes
+          result << char
+          i += 1
+        elsif char == '"' && !in_single_quotes
+          in_double_quotes = !in_double_quotes
+          result << char
+          i += 1
+        elsif char == '~' && !in_single_quotes
+          # Check if ~ is at start of a word (preceded by space, start, or quotes)
+          prev_char = i > 0 ? line[i - 1] : nil
+          at_word_start = prev_char.nil? || prev_char =~ /[\s"'=:]/
+
+          if at_word_start
+            # Look for username after ~
+            j = i + 1
+            j += 1 while j < line.length && line[j] =~ /[a-zA-Z0-9_-]/
+
+            if j == i + 1
+              # Just ~ or ~/path
+              result << Dir.home
+              i = j
+            else
+              # ~username
+              username = line[i + 1...j]
+              begin
+                result << Dir.home(username)
+              rescue ArgumentError
+                # Unknown user, keep literal
+                result << line[i...j]
+              end
+              i = j
+            end
+          else
+            result << char
+            i += 1
+          end
+        else
+          result << char
+          i += 1
+        end
+      end
+
+      result
     end
 
     def expand_variables(line)
