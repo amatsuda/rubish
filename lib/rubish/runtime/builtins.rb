@@ -2,7 +2,7 @@
 
 module Rubish
   module Builtins
-    COMMANDS = %w[cd exit jobs fg bg export pwd history alias unalias source . shift set return read].freeze
+    COMMANDS = %w[cd exit jobs fg bg export pwd history alias unalias source . shift set return read echo].freeze
 
     @aliases = {}
     @executor = nil
@@ -52,6 +52,8 @@ module Rubish
         run_return(args)
       when 'read'
         run_read(args)
+      when 'echo'
+        run_echo(args)
       else
         false
       end
@@ -237,6 +239,26 @@ module Rubish
     def self.run_return(args)
       code = args.first&.to_i || 0
       throw :return, code
+    end
+
+    def self.run_echo(args)
+      newline = true
+      start_idx = 0
+
+      if args.first == '-n'
+        newline = false
+        start_idx = 1
+      end
+
+      output = args[start_idx..].join(' ')
+
+      if newline
+        puts output
+      else
+        print output
+      end
+
+      true
     end
 
     def self.run_read(args)
