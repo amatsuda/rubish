@@ -6,10 +6,12 @@ module Rubish
 
     @aliases = {}
     @executor = nil
+    @script_name_getter = nil
+    @script_name_setter = nil
 
     class << self
       attr_reader :aliases
-      attr_accessor :executor
+      attr_accessor :executor, :script_name_getter, :script_name_setter
     end
 
     def self.builtin?(name)
@@ -166,15 +168,24 @@ module Rubish
         return false
       end
 
-      File.readlines(file, chomp: true).each do |line|
-        line = line.strip
-        next if line.empty? || line.start_with?('#')
+      # Save and set script name
+      old_script_name = @script_name_getter&.call
+      @script_name_setter&.call(file)
 
-        begin
-          @executor.call(line)
-        rescue => e
-          puts "source: #{e.message}"
+      begin
+        File.readlines(file, chomp: true).each do |line|
+          line = line.strip
+          next if line.empty? || line.start_with?('#')
+
+          begin
+            @executor.call(line)
+          rescue => e
+            puts "source: #{e.message}"
+          end
         end
+      ensure
+        # Restore script name
+        @script_name_setter&.call(old_script_name) if old_script_name
       end
 
       true

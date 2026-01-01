@@ -115,4 +115,30 @@ class TestSource < Test::Unit::TestCase
     assert Rubish::Builtins.builtin?('source')
     assert Rubish::Builtins.builtin?('.')
   end
+
+  def test_source_sets_script_name
+    output_file = File.join(@tempdir, 'script_name.txt')
+    script = create_script('check_name.sh', <<~SCRIPT)
+      echo $0 > #{output_file}
+    SCRIPT
+
+    execute("source #{script}")
+
+    assert_equal "#{script}\n", File.read(output_file)
+  end
+
+  def test_source_restores_script_name
+    script = create_script('nested.sh', <<~SCRIPT)
+      # Just a simple script
+      true
+    SCRIPT
+
+    # Before sourcing
+    assert_equal 'rubish', @repl.script_name
+
+    execute("source #{script}")
+
+    # After sourcing, should be restored
+    assert_equal 'rubish', @repl.script_name
+  end
 end

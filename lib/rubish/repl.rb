@@ -9,8 +9,13 @@ module Rubish
       @last_line = nil
       @last_status = 0
       @last_bg_pid = nil
+      @script_name = 'rubish'
       Builtins.executor = ->(line) { execute(line) }
+      Builtins.script_name_getter = -> { @script_name }
+      Builtins.script_name_setter = ->(name) { @script_name = name }
     end
+
+    attr_accessor :script_name
 
     def run
       setup_reline
@@ -190,6 +195,10 @@ module Rubish
           elsif line[i + 1] == '!'
             # Special variable $! - last background PID
             result << (@last_bg_pid ? @last_bg_pid.to_s : '')
+            i += 2
+          elsif line[i + 1] == '0'
+            # Special variable $0 - script/shell name
+            result << @script_name
             i += 2
           elsif line[i + 1] == '('
             # Command substitution $(cmd)

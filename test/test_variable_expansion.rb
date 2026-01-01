@@ -242,4 +242,31 @@ class TestVariableExpansion < Test::Unit::TestCase
     assert_equal "'$!'", result
     sleep 0.2
   end
+
+  # $0 tests
+  def test_script_name_default
+    result = expand('$0')
+    assert_equal 'rubish', result
+  end
+
+  def test_script_name_in_string
+    result = expand('shell: $0')
+    assert_equal 'shell: rubish', result
+  end
+
+  def test_script_name_in_double_quotes
+    result = expand('"$0"')
+    assert_equal '"rubish"', result
+  end
+
+  def test_script_name_not_in_single_quotes
+    result = expand("'$0'")
+    assert_equal "'$0'", result
+  end
+
+  def test_script_name_can_be_set
+    @repl.script_name = '/path/to/script.sh'
+    result = expand('$0')
+    assert_equal '/path/to/script.sh', result
+  end
 end
