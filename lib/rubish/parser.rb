@@ -89,12 +89,13 @@ module Rubish
       commands.length == 1 ? commands.first : AST::Pipeline.new(commands)
     end
 
-    # command : if_statement | while_statement | for_statement | case_statement | function_def | WORD arg* block? (redirection)*
+    # command : if_statement | while_statement | until_statement | for_statement | case_statement | function_def | WORD arg* block? (redirection)*
     # arg : WORD | ARRAY | REGEXP
     def parse_command
       # Check for control structures
       return parse_if if peek(:IF)
       return parse_while if peek(:WHILE)
+      return parse_until if peek(:UNTIL)
       return parse_for if peek(:FOR)
       return parse_case if peek(:CASE)
       return parse_function_keyword if peek(:FUNCTION)
@@ -240,6 +241,19 @@ module Rubish
       consume_word('done') || raise('Expected "done" to close while loop')
 
       AST::While.new(condition, body)
+    end
+
+    # until_statement : UNTIL conditional 'do' body 'done'
+    def parse_until
+      consume(:UNTIL)
+
+      condition = parse_conditional_for_if
+      skip_semicolon
+      consume_word('do') || raise('Expected "do" after until condition')
+      body = parse_while_body  # Reuse while body parser (stops at done)
+      consume_word('done') || raise('Expected "done" to close until loop')
+
+      AST::Until.new(condition, body)
     end
 
     # Parse body of while loop (stops at done)

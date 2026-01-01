@@ -22,6 +22,8 @@ module Rubish
         generate_if(node)
       when AST::While
         generate_while(node)
+      when AST::Until
+        generate_until(node)
       when AST::For
         generate_for(node)
       when AST::Function
@@ -318,6 +320,14 @@ module Rubish
     def generate_while(node)
       parts = []
       parts << "while __condition { #{generate(node.condition)} }"
+      parts << generate_loop_body(node.body)
+      parts << 'end'
+      parts.join("\n")
+    end
+
+    def generate_until(node)
+      parts = []
+      parts << "until __condition { #{generate(node.condition)} }"
       parts << generate_loop_body(node.body)
       parts << 'end'
       parts.join("\n")

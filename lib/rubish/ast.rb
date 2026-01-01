@@ -42,6 +42,9 @@ module Rubish
     # While loop: while cond; do body; done
     While = Data.define(:condition, :body)
 
+    # Until loop: until cond; do body; done (loops while condition is false)
+    Until = Data.define(:condition, :body)
+
     # For loop: for var in items; do body; done
     For = Data.define(:variable, :items, :body)
 

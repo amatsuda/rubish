@@ -29,6 +29,7 @@ module Rubish
       'elif' => :ELIF,
       'fi' => :FI,
       'while' => :WHILE,
+      'until' => :UNTIL,
       'for' => :FOR,
       'function' => :FUNCTION,
       'case' => :CASE,
