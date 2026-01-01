@@ -10,10 +10,11 @@ module Rubish
     @script_name_setter = nil
     @positional_params_getter = nil
     @positional_params_setter = nil
+    @function_checker = nil
 
     class << self
       attr_reader :aliases
-      attr_accessor :executor, :script_name_getter, :script_name_setter, :positional_params_getter, :positional_params_setter
+      attr_accessor :executor, :script_name_getter, :script_name_setter, :positional_params_getter, :positional_params_setter, :function_checker
     end
 
     def self.builtin?(name)
@@ -203,6 +204,10 @@ module Rubish
             when 'if', 'while', 'for'
               depth += 1
             when 'fi', 'done'
+              depth -= 1
+            when '{'
+              depth += 1
+            when '}'
               depth -= 1
             end
           end

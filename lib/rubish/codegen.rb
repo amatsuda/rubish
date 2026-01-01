@@ -24,6 +24,8 @@ module Rubish
         generate_while(node)
       when AST::For
         generate_for(node)
+      when AST::Function
+        generate_function(node)
       else
         raise "Unknown AST node: #{node.class}"
       end
@@ -357,6 +359,12 @@ module Rubish
       else
         "__run_cmd { #{generate(body)} }"
       end
+    end
+
+    def generate_function(node)
+      # Generate a function definition that stores a lambda
+      body_code = generate_loop_body(node.body)
+      "__define_function(#{node.name.inspect}) { #{body_code} }"
     end
 
     def escape_string(str)

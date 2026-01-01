@@ -44,5 +44,8 @@ module Rubish
 
     # For loop: for var in items; do body; done
     For = Data.define(:variable, :items, :body)
+
+    # Function definition: function name { body } or name() { body }
+    Function = Data.define(:name, :body)
   end
 end

@@ -13,7 +13,12 @@ module Rubish
       '<' => :REDIRECT_IN,
       '2>' => :REDIRECT_ERR,
       '&&' => :AND,
-      '||' => :OR
+      '||' => :OR,
+      '(' => :LPAREN,
+      ')' => :RPAREN,
+      '()' => :PARENS,  # For function definitions: name() { }
+      '{' => :LBRACE,
+      '}' => :RBRACE
     }.freeze
 
     KEYWORDS = {
@@ -23,7 +28,8 @@ module Rubish
       'elif' => :ELIF,
       'fi' => :FI,
       'while' => :WHILE,
-      'for' => :FOR
+      'for' => :FOR,
+      'function' => :FUNCTION
       # Note: 'do', 'done', 'in' are handled as WORD tokens and checked by parser
       # to allow them as command arguments (e.g., "echo done")
     }.freeze
@@ -54,14 +60,14 @@ module Rubish
     def read_token
       # Check for multi-char operators first
       two_char = @input[@pos, 2]
-      if %w[>> 2> && ||].include?(two_char)
+      if %w[>> 2> && || ()].include?(two_char)
         @pos += 2
         return Token.new(OPERATORS[two_char], two_char)
       end
 
-      # Single char operators
+      # Single char operators (but not ( and ) which need context)
       char = @input[@pos]
-      if OPERATORS.key?(char)
+      if %w[| ; & > <].include?(char)
         @pos += 1
         return Token.new(OPERATORS[char], char)
       end
@@ -79,7 +85,20 @@ module Rubish
       when '/'
         read_regexp_or_word
       when '{'
-        read_block
+        # Check if this is a Ruby block { |x| ... } or shell function body { cmd; }
+        # Ruby blocks have | after optional whitespace
+        lookahead = @pos + 1
+        lookahead += 1 while lookahead < @input.length && @input[lookahead] =~ /\s/
+        if @input[lookahead] == '|'
+          read_block
+        else
+          # Shell function body or standalone brace
+          @pos += 1
+          Token.new(:LBRACE, '{')
+        end
+      when '}'
+        @pos += 1
+        Token.new(:RBRACE, '}')
       when 'd'
         # Check for Ruby 'do' block (do |x| ... end)
         # Only treat as block if followed by space/| (not 'done' or other words)

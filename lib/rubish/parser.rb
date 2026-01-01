@@ -89,17 +89,25 @@ module Rubish
       commands.length == 1 ? commands.first : AST::Pipeline.new(commands)
     end
 
-    # command : if_statement | while_statement | for_statement | WORD arg* block? (redirection)*
+    # command : if_statement | while_statement | for_statement | function_def | WORD arg* block? (redirection)*
     # arg : WORD | ARRAY | REGEXP
     def parse_command
       # Check for control structures
       return parse_if if peek(:IF)
       return parse_while if peek(:WHILE)
       return parse_for if peek(:FOR)
+      return parse_function_keyword if peek(:FUNCTION)
 
       return nil unless peek(:WORD)
 
       name = consume(:WORD).value
+
+      # Check for function definition: name() { body }
+      if peek(:PARENS)
+        consume(:PARENS)
+        return parse_function_body(name)
+      end
+
       args = []
 
       # Parse arguments (WORD, ARRAY, REGEXP)
@@ -115,6 +123,37 @@ module Rubish
 
       cmd = AST::Command.new(name: name, args: args, block: block)
       parse_redirections(cmd)
+    end
+
+    # function_def : FUNCTION WORD '{' body '}'
+    def parse_function_keyword
+      consume(:FUNCTION)
+      name = consume(:WORD)&.value || raise('Expected function name after "function"')
+      parse_function_body(name)
+    end
+
+    # Parse function body: { commands }
+    def parse_function_body(name)
+      consume(:LBRACE) || raise('Expected "{" for function body')
+      body = parse_function_body_commands
+      consume(:RBRACE) || raise('Expected "}" to close function body')
+      AST::Function.new(name, body)
+    end
+
+    # Parse commands inside function body (stops at })
+    def parse_function_body_commands
+      commands = []
+      skip_semicolon
+
+      while !peek(:RBRACE) && current
+        cmd = parse_conditional
+        break unless cmd
+
+        commands << cmd
+        skip_semicolon
+      end
+
+      commands.length == 1 ? commands.first : AST::List.new(commands)
     end
 
     # if_statement : IF conditional THEN body (ELIF conditional THEN body)* (ELSE body)? FI

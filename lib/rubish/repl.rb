@@ -11,14 +11,16 @@ module Rubish
       @last_bg_pid = nil
       @script_name = 'rubish'
       @positional_params = []
+      @functions = {}
       Builtins.executor = ->(line) { execute(line) }
       Builtins.script_name_getter = -> { @script_name }
       Builtins.script_name_setter = ->(name) { @script_name = name }
       Builtins.positional_params_getter = -> { @positional_params }
       Builtins.positional_params_setter = ->(params) { @positional_params = params }
+      Builtins.function_checker = ->(name) { @functions.key?(name) }
     end
 
-    attr_accessor :script_name, :positional_params
+    attr_accessor :script_name, :positional_params, :functions
 
     def run
       setup_reline
@@ -98,9 +100,41 @@ module Rubish
         return
       end
 
+      # Check for user-defined functions (simple command only)
+      if ast.is_a?(AST::Command) && @functions.key?(ast.name)
+        expanded_args = expand_args_for_builtin(ast.args)
+        result = call_function(ast.name, expanded_args)
+        @last_status = result ? 0 : 1
+        return
+      end
+
       code = @codegen.generate(ast)
       result = eval_in_context(code)
       @last_status = extract_exit_status(result)
+    end
+
+    def call_function(name, args)
+      func = @functions[name]
+      return false unless func
+
+      # Save current positional params and set new ones
+      saved_params = @positional_params
+      @positional_params = args
+
+      begin
+        result = func.call
+        # Handle return value
+        if result.is_a?(Command) || result.is_a?(Pipeline)
+          result.success?
+        else
+          true
+        end
+      rescue LocalJumpError
+        # return was called in function
+        true
+      ensure
+        @positional_params = saved_params
+      end
     end
 
     def expand_args_for_builtin(args)
@@ -327,8 +361,44 @@ module Rubish
 
     def eval_in_context(code)
       result = binding.eval(code)
-      result.run if result.is_a?(Command) || result.is_a?(Pipeline)
+      if result.is_a?(Command) && @functions.key?(result.name)
+        # Call user-defined function, handling redirects
+        call_function_with_redirects(result)
+      elsif result.is_a?(Command) || result.is_a?(Pipeline)
+        result.run
+      end
       result
+    end
+
+    def call_function_with_redirects(cmd)
+      # Set up redirects if present
+      saved_stdout = nil
+      saved_stdin = nil
+
+      begin
+        if cmd.stdout
+          saved_stdout = $stdout.dup
+          $stdout.reopen(cmd.stdout)
+        end
+        if cmd.stdin
+          saved_stdin = $stdin.dup
+          $stdin.reopen(cmd.stdin)
+        end
+
+        success = call_function(cmd.name, cmd.args)
+        @last_status = success ? 0 : 1
+      ensure
+        if saved_stdout
+          $stdout.reopen(saved_stdout)
+          saved_stdout.close
+          cmd.stdout.close unless cmd.stdout.closed?
+        end
+        if saved_stdin
+          $stdin.reopen(saved_stdin)
+          saved_stdin.close
+          cmd.stdin.close unless cmd.stdin.closed?
+        end
+      end
     end
 
     def __cmd(name, *args, &block)
@@ -437,6 +507,11 @@ module Rubish
       matches.empty? ? [pattern] : matches
     end
 
+    def __define_function(name, &block)
+      @functions[name] = block
+      nil
+    end
+
     # Builtins that must run in current process (affect shell state)
     PROCESS_BUILTINS = %w[cd export set shift source . return exit].freeze
 
@@ -446,6 +521,10 @@ module Rubish
         # Run process-affecting builtins directly in current process
         success = Builtins.run(result.name, result.args)
         @last_status = success ? 0 : 1
+        result
+      elsif result.is_a?(Command) && @functions.key?(result.name)
+        # Call user-defined function with redirects
+        call_function_with_redirects(result)
         result
       else
         result.run if result.is_a?(Command) || result.is_a?(Pipeline)
@@ -470,6 +549,11 @@ module Rubish
       # Builtins
       Builtins::COMMANDS.each do |cmd|
         results << cmd if cmd.start_with?(input)
+      end
+
+      # User-defined functions
+      @functions.keys.each do |name|
+        results << name if name.start_with?(input)
       end
 
       # Commands from PATH
