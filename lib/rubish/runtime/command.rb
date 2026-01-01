@@ -2,16 +2,21 @@
 
 module Rubish
   class Command
-    attr_reader :name, :args, :pid, :status
-    attr_accessor :stdin, :stdout, :stderr
+    attr_reader :name, :pid, :status
+    attr_accessor :stdin, :stdout, :stderr, :block
 
-    def initialize(name, *args)
+    def initialize(name, *args, &block)
       @name = name
-      @args = args
+      @args = expand_args(args)
       @stdin = nil
       @stdout = nil
       @stderr = nil
+      @block = block
       @ran = false
+    end
+
+    def args
+      @args
     end
 
     def ran?
@@ -22,19 +27,11 @@ module Rubish
       return self if @ran
       @ran = true
 
-      @pid = fork do
-        $stdin.reopen(@stdin) if @stdin
-        $stdout.reopen(@stdout) if @stdout
-        $stderr.reopen(@stderr) if @stderr
-        exec(name, *args)
+      if @block
+        run_with_block
+      else
+        run_simple
       end
-
-      @stdin&.close unless @stdin == $stdin
-      @stdout&.close unless @stdout == $stdout
-
-      Process.wait(@pid)
-      @status = $?
-      self
     end
 
     def |(other)
@@ -60,14 +57,72 @@ module Rubish
       @stderr = File.open(file, 'w')
       self
     end
+
+    private
+
+    def expand_args(args)
+      args.flat_map do |arg|
+        case arg
+        when Array
+          arg.map(&:to_s)
+        when Regexp
+          arg.source
+        else
+          arg.to_s
+        end
+      end
+    end
+
+    def run_simple
+      @pid = fork do
+        $stdin.reopen(@stdin) if @stdin
+        $stdout.reopen(@stdout) if @stdout
+        $stderr.reopen(@stderr) if @stderr
+        exec(name, *@args)
+      end
+
+      @stdin&.close unless @stdin == $stdin
+      @stdout&.close unless @stdout == $stdout
+
+      Process.wait(@pid)
+      @status = $?
+      self
+    end
+
+    def run_with_block
+      reader, writer = IO.pipe
+
+      @pid = fork do
+        reader.close
+        $stdin.reopen(@stdin) if @stdin
+        $stdout.reopen(writer)
+        $stderr.reopen(@stderr) if @stderr
+        exec(name, *@args)
+      end
+
+      writer.close
+      @stdin&.close unless @stdin == $stdin
+
+      # Yield each line to block
+      reader.each_line do |line|
+        @block.call(line.chomp)
+      end
+      reader.close
+
+      Process.wait(@pid)
+      @status = $?
+      self
+    end
   end
 
   class Pipeline
     attr_reader :commands, :status
+    attr_accessor :block
 
     def initialize(*commands)
       @commands = commands.flatten
       @ran = false
+      @block = nil
     end
 
     def |(other)
@@ -79,10 +134,40 @@ module Rubish
       @ran
     end
 
-    def run
+    def run(&block)
       return self if @ran
       @ran = true
 
+      if block || @block
+        run_with_block(block || @block)
+      else
+        run_simple
+      end
+    end
+
+    def redirect_out(file)
+      @commands.last.redirect_out(file)
+      self
+    end
+
+    def redirect_append(file)
+      @commands.last.redirect_append(file)
+      self
+    end
+
+    def redirect_in(file)
+      @commands.first.redirect_in(file)
+      self
+    end
+
+    def redirect_err(file)
+      @commands.last.redirect_err(file)
+      self
+    end
+
+    private
+
+    def run_simple
       # Set up pipes between commands
       pipes = (@commands.length - 1).times.map { IO.pipe }
 
@@ -125,23 +210,53 @@ module Rubish
       self
     end
 
-    def redirect_out(file)
-      @commands.last.redirect_out(file)
-      self
-    end
+    def run_with_block(block)
+      # Set up pipes between commands, with last one going to a pipe we read
+      pipes = @commands.length.times.map { IO.pipe }
 
-    def redirect_append(file)
-      @commands.last.redirect_append(file)
-      self
-    end
+      pids = @commands.each_with_index.map do |cmd, i|
+        # Set stdin from previous pipe (except first command)
+        cmd.stdin ||= pipes[i - 1][0] if i > 0
 
-    def redirect_in(file)
-      @commands.first.redirect_in(file)
-      self
-    end
+        # Set stdout to next pipe
+        cmd.stdout ||= pipes[i][1]
 
-    def redirect_err(file)
-      @commands.last.redirect_err(file)
+        fork do
+          # Close unused pipe ends
+          pipes.each_with_index do |(reader, writer), j|
+            if j == i - 1
+              writer.close
+            elsif j == i
+              reader.close
+            else
+              reader.close
+              writer.close
+            end
+          end
+
+          $stdin.reopen(cmd.stdin) if cmd.stdin
+          $stdout.reopen(cmd.stdout) if cmd.stdout
+          $stderr.reopen(cmd.stderr) if cmd.stderr
+          exec(cmd.name, *cmd.args)
+        end
+      end
+
+      # Parent closes write ends
+      pipes.each { |_, writer| writer.close }
+
+      # Close intermediate read ends
+      pipes[0...-1].each { |reader, _| reader.close }
+
+      # Read from last pipe and yield to block
+      last_reader = pipes.last[0]
+      last_reader.each_line do |line|
+        block.call(line.chomp)
+      end
+      last_reader.close
+
+      # Wait for all children
+      pids.each { |pid| Process.wait(pid) }
+      @status = $?
       self
     end
   end

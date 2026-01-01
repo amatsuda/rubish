@@ -3,7 +3,11 @@
 module Rubish
   module AST
     # Single command: ls -la
-    Command = Data.define(:name, :args)
+    Command = Data.define(:name, :args, :block) do
+      def initialize(name:, args: [], block: nil)
+        super
+      end
+    end
 
     # Pipeline: cmd1 | cmd2 | cmd3
     Pipeline = Data.define(:commands)
@@ -16,5 +20,9 @@ module Rubish
 
     # Background: cmd &
     Background = Data.define(:command)
+
+    # Ruby literals as arguments
+    ArrayLiteral = Data.define(:value)   # [1, 2, 3]
+    RegexpLiteral = Data.define(:value)  # /pattern/
   end
 end

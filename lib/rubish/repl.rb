@@ -63,8 +63,8 @@ module Rubish
       result
     end
 
-    def __cmd(name, *args)
-      Command.new(name, *args)
+    def __cmd(name, *args, &block)
+      Command.new(name, *args, &block)
     end
 
     def __background(&block)

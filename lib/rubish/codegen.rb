@@ -22,11 +22,31 @@ module Rubish
     private
 
     def generate_command(node)
-      args = node.args.map { |a| escape_arg(a) }.join(', ')
-      if args.empty?
-        "__cmd(#{escape_arg(node.name)})"
+      args = node.args.map { |a| generate_arg(a) }.join(', ')
+      cmd = if args.empty?
+              "__cmd(#{escape_string(node.name)})"
+            else
+              "__cmd(#{escape_string(node.name)}, #{args})"
+            end
+
+      # Append block if present
+      if node.block
+        cmd = "#{cmd} #{node.block}"
+      end
+
+      cmd
+    end
+
+    def generate_arg(arg)
+      case arg
+      when String
+        escape_string(arg)
+      when AST::ArrayLiteral
+        arg.value  # Already valid Ruby: [1, 2, 3]
+      when AST::RegexpLiteral
+        arg.value  # Already valid Ruby: /pattern/
       else
-        "__cmd(#{escape_arg(node.name)}, #{args})"
+        arg.inspect
       end
     end
 
@@ -45,14 +65,14 @@ module Rubish
                   when '<' then 'redirect_in'
                   when '2>' then 'redirect_err'
                   end
-      "#{generate(node.command)}.#{op_method}(#{escape_arg(node.target)})"
+      "#{generate(node.command)}.#{op_method}(#{escape_string(node.target)})"
     end
 
     def generate_background(node)
       "__background { #{generate(node.command)} }"
     end
 
-    def escape_arg(str)
+    def escape_string(str)
       str.inspect
     end
   end
