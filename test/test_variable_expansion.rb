@@ -190,4 +190,56 @@ class TestVariableExpansion < Test::Unit::TestCase
     @repl.send(:execute, 'cd .')
     assert_equal '0', expand('$?')
   end
+
+  # $$ tests
+  def test_shell_pid
+    result = expand('$$')
+    assert_equal Process.pid.to_s, result
+  end
+
+  def test_shell_pid_in_string
+    result = expand('pid: $$')
+    assert_equal "pid: #{Process.pid}", result
+  end
+
+  def test_shell_pid_in_double_quotes
+    result = expand('"$$"')
+    assert_equal "\"#{Process.pid}\"", result
+  end
+
+  def test_shell_pid_not_in_single_quotes
+    result = expand("'$$'")
+    assert_equal "'$$'", result
+  end
+
+  # $! tests
+  def test_bg_pid_initial_empty
+    repl = Rubish::REPL.new
+    result = repl.send(:expand_variables, '$!')
+    assert_equal '', result
+  end
+
+  def test_bg_pid_after_background_job
+    # Run a background job
+    @repl.send(:execute, 'sleep 0.1 &')
+    result = expand('$!')
+    # Should be a valid PID (numeric)
+    assert_match(/^\d+$/, result)
+    # Clean up - wait for the job
+    sleep 0.2
+  end
+
+  def test_bg_pid_in_double_quotes
+    @repl.send(:execute, 'sleep 0.1 &')
+    result = expand('"$!"')
+    assert_match(/^"\d+"$/, result)
+    sleep 0.2
+  end
+
+  def test_bg_pid_not_in_single_quotes
+    @repl.send(:execute, 'sleep 0.1 &')
+    result = expand("'$!'")
+    assert_equal "'$!'", result
+    sleep 0.2
+  end
 end

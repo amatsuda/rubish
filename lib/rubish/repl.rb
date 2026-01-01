@@ -8,6 +8,7 @@ module Rubish
       @codegen = Codegen.new
       @last_line = nil
       @last_status = 0
+      @last_bg_pid = nil
       Builtins.executor = ->(line) { execute(line) }
     end
 
@@ -182,6 +183,14 @@ module Rubish
             # Special variable $? - last exit status
             result << @last_status.to_s
             i += 2
+          elsif line[i + 1] == '$'
+            # Special variable $$ - current shell PID
+            result << Process.pid.to_s
+            i += 2
+          elsif line[i + 1] == '!'
+            # Special variable $! - last background PID
+            result << (@last_bg_pid ? @last_bg_pid.to_s : '')
+            i += 2
           elsif line[i + 1] == '('
             # Command substitution $(cmd)
             depth = 1
@@ -282,6 +291,7 @@ module Rubish
 
       # Parent: create job and return immediately
       Process.setpgid(pid, pid) rescue nil  # May fail if child already set it
+      @last_bg_pid = pid
       job = JobManager.instance.add(
         pid: pid,
         pgid: pid,
