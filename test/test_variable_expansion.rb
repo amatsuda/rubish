@@ -321,4 +321,71 @@ class TestVariableExpansion < Test::Unit::TestCase
     @repl.positional_params = %w[a b c d e f g h i]
     assert_equal 'a b c d e f g h i', expand('$1 $2 $3 $4 $5 $6 $7 $8 $9')
   end
+
+  # $# tests - number of positional parameters
+  def test_param_count_zero
+    @repl.positional_params = []
+    assert_equal '0', expand('$#')
+  end
+
+  def test_param_count_one
+    @repl.positional_params = ['single']
+    assert_equal '1', expand('$#')
+  end
+
+  def test_param_count_multiple
+    @repl.positional_params = %w[a b c d e]
+    assert_equal '5', expand('$#')
+  end
+
+  def test_param_count_in_string
+    @repl.positional_params = %w[x y z]
+    assert_equal 'count: 3', expand('count: $#')
+  end
+
+  def test_param_count_in_double_quotes
+    @repl.positional_params = %w[a b]
+    assert_equal '"2"', expand('"$#"')
+  end
+
+  def test_param_count_not_in_single_quotes
+    @repl.positional_params = %w[a b]
+    assert_equal "'$#'", expand("'$#'")
+  end
+
+  # $@ tests - all positional parameters
+  def test_all_params_empty
+    @repl.positional_params = []
+    assert_equal '', expand('$@')
+  end
+
+  def test_all_params_one
+    @repl.positional_params = ['single']
+    assert_equal 'single', expand('$@')
+  end
+
+  def test_all_params_multiple
+    @repl.positional_params = %w[foo bar baz]
+    assert_equal 'foo bar baz', expand('$@')
+  end
+
+  def test_all_params_in_string
+    @repl.positional_params = %w[hello world]
+    assert_equal 'args: hello world', expand('args: $@')
+  end
+
+  def test_all_params_in_double_quotes
+    @repl.positional_params = %w[a b c]
+    assert_equal '"a b c"', expand('"$@"')
+  end
+
+  def test_all_params_not_in_single_quotes
+    @repl.positional_params = %w[a b c]
+    assert_equal "'$@'", expand("'$@'")
+  end
+
+  def test_param_count_and_all_params_together
+    @repl.positional_params = %w[x y z]
+    assert_equal '3 args: x y z', expand('$# args: $@')
+  end
 end

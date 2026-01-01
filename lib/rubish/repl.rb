@@ -208,6 +208,14 @@ module Rubish
             idx = line[i + 1].to_i - 1
             result << (@positional_params[idx] || '')
             i += 2
+          elsif line[i + 1] == '#'
+            # Special variable $# - number of positional parameters
+            result << @positional_params.length.to_s
+            i += 2
+          elsif line[i + 1] == '@'
+            # Special variable $@ - all positional parameters
+            result << @positional_params.join(' ')
+            i += 2
           elsif line[i + 1] == '('
             # Command substitution $(cmd)
             depth = 1
