@@ -337,6 +337,13 @@ module Rubish
       end
     end
 
+    def __for_loop(variable, items, &block)
+      items.each do |item|
+        ENV[variable] = item
+        block.call
+      end
+    end
+
     # Builtins that must run in current process (affect shell state)
     PROCESS_BUILTINS = %w[cd export set shift source . return exit].freeze
 

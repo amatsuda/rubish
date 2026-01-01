@@ -41,5 +41,8 @@ module Rubish
 
     # While loop: while cond; do body; done
     While = Data.define(:condition, :body)
+
+    # For loop: for var in items; do body; done
+    For = Data.define(:variable, :items, :body)
   end
 end

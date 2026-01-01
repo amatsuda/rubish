@@ -44,7 +44,7 @@ module Rubish
       commands = [first]
       while peek(:SEMICOLON) || peek(:AMPERSAND)
         op = consume
-        if op.type == :AMPERSAND && !peek_any(:WORD, :ARRAY, :REGEXP, :IF, :WHILE)
+        if op.type == :AMPERSAND && !peek_any(:WORD, :ARRAY, :REGEXP, :IF, :WHILE, :FOR)
           # Trailing &, make last command background
           commands[-1] = AST::Background.new(commands[-1])
           break
@@ -89,12 +89,13 @@ module Rubish
       commands.length == 1 ? commands.first : AST::Pipeline.new(commands)
     end
 
-    # command : if_statement | while_statement | WORD arg* block? (redirection)*
+    # command : if_statement | while_statement | for_statement | WORD arg* block? (redirection)*
     # arg : WORD | ARRAY | REGEXP
     def parse_command
       # Check for control structures
       return parse_if if peek(:IF)
       return parse_while if peek(:WHILE)
+      return parse_for if peek(:FOR)
 
       return nil unless peek(:WORD)
 
@@ -215,6 +216,27 @@ module Rubish
       end
 
       commands.length == 1 ? commands.first : AST::List.new(commands)
+    end
+
+    # for_statement : FOR WORD 'in' items 'do' body 'done'
+    def parse_for
+      consume(:FOR)
+
+      variable = consume(:WORD)&.value || raise('Expected variable name after "for"')
+      consume_word('in') || raise('Expected "in" after for variable')
+
+      # Parse items until 'do' or ';'
+      items = []
+      while !peek_word('do') && !peek(:SEMICOLON) && peek(:WORD)
+        items << consume(:WORD).value
+      end
+
+      skip_semicolon
+      consume_word('do') || raise('Expected "do" after for items')
+      body = parse_while_body  # Reuse while body parser (stops at done)
+      consume_word('done') || raise('Expected "done" to close for loop')
+
+      AST::For.new(variable, items, body)
     end
 
     def peek_word(value)

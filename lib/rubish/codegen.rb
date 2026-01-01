@@ -22,6 +22,8 @@ module Rubish
         generate_if(node)
       when AST::While
         generate_while(node)
+      when AST::For
+        generate_for(node)
       else
         raise "Unknown AST node: #{node.class}"
       end
@@ -110,9 +112,27 @@ module Rubish
     def generate_while(node)
       parts = []
       parts << "while __condition { #{generate(node.condition)} }"
-      parts << generate(node.body)
+      parts << generate_loop_body(node.body)
       parts << 'end'
       parts.join("\n")
+    end
+
+    def generate_for(node)
+      items = node.items.map { |i| escape_string(i) }.join(', ')
+      parts = []
+      parts << "__for_loop(#{escape_string(node.variable)}, [#{items}]) do"
+      parts << generate_loop_body(node.body)
+      parts << 'end'
+      parts.join("\n")
+    end
+
+    def generate_loop_body(body)
+      # Lists already wrap each command in __run_cmd, but single commands don't
+      if body.is_a?(AST::List)
+        generate(body)
+      else
+        "__run_cmd { #{generate(body)} }"
+      end
     end
 
     def escape_string(str)

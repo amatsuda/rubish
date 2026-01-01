@@ -22,8 +22,9 @@ module Rubish
       'else' => :ELSE,
       'elif' => :ELIF,
       'fi' => :FI,
-      'while' => :WHILE
-      # Note: 'do' and 'done' are handled as WORD tokens and checked by parser
+      'while' => :WHILE,
+      'for' => :FOR
+      # Note: 'do', 'done', 'in' are handled as WORD tokens and checked by parser
       # to allow them as command arguments (e.g., "echo done")
     }.freeze
 
