@@ -241,7 +241,9 @@ module Rubish
         break if char =~ /[ \t]/ || OPERATORS.key?(char)
         break if @input[@pos, 2] == '>>' || @input[@pos, 2] == '2>'
         # Stop at Ruby literal starters (but not in the middle of a word)
-        break if char == '[' || char == '{'
+        # Exception: ${VAR} is a shell variable, not a Ruby block
+        break if char == '['
+        break if char == '{' && (@pos == start || @input[@pos - 1] != '$')
 
         if char == '"'
           read_double_quoted_string
@@ -250,6 +252,9 @@ module Rubish
         elsif char == '$' && @input[@pos + 1] == '('
           # Command substitution $(...)
           read_command_substitution
+        elsif char == '$' && @input[@pos + 1] == '{'
+          # Variable expansion ${VAR}
+          read_braced_variable
         else
           @pos += 1
         end
@@ -299,6 +304,13 @@ module Rubish
         end
         @pos += 1
       end
+    end
+
+    def read_braced_variable
+      # ${VAR}
+      @pos += 2 # skip ${
+      @pos += 1 while @pos < @input.length && @input[@pos] != '}'
+      @pos += 1 if @pos < @input.length # skip closing }
     end
   end
 end

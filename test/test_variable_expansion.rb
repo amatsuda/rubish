@@ -296,4 +296,41 @@ class TestVariableExpansion < Test::Unit::TestCase
     @repl.positional_params = %w[a b c]
     assert_equal '$@', expand("'$@'")
   end
+
+  # Regression tests - variables in various positions
+  def test_variable_as_command_name
+    ENV['CMD'] = 'echo'
+    execute("$CMD from_variable > #{output_file}")
+    assert_equal "from_variable\n", File.read(output_file)
+  end
+
+  def test_variable_in_redirect_target
+    ENV['TARGET'] = output_file
+    execute("echo redirected > $TARGET")
+    assert_equal "redirected\n", File.read(output_file)
+  end
+
+  def test_braced_variable_in_redirect_target
+    ENV['OUT'] = output_file
+    execute("echo braced > ${OUT}")
+    assert_equal "braced\n", File.read(output_file)
+  end
+
+  def test_variable_in_for_loop_items_with_splitting
+    ENV['ITEMS'] = 'one two three'
+    execute("for x in $ITEMS; do echo $x >> #{output_file}; done")
+    assert_equal "one\ntwo\nthree\n", File.read(output_file)
+  end
+
+  def test_braced_variable_in_for_loop_items
+    ENV['LIST'] = 'a b c'
+    execute("for x in ${LIST}; do echo $x >> #{output_file}; done")
+    assert_equal "a\nb\nc\n", File.read(output_file)
+  end
+
+  def test_mixed_literal_and_variable_in_for_loop
+    ENV['MIDDLE'] = 'two three'
+    execute("for x in one $MIDDLE four; do echo $x >> #{output_file}; done")
+    assert_equal "one\ntwo\nthree\nfour\n", File.read(output_file)
+  end
 end

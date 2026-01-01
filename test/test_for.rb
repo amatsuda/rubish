@@ -48,7 +48,7 @@ class TestFor < Test::Unit::TestCase
     tokens = Rubish::Lexer.new('for x in a b c; do echo $x; done').tokenize
     ast = Rubish::Parser.new(tokens).parse
     code = Rubish::Codegen.new.generate(ast)
-    assert_match(/__for_loop\("x", \["a", "b", "c"\]\)/, code)
+    assert_match(/__for_loop\("x", \["a", "b", "c"\]\.flatten\)/, code)
   end
 
   # Execution tests

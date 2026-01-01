@@ -33,10 +33,11 @@ module Rubish
 
     def generate_command(node)
       args = node.args.map { |a| generate_arg(a) }.join(', ')
+      name = generate_string_arg(node.name)
       cmd = if args.empty?
-              "__cmd(#{escape_string(node.name)})"
+              "__cmd(#{name})"
             else
-              "__cmd(#{escape_string(node.name)}, #{args})"
+              "__cmd(#{name}, #{args})"
             end
 
       # Append block if present
@@ -225,7 +226,8 @@ module Rubish
                   when '<' then 'redirect_in'
                   when '2>' then 'redirect_err'
                   end
-      "#{generate(node.command)}.#{op_method}(#{escape_string(node.target)})"
+      target = generate_string_arg(node.target)
+      "#{generate(node.command)}.#{op_method}(#{target})"
     end
 
     def generate_background(node)
@@ -267,12 +269,30 @@ module Rubish
     end
 
     def generate_for(node)
-      items = node.items.map { |i| escape_string(i) }.join(', ')
+      items = node.items.map { |i| generate_for_item(i) }.join(', ')
       parts = []
-      parts << "__for_loop(#{escape_string(node.variable)}, [#{items}]) do"
+      parts << "__for_loop(#{escape_string(node.variable)}, [#{items}].flatten) do"
       parts << generate_loop_body(node.body)
       parts << 'end'
       parts.join("\n")
+    end
+
+    def generate_for_item(item)
+      # For loop items need word splitting on variable expansion
+      # $VAR with value "a b c" should become three items
+      if item =~ /\A\$([a-zA-Z_][a-zA-Z0-9_]*)\z/
+        # Simple variable - expand and split
+        "ENV.fetch(#{$1.inspect}, '').split"
+      elsif item =~ /\A\$\{([^}]+)\}\z/
+        # Braced variable - expand and split
+        "ENV.fetch(#{$1.inspect}, '').split"
+      elsif item.include?('$')
+        # Mixed content - expand as string, then split
+        "#{generate_interpolated_string(item)}.split"
+      else
+        # Literal - no splitting needed
+        item.inspect
+      end
     end
 
     def generate_loop_body(body)
