@@ -108,10 +108,46 @@ module Rubish
     end
 
     def complete(input)
-      # File completion
+      line = Reline.line_buffer
+      is_first_word = !line.include?(' ') || line.end_with?('| ')
+
+      if is_first_word
+        complete_command(input)
+      else
+        complete_file(input)
+      end
+    end
+
+    def complete_command(input)
+      results = []
+
+      # Builtins
+      Builtins::COMMANDS.each do |cmd|
+        results << cmd if cmd.start_with?(input)
+      end
+
+      # Commands from PATH
+      ENV['PATH'].split(':').each do |dir|
+        next unless Dir.exist?(dir)
+
+        Dir.foreach(dir) do |file|
+          next if file.start_with?('.')
+          next unless file.start_with?(input)
+
+          path = File.join(dir, file)
+          results << file if File.executable?(path)
+        end
+      rescue Errno::EACCES
+        # Skip directories we can't read
+      end
+
+      results.uniq.sort
+    end
+
+    def complete_file(input)
       Dir.glob("#{input}*").map do |f|
         File.directory?(f) ? "#{f}/" : f
-      end
+      end.sort
     end
   end
 end
