@@ -17,6 +17,11 @@ module TestHelper
     $stdout = original_stdout
     $stderr = original_stderr
   end
+
+  # Execute a line via the REPL (requires @repl to be set)
+  def execute(line)
+    @repl.send(:execute, line)
+  end
 end
 
 Test::Unit::TestCase.include TestHelper

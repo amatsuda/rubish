@@ -14,6 +14,10 @@ module Rubish
         generate_redirect(node)
       when AST::Background
         generate_background(node)
+      when AST::And
+        generate_and(node)
+      when AST::Or
+        generate_or(node)
       else
         raise "Unknown AST node: #{node.class}"
       end
@@ -70,6 +74,14 @@ module Rubish
 
     def generate_background(node)
       "__background { #{generate(node.command)} }"
+    end
+
+    def generate_and(node)
+      "__and_cmd(-> { #{generate(node.left)} }, -> { #{generate(node.right)} })"
+    end
+
+    def generate_or(node)
+      "__or_cmd(-> { #{generate(node.left)} }, -> { #{generate(node.right)} })"
     end
 
     def escape_string(str)

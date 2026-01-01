@@ -36,9 +36,9 @@ module Rubish
       token
     end
 
-    # list : pipeline ((';' | '&') pipeline)*
+    # list : conditional ((';' | '&') conditional)*
     def parse_list
-      first = parse_pipeline
+      first = parse_conditional
       return nil unless first
 
       commands = [first]
@@ -49,11 +49,29 @@ module Rubish
           commands[-1] = AST::Background.new(commands[-1])
           break
         end
-        next_cmd = parse_pipeline
+        next_cmd = parse_conditional
         commands << next_cmd if next_cmd
       end
 
       commands.length == 1 ? commands.first : AST::List.new(commands)
+    end
+
+    # conditional : pipeline (('&&' | '||') pipeline)*
+    def parse_conditional
+      left = parse_pipeline
+      return nil unless left
+
+      while peek(:AND) || peek(:OR)
+        op = consume
+        right = parse_pipeline
+        left = if op.type == :AND
+                 AST::And.new(left, right)
+               else
+                 AST::Or.new(left, right)
+               end
+      end
+
+      left
     end
 
     # pipeline : command ('|' command)*

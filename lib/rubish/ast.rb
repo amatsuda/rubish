@@ -21,6 +21,12 @@ module Rubish
     # Background: cmd &
     Background = Data.define(:command)
 
+    # Conditional: cmd1 && cmd2
+    And = Data.define(:left, :right)
+
+    # Conditional: cmd1 || cmd2
+    Or = Data.define(:left, :right)
+
     # Ruby literals as arguments
     ArrayLiteral = Data.define(:value)   # [1, 2, 3]
     RegexpLiteral = Data.define(:value)  # /pattern/

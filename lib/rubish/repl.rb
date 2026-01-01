@@ -225,6 +225,26 @@ module Rubish
       Command.new(name, *args, &block)
     end
 
+    def __and_cmd(left_proc, right_proc)
+      left = left_proc.call
+      left.run if left.is_a?(Command) || left.is_a?(Pipeline)
+      return left unless left.success?
+
+      right = right_proc.call
+      right.run if right.is_a?(Command) || right.is_a?(Pipeline)
+      right
+    end
+
+    def __or_cmd(left_proc, right_proc)
+      left = left_proc.call
+      left.run if left.is_a?(Command) || left.is_a?(Pipeline)
+      return left if left.success?
+
+      right = right_proc.call
+      right.run if right.is_a?(Command) || right.is_a?(Pipeline)
+      right
+    end
+
     def __background(&block)
       # Fork and run in background
       pid = fork do

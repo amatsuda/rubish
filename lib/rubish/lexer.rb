@@ -11,7 +11,9 @@ module Rubish
       '>' => :REDIRECT_OUT,
       '>>' => :REDIRECT_APPEND,
       '<' => :REDIRECT_IN,
-      '2>' => :REDIRECT_ERR
+      '2>' => :REDIRECT_ERR,
+      '&&' => :AND,
+      '||' => :OR
     }.freeze
 
     def initialize(input)
@@ -39,14 +41,10 @@ module Rubish
 
     def read_token
       # Check for multi-char operators first
-      if @input[@pos, 2] == '>>'
+      two_char = @input[@pos, 2]
+      if %w[>> 2> && ||].include?(two_char)
         @pos += 2
-        return Token.new(:REDIRECT_APPEND, '>>')
-      end
-
-      if @input[@pos, 2] == '2>'
-        @pos += 2
-        return Token.new(:REDIRECT_ERR, '2>')
+        return Token.new(OPERATORS[two_char], two_char)
       end
 
       # Single char operators

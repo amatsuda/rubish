@@ -23,6 +23,10 @@ module Rubish
       @ran
     end
 
+    def success?
+      @status&.success? || false
+    end
+
     def run
       return self if @ran
       @ran = true
@@ -132,6 +136,10 @@ module Rubish
 
     def ran?
       @ran
+    end
+
+    def success?
+      @status&.success? || false
     end
 
     def run(&block)
