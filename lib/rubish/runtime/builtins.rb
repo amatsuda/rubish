@@ -2,7 +2,7 @@
 
 module Rubish
   module Builtins
-    COMMANDS = %w[cd exit jobs fg bg export pwd history alias unalias source . shift].freeze
+    COMMANDS = %w[cd exit jobs fg bg export pwd history alias unalias source . shift set].freeze
 
     @aliases = {}
     @executor = nil
@@ -46,6 +46,8 @@ module Rubish
         run_source(args)
       when 'shift'
         run_shift(args)
+      when 'set'
+        run_set(args)
       else
         false
       end
@@ -211,6 +213,19 @@ module Rubish
       end
 
       @positional_params_setter&.call(params.drop(n))
+      true
+    end
+
+    def self.run_set(args)
+      # set -- arg1 arg2 arg3  sets positional params
+      # set (no args) could list variables, but for now just clear params
+      if args.empty?
+        @positional_params_setter&.call([])
+      elsif args.first == '--'
+        @positional_params_setter&.call(args[1..] || [])
+      else
+        @positional_params_setter&.call(args)
+      end
       true
     end
 
