@@ -2,7 +2,7 @@
 
 module Rubish
   module Builtins
-    COMMANDS = %w[cd exit jobs fg bg].freeze
+    COMMANDS = %w[cd exit jobs fg bg export pwd].freeze
 
     def self.builtin?(name)
       COMMANDS.include?(name)
@@ -20,6 +20,10 @@ module Rubish
         run_fg(args)
       when 'bg'
         run_bg(args)
+      when 'export'
+        run_export(args)
+      when 'pwd'
+        run_pwd(args)
       else
         false
       end
@@ -32,6 +36,29 @@ module Rubish
     rescue Errno::ENOENT => e
       puts "cd: #{e.message}"
       false
+    end
+
+    def self.run_export(args)
+      if args.empty?
+        # List all environment variables
+        ENV.each { |k, v| puts "#{k}=#{v}" }
+      else
+        args.each do |arg|
+          if arg.include?('=')
+            key, value = arg.split('=', 2)
+            ENV[key] = value
+          else
+            # Just export existing variable (no-op in this simple impl)
+            puts "export: #{arg}=#{ENV[arg]}" if ENV.key?(arg)
+          end
+        end
+      end
+      true
+    end
+
+    def self.run_pwd(_args)
+      puts Dir.pwd
+      true
     end
 
     def self.run_exit(args)
