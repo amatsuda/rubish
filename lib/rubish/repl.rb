@@ -71,6 +71,7 @@ module Rubish
     end
 
     def execute(line)
+      line = Builtins.expand_alias(line)
       line = expand_variables(line)
       tokens = @lexer_class.new(line).tokenize
       ast = @parser_class.new(tokens).parse

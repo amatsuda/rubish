@@ -1,5 +1,6 @@
 # frozen_string_literal: true
 
+require 'stringio'
 require 'tempfile'
 require 'singleton'
 require 'reline'

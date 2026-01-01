@@ -2,7 +2,13 @@
 
 module Rubish
   module Builtins
-    COMMANDS = %w[cd exit jobs fg bg export pwd history].freeze
+    COMMANDS = %w[cd exit jobs fg bg export pwd history alias unalias].freeze
+
+    @aliases = {}
+
+    class << self
+      attr_reader :aliases
+    end
 
     def self.builtin?(name)
       COMMANDS.include?(name)
@@ -26,6 +32,10 @@ module Rubish
         run_pwd(args)
       when 'history'
         run_history(args)
+      when 'alias'
+        run_alias(args)
+      when 'unalias'
+        run_unalias(args)
       else
         false
       end
@@ -72,6 +82,65 @@ module Rubish
         puts format('%5d  %s', start_index + i + 1, line)
       end
       true
+    end
+
+    def self.run_alias(args)
+      if args.empty?
+        # List all aliases
+        @aliases.each { |name, value| puts "alias #{name}='#{value}'" }
+      else
+        args.each do |arg|
+          if arg.include?('=')
+            name, value = arg.split('=', 2)
+            # Remove surrounding quotes if present
+            value = value.sub(/\A(['"])(.*)\1\z/, '\2')
+            @aliases[name] = value
+          else
+            # Show specific alias
+            if @aliases.key?(arg)
+              puts "alias #{arg}='#{@aliases[arg]}'"
+            else
+              puts "alias: #{arg}: not found"
+            end
+          end
+        end
+      end
+      true
+    end
+
+    def self.run_unalias(args)
+      if args.empty?
+        puts 'unalias: usage: unalias name [name ...]'
+        return false
+      end
+
+      args.each do |name|
+        if @aliases.key?(name)
+          @aliases.delete(name)
+        else
+          puts "unalias: #{name}: not found"
+        end
+      end
+      true
+    end
+
+    def self.expand_alias(line)
+      return line if line.empty?
+
+      # Extract the first word
+      first_word = line.split(/\s/, 2).first
+      return line unless first_word
+
+      if @aliases.key?(first_word)
+        rest = line[first_word.length..]
+        "#{@aliases[first_word]}#{rest}"
+      else
+        line
+      end
+    end
+
+    def self.clear_aliases
+      @aliases.clear
     end
 
     def self.run_exit(args)
