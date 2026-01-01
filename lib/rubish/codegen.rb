@@ -20,6 +20,8 @@ module Rubish
         generate_or(node)
       when AST::If
         generate_if(node)
+      when AST::While
+        generate_while(node)
       else
         raise "Unknown AST node: #{node.class}"
       end
@@ -101,6 +103,14 @@ module Rubish
         parts << generate(node.else_body)
       end
 
+      parts << 'end'
+      parts.join("\n")
+    end
+
+    def generate_while(node)
+      parts = []
+      parts << "while __condition { #{generate(node.condition)} }"
+      parts << generate(node.body)
       parts << 'end'
       parts.join("\n")
     end

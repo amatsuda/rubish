@@ -337,10 +337,20 @@ module Rubish
       end
     end
 
+    # Builtins that must run in current process (affect shell state)
+    PROCESS_BUILTINS = %w[cd export set shift source . return exit].freeze
+
     def __run_cmd(&block)
       result = block.call
-      result.run if result.is_a?(Command) || result.is_a?(Pipeline)
-      result
+      if result.is_a?(Command) && PROCESS_BUILTINS.include?(result.name)
+        # Run process-affecting builtins directly in current process
+        success = Builtins.run(result.name, result.args)
+        @last_status = success ? 0 : 1
+        result
+      else
+        result.run if result.is_a?(Command) || result.is_a?(Pipeline)
+        result
+      end
     end
 
     def complete(input)

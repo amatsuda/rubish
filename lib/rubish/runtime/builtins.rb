@@ -189,16 +189,51 @@ module Rubish
       @positional_params_setter&.call(args[1..] || [])
 
       return_code = catch(:return) do
+        buffer = +''
+        depth = 0
+
         File.readlines(file, chomp: true).each do |line|
           line = line.strip
           next if line.empty? || line.start_with?('#')
 
+          # Track control structure depth
+          words = line.split(/\s+/)
+          words.each do |word|
+            case word
+            when 'if', 'while'
+              depth += 1
+            when 'fi', 'done'
+              depth -= 1
+            end
+          end
+
+          # Accumulate lines
+          if buffer.empty?
+            buffer = line
+          else
+            buffer = "#{buffer}; #{line}"
+          end
+
+          # Execute when we have a complete statement
+          if depth == 0
+            begin
+              @executor.call(buffer)
+            rescue => e
+              puts "source: #{e.message}"
+            end
+            buffer = +''
+          end
+        end
+
+        # Execute any remaining buffer (incomplete statement)
+        unless buffer.empty?
           begin
-            @executor.call(line)
+            @executor.call(buffer)
           rescue => e
             puts "source: #{e.message}"
           end
         end
+
         nil
       end
 

@@ -38,5 +38,8 @@ module Rubish
         super
       end
     end
+
+    # While loop: while cond; do body; done
+    While = Data.define(:condition, :body)
   end
 end

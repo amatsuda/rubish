@@ -21,7 +21,10 @@ module Rubish
       'then' => :THEN,
       'else' => :ELSE,
       'elif' => :ELIF,
-      'fi' => :FI
+      'fi' => :FI,
+      'while' => :WHILE
+      # Note: 'do' and 'done' are handled as WORD tokens and checked by parser
+      # to allow them as command arguments (e.g., "echo done")
     }.freeze
 
     def initialize(input)
@@ -77,9 +80,17 @@ module Rubish
       when '{'
         read_block
       when 'd'
-        # Check for 'do' block
-        if @input[@pos, 2] == 'do' && (@input[@pos + 2].nil? || @input[@pos + 2] =~ /[\s|]/)
-          read_do_block
+        # Check for Ruby 'do' block (do |x| ... end)
+        # Only treat as block if followed by space/| (not 'done' or other words)
+        if @input[@pos, 2] == 'do' && @input[@pos + 2] =~ /[\s|]/
+          # Look ahead to see if this has block args (|...|) - distinguishes from shell 'do'
+          lookahead = @pos + 2
+          lookahead += 1 while lookahead < @input.length && @input[lookahead] =~ /\s/
+          if @input[lookahead] == '|'
+            read_do_block
+          else
+            read_word
+          end
         else
           read_word
         end

@@ -44,7 +44,7 @@ module Rubish
       commands = [first]
       while peek(:SEMICOLON) || peek(:AMPERSAND)
         op = consume
-        if op.type == :AMPERSAND && !peek_any(:WORD, :ARRAY, :REGEXP, :IF)
+        if op.type == :AMPERSAND && !peek_any(:WORD, :ARRAY, :REGEXP, :IF, :WHILE)
           # Trailing &, make last command background
           commands[-1] = AST::Background.new(commands[-1])
           break
@@ -89,11 +89,12 @@ module Rubish
       commands.length == 1 ? commands.first : AST::Pipeline.new(commands)
     end
 
-    # command : if_statement | WORD arg* block? (redirection)*
+    # command : if_statement | while_statement | WORD arg* block? (redirection)*
     # arg : WORD | ARRAY | REGEXP
     def parse_command
-      # Check for if statement
+      # Check for control structures
       return parse_if if peek(:IF)
+      return parse_while if peek(:WHILE)
 
       return nil unless peek(:WORD)
 
@@ -185,6 +186,45 @@ module Rubish
       end
 
       commands.length == 1 ? commands.first : AST::List.new(commands)
+    end
+
+    # while_statement : WHILE conditional 'do' body 'done'
+    def parse_while
+      consume(:WHILE)
+
+      condition = parse_conditional_for_if
+      skip_semicolon
+      consume_word('do') || raise('Expected "do" after while condition')
+      body = parse_while_body
+      consume_word('done') || raise('Expected "done" to close while loop')
+
+      AST::While.new(condition, body)
+    end
+
+    # Parse body of while loop (stops at done)
+    def parse_while_body
+      commands = []
+      skip_semicolon
+
+      while !peek_word('done') && current
+        cmd = parse_conditional
+        break unless cmd
+
+        commands << cmd
+        skip_semicolon
+      end
+
+      commands.length == 1 ? commands.first : AST::List.new(commands)
+    end
+
+    def peek_word(value)
+      peek(:WORD) && current.value == value
+    end
+
+    def consume_word(value)
+      return nil unless peek_word(value)
+
+      consume(:WORD)
     end
 
     def parse_arg
