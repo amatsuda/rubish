@@ -1,8 +1,13 @@
 # frozen_string_literal: true
 
+require 'tempfile'
+
 require_relative 'rubish/lexer'
 require_relative 'rubish/ast'
 require_relative 'rubish/parser'
+require_relative 'rubish/codegen'
+require_relative 'rubish/runtime/command'
+require_relative 'rubish/runtime/builtins'
 
 module Rubish
   VERSION = '0.0.1'
