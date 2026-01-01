@@ -2,7 +2,7 @@
 
 module Rubish
   module Builtins
-    COMMANDS = %w[cd exit jobs fg bg export pwd history alias unalias source . shift set return read echo].freeze
+    COMMANDS = %w(cd exit jobs fg bg export pwd history alias unalias source . shift set return read echo test [).freeze
 
     @aliases = {}
     @executor = nil
@@ -54,6 +54,8 @@ module Rubish
         run_read(args)
       when 'echo'
         run_echo(args)
+      when 'test', '['
+        run_test(args)
       else
         false
       end
@@ -239,6 +241,55 @@ module Rubish
     def self.run_return(args)
       code = args.first&.to_i || 0
       throw :return, code
+    end
+
+    def self.run_test(args)
+      # Remove trailing ] if called as [
+      args = args[0...-1] if args.last == ']'
+
+      return false if args.empty?
+
+      # Unary operators
+      if args.length == 2
+        op, arg = args
+        case op
+        when '-z' then return arg.empty?
+        when '-n' then return !arg.empty?
+        when '-f' then return File.file?(arg)
+        when '-d' then return File.directory?(arg)
+        when '-e' then return File.exist?(arg)
+        when '-r' then return File.readable?(arg)
+        when '-w' then return File.writable?(arg)
+        when '-x' then return File.executable?(arg)
+        when '-s' then return File.exist?(arg) && File.size(arg) > 0
+        end
+      end
+
+      # Single argument - true if non-empty
+      return !args.first.empty? if args.length == 1
+
+      # Binary operators
+      if args.length == 3
+        left, op, right = args
+        case op
+        when '=' then return left == right
+        when '==' then return left == right
+        when '!=' then return left != right
+        when '-eq' then return left.to_i == right.to_i
+        when '-ne' then return left.to_i != right.to_i
+        when '-lt' then return left.to_i < right.to_i
+        when '-le' then return left.to_i <= right.to_i
+        when '-gt' then return left.to_i > right.to_i
+        when '-ge' then return left.to_i >= right.to_i
+        end
+      end
+
+      # Negation
+      if args.first == '!'
+        return !run_test(args[1..])
+      end
+
+      false
     end
 
     def self.run_echo(args)
