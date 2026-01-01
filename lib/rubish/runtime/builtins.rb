@@ -2,7 +2,7 @@
 
 module Rubish
   module Builtins
-    COMMANDS = %w[cd exit jobs fg bg export pwd history alias unalias source .].freeze
+    COMMANDS = %w[cd exit jobs fg bg export pwd history alias unalias source . shift].freeze
 
     @aliases = {}
     @executor = nil
@@ -44,6 +44,8 @@ module Rubish
         run_unalias(args)
       when 'source', '.'
         run_source(args)
+      when 'shift'
+        run_shift(args)
       else
         false
       end
@@ -193,6 +195,22 @@ module Rubish
         @positional_params_setter&.call(old_positional_params) if old_positional_params
       end
 
+      true
+    end
+
+    def self.run_shift(args)
+      n = args.first&.to_i || 1
+
+      return false if n < 0
+
+      params = @positional_params_getter&.call || []
+
+      if n > params.length
+        puts 'shift: shift count out of range'
+        return false
+      end
+
+      @positional_params_setter&.call(params.drop(n))
       true
     end
 
