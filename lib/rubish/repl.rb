@@ -71,6 +71,7 @@ module Rubish
     end
 
     def execute(line)
+      line = expand_variables(line)
       tokens = @lexer_class.new(line).tokenize
       ast = @parser_class.new(tokens).parse
       return unless ast
@@ -83,6 +84,57 @@ module Rubish
 
       code = @codegen.generate(ast)
       eval_in_context(code)
+    end
+
+    def expand_variables(line)
+      # Expand ${VAR} and $VAR (but not inside single quotes)
+      result = +''
+      i = 0
+      in_single_quotes = false
+      in_double_quotes = false
+
+      while i < line.length
+        char = line[i]
+
+        if char == "'" && !in_double_quotes
+          in_single_quotes = !in_single_quotes
+          result << char
+          i += 1
+        elsif char == '"' && !in_single_quotes
+          in_double_quotes = !in_double_quotes
+          result << char
+          i += 1
+        elsif char == '$' && !in_single_quotes
+          # Variable expansion
+          if line[i + 1] == '{'
+            # ${VAR} form
+            end_brace = line.index('}', i + 2)
+            if end_brace
+              var_name = line[i + 2...end_brace]
+              result << ENV.fetch(var_name, '')
+              i = end_brace + 1
+            else
+              result << char
+              i += 1
+            end
+          elsif line[i + 1] =~ /[a-zA-Z_]/
+            # $VAR form
+            j = i + 1
+            j += 1 while j < line.length && line[j] =~ /[a-zA-Z0-9_]/
+            var_name = line[i + 1...j]
+            result << ENV.fetch(var_name, '')
+            i = j
+          else
+            result << char
+            i += 1
+          end
+        else
+          result << char
+          i += 1
+        end
+      end
+
+      result
     end
 
     def eval_in_context(code)
