@@ -2,7 +2,7 @@
 
 module Rubish
   module Builtins
-    COMMANDS = %w[cd exit jobs fg bg export pwd].freeze
+    COMMANDS = %w[cd exit jobs fg bg export pwd history].freeze
 
     def self.builtin?(name)
       COMMANDS.include?(name)
@@ -24,6 +24,8 @@ module Rubish
         run_export(args)
       when 'pwd'
         run_pwd(args)
+      when 'history'
+        run_history(args)
       else
         false
       end
@@ -58,6 +60,17 @@ module Rubish
 
     def self.run_pwd(_args)
       puts Dir.pwd
+      true
+    end
+
+    def self.run_history(args)
+      history = Reline::HISTORY.to_a
+      count = args.first&.to_i || history.length
+
+      start_index = [history.length - count, 0].max
+      history[start_index..].each_with_index do |line, i|
+        puts format('%5d  %s', start_index + i + 1, line)
+      end
       true
     end
 

@@ -2,6 +2,7 @@
 
 require 'tempfile'
 require 'singleton'
+require 'reline'
 
 require_relative 'rubish/lexer'
 require_relative 'rubish/ast'

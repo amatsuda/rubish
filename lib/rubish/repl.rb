@@ -1,7 +1,5 @@
 # frozen_string_literal: true
 
-require 'reline'
-
 module Rubish
   class REPL
     def initialize
