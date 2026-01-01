@@ -89,13 +89,14 @@ module Rubish
       commands.length == 1 ? commands.first : AST::Pipeline.new(commands)
     end
 
-    # command : if_statement | while_statement | for_statement | function_def | WORD arg* block? (redirection)*
+    # command : if_statement | while_statement | for_statement | case_statement | function_def | WORD arg* block? (redirection)*
     # arg : WORD | ARRAY | REGEXP
     def parse_command
       # Check for control structures
       return parse_if if peek(:IF)
       return parse_while if peek(:WHILE)
       return parse_for if peek(:FOR)
+      return parse_case if peek(:CASE)
       return parse_function_keyword if peek(:FUNCTION)
 
       return nil unless peek(:WORD)
@@ -276,6 +277,67 @@ module Rubish
       consume_word('done') || raise('Expected "done" to close for loop')
 
       AST::For.new(variable, items, body)
+    end
+
+    # case_statement : CASE WORD 'in' (pattern ('|' pattern)* ')' body ';;')* ESAC
+    def parse_case
+      consume(:CASE)
+
+      word = consume(:WORD)&.value || raise('Expected word after "case"')
+      skip_semicolon
+      consume_word('in') || raise('Expected "in" after case word')
+      skip_semicolon
+
+      branches = []
+
+      while !peek(:ESAC) && current
+        # Parse patterns (separated by |)
+        patterns = []
+        loop do
+          pattern = consume(:WORD)&.value
+          break unless pattern
+
+          patterns << pattern
+          break unless peek(:PIPE)
+
+          consume(:PIPE)
+        end
+
+        break if patterns.empty?
+
+        # Consume closing )
+        consume(:RPAREN) || raise('Expected ")" after case pattern')
+
+        # Parse body until ;;
+        body = parse_case_body
+        branches << [patterns, body]
+
+        # Consume ;;
+        if peek(:DOUBLE_SEMI)
+          consume(:DOUBLE_SEMI)
+          skip_semicolon
+        end
+      end
+
+      consume(:ESAC) || raise('Expected "esac" to close case statement')
+
+      AST::Case.new(word, branches)
+    end
+
+    # Parse body of case branch (stops at ;; or esac)
+    def parse_case_body
+      commands = []
+      skip_semicolon
+
+      while !peek(:DOUBLE_SEMI) && !peek(:ESAC) && current
+        cmd = parse_conditional
+        break unless cmd
+
+        commands << cmd
+        skip_semicolon
+      end
+
+      commands.length == 1 ? commands.first : AST::List.new(commands)
     end
 
     def peek_word(value)

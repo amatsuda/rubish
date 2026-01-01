@@ -510,6 +510,12 @@ module Rubish
       matches.empty? ? [pattern] : matches
     end
 
+    def __case_match(pattern, word)
+      # Shell pattern matching using fnmatch
+      # Supports *, ?, [...] patterns
+      File.fnmatch(pattern, word, File::FNM_EXTGLOB)
+    end
+
     def __define_function(name, &block)
       @functions[name] = block
       nil

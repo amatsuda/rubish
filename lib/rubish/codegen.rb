@@ -26,6 +26,8 @@ module Rubish
         generate_for(node)
       when AST::Function
         generate_function(node)
+      when AST::Case
+        generate_case(node)
       else
         raise "Unknown AST node: #{node.class}"
       end
@@ -365,6 +367,34 @@ module Rubish
       # Generate a function definition that stores a lambda
       body_code = generate_loop_body(node.body)
       "__define_function(#{node.name.inspect}) { #{body_code} }"
+    end
+
+    def generate_case(node)
+      parts = []
+      word_expr = generate_string_arg(node.word)
+      parts << "__case_word = #{word_expr}"
+
+      node.branches.each_with_index do |(patterns, body), i|
+        keyword = i == 0 ? 'if' : 'elsif'
+        # Build condition: check if any pattern matches
+        conditions = patterns.map { |p| generate_case_pattern_match(p) }
+        parts << "#{keyword} #{conditions.join(' || ')}"
+        parts << generate_loop_body(body)
+      end
+
+      parts << 'end'
+      parts.join("\n")
+    end
+
+    def generate_case_pattern_match(pattern)
+      # Convert shell pattern to fnmatch check
+      # Handle variable expansion in patterns
+      if pattern.include?('$')
+        pattern_expr = generate_interpolated_string(pattern)
+        "__case_match(#{pattern_expr}, __case_word)"
+      else
+        "__case_match(#{pattern.inspect}, __case_word)"
+      end
     end
 
     def escape_string(str)

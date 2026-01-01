@@ -7,6 +7,7 @@ module Rubish
     OPERATORS = {
       '|' => :PIPE,
       ';' => :SEMICOLON,
+      ';;' => :DOUBLE_SEMI,  # For case statement pattern terminators
       '&' => :AMPERSAND,
       '>' => :REDIRECT_OUT,
       '>>' => :REDIRECT_APPEND,
@@ -29,7 +30,9 @@ module Rubish
       'fi' => :FI,
       'while' => :WHILE,
       'for' => :FOR,
-      'function' => :FUNCTION
+      'function' => :FUNCTION,
+      'case' => :CASE,
+      'esac' => :ESAC
       # Note: 'do', 'done', 'in' are handled as WORD tokens and checked by parser
       # to allow them as command arguments (e.g., "echo done")
     }.freeze
@@ -60,14 +63,14 @@ module Rubish
     def read_token
       # Check for multi-char operators first
       two_char = @input[@pos, 2]
-      if %w[>> 2> && || ()].include?(two_char)
+      if %w[>> 2> && || () ;;].include?(two_char)
         @pos += 2
         return Token.new(OPERATORS[two_char], two_char)
       end
 
-      # Single char operators (but not ( and ) which need context)
+      # Single char operators (but not ( which needs context for function defs)
       char = @input[@pos]
-      if %w[| ; & > <].include?(char)
+      if %w[| ; & > < )].include?(char)
         @pos += 1
         return Token.new(OPERATORS[char], char)
       end
@@ -81,7 +84,14 @@ module Rubish
           @pos += 1
           return Token.new(:WORD, '[')
         end
-        read_array
+        # Check if this is a glob pattern like [abc]file vs array [1, 2, 3]
+        # Glob pattern: [chars] followed by more word characters
+        # Array: [value, value, ...] with commas inside
+        if looks_like_glob_bracket?
+          read_word
+        else
+          read_array
+        end
       when '/'
         read_regexp_or_word
       when '{'
@@ -117,6 +127,32 @@ module Rubish
       else
         read_word
       end
+    end
+
+    def looks_like_glob_bracket?
+      # Glob pattern: [abc] or [a-z] followed by more word characters
+      # Array: [1, 2, 3] or ["a", "b"] with commas
+      lookahead = @pos + 1
+      has_comma = false
+      while lookahead < @input.length
+        char = @input[lookahead]
+        if char == ']'
+          # Found closing bracket - check what follows
+          next_char = @input[lookahead + 1]
+          # If followed by word characters, it's a glob pattern
+          return true if next_char && next_char =~ /[a-zA-Z0-9_.\-]/
+          # If followed by space/operator/end, could be either
+          # Check if we saw commas inside - if so, it's an array
+          return !has_comma
+        elsif char == ','
+          has_comma = true
+        elsif char =~ /[\s]/
+          # Whitespace inside brackets suggests array (glob patterns are compact)
+          return false
+        end
+        lookahead += 1
+      end
+      false  # Unclosed bracket, treat as array
     end
 
     def read_array
@@ -258,11 +294,12 @@ module Rubish
       while @pos < @input.length
         char = @input[@pos]
         break if char =~ /[ \t]/ || OPERATORS.key?(char)
-        break if @input[@pos, 2] == '>>' || @input[@pos, 2] == '2>'
+        break if @input[@pos, 2] == '>>' || @input[@pos, 2] == '2>' || @input[@pos, 2] == ';;'
         # Stop at Ruby literal starters only at the start of a word
         # In the middle of a word, [ is a glob pattern like file[12].txt
+        # At the start, [ might be a glob pattern like [abc]file
         # Exception: ${VAR} is a shell variable, not a Ruby block
-        break if char == '[' && @pos == start
+        break if char == '[' && @pos == start && !looks_like_glob_bracket?
         break if char == '{' && (@pos == start || @input[@pos - 1] != '$')
 
         if char == '"'

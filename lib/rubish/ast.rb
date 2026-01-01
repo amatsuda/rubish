@@ -47,5 +47,9 @@ module Rubish
 
     # Function definition: function name { body } or name() { body }
     Function = Data.define(:name, :body)
+
+    # Case statement: case word in pattern1) body ;; pattern2|pattern3) body ;; esac
+    # branches is array of [patterns, body] where patterns is array of pattern strings
+    Case = Data.define(:word, :branches)
   end
 end
