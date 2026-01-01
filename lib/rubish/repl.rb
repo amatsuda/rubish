@@ -7,6 +7,7 @@ module Rubish
       @parser_class = Parser
       @codegen = Codegen.new
       @last_line = nil
+      @last_status = 0
       Builtins.executor = ->(line) { execute(line) }
     end
 
@@ -81,12 +82,25 @@ module Rubish
 
       # Check for builtins (simple command only)
       if ast.is_a?(AST::Command) && Builtins.builtin?(ast.name)
-        Builtins.run(ast.name, ast.args)
+        result = Builtins.run(ast.name, ast.args)
+        @last_status = result ? 0 : 1
         return
       end
 
       code = @codegen.generate(ast)
-      eval_in_context(code)
+      result = eval_in_context(code)
+      @last_status = extract_exit_status(result)
+    end
+
+    def extract_exit_status(result)
+      case result
+      when Command, Pipeline
+        result.status&.exitstatus || 0
+      when Integer
+        result
+      else
+        0
+      end
     end
 
     def expand_tilde(line)
@@ -164,7 +178,11 @@ module Rubish
           result << char
           i += 1
         elsif char == '$' && !in_single_quotes
-          if line[i + 1] == '('
+          if line[i + 1] == '?'
+            # Special variable $? - last exit status
+            result << @last_status.to_s
+            i += 2
+          elsif line[i + 1] == '('
             # Command substitution $(cmd)
             depth = 1
             j = i + 2

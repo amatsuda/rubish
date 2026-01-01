@@ -152,4 +152,42 @@ class TestVariableExpansion < Test::Unit::TestCase
     # Unclosed $( should be treated as literal $
     assert_equal 'echo $(unclosed', expand('echo $(unclosed')
   end
+
+  # $? tests
+  def test_exit_status_after_success
+    @repl.send(:execute, 'true')
+    assert_equal 'exit: 0', expand('exit: $?')
+  end
+
+  def test_exit_status_after_failure
+    @repl.send(:execute, 'false')
+    assert_equal 'exit: 1', expand('exit: $?')
+  end
+
+  def test_exit_status_initial_value
+    repl = Rubish::REPL.new
+    result = repl.send(:expand_variables, 'status: $?')
+    assert_equal 'status: 0', result
+  end
+
+  def test_exit_status_in_double_quotes
+    @repl.send(:execute, 'false')
+    assert_equal '"1"', expand('"$?"')
+  end
+
+  def test_exit_status_not_in_single_quotes
+    @repl.send(:execute, 'false')
+    assert_equal "'$?'", expand("'$?'")
+  end
+
+  def test_exit_status_with_pipeline
+    @repl.send(:execute, 'true | false')
+    # Pipeline exit status is the last command
+    assert_equal '1', expand('$?')
+  end
+
+  def test_exit_status_after_builtin_success
+    @repl.send(:execute, 'cd .')
+    assert_equal '0', expand('$?')
+  end
 end
