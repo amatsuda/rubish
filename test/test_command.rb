@@ -32,23 +32,34 @@ class TestCommand < Test::Unit::TestCase
     output = capture_command_output do |f|
       left = Rubish::Command.new('echo', 'hello world')
       right = Rubish::Command.new('wc', '-w')
-      right.redirect_out(f.path)
-      left | right
+      pipeline = left | right
+      pipeline.redirect_out(f.path)
+      pipeline.run
     end
     assert_match(/2/, output.strip)
   end
 
-  # TODO: three-command pipes need architectural fix
-  # The issue is (cmd1 | cmd2) runs cmd2, then trying to pipe
-  # the result to cmd3 fails because cmd2 already ran
   def test_pipe_with_grep
     output = capture_command_output do |f|
       cmd1 = Rubish::Command.new('printf', "apple\nbanana\ncherry")
       cmd2 = Rubish::Command.new('grep', 'banana')
-      cmd2.redirect_out(f.path)
-      cmd1 | cmd2
+      pipeline = cmd1 | cmd2
+      pipeline.redirect_out(f.path)
+      pipeline.run
     end
     assert_equal "banana\n", output
+  end
+
+  def test_pipe_three_commands
+    output = capture_command_output do |f|
+      cmd1 = Rubish::Command.new('printf', "apple\nbanana\ncherry\nbanana")
+      cmd2 = Rubish::Command.new('grep', 'banana')
+      cmd3 = Rubish::Command.new('wc', '-l')
+      pipeline = cmd1 | cmd2 | cmd3
+      pipeline.redirect_out(f.path)
+      pipeline.run
+    end
+    assert_match(/2/, output.strip)
   end
 
   def test_redirect_out
@@ -85,6 +96,34 @@ class TestCommand < Test::Unit::TestCase
       end
 
       assert_equal "hello from file\n", output
+    end
+  end
+
+  def test_redirect_err
+    Tempfile.create('rubish_err') do |f|
+      cmd = Rubish::Command.new('ls', '/nonexistent_path_for_test')
+      cmd.redirect_err(f.path)
+      cmd.run
+
+      err_output = File.read(f.path)
+      assert_match(/No such file or directory/, err_output)
+    end
+  end
+
+  def test_pipeline_with_redirect
+    Tempfile.create('rubish_test') do |f|
+      File.write(f.path, "apple\nbanana\ncherry\n")
+
+      output = capture_command_output do |out|
+        cmd1 = Rubish::Command.new('cat')
+        cmd1.redirect_in(f.path)
+        cmd2 = Rubish::Command.new('grep', 'an')
+        pipeline = cmd1 | cmd2
+        pipeline.redirect_out(out.path)
+        pipeline.run
+      end
+
+      assert_equal "banana\n", output
     end
   end
 

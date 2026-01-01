@@ -59,7 +59,7 @@ module Rubish
 
     def eval_in_context(code)
       result = binding.eval(code)
-      result.run if result.is_a?(Command)
+      result.run if result.is_a?(Command) || result.is_a?(Pipeline)
       result
     end
 
