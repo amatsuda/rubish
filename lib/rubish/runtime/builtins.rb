@@ -2,7 +2,7 @@
 
 module Rubish
   module Builtins
-    COMMANDS = %w[cd exit jobs fg bg export pwd history alias unalias source . shift set].freeze
+    COMMANDS = %w[cd exit jobs fg bg export pwd history alias unalias source . shift set return].freeze
 
     @aliases = {}
     @executor = nil
@@ -48,6 +48,8 @@ module Rubish
         run_shift(args)
       when 'set'
         run_set(args)
+      when 'return'
+        run_return(args)
       else
         false
       end
@@ -180,7 +182,7 @@ module Rubish
       @script_name_setter&.call(file)
       @positional_params_setter&.call(args[1..] || [])
 
-      begin
+      return_code = catch(:return) do
         File.readlines(file, chomp: true).each do |line|
           line = line.strip
           next if line.empty? || line.start_with?('#')
@@ -191,13 +193,14 @@ module Rubish
             puts "source: #{e.message}"
           end
         end
-      ensure
-        # Restore script name and positional params
-        @script_name_setter&.call(old_script_name) if old_script_name
-        @positional_params_setter&.call(old_positional_params) if old_positional_params
+        nil
       end
 
-      true
+      # Restore script name and positional params
+      @script_name_setter&.call(old_script_name) if old_script_name
+      @positional_params_setter&.call(old_positional_params) if old_positional_params
+
+      return_code.nil? || return_code == 0
     end
 
     def self.run_shift(args)
@@ -227,6 +230,11 @@ module Rubish
         @positional_params_setter&.call(args)
       end
       true
+    end
+
+    def self.run_return(args)
+      code = args.first&.to_i || 0
+      throw :return, code
     end
 
     def self.run_exit(args)
