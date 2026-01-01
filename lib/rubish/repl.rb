@@ -10,12 +10,15 @@ module Rubish
       @last_status = 0
       @last_bg_pid = nil
       @script_name = 'rubish'
+      @positional_params = []
       Builtins.executor = ->(line) { execute(line) }
       Builtins.script_name_getter = -> { @script_name }
       Builtins.script_name_setter = ->(name) { @script_name = name }
+      Builtins.positional_params_getter = -> { @positional_params }
+      Builtins.positional_params_setter = ->(params) { @positional_params = params }
     end
 
-    attr_accessor :script_name
+    attr_accessor :script_name, :positional_params
 
     def run
       setup_reline
@@ -199,6 +202,11 @@ module Rubish
           elsif line[i + 1] == '0'
             # Special variable $0 - script/shell name
             result << @script_name
+            i += 2
+          elsif line[i + 1] =~ /[1-9]/
+            # Positional parameters $1-$9
+            idx = line[i + 1].to_i - 1
+            result << (@positional_params[idx] || '')
             i += 2
           elsif line[i + 1] == '('
             # Command substitution $(cmd)

@@ -141,4 +141,49 @@ class TestSource < Test::Unit::TestCase
     # After sourcing, should be restored
     assert_equal 'rubish', @repl.script_name
   end
+
+  def test_source_with_positional_params
+    output_file = File.join(@tempdir, 'params.txt')
+    script = create_script('params.sh', <<~SCRIPT)
+      echo $1 $2 $3 > #{output_file}
+    SCRIPT
+
+    execute("source #{script} foo bar baz")
+
+    assert_equal "foo bar baz\n", File.read(output_file)
+  end
+
+  def test_source_positional_params_restored
+    @repl.positional_params = ['original']
+    script = create_script('change_params.sh', <<~SCRIPT)
+      true
+    SCRIPT
+
+    execute("source #{script} new_value")
+
+    # Should be restored after source
+    assert_equal ['original'], @repl.positional_params
+  end
+
+  def test_source_accesses_param_1
+    output_file = File.join(@tempdir, 'first.txt')
+    script = create_script('first.sh', <<~SCRIPT)
+      echo $1 > #{output_file}
+    SCRIPT
+
+    execute("source #{script} first_arg second_arg")
+
+    assert_equal "first_arg\n", File.read(output_file)
+  end
+
+  def test_source_empty_positional_params
+    output_file = File.join(@tempdir, 'empty.txt')
+    script = create_script('empty_params.sh', <<~SCRIPT)
+      echo "[$1][$2]" > #{output_file}
+    SCRIPT
+
+    execute("source #{script}")
+
+    assert_equal "[][]\n", File.read(output_file)
+  end
 end

@@ -70,7 +70,8 @@ class TestVariableExpansion < Test::Unit::TestCase
   end
 
   def test_dollar_followed_by_number
-    assert_equal 'echo $1', expand('echo $1')
+    # $1-$9 are now positional parameters, expand to empty if not set
+    assert_equal 'echo ', expand('echo $1')
   end
 
   def test_variable_with_underscore
@@ -268,5 +269,56 @@ class TestVariableExpansion < Test::Unit::TestCase
     @repl.script_name = '/path/to/script.sh'
     result = expand('$0')
     assert_equal '/path/to/script.sh', result
+  end
+
+  # $1-$9 positional parameters tests
+  def test_positional_param_1
+    @repl.positional_params = ['first', 'second', 'third']
+    assert_equal 'first', expand('$1')
+  end
+
+  def test_positional_param_2
+    @repl.positional_params = ['first', 'second', 'third']
+    assert_equal 'second', expand('$2')
+  end
+
+  def test_positional_param_3
+    @repl.positional_params = ['first', 'second', 'third']
+    assert_equal 'third', expand('$3')
+  end
+
+  def test_positional_param_9
+    @repl.positional_params = %w[a b c d e f g h i]
+    assert_equal 'i', expand('$9')
+  end
+
+  def test_positional_param_unset
+    @repl.positional_params = ['only_one']
+    assert_equal '', expand('$2')
+  end
+
+  def test_positional_params_empty
+    @repl.positional_params = []
+    assert_equal '', expand('$1')
+  end
+
+  def test_positional_params_in_string
+    @repl.positional_params = ['hello', 'world']
+    assert_equal 'say hello world', expand('say $1 $2')
+  end
+
+  def test_positional_params_in_double_quotes
+    @repl.positional_params = ['value']
+    assert_equal '"value"', expand('"$1"')
+  end
+
+  def test_positional_params_not_in_single_quotes
+    @repl.positional_params = ['value']
+    assert_equal "'$1'", expand("'$1'")
+  end
+
+  def test_all_positional_params
+    @repl.positional_params = %w[a b c d e f g h i]
+    assert_equal 'a b c d e f g h i', expand('$1 $2 $3 $4 $5 $6 $7 $8 $9')
   end
 end

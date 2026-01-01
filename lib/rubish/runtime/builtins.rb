@@ -8,10 +8,12 @@ module Rubish
     @executor = nil
     @script_name_getter = nil
     @script_name_setter = nil
+    @positional_params_getter = nil
+    @positional_params_setter = nil
 
     class << self
       attr_reader :aliases
-      attr_accessor :executor, :script_name_getter, :script_name_setter
+      attr_accessor :executor, :script_name_getter, :script_name_setter, :positional_params_getter, :positional_params_setter
     end
 
     def self.builtin?(name)
@@ -168,9 +170,11 @@ module Rubish
         return false
       end
 
-      # Save and set script name
+      # Save and set script name and positional params
       old_script_name = @script_name_getter&.call
+      old_positional_params = @positional_params_getter&.call
       @script_name_setter&.call(file)
+      @positional_params_setter&.call(args[1..] || [])
 
       begin
         File.readlines(file, chomp: true).each do |line|
@@ -184,8 +188,9 @@ module Rubish
           end
         end
       ensure
-        # Restore script name
+        # Restore script name and positional params
         @script_name_setter&.call(old_script_name) if old_script_name
+        @positional_params_setter&.call(old_positional_params) if old_positional_params
       end
 
       true
