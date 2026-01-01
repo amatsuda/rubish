@@ -2,7 +2,9 @@
 
 require 'stringio'
 require 'tempfile'
+require 'tmpdir'
 require 'singleton'
+require 'fileutils'
 require 'reline'
 
 require_relative 'rubish/lexer'

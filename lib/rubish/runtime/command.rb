@@ -72,8 +72,31 @@ module Rubish
         when Regexp
           arg.source
         else
-          arg.to_s
+          expand_glob(arg.to_s)
         end
+      end
+    end
+
+    def expand_glob(arg)
+      # Don't expand if quoted
+      return strip_quotes(arg) if arg.start_with?('"') || arg.start_with?("'")
+
+      # Check if it contains glob characters
+      return arg unless arg =~ /[*?\[]/
+
+      # Expand the glob
+      matches = Dir.glob(arg)
+
+      # If no matches, return original (like bash without nullglob)
+      matches.empty? ? arg : matches.sort
+    end
+
+    def strip_quotes(str)
+      if (str.start_with?('"') && str.end_with?('"')) ||
+         (str.start_with?("'") && str.end_with?("'"))
+        str[1...-1]
+      else
+        str
       end
     end
 
