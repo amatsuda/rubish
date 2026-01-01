@@ -12,6 +12,22 @@ module Rubish
     attr_reader :name, :pid, :status
     attr_accessor :stdin, :stdout, :stderr, :block
 
+    # Class-level accessors for function support in pipelines
+    @function_checker = nil
+    @function_caller = nil
+
+    class << self
+      attr_accessor :function_checker, :function_caller
+    end
+
+    def self.function?(name)
+      @function_checker&.call(name) || false
+    end
+
+    def self.call_function(name, args)
+      @function_caller&.call(name, args)
+    end
+
     def initialize(name, *args, &block)
       @name = name
       @args = expand_args(args)
@@ -90,7 +106,14 @@ module Rubish
         $stdin.reopen(@stdin) if @stdin
         $stdout.reopen(@stdout) if @stdout
         $stderr.reopen(@stderr) if @stderr
-        exec(name, *@args)
+
+        # Check if this is a user-defined function
+        if Command.function?(name)
+          Command.call_function(name, @args)
+          exit(0)
+        else
+          exec(name, *@args)
+        end
       end
 
       @stdin&.close unless @stdin == $stdin
@@ -210,7 +233,14 @@ module Rubish
           $stdin.reopen(cmd.stdin) if cmd.stdin
           $stdout.reopen(cmd.stdout) if cmd.stdout
           $stderr.reopen(cmd.stderr) if cmd.stderr
-          exec(cmd.name, *cmd.args)
+
+          # Check if this is a user-defined function
+          if Command.function?(cmd.name)
+            Command.call_function(cmd.name, cmd.args)
+            exit(0)
+          else
+            exec(cmd.name, *cmd.args)
+          end
         end
       end
 
@@ -253,7 +283,14 @@ module Rubish
           $stdin.reopen(cmd.stdin) if cmd.stdin
           $stdout.reopen(cmd.stdout) if cmd.stdout
           $stderr.reopen(cmd.stderr) if cmd.stderr
-          exec(cmd.name, *cmd.args)
+
+          # Check if this is a user-defined function
+          if Command.function?(cmd.name)
+            Command.call_function(cmd.name, cmd.args)
+            exit(0)
+          else
+            exec(cmd.name, *cmd.args)
+          end
         end
       end
 

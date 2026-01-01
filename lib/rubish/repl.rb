@@ -18,6 +18,9 @@ module Rubish
       Builtins.positional_params_getter = -> { @positional_params }
       Builtins.positional_params_setter = ->(params) { @positional_params = params }
       Builtins.function_checker = ->(name) { @functions.key?(name) }
+      # Set up Command class to handle functions in pipelines
+      Command.function_checker = ->(name) { @functions.key?(name) }
+      Command.function_caller = ->(name, args) { call_function(name, args) }
     end
 
     attr_accessor :script_name, :positional_params, :functions

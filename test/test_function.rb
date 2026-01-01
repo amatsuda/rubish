@@ -134,12 +134,30 @@ class TestFunction < Test::Unit::TestCase
     assert_equal "yes\n", File.read(output_file)
   end
 
-  # TODO: Functions in pipelines require changes to the Pipeline class
-  # def test_function_in_pipeline
-  #   execute('shout() { echo HELLO; }')
-  #   execute("shout | tr A-Z a-z > #{output_file}")
-  #   assert_equal "hello\n", File.read(output_file)
-  # end
+  def test_function_in_pipeline
+    execute('shout() { echo HELLO; }')
+    execute("shout | tr A-Z a-z > #{output_file}")
+    assert_equal "hello\n", File.read(output_file)
+  end
+
+  def test_function_at_end_of_pipeline
+    execute('upper() { tr a-z A-Z; }')
+    execute("echo hello | upper > #{output_file}")
+    assert_equal "HELLO\n", File.read(output_file)
+  end
+
+  def test_function_in_middle_of_pipeline
+    execute('double() { while read line; do echo $line; echo $line; done; }')
+    execute("echo hello | double | wc -l > #{output_file}")
+    assert_equal "       2\n", File.read(output_file)
+  end
+
+  def test_multiple_functions_in_pipeline
+    execute('add_prefix() { while read line; do echo PREFIX:$line; done; }')
+    execute('add_suffix() { while read line; do echo $line:SUFFIX; done; }')
+    execute("echo test | add_prefix | add_suffix > #{output_file}")
+    assert_equal "PREFIX:test:SUFFIX\n", File.read(output_file)
+  end
 
   def test_nested_function_call
     execute('inner() { echo inside; }')
