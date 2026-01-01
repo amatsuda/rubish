@@ -44,7 +44,7 @@ module Rubish
       commands = [first]
       while peek(:SEMICOLON) || peek(:AMPERSAND)
         op = consume
-        if op.type == :AMPERSAND && !peek_any(:WORD, :ARRAY, :REGEXP)
+        if op.type == :AMPERSAND && !peek_any(:WORD, :ARRAY, :REGEXP, :IF)
           # Trailing &, make last command background
           commands[-1] = AST::Background.new(commands[-1])
           break
@@ -89,9 +89,12 @@ module Rubish
       commands.length == 1 ? commands.first : AST::Pipeline.new(commands)
     end
 
-    # command : WORD arg* block? (redirection)*
+    # command : if_statement | WORD arg* block? (redirection)*
     # arg : WORD | ARRAY | REGEXP
     def parse_command
+      # Check for if statement
+      return parse_if if peek(:IF)
+
       return nil unless peek(:WORD)
 
       name = consume(:WORD).value
@@ -110,6 +113,78 @@ module Rubish
 
       cmd = AST::Command.new(name: name, args: args, block: block)
       parse_redirections(cmd)
+    end
+
+    # if_statement : IF conditional THEN body (ELIF conditional THEN body)* (ELSE body)? FI
+    def parse_if
+      consume(:IF)
+      branches = []
+
+      # Parse first branch
+      condition = parse_conditional_for_if
+      skip_semicolon
+      consume(:THEN) || raise('Expected "then" after if condition')
+      body = parse_if_body
+      branches << [condition, body]
+
+      # Parse elif branches
+      while peek(:ELIF)
+        consume(:ELIF)
+        elif_condition = parse_conditional_for_if
+        skip_semicolon
+        consume(:THEN) || raise('Expected "then" after elif condition')
+        elif_body = parse_if_body
+        branches << [elif_condition, elif_body]
+      end
+
+      # Parse else branch
+      else_body = nil
+      if peek(:ELSE)
+        consume(:ELSE)
+        else_body = parse_if_body
+      end
+
+      consume(:FI) || raise('Expected "fi" to close if statement')
+
+      AST::If.new(branches: branches, else_body: else_body)
+    end
+
+    def skip_semicolon
+      consume(:SEMICOLON) if peek(:SEMICOLON)
+    end
+
+    # Parse condition for if/elif (stops at then/do)
+    def parse_conditional_for_if
+      left = parse_pipeline
+      return nil unless left
+
+      while peek(:AND) || peek(:OR)
+        op = consume
+        right = parse_pipeline
+        left = if op.type == :AND
+                 AST::And.new(left, right)
+               else
+                 AST::Or.new(left, right)
+               end
+      end
+
+      left
+    end
+
+    # Parse body of if/elif/else (stops at elif/else/fi)
+    def parse_if_body
+      commands = []
+      skip_semicolon
+
+      while !peek(:ELIF) && !peek(:ELSE) && !peek(:FI) && current
+        cmd = parse_conditional
+        break unless cmd
+
+        commands << cmd
+        skip_semicolon
+      end
+
+      commands.length == 1 ? commands.first : AST::List.new(commands)
     end
 
     def parse_arg

@@ -18,6 +18,8 @@ module Rubish
         generate_and(node)
       when AST::Or
         generate_or(node)
+      when AST::If
+        generate_if(node)
       else
         raise "Unknown AST node: #{node.class}"
       end
@@ -59,7 +61,8 @@ module Rubish
     end
 
     def generate_list(node)
-      node.commands.map { |c| generate(c) }.join('; ')
+      # Each command in a list needs to run, not just the last one
+      node.commands.map { |c| "__run_cmd { #{generate(c)} }" }.join('; ')
     end
 
     def generate_redirect(node)
@@ -82,6 +85,24 @@ module Rubish
 
     def generate_or(node)
       "__or_cmd(-> { #{generate(node.left)} }, -> { #{generate(node.right)} })"
+    end
+
+    def generate_if(node)
+      parts = []
+
+      node.branches.each_with_index do |(condition, body), i|
+        keyword = i == 0 ? 'if' : 'elsif'
+        parts << "#{keyword} __condition { #{generate(condition)} }"
+        parts << generate(body)
+      end
+
+      if node.else_body
+        parts << 'else'
+        parts << generate(node.else_body)
+      end
+
+      parts << 'end'
+      parts.join("\n")
     end
 
     def escape_string(str)

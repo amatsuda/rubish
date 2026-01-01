@@ -30,5 +30,13 @@ module Rubish
     # Ruby literals as arguments
     ArrayLiteral = Data.define(:value)   # [1, 2, 3]
     RegexpLiteral = Data.define(:value)  # /pattern/
+
+    # If statement: if cond; then body; elif cond; then body; else body; fi
+    # branches is array of [condition, body] pairs, else_body is optional
+    If = Data.define(:branches, :else_body) do
+      def initialize(branches:, else_body: nil)
+        super
+      end
+    end
   end
 end

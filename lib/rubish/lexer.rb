@@ -16,6 +16,14 @@ module Rubish
       '||' => :OR
     }.freeze
 
+    KEYWORDS = {
+      'if' => :IF,
+      'then' => :THEN,
+      'else' => :ELSE,
+      'elif' => :ELIF,
+      'fi' => :FI
+    }.freeze
+
     def initialize(input)
       @input = input
       @pos = 0
@@ -57,6 +65,12 @@ module Rubish
       # Ruby literals
       case char
       when '['
+        # Check if this is a command [ (test) or an array literal
+        # [ as command is followed by space, array literal is not
+        if @input[@pos + 1] =~ /[\s]/
+          @pos += 1
+          return Token.new(:WORD, '[')
+        end
         read_array
       when '/'
         read_regexp_or_word
@@ -226,7 +240,14 @@ module Rubish
         end
       end
       value = @input[start...@pos]
-      Token.new(:WORD, value) unless value.empty?
+      return nil if value.empty?
+
+      # Check if word is a keyword
+      if KEYWORDS.key?(value)
+        Token.new(KEYWORDS[value], value)
+      else
+        Token.new(:WORD, value)
+      end
     end
 
     def read_double_quoted_string

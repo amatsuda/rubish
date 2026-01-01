@@ -1,6 +1,13 @@
 # frozen_string_literal: true
 
 module Rubish
+  # Simple exit status for builtins
+  ExitStatus = Struct.new(:exitstatus) do
+    def success?
+      exitstatus == 0
+    end
+  end
+
   class Command
     attr_reader :name, :pid, :status
     attr_accessor :stdin, :stdout, :stderr, :block

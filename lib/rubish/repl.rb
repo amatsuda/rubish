@@ -326,6 +326,23 @@ module Rubish
       nil
     end
 
+    def __condition(&block)
+      result = block.call
+      if result.is_a?(Command) && Builtins.builtin?(result.name)
+        # Run builtin directly and check its return value
+        Builtins.run(result.name, result.args)
+      else
+        result.run if result.is_a?(Command) || result.is_a?(Pipeline)
+        result.success?
+      end
+    end
+
+    def __run_cmd(&block)
+      result = block.call
+      result.run if result.is_a?(Command) || result.is_a?(Pipeline)
+      result
+    end
+
     def complete(input)
       line = Reline.line_buffer
       is_first_word = !line.include?(' ') || line.end_with?('| ')

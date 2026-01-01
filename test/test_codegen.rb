@@ -51,6 +51,6 @@ class TestCodegen < Test::Unit::TestCase
 
   def test_list
     code = generate('echo a; echo b')
-    assert_equal '__cmd("echo", "a"); __cmd("echo", "b")', code
+    assert_equal '__run_cmd { __cmd("echo", "a") }; __run_cmd { __cmd("echo", "b") }', code
   end
 end
