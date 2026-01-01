@@ -105,8 +105,28 @@ module Rubish
           result << char
           i += 1
         elsif char == '$' && !in_single_quotes
-          # Variable expansion
-          if line[i + 1] == '{'
+          if line[i + 1] == '('
+            # Command substitution $(cmd)
+            depth = 1
+            j = i + 2
+            while j < line.length && depth > 0
+              if line[j] == '('
+                depth += 1
+              elsif line[j] == ')'
+                depth -= 1
+              end
+              j += 1
+            end
+            if depth == 0
+              cmd = line[i + 2...j - 1]
+              output = `#{cmd}`.chomp
+              result << output
+              i = j
+            else
+              result << char
+              i += 1
+            end
+          elsif line[i + 1] == '{'
             # ${VAR} form
             end_brace = line.index('}', i + 2)
             if end_brace

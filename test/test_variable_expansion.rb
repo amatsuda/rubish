@@ -104,4 +104,52 @@ class TestVariableExpansion < Test::Unit::TestCase
     ENV['X'] = 'expanded'
     assert_equal "prefix '$X' suffix", expand("prefix '$X' suffix")
   end
+
+  # Command substitution tests
+  def test_simple_command_substitution
+    assert_equal 'echo hello', expand('echo $(echo hello)')
+  end
+
+  def test_command_substitution_at_start
+    assert_equal 'hello world', expand('$(echo hello) world')
+  end
+
+  def test_command_substitution_at_end
+    assert_equal 'say hello', expand('say $(echo hello)')
+  end
+
+  def test_multiple_command_substitutions
+    assert_equal 'a b', expand('$(echo a) $(echo b)')
+  end
+
+  def test_command_substitution_in_double_quotes
+    assert_equal '"hello"', expand('"$(echo hello)"')
+  end
+
+  def test_command_substitution_not_in_single_quotes
+    assert_equal "'$(echo hello)'", expand("'$(echo hello)'")
+  end
+
+  def test_nested_parentheses_in_command_substitution
+    assert_equal '2', expand('$(echo $((1+1)))')
+  end
+
+  def test_command_substitution_strips_trailing_newline
+    result = expand('$(printf "hello\n")')
+    assert_equal 'hello', result
+  end
+
+  def test_command_substitution_with_pipe
+    assert_equal 'HELLO', expand('$(echo hello | tr a-z A-Z)')
+  end
+
+  def test_mixed_variable_and_command_substitution
+    ENV['NAME'] = 'world'
+    assert_equal 'hello world', expand('$(echo hello) $NAME')
+  end
+
+  def test_unclosed_command_substitution
+    # Unclosed $( should be treated as literal $
+    assert_equal 'echo $(unclosed', expand('echo $(unclosed')
+  end
 end
