@@ -37,7 +37,8 @@ module Rubish
       cmd = if args.empty?
               "__cmd(#{name})"
             else
-              "__cmd(#{name}, #{args})"
+              # Flatten args in case of glob expansion
+              "__cmd(#{name}, *[#{args}].flatten)"
             end
 
       # Append block if present
@@ -51,7 +52,7 @@ module Rubish
     def generate_arg(arg)
       case arg
       when String
-        generate_string_arg(arg)
+        generate_string_arg_with_glob(arg)
       when AST::ArrayLiteral
         arg.value  # Already valid Ruby: [1, 2, 3]
       when AST::RegexpLiteral
@@ -59,6 +60,37 @@ module Rubish
       else
         arg.inspect
       end
+    end
+
+    def has_glob_chars?(str)
+      # Check for unquoted glob characters: *, ?, [...]
+      str.match?(/[*?\[]/)
+    end
+
+    def generate_string_arg_with_glob(str)
+      # Single-quoted strings: no expansion at all
+      if str.start_with?("'") && str.end_with?("'")
+        return str[1...-1].inspect
+      end
+
+      # Double-quoted strings: variable expansion but no glob
+      if str.start_with?('"') && str.end_with?('"')
+        inner = str[1...-1]
+        return generate_interpolated_string(inner)
+      end
+
+      # Unquoted: check for glob characters
+      if has_glob_chars?(str)
+        # If it also has variables, expand variables first then glob
+        if str.include?('$')
+          return "__glob(#{generate_interpolated_string(str)})"
+        else
+          return "__glob(#{str.inspect})"
+        end
+      end
+
+      # No glob chars - use normal string arg generation
+      generate_string_arg(str)
     end
 
     def generate_string_arg(str)
@@ -299,6 +331,7 @@ module Rubish
     def generate_for_item(item)
       # For loop items need word splitting on variable expansion
       # $VAR with value "a b c" should become three items
+      # Also need glob expansion for patterns like *.txt
       if item =~ /\A\$([a-zA-Z_][a-zA-Z0-9_]*)\z/
         # Simple variable - expand and split
         "ENV.fetch(#{$1.inspect}, '').split"
@@ -306,8 +339,11 @@ module Rubish
         # Braced variable - expand and split
         "ENV.fetch(#{$1.inspect}, '').split"
       elsif item.include?('$')
-        # Mixed content - expand as string, then split
+        # Mixed content with variable - expand as string, then split
         "#{generate_interpolated_string(item)}.split"
+      elsif has_glob_chars?(item)
+        # Glob pattern - expand
+        "__glob(#{item.inspect})"
       else
         # Literal - no splitting needed
         item.inspect

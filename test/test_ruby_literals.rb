@@ -90,14 +90,14 @@ class TestRubyLiterals < Test::Unit::TestCase
     tokens = Rubish::Lexer.new('echo [1, 2, 3]').tokenize
     ast = Rubish::Parser.new(tokens).parse
     code = Rubish::Codegen.new.generate(ast)
-    assert_equal '__cmd("echo", [1, 2, 3])', code
+    assert_equal '__cmd("echo", *[[1, 2, 3]].flatten)', code
   end
 
   def test_codegen_regexp
     tokens = Rubish::Lexer.new('grep /foo/i file').tokenize
     ast = Rubish::Parser.new(tokens).parse
     code = Rubish::Codegen.new.generate(ast)
-    assert_equal '__cmd("grep", /foo/i, "file")', code
+    assert_equal '__cmd("grep", *[/foo/i, "file"].flatten)', code
   end
 
   def test_codegen_block

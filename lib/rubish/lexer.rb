@@ -240,9 +240,10 @@ module Rubish
         char = @input[@pos]
         break if char =~ /[ \t]/ || OPERATORS.key?(char)
         break if @input[@pos, 2] == '>>' || @input[@pos, 2] == '2>'
-        # Stop at Ruby literal starters (but not in the middle of a word)
+        # Stop at Ruby literal starters only at the start of a word
+        # In the middle of a word, [ is a glob pattern like file[12].txt
         # Exception: ${VAR} is a shell variable, not a Ruby block
-        break if char == '['
+        break if char == '[' && @pos == start
         break if char == '{' && (@pos == start || @input[@pos - 1] != '$')
 
         if char == '"'

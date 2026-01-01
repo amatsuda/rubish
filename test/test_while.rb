@@ -68,7 +68,7 @@ class TestWhile < Test::Unit::TestCase
     ast = Rubish::Parser.new(tokens).parse
     code = Rubish::Codegen.new.generate(ast)
     assert_match(/while __condition/, code)
-    assert_match(/__cmd\("echo", "yes"\)/, code)
+    assert_match(/__cmd\("echo", \*\["yes"\]\.flatten\)/, code)
   end
 
   # Execution tests - condition that is always false (no iterations)

@@ -104,7 +104,31 @@ module Rubish
     end
 
     def expand_args_for_builtin(args)
-      args.map { |arg| expand_single_arg(arg) }
+      args.flat_map { |arg| expand_single_arg_with_glob(arg) }
+    end
+
+    def expand_single_arg_with_glob(arg)
+      return [arg] unless arg.is_a?(String)
+
+      # Single-quoted strings: no expansion, strip quotes
+      if arg.start_with?("'") && arg.end_with?("'")
+        return [arg[1...-1]]
+      end
+
+      # Double-quoted strings: strip quotes, expand variables, no glob
+      if arg.start_with?('"') && arg.end_with?('"')
+        return [expand_string_content(arg[1...-1])]
+      end
+
+      # Unquoted: expand variables first
+      expanded = expand_string_content(arg)
+
+      # Then expand globs if present
+      if expanded.match?(/[*?\[]/)
+        __glob(expanded)
+      else
+        [expanded]
+      end
     end
 
     def expand_single_arg(arg)
@@ -405,6 +429,12 @@ module Rubish
       rescue StandardError
         '0'
       end
+    end
+
+    def __glob(pattern)
+      # Expand glob pattern, return original if no matches
+      matches = Dir.glob(pattern)
+      matches.empty? ? [pattern] : matches
     end
 
     # Builtins that must run in current process (affect shell state)
