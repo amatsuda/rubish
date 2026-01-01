@@ -14,6 +14,7 @@ module Rubish
     def run
       setup_reline
       setup_signals
+      load_config
       exit_code = catch(:exit) do
         loop { process_line }
       end
@@ -31,6 +32,22 @@ module Rubish
       # They should only affect foreground jobs
       trap('INT') { puts }   # Just print newline on Ctrl+C
       trap('TSTP') { }       # Ignore Ctrl+Z for shell
+    end
+
+    def load_config
+      config_file = File.expand_path('~/.rubishrc')
+      return unless File.exist?(config_file)
+
+      File.readlines(config_file, chomp: true).each do |line|
+        line = line.strip
+        next if line.empty? || line.start_with?('#')
+
+        begin
+          execute(line)
+        rescue => e
+          puts "rubishrc: #{e.message}"
+        end
+      end
     end
 
     def prompt
