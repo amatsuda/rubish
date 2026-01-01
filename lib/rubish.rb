@@ -8,6 +8,7 @@ require_relative 'rubish/parser'
 require_relative 'rubish/codegen'
 require_relative 'rubish/runtime/command'
 require_relative 'rubish/runtime/builtins'
+require_relative 'rubish/repl'
 
 module Rubish
   VERSION = '0.0.1'
