@@ -2,7 +2,7 @@
 
 module Rubish
   module Builtins
-    COMMANDS = %w[cd exit jobs fg bg export pwd history alias unalias source . shift set return].freeze
+    COMMANDS = %w[cd exit jobs fg bg export pwd history alias unalias source . shift set return read].freeze
 
     @aliases = {}
     @executor = nil
@@ -50,6 +50,8 @@ module Rubish
         run_set(args)
       when 'return'
         run_return(args)
+      when 'read'
+        run_read(args)
       else
         false
       end
@@ -235,6 +237,48 @@ module Rubish
     def self.run_return(args)
       code = args.first&.to_i || 0
       throw :return, code
+    end
+
+    def self.run_read(args)
+      prompt = nil
+      vars = []
+
+      # Parse options
+      i = 0
+      while i < args.length
+        if args[i] == '-p' && args[i + 1]
+          prompt = args[i + 1]
+          i += 2
+        else
+          vars << args[i]
+          i += 1
+        end
+      end
+
+      # Default variable is REPLY
+      vars << 'REPLY' if vars.empty?
+
+      # Display prompt if specified
+      print prompt if prompt
+
+      # Read line from stdin
+      line = $stdin.gets
+      return false unless line
+
+      line = line.chomp
+      words = line.split
+
+      # Assign to variables
+      vars.each_with_index do |var, idx|
+        if idx == vars.length - 1
+          # Last variable gets remaining words
+          ENV[var] = (words[idx..] || []).join(' ')
+        else
+          ENV[var] = words[idx] || ''
+        end
+      end
+
+      true
     end
 
     def self.run_exit(args)
