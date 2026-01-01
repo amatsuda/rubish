@@ -7,6 +7,7 @@ module Rubish
       @parser_class = Parser
       @codegen = Codegen.new
       @last_line = nil
+      Builtins.executor = ->(line) { execute(line) }
     end
 
     def run

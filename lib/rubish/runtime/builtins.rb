@@ -2,12 +2,14 @@
 
 module Rubish
   module Builtins
-    COMMANDS = %w[cd exit jobs fg bg export pwd history alias unalias].freeze
+    COMMANDS = %w[cd exit jobs fg bg export pwd history alias unalias source .].freeze
 
     @aliases = {}
+    @executor = nil
 
     class << self
       attr_reader :aliases
+      attr_accessor :executor
     end
 
     def self.builtin?(name)
@@ -36,6 +38,8 @@ module Rubish
         run_alias(args)
       when 'unalias'
         run_unalias(args)
+      when 'source', '.'
+        run_source(args)
       else
         false
       end
@@ -141,6 +145,39 @@ module Rubish
 
     def self.clear_aliases
       @aliases.clear
+    end
+
+    def self.run_source(args)
+      if args.empty?
+        puts 'source: usage: source filename [arguments]'
+        return false
+      end
+
+      file = args.first
+      file = File.expand_path(file)
+
+      unless File.exist?(file)
+        puts "source: #{file}: No such file or directory"
+        return false
+      end
+
+      unless @executor
+        puts 'source: executor not configured'
+        return false
+      end
+
+      File.readlines(file, chomp: true).each do |line|
+        line = line.strip
+        next if line.empty? || line.start_with?('#')
+
+        begin
+          @executor.call(line)
+        rescue => e
+          puts "source: #{e.message}"
+        end
+      end
+
+      true
     end
 
     def self.run_exit(args)
