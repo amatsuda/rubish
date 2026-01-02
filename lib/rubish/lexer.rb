@@ -69,9 +69,10 @@ module Rubish
         return Token.new(OPERATORS[two_char], two_char)
       end
 
-      # Single char operators (but not ( which needs context for function defs)
+      # Single char operators
+      # Note: () is handled above as two-char for function defs, so ( here is for subshells
       char = @input[@pos]
-      if %w[| ; & > < )].include?(char)
+      if %w[| ; & > < ) (].include?(char)
         @pos += 1
         return Token.new(OPERATORS[char], char)
       end

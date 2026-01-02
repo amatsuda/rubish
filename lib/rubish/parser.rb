@@ -89,7 +89,7 @@ module Rubish
       commands.length == 1 ? commands.first : AST::Pipeline.new(commands)
     end
 
-    # command : if_statement | while_statement | until_statement | for_statement | case_statement | function_def | WORD arg* block? (redirection)*
+    # command : if_statement | while_statement | until_statement | for_statement | case_statement | function_def | subshell | WORD arg* block? (redirection)*
     # arg : WORD | ARRAY | REGEXP
     def parse_command
       # Check for control structures
@@ -99,6 +99,7 @@ module Rubish
       return parse_for if peek(:FOR)
       return parse_case if peek(:CASE)
       return parse_function_keyword if peek(:FUNCTION)
+      return parse_subshell if peek(:LPAREN)
 
       return nil unless peek(:WORD)
 
@@ -336,6 +337,31 @@ module Rubish
       consume(:ESAC) || raise('Expected "esac" to close case statement')
 
       AST::Case.new(word, branches)
+    end
+
+    # subshell : '(' list ')'
+    def parse_subshell
+      consume(:LPAREN)
+      body = parse_subshell_body
+      consume(:RPAREN) || raise('Expected ")" to close subshell')
+      cmd = AST::Subshell.new(body)
+      parse_redirections(cmd)
+    end
+
+    # Parse body of subshell (stops at ))
+    def parse_subshell_body
+      commands = []
+      skip_semicolon
+
+      while !peek(:RPAREN) && current
+        cmd = parse_conditional
+        break unless cmd
+
+        commands << cmd
+        skip_semicolon
+      end
+
+      commands.length == 1 ? commands.first : AST::List.new(commands)
     end
 
     # Parse body of case branch (stops at ;; or esac)

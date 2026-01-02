@@ -213,6 +213,12 @@ module Rubish
               depth += 1
             when '}'
               depth -= 1
+            when '('
+              # Standalone ( is a subshell
+              depth += 1
+            when ')'
+              # Standalone ) closes a subshell
+              depth -= 1
             end
           end
 

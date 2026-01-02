@@ -30,6 +30,8 @@ module Rubish
         generate_function(node)
       when AST::Case
         generate_case(node)
+      when AST::Subshell
+        generate_subshell(node)
       else
         raise "Unknown AST node: #{node.class}"
       end
@@ -426,6 +428,11 @@ module Rubish
       else
         "__case_match(#{pattern.inspect}, __case_word)"
       end
+    end
+
+    def generate_subshell(node)
+      body_code = generate_loop_body(node.body)
+      "__subshell { #{body_code} }"
     end
 
     def escape_string(str)

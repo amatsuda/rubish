@@ -54,5 +54,8 @@ module Rubish
     # Case statement: case word in pattern1) body ;; pattern2|pattern3) body ;; esac
     # branches is array of [patterns, body] where patterns is array of pattern strings
     Case = Data.define(:word, :branches)
+
+    # Subshell: (commands) - runs commands in a child process
+    Subshell = Data.define(:body)
   end
 end

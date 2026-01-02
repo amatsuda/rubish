@@ -297,7 +297,7 @@ module Rubish
 
     def extract_exit_status(result)
       case result
-      when Command, Pipeline
+      when Command, Pipeline, Subshell
         result.status&.exitstatus || 0
       when Integer
         result
@@ -367,7 +367,7 @@ module Rubish
       if result.is_a?(Command) && @functions.key?(result.name)
         # Call user-defined function, handling redirects
         call_function_with_redirects(result)
-      elsif result.is_a?(Command) || result.is_a?(Pipeline)
+      elsif result.is_a?(Command) || result.is_a?(Pipeline) || result.is_a?(Subshell)
         result.run
       end
       result
@@ -516,6 +516,11 @@ module Rubish
       File.fnmatch(pattern, word, File::FNM_EXTGLOB)
     end
 
+    def __subshell(&block)
+      # Create a Subshell object that can be run, redirected, or piped
+      Subshell.new(&block)
+    end
+
     def __define_function(name, &block)
       @functions[name] = block
       nil
@@ -536,7 +541,7 @@ module Rubish
         call_function_with_redirects(result)
         result
       else
-        result.run if result.is_a?(Command) || result.is_a?(Pipeline)
+        result.run if result.is_a?(Command) || result.is_a?(Pipeline) || result.is_a?(Subshell)
         result
       end
     end

@@ -234,8 +234,13 @@ module Rubish
           $stdout.reopen(cmd.stdout) if cmd.stdout
           $stderr.reopen(cmd.stderr) if cmd.stderr
 
-          # Check if this is a user-defined function
-          if Command.function?(cmd.name)
+          # Handle different command types
+          if cmd.is_a?(Subshell)
+            # Run subshell block
+            result = cmd.instance_variable_get(:@block).call
+            result.run if result.is_a?(Command) || result.is_a?(Pipeline)
+            exit(result.respond_to?(:success?) && result.success? ? 0 : 0)
+          elsif Command.function?(cmd.name)
             Command.call_function(cmd.name, cmd.args)
             exit(0)
           else
@@ -284,8 +289,13 @@ module Rubish
           $stdout.reopen(cmd.stdout) if cmd.stdout
           $stderr.reopen(cmd.stderr) if cmd.stderr
 
-          # Check if this is a user-defined function
-          if Command.function?(cmd.name)
+          # Handle different command types
+          if cmd.is_a?(Subshell)
+            # Run subshell block
+            result = cmd.instance_variable_get(:@block).call
+            result.run if result.is_a?(Command) || result.is_a?(Pipeline)
+            exit(result.respond_to?(:success?) && result.success? ? 0 : 0)
+          elsif Command.function?(cmd.name)
             Command.call_function(cmd.name, cmd.args)
             exit(0)
           else
@@ -310,6 +320,80 @@ module Rubish
       # Wait for all children
       pids.each { |pid| Process.wait(pid) }
       @status = $?
+      self
+    end
+  end
+
+  class Subshell
+    attr_reader :status
+    attr_accessor :stdin, :stdout, :stderr
+
+    def initialize(&block)
+      @block = block
+      @stdin = nil
+      @stdout = nil
+      @stderr = nil
+      @ran = false
+    end
+
+    def ran?
+      @ran
+    end
+
+    def success?
+      @status&.success? || false
+    end
+
+    def run
+      return self if @ran
+      @ran = true
+
+      pid = fork do
+        $stdin.reopen(@stdin) if @stdin
+        $stdout.reopen(@stdout) if @stdout
+        $stderr.reopen(@stderr) if @stderr
+
+        # The block contains __run_cmd calls which handle execution
+        # So we just call the block and check the result's status
+        result = @block.call
+
+        exit_code = if result.respond_to?(:success?)
+                      result.success? ? 0 : 1
+                    else
+                      0
+                    end
+        exit(exit_code)
+      end
+
+      @stdin&.close unless @stdin == $stdin
+      @stdout&.close unless @stdout == $stdout
+
+      Process.wait(pid)
+      @status = $?
+      self
+    end
+
+    def |(other)
+      Pipeline.new(self, other)
+    end
+
+    def redirect_out(file)
+      @stdout = File.open(file, 'w')
+      self
+    end
+
+    def redirect_append(file)
+      @stdout = File.open(file, 'a')
+      self
+    end
+
+    def redirect_in(file)
+      @stdin = File.open(file, 'r')
+      self
+    end
+
+    def redirect_err(file)
+      @stderr = File.open(file, 'w')
       self
     end
   end
