@@ -12,6 +12,9 @@ module Rubish
       '>' => :REDIRECT_OUT,
       '>>' => :REDIRECT_APPEND,
       '<' => :REDIRECT_IN,
+      '<<' => :HEREDOC,      # Here document
+      '<<-' => :HEREDOC_INDENT,  # Here document with indented delimiter
+      '<<<' => :HERESTRING,  # Here string
       '2>' => :REDIRECT_ERR,
       '&&' => :AND,
       '||' => :OR,
@@ -63,7 +66,20 @@ module Rubish
 
     def read_token
       # Check for multi-char operators first
+      three_char = @input[@pos, 3]
+      if three_char == '<<<'
+        @pos += 3
+        return read_herestring
+      elsif three_char == '<<-'
+        @pos += 3
+        return read_heredoc_delimiter(:HEREDOC_INDENT)
+      end
+
       two_char = @input[@pos, 2]
+      if two_char == '<<'
+        @pos += 2
+        return read_heredoc_delimiter(:HEREDOC)
+      end
       if %w[>> 2> && || () ;;].include?(two_char)
         @pos += 2
         return Token.new(OPERATORS[two_char], two_char)
@@ -72,9 +88,14 @@ module Rubish
       # Single char operators
       # Note: () is handled above as two-char for function defs, so ( here is for subshells
       char = @input[@pos]
-      if %w[| ; & > < ) (].include?(char)
+      if %w[| ; & > ) (].include?(char)
         @pos += 1
         return Token.new(OPERATORS[char], char)
+      end
+      # < alone is redirect in (heredocs handled above)
+      if char == '<'
+        @pos += 1
+        return Token.new(:REDIRECT_IN, char)
       end
 
       # Ruby literals
@@ -370,6 +391,58 @@ module Rubish
       @pos += 2 # skip ${
       @pos += 1 while @pos < @input.length && @input[@pos] != '}'
       @pos += 1 if @pos < @input.length # skip closing }
+    end
+
+    def read_heredoc_delimiter(type)
+      skip_whitespace
+
+      # Check for quoted delimiter (no variable expansion)
+      quoted = false
+      if @input[@pos] == "'" || @input[@pos] == '"'
+        quote = @input[@pos]
+        @pos += 1
+        start = @pos
+        @pos += 1 while @pos < @input.length && @input[@pos] != quote
+        delimiter = @input[start...@pos]
+        @pos += 1 if @pos < @input.length # skip closing quote
+        quoted = true
+      else
+        # Unquoted delimiter
+        start = @pos
+        @pos += 1 while @pos < @input.length && @input[@pos] =~ /[a-zA-Z0-9_]/
+        delimiter = @input[start...@pos]
+      end
+
+      # Return token with delimiter info: "delimiter:quoted" format
+      # quoted=true means no variable expansion
+      value = quoted ? "#{delimiter}:quoted" : delimiter
+      Token.new(type, value)
+    end
+
+    def read_herestring
+      skip_whitespace
+
+      # Read the string (can be quoted or unquoted)
+      if @input[@pos] == '"'
+        start = @pos
+        read_double_quoted_string
+        value = @input[start...@pos]
+      elsif @input[@pos] == "'"
+        start = @pos
+        read_single_quoted_string
+        value = @input[start...@pos]
+      else
+        # Unquoted - read until whitespace or operator
+        start = @pos
+        while @pos < @input.length
+          char = @input[@pos]
+          break if char =~ /[ \t]/ || OPERATORS.key?(char)
+          @pos += 1
+        end
+        value = @input[start...@pos]
+      end
+
+      Token.new(:HERESTRING, value)
     end
   end
 end

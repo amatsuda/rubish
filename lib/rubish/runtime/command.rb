@@ -240,6 +240,10 @@ module Rubish
             result = cmd.instance_variable_get(:@block).call
             result.run if result.is_a?(Command) || result.is_a?(Pipeline)
             exit(result.respond_to?(:success?) && result.success? ? 0 : 0)
+          elsif cmd.is_a?(HeredocCommand)
+            # Run heredoc command in child process
+            cmd.run
+            exit(cmd.success? ? 0 : 1)
           elsif Command.function?(cmd.name)
             Command.call_function(cmd.name, cmd.args)
             exit(0)
@@ -295,6 +299,10 @@ module Rubish
             result = cmd.instance_variable_get(:@block).call
             result.run if result.is_a?(Command) || result.is_a?(Pipeline)
             exit(result.respond_to?(:success?) && result.success? ? 0 : 0)
+          elsif cmd.is_a?(HeredocCommand)
+            # Run heredoc command in child process
+            cmd.run
+            exit(cmd.success? ? 0 : 1)
           elsif Command.function?(cmd.name)
             Command.call_function(cmd.name, cmd.args)
             exit(0)
@@ -389,6 +397,78 @@ module Rubish
 
     def redirect_in(file)
       @stdin = File.open(file, 'r')
+      self
+    end
+
+    def redirect_err(file)
+      @stderr = File.open(file, 'w')
+      self
+    end
+  end
+
+  # Wrapper for heredoc/herestring that provides content as stdin
+  class HeredocCommand
+    attr_reader :status
+    attr_accessor :stdin, :stdout, :stderr
+
+    def initialize(content, &block)
+      @content = content
+      @block = block
+      @stdin = nil
+      @stdout = nil
+      @stderr = nil
+      @ran = false
+    end
+
+    def ran?
+      @ran
+    end
+
+    def success?
+      @status&.success? || false
+    end
+
+    def run
+      return self if @ran
+      @ran = true
+
+      cmd = @block.call
+      if cmd.is_a?(Command) || cmd.is_a?(Pipeline)
+        # Create a pipe for heredoc content
+        reader, writer = IO.pipe
+        writer.write(@content)
+        writer.close
+
+        # Set stdin from heredoc content
+        cmd.stdin = reader
+
+        # Apply any additional redirects we have
+        cmd.stdout = @stdout if @stdout
+        cmd.stderr = @stderr if @stderr
+
+        cmd.run
+        reader.close unless reader.closed?
+        @status = cmd.status
+      end
+      self
+    end
+
+    def |(other)
+      Pipeline.new(self, other)
+    end
+
+    def redirect_out(file)
+      @stdout = File.open(file, 'w')
+      self
+    end
+
+    def redirect_append(file)
+      @stdout = File.open(file, 'a')
+      self
+    end
+
+    def redirect_in(file)
+      # For heredoc, stdin comes from content, so this is ignored
       self
     end
 

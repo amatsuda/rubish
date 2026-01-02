@@ -11,10 +11,11 @@ module Rubish
     @positional_params_getter = nil
     @positional_params_setter = nil
     @function_checker = nil
+    @heredoc_content_setter = nil
 
     class << self
       attr_reader :aliases
-      attr_accessor :executor, :script_name_getter, :script_name_setter, :positional_params_getter, :positional_params_setter, :function_checker
+      attr_accessor :executor, :script_name_getter, :script_name_setter, :positional_params_getter, :positional_params_setter, :function_checker, :heredoc_content_setter
     end
 
     def self.builtin?(name)
@@ -196,10 +197,34 @@ module Rubish
       return_code = catch(:return) do
         buffer = +''
         depth = 0
+        lines = File.readlines(file, chomp: true)
+        i = 0
 
-        File.readlines(file, chomp: true).each do |line|
-          line = line.strip
+        while i < lines.length
+          line = lines[i].strip
+          i += 1
           next if line.empty? || line.start_with?('#')
+
+          # Check for heredoc in this line
+          heredoc_info = detect_heredoc(line)
+          if heredoc_info
+            delimiter, strip_tabs = heredoc_info
+            heredoc_lines = []
+            # Collect heredoc content from subsequent lines
+            while i < lines.length
+              heredoc_line = lines[i]
+              i += 1
+              # Check for delimiter (possibly with leading tabs if strip_tabs)
+              check_line = strip_tabs ? heredoc_line.sub(/\A\t+/, '') : heredoc_line
+              if check_line.strip == delimiter
+                break
+              end
+              heredoc_lines << heredoc_line
+            end
+            # Set heredoc content before executing
+            content = heredoc_lines.join("\n") + (heredoc_lines.empty? ? '' : "\n")
+            @heredoc_content_setter&.call(content)
+          end
 
           # Track control structure depth
           words = line.split(/\s+/)
@@ -496,6 +521,29 @@ module Rubish
         end
         job
       end
+    end
+
+    def self.detect_heredoc(line)
+      # Detect heredoc in a line: <<WORD, <<-WORD, <<'WORD', <<"WORD"
+      # Does not match herestrings (<<<)
+      # Returns [delimiter, strip_tabs] or nil
+      return nil unless line.include?('<<')
+      return nil if line.include?('<<<')  # Skip herestrings
+
+      # Match heredoc patterns
+      # <<-'DELIM' or <<-"DELIM" or <<-DELIM (strip tabs)
+      if line =~ /<<-\s*(['"])([^'"]+)\1/
+        return [$2, true]
+      elsif line =~ /<<-\s*([a-zA-Z_][a-zA-Z0-9_]*)/
+        return [$1, true]
+      # <<'DELIM' or <<"DELIM" or <<DELIM (no strip tabs)
+      elsif line =~ /<<\s*(['"])([^'"]+)\1/
+        return [$2, false]
+      elsif line =~ /<<\s*([a-zA-Z_][a-zA-Z0-9_]*)/
+        return [$1, false]
+      end
+
+      nil
     end
   end
 end

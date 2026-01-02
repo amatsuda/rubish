@@ -32,6 +32,10 @@ module Rubish
         generate_case(node)
       when AST::Subshell
         generate_subshell(node)
+      when AST::Heredoc
+        generate_heredoc(node)
+      when AST::Herestring
+        generate_herestring(node)
       else
         raise "Unknown AST node: #{node.class}"
       end
@@ -433,6 +437,19 @@ module Rubish
     def generate_subshell(node)
       body_code = generate_loop_body(node.body)
       "__subshell { #{body_code} }"
+    end
+
+    def generate_heredoc(node)
+      cmd_code = generate(node.command)
+      # Content is set by REPL/source before execution
+      # At codegen time, we generate a call to __heredoc with placeholder
+      "__heredoc(#{node.delimiter.inspect}, #{node.expand}, #{node.strip_tabs}) { #{cmd_code} }"
+    end
+
+    def generate_herestring(node)
+      cmd_code = generate(node.command)
+      string_expr = generate_string_arg(node.string)
+      "__herestring(#{string_expr}) { #{cmd_code} }"
     end
 
     def escape_string(str)

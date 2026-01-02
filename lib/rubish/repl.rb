@@ -12,12 +12,14 @@ module Rubish
       @script_name = 'rubish'
       @positional_params = []
       @functions = {}
+      @heredoc_content = nil  # Content for current heredoc
       Builtins.executor = ->(line) { execute(line) }
       Builtins.script_name_getter = -> { @script_name }
       Builtins.script_name_setter = ->(name) { @script_name = name }
       Builtins.positional_params_getter = -> { @positional_params }
       Builtins.positional_params_setter = ->(params) { @positional_params = params }
       Builtins.function_checker = ->(name) { @functions.key?(name) }
+      Builtins.heredoc_content_setter = ->(content) { @heredoc_content = content }
       # Set up Command class to handle functions in pipelines
       Command.function_checker = ->(name) { @functions.key?(name) }
       Command.function_caller = ->(name, args) { call_function(name, args) }
@@ -94,6 +96,12 @@ module Rubish
       ast = @parser_class.new(tokens).parse
       return unless ast
 
+      # Check for heredocs and collect content if needed
+      # Skip if content was already set (e.g., by source command)
+      if (heredoc = find_heredoc(ast)) && @heredoc_content.nil?
+        @heredoc_content = collect_heredoc_content(heredoc.delimiter, heredoc.strip_tabs)
+      end
+
       # Check for builtins (simple command only)
       if ast.is_a?(AST::Command) && Builtins.builtin?(ast.name)
         # Expand variables in args for builtins
@@ -114,6 +122,8 @@ module Rubish
       code = @codegen.generate(ast)
       result = eval_in_context(code)
       @last_status = extract_exit_status(result)
+    ensure
+      @heredoc_content = nil
     end
 
     def call_function(name, args)
@@ -297,7 +307,7 @@ module Rubish
 
     def extract_exit_status(result)
       case result
-      when Command, Pipeline, Subshell
+      when Command, Pipeline, Subshell, HeredocCommand
         result.status&.exitstatus || 0
       when Integer
         result
@@ -367,7 +377,7 @@ module Rubish
       if result.is_a?(Command) && @functions.key?(result.name)
         # Call user-defined function, handling redirects
         call_function_with_redirects(result)
-      elsif result.is_a?(Command) || result.is_a?(Pipeline) || result.is_a?(Subshell)
+      elsif result.is_a?(Command) || result.is_a?(Pipeline) || result.is_a?(Subshell) || result.is_a?(HeredocCommand)
         result.run
       end
       result
@@ -519,6 +529,78 @@ module Rubish
     def __subshell(&block)
       # Create a Subshell object that can be run, redirected, or piped
       Subshell.new(&block)
+    end
+
+    def __heredoc(delimiter, expand, strip_tabs, &block)
+      content = @heredoc_content || ''
+
+      # Apply tab stripping if <<- was used
+      if strip_tabs
+        content = content.lines.map { |l| l.sub(/\A\t+/, '') }.join
+      end
+
+      # Apply variable expansion if not quoted
+      if expand
+        content = expand_heredoc_content(content)
+      end
+
+      # Return a HeredocCommand that can be redirected and run later
+      HeredocCommand.new(content, &block)
+    end
+
+    def __herestring(string, &block)
+      # Herestring provides a single string as stdin (with trailing newline)
+      content = "#{string}\n"
+
+      # Return a HeredocCommand that can be redirected and run later
+      HeredocCommand.new(content, &block)
+    end
+
+    def expand_heredoc_content(content)
+      # Expand variables in heredoc content
+      expand_string_content(content)
+    end
+
+    def find_heredoc(ast)
+      case ast
+      when AST::Heredoc
+        ast
+      when AST::Redirect
+        find_heredoc(ast.command)
+      when AST::Pipeline
+        ast.commands.each do |cmd|
+          if (h = find_heredoc(cmd))
+            return h
+          end
+        end
+        nil
+      when AST::List
+        ast.commands.each do |cmd|
+          if (h = find_heredoc(cmd))
+            return h
+          end
+        end
+        nil
+      else
+        nil
+      end
+    end
+
+    def collect_heredoc_content(delimiter, strip_tabs)
+      lines = []
+      loop do
+        line = Reline.readline('> ', false)
+        break unless line
+
+        # Check for delimiter (possibly with leading tabs if strip_tabs)
+        check_line = strip_tabs ? line.sub(/\A\t+/, '') : line
+        if check_line.chomp == delimiter
+          break
+        end
+
+        lines << line
+      end
+      lines.join("\n") + (lines.empty? ? '' : "\n")
     end
 
     def __define_function(name, &block)

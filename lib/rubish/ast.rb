@@ -57,5 +57,23 @@ module Rubish
 
     # Subshell: (commands) - runs commands in a child process
     Subshell = Data.define(:body)
+
+    # Heredoc: cmd <<EOF ... EOF - provides multi-line input to command
+    # delimiter: the terminating word (e.g., "EOF")
+    # content: the heredoc content (set later when lines are collected)
+    # expand: true if variables should be expanded
+    # strip_tabs: true for <<- (allows indented delimiter)
+    Heredoc = Data.define(:command, :delimiter, :content, :expand, :strip_tabs) do
+      def initialize(command:, delimiter:, content: nil, expand: true, strip_tabs: false)
+        super
+      end
+
+      def with_content(new_content)
+        Heredoc.new(command: command, delimiter: delimiter, content: new_content, expand: expand, strip_tabs: strip_tabs)
+      end
+    end
+
+    # Herestring: cmd <<< "string" - provides single-line string as stdin
+    Herestring = Data.define(:command, :string)
   end
 end

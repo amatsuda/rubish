@@ -404,10 +404,32 @@ module Rubish
 
     def parse_redirections(cmd)
       while peek(:REDIRECT_OUT) || peek(:REDIRECT_APPEND) ||
-            peek(:REDIRECT_IN) || peek(:REDIRECT_ERR)
+            peek(:REDIRECT_IN) || peek(:REDIRECT_ERR) ||
+            peek(:HEREDOC) || peek(:HEREDOC_INDENT) || peek(:HERESTRING)
         op = consume
-        target = consume(:WORD)&.value
-        cmd = AST::Redirect.new(cmd, op.value, target) if target
+
+        case op.type
+        when :HEREDOC, :HEREDOC_INDENT
+          # Parse heredoc delimiter info from token value
+          # Format: "DELIMITER" or "DELIMITER:quoted"
+          delimiter_info = op.value
+          if delimiter_info.end_with?(':quoted')
+            delimiter = delimiter_info.sub(/:quoted$/, '')
+            expand = false
+          else
+            delimiter = delimiter_info
+            expand = true
+          end
+          strip_tabs = (op.type == :HEREDOC_INDENT)
+          cmd = AST::Heredoc.new(command: cmd, delimiter: delimiter, expand: expand, strip_tabs: strip_tabs)
+        when :HERESTRING
+          # The token value contains the string
+          cmd = AST::Herestring.new(cmd, op.value)
+        else
+          # Regular redirections
+          target = consume(:WORD)&.value
+          cmd = AST::Redirect.new(cmd, op.value, target) if target
+        end
       end
       cmd
     end
