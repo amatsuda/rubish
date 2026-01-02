@@ -151,7 +151,40 @@ module Rubish
     end
 
     def expand_args_for_builtin(args)
-      args.flat_map { |arg| expand_single_arg_with_glob(arg) }
+      args.flat_map { |arg| expand_single_arg_with_brace_and_glob(arg) }
+    end
+
+    def expand_single_arg_with_brace_and_glob(arg)
+      return [arg] unless arg.is_a?(String)
+
+      # Single-quoted strings: no expansion, strip quotes
+      if arg.start_with?("'") && arg.end_with?("'")
+        return [arg[1...-1]]
+      end
+
+      # Double-quoted strings: strip quotes, expand variables, no glob/brace
+      if arg.start_with?('"') && arg.end_with?('"')
+        return [expand_string_content(arg[1...-1])]
+      end
+
+      # Brace expansion first (before variable expansion in shell, but we do it after for simplicity)
+      # Expand braces first
+      brace_expanded = if arg.include?('{') && !arg.start_with?('$')
+                         expand_braces(arg)
+                       else
+                         [arg]
+                       end
+
+      # Then expand variables and globs on each result
+      brace_expanded.flat_map do |item|
+        expanded = expand_string_content(item)
+        # Then expand globs if present
+        if expanded.match?(/[*?\[]/)
+          __glob(expanded)
+        else
+          [expanded]
+        end
+      end
     end
 
     def expand_single_arg_with_glob(arg)
@@ -518,6 +551,127 @@ module Rubish
       # Expand glob pattern, return original if no matches
       matches = Dir.glob(pattern)
       matches.empty? ? [pattern] : matches
+    end
+
+    def __brace(pattern)
+      # Expand brace patterns like {a,b,c} or {1..5}
+      expand_braces(pattern)
+    end
+
+    def expand_braces(str)
+      # Find the first brace group to expand
+      # Return array of expanded strings
+      return [str] unless str.include?('{')
+
+      # Find matching braces, handling nesting
+      start_idx = nil
+      depth = 0
+      i = 0
+
+      while i < str.length
+        case str[i]
+        when '\\'
+          i += 2  # Skip escaped character
+          next
+        when '{'
+          start_idx = i if depth == 0
+          depth += 1
+        when '}'
+          depth -= 1
+          if depth == 0 && start_idx
+            # Found a complete brace group
+            prefix = str[0...start_idx]
+            suffix = str[i + 1..]
+            content = str[start_idx + 1...i]
+
+            # Check if it's a sequence {a..b} or a list {a,b,c}
+            expansions = if content =~ /\A(-?\d+)\.\.(-?\d+)\z/
+                           expand_numeric_sequence($1, $2)
+                         elsif content =~ /\A([a-zA-Z])\.\.([a-zA-Z])\z/
+                           expand_letter_sequence($1, $2)
+                         elsif content.include?(',')
+                           expand_brace_list(content)
+                         else
+                           # Not a valid brace expansion, return as-is
+                           return [str]
+                         end
+
+            # Combine prefix, expansions, suffix and recursively expand
+            results = []
+            expansions.each do |exp|
+              combined = "#{prefix}#{exp}#{suffix}"
+              results.concat(expand_braces(combined))
+            end
+            return results
+          end
+        end
+        i += 1
+      end
+
+      # No complete brace group found
+      [str]
+    end
+
+    def expand_numeric_sequence(start_str, end_str)
+      start_val = start_str.to_i
+      end_val = end_str.to_i
+
+      # Check for zero-padding
+      width = if start_str.start_with?('0') || start_str.start_with?('-0')
+                start_str.sub(/^-/, '').length
+              elsif end_str.start_with?('0') || end_str.start_with?('-0')
+                end_str.sub(/^-/, '').length
+              else
+                0
+              end
+
+      range = start_val <= end_val ? (start_val..end_val) : (end_val..start_val).to_a.reverse
+      range.map do |n|
+        if width > 0
+          format("%0#{width}d", n)
+        else
+          n.to_s
+        end
+      end
+    end
+
+    def expand_letter_sequence(start_char, end_char)
+      if start_char <= end_char
+        (start_char..end_char).to_a
+      else
+        (end_char..start_char).to_a.reverse
+      end
+    end
+
+    def expand_brace_list(content)
+      # Split on commas, but respect nested braces
+      items = []
+      current = +''
+      depth = 0
+
+      content.each_char do |char|
+        case char
+        when '{'
+          depth += 1
+          current << char
+        when '}'
+          depth -= 1
+          current << char
+        when ','
+          if depth == 0
+            items << current
+            current = +''
+          else
+            current << char
+          end
+        else
+          current << char
+        end
+      end
+      items << current unless current.empty?
+
+      # Recursively expand any nested braces in items
+      items.flat_map { |item| expand_braces(item) }
     end
 
     def __case_match(pattern, word)

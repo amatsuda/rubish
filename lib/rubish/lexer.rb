@@ -118,16 +118,21 @@ module Rubish
       when '/'
         read_regexp_or_word
       when '{'
-        # Check if this is a Ruby block { |x| ... } or shell function body { cmd; }
-        # Ruby blocks have | after optional whitespace
-        lookahead = @pos + 1
-        lookahead += 1 while lookahead < @input.length && @input[lookahead] =~ /\s/
-        if @input[lookahead] == '|'
-          read_block
+        # Check if this is a brace expansion pattern like {a,b,c} or {1..5}
+        if looks_like_brace_expansion?
+          read_word
         else
-          # Shell function body or standalone brace
-          @pos += 1
-          Token.new(:LBRACE, '{')
+          # Check if this is a Ruby block { |x| ... } or shell function body { cmd; }
+          # Ruby blocks have | after optional whitespace
+          lookahead = @pos + 1
+          lookahead += 1 while lookahead < @input.length && @input[lookahead] =~ /\s/
+          if @input[lookahead] == '|'
+            read_block
+          else
+            # Shell function body or standalone brace
+            @pos += 1
+            Token.new(:LBRACE, '{')
+          end
         end
       when '}'
         @pos += 1
@@ -178,6 +183,40 @@ module Rubish
       false  # Unclosed bracket, treat as array
     end
 
+    def looks_like_brace_expansion?
+      # Brace expansion: {a,b,c} or {1..5} or prefix{a,b}suffix
+      # Must have matching braces with comma or ..
+      # Not: ${VAR} (variable) or { cmd; } (function body)
+      lookahead = @pos + 1
+      depth = 1
+      has_comma = false
+      has_dotdot = false
+
+      while lookahead < @input.length && depth > 0
+        char = @input[lookahead]
+        case char
+        when '{'
+          depth += 1
+        when '}'
+          depth -= 1
+        when ','
+          has_comma = true if depth == 1
+        when '.'
+          if @input[lookahead + 1] == '.'
+            has_dotdot = true if depth == 1
+            lookahead += 1  # Skip second dot
+          end
+        when ' ', "\t", "\n"
+          # Whitespace inside braces suggests function body, not brace expansion
+          return false if depth > 0
+        end
+        lookahead += 1
+      end
+
+      # Must have found closing brace and have either comma or ..
+      depth == 0 && (has_comma || has_dotdot)
+    end
+
     def read_array
       start = @pos
       depth = 0
@@ -216,9 +255,10 @@ module Rubish
           after_slash = lookahead + 1
           # Skip optional regexp flags
           after_slash += 1 while after_slash < @input.length && @input[after_slash] =~ /[imxo]/
-          # If followed by whitespace, operator, or end, it's a regexp
+          # If followed by whitespace, operator (except {), or end, it's a regexp
+          # Exclude { because it could be brace expansion in a path like /tmp/{a,b}
           next_char = @input[after_slash]
-          if next_char.nil? || next_char =~ /[ \t]/ || OPERATORS.key?(next_char)
+          if next_char.nil? || next_char =~ /[ \t]/ || (OPERATORS.key?(next_char) && next_char != '{')
             return read_regexp
           end
           # Otherwise continue - it's a path like /tmp/file
@@ -316,14 +356,30 @@ module Rubish
       start = @pos
       while @pos < @input.length
         char = @input[@pos]
-        break if char =~ /[ \t]/ || OPERATORS.key?(char)
+
+        # Handle { specially BEFORE the general operator check
+        # { could be brace expansion (part of word) or operator
+        if char == '{'
+          if @pos > start && @input[@pos - 1] == '$'
+            # ${VAR} - variable expansion, let read_braced_variable handle it below
+          elsif looks_like_brace_expansion?
+            # Brace expansion pattern like {a,b,c} - read the whole thing
+            read_brace_expansion
+            next
+          else
+            # Not brace expansion (e.g. shell function body), treat as operator
+            break
+          end
+        end
+
+        # General break conditions - exclude { since it's handled above
+        break if char =~ /[ \t]/ || (OPERATORS.key?(char) && char != '{')
         break if @input[@pos, 2] == '>>' || @input[@pos, 2] == '2>' || @input[@pos, 2] == ';;'
         # Stop at Ruby literal starters only at the start of a word
         # In the middle of a word, [ is a glob pattern like file[12].txt
         # At the start, [ might be a glob pattern like [abc]file
         # Exception: ${VAR} is a shell variable, not a Ruby block
         break if char == '[' && @pos == start && !looks_like_glob_bracket?
-        break if char == '{' && (@pos == start || @input[@pos - 1] != '$')
 
         if char == '"'
           read_double_quoted_string
@@ -391,6 +447,24 @@ module Rubish
       @pos += 2 # skip ${
       @pos += 1 while @pos < @input.length && @input[@pos] != '}'
       @pos += 1 if @pos < @input.length # skip closing }
+    end
+
+    def read_brace_expansion
+      # Read a brace expansion pattern like {a,b,c} or {1..5}
+      # Handles nested braces
+      depth = 0
+      while @pos < @input.length
+        char = @input[@pos]
+        if char == '{'
+          depth += 1
+        elsif char == '}'
+          depth -= 1
+          @pos += 1
+          break if depth == 0
+          next
+        end
+        @pos += 1
+      end
     end
 
     def read_heredoc_delimiter(type)

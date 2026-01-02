@@ -79,19 +79,39 @@ module Rubish
       str.match?(/[*?\[]/)
     end
 
+    def has_brace_expansion?(str)
+      # Check for brace expansion patterns: {a,b} or {1..5}
+      # Must have matching braces with either comma or ..
+      return false unless str.include?('{') && str.include?('}')
+
+      # Simple check: contains {something,something} or {x..y}
+      str.match?(/\{[^}]*(?:,|\.\.)[^}]*\}/)
+    end
+
     def generate_string_arg_with_glob(str)
       # Single-quoted strings: no expansion at all
       if str.start_with?("'") && str.end_with?("'")
         return str[1...-1].inspect
       end
 
-      # Double-quoted strings: variable expansion but no glob
+      # Double-quoted strings: variable expansion but no glob/brace
       if str.start_with?('"') && str.end_with?('"')
         inner = str[1...-1]
         return generate_interpolated_string(inner)
       end
 
-      # Unquoted: check for glob characters
+      # Check for brace expansion (happens before glob)
+      if has_brace_expansion?(str)
+        # Brace expansion returns an array, each element may need glob expansion
+        if has_glob_chars?(str)
+          # Both brace and glob: expand braces, then glob each result
+          return "__brace(#{str.inspect}).flat_map { |x| __glob(x) }"
+        else
+          return "__brace(#{str.inspect})"
+        end
+      end
+
+      # Check for glob characters (no brace)
       if has_glob_chars?(str)
         # If it also has variables, expand variables first then glob
         if str.include?('$')
@@ -101,7 +121,7 @@ module Rubish
         end
       end
 
-      # No glob chars - use normal string arg generation
+      # No glob or brace chars - use normal string arg generation
       generate_string_arg(str)
     end
 
@@ -372,7 +392,7 @@ module Rubish
     def generate_for_item(item)
       # For loop items need word splitting on variable expansion
       # $VAR with value "a b c" should become three items
-      # Also need glob expansion for patterns like *.txt
+      # Also need glob/brace expansion for patterns like *.txt or {1..5}
       if item =~ /\A\$([a-zA-Z_][a-zA-Z0-9_]*)\z/
         # Simple variable - expand and split
         "ENV.fetch(#{$1.inspect}, '').split"
@@ -382,6 +402,13 @@ module Rubish
       elsif item.include?('$')
         # Mixed content with variable - expand as string, then split
         "#{generate_interpolated_string(item)}.split"
+      elsif has_brace_expansion?(item)
+        # Brace expansion - may also have glob
+        if has_glob_chars?(item)
+          "__brace(#{item.inspect}).flat_map { |x| __glob(x) }"
+        else
+          "__brace(#{item.inspect})"
+        end
       elsif has_glob_chars?(item)
         # Glob pattern - expand
         "__glob(#{item.inspect})"
