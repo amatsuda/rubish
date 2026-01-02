@@ -89,6 +89,12 @@ module Rubish
     end
 
     def execute(line)
+      line, expanded = expand_history(line)
+      return unless line
+
+      # Print expanded command if history expansion occurred
+      puts line if expanded
+
       line = Builtins.expand_alias(line)
       line = expand_tilde(line)
       # Variable expansion now happens at runtime in generated Ruby code
@@ -712,6 +718,61 @@ module Rubish
       # Expand glob pattern, return original if no matches
       matches = Dir.glob(pattern)
       matches.empty? ? [pattern] : matches
+    end
+
+    def __proc_sub(command, direction)
+      # Process substitution: <(cmd) or >(cmd)
+      # Creates a named pipe and returns its path
+      # The command runs in background, reading from or writing to the pipe
+
+      # Create a unique FIFO path
+      fifo_path = File.join(Dir.tmpdir, "rubish_procsub_#{$$}_#{rand(1000000)}")
+      system('mkfifo', fifo_path)
+
+      # Track the FIFO for cleanup
+      @proc_sub_fifos ||= []
+      @proc_sub_fifos << fifo_path
+
+      if direction == :in
+        # <(cmd) - command output becomes readable file
+        # Fork a process to run the command and write to FIFO
+        pid = fork do
+          # Redirect stdout to the FIFO
+          fifo = File.open(fifo_path, 'w')
+          $stdout.reopen(fifo)
+          $stderr.reopen('/dev/null', 'w')
+
+          # Execute the command via shell
+          exec('/bin/sh', '-c', command)
+        end
+        Process.detach(pid)
+      else
+        # >(cmd) - writable file whose content goes to command stdin
+        # Fork a process to read from FIFO and pipe to command
+        pid = fork do
+          # Read from FIFO and pipe to command
+          fifo = File.open(fifo_path, 'r')
+          $stdin.reopen(fifo)
+          $stderr.reopen('/dev/null', 'w')
+
+          # Execute the command via shell
+          exec('/bin/sh', '-c', command)
+        end
+        Process.detach(pid)
+      end
+
+      fifo_path
+    end
+
+    def cleanup_proc_sub_fifos
+      return unless @proc_sub_fifos
+
+      @proc_sub_fifos.each do |fifo|
+        File.unlink(fifo) if File.exist?(fifo)
+      rescue Errno::ENOENT
+        # Already deleted
+      end
+      @proc_sub_fifos.clear
     end
 
     def __brace(pattern)

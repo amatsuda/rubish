@@ -113,8 +113,8 @@ module Rubish
 
       args = []
 
-      # Parse arguments (WORD, ARRAY, REGEXP)
-      while peek_any(:WORD, :ARRAY, :REGEXP)
+      # Parse arguments (WORD, ARRAY, REGEXP, PROC_SUB_IN, PROC_SUB_OUT)
+      while peek_any(:WORD, :ARRAY, :REGEXP, :PROC_SUB_IN, :PROC_SUB_OUT)
         args << parse_arg
       end
 
@@ -399,6 +399,10 @@ module Rubish
         AST::ArrayLiteral.new(token.value)
       when :REGEXP
         AST::RegexpLiteral.new(token.value)
+      when :PROC_SUB_IN
+        AST::ProcessSubstitution.new(token.value, :in)
+      when :PROC_SUB_OUT
+        AST::ProcessSubstitution.new(token.value, :out)
       end
     end
 

@@ -31,6 +31,10 @@ module Rubish
     ArrayLiteral = Data.define(:value)   # [1, 2, 3]
     RegexpLiteral = Data.define(:value)  # /pattern/
 
+    # Process substitution: <(cmd) or >(cmd)
+    # direction: :in for <(cmd), :out for >(cmd)
+    ProcessSubstitution = Data.define(:command, :direction)
+
     # If statement: if cond; then body; elif cond; then body; else body; fi
     # branches is array of [condition, body] pairs, else_body is optional
     If = Data.define(:branches, :else_body) do

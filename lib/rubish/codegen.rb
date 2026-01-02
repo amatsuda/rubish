@@ -69,9 +69,16 @@ module Rubish
         arg.value  # Already valid Ruby: [1, 2, 3]
       when AST::RegexpLiteral
         arg.value  # Already valid Ruby: /pattern/
+      when AST::ProcessSubstitution
+        generate_process_substitution(arg)
       else
         arg.inspect
       end
+    end
+
+    def generate_process_substitution(node)
+      direction = node.direction == :in ? ':in' : ':out'
+      "__proc_sub(#{node.command.inspect}, #{direction})"
     end
 
     def has_glob_chars?(str)

@@ -80,6 +80,13 @@ module Rubish
         @pos += 2
         return read_heredoc_delimiter(:HEREDOC)
       end
+      # Process substitution: <(...) and >(...)
+      if two_char == '<('
+        return read_process_substitution(:PROC_SUB_IN)
+      end
+      if two_char == '>('
+        return read_process_substitution(:PROC_SUB_OUT)
+      end
       if %w[>> 2> && || () ;;].include?(two_char)
         @pos += 2
         return Token.new(OPERATORS[two_char], two_char)
@@ -465,6 +472,32 @@ module Rubish
         end
         @pos += 1
       end
+    end
+
+    def read_process_substitution(type)
+      # Read <(...) or >(...) - the command inside parens
+      @pos += 2  # skip <( or >(
+      start = @pos
+      depth = 1
+      while @pos < @input.length && depth > 0
+        char = @input[@pos]
+        if char == '('
+          depth += 1
+        elsif char == ')'
+          depth -= 1
+          break if depth == 0
+        elsif char == '"'
+          read_double_quoted_string
+          next
+        elsif char == "'"
+          read_single_quoted_string
+          next
+        end
+        @pos += 1
+      end
+      command = @input[start...@pos]
+      @pos += 1 if @pos < @input.length  # skip closing )
+      Token.new(type, command)
     end
 
     def read_heredoc_delimiter(type)
