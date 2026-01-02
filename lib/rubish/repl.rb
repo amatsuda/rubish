@@ -561,6 +561,153 @@ module Rubish
       end
     end
 
+    def __param_expand(var_name, operator, operand)
+      # Parameter expansion operations
+      value = ENV[var_name]
+      is_set = ENV.key?(var_name)
+      is_null = value.nil? || value.empty?
+
+      case operator
+      when ':-'
+        # ${var:-default} - use default if unset or null
+        is_null ? operand : value
+      when ':='
+        # ${var:=default} - assign default if unset or null
+        if is_null
+          ENV[var_name] = operand
+          operand
+        else
+          value
+        end
+      when ':+'
+        # ${var:+value} - use value if set and non-null
+        is_null ? '' : operand
+      when ':?'
+        # ${var:?message} - error if unset or null
+        if is_null
+          msg = operand.empty? ? "#{var_name}: parameter null or not set" : operand
+          raise msg
+        end
+        value
+      when '#'
+        # ${var#pattern} - remove shortest prefix
+        return '' if value.nil?
+        pattern_to_regex(operand, :prefix, :shortest).match(value) do |m|
+          value[m.end(0)..]
+        end || value
+      when '##'
+        # ${var##pattern} - remove longest prefix
+        return '' if value.nil?
+        pattern_to_regex(operand, :prefix, :longest).match(value) do |m|
+          value[m.end(0)..]
+        end || value
+      when '%'
+        # ${var%pattern} - remove shortest suffix
+        return '' if value.nil?
+        remove_suffix(value, operand, :shortest)
+      when '%%'
+        # ${var%%pattern} - remove longest suffix
+        return '' if value.nil?
+        remove_suffix(value, operand, :longest)
+      else
+        value || ''
+      end
+    end
+
+    def __param_length(var_name)
+      # ${#var} - length of variable value
+      (ENV[var_name] || '').length.to_s
+    end
+
+    def __param_substring(var_name, offset, length)
+      # ${var:offset} or ${var:offset:length}
+      value = ENV[var_name] || ''
+      offset = offset.to_i
+      if length
+        length = length.to_i
+        if length < 0
+          # Negative length means from end
+          value[offset...length]
+        else
+          value[offset, length]
+        end
+      else
+        value[offset..]
+      end || ''
+    end
+
+    def remove_suffix(value, pattern, mode)
+      # For suffix removal, we need to find where the pattern matches at the end
+      # For shortest (%), we want the rightmost match start position
+      # For longest (%%), we want the leftmost match start position
+      # The regex must match the ENTIRE suffix (anchored at both ends)
+      regex = pattern_to_regex(pattern, :full, mode)
+
+      if mode == :shortest
+        # Try matching from the end, progressively looking for shorter matches
+        (value.length - 1).downto(0) do |i|
+          if regex.match?(value[i..])
+            return value[0...i]
+          end
+        end
+        value  # No match
+      else
+        # For longest, find the earliest position where pattern matches to end
+        (0...value.length).each do |i|
+          if regex.match?(value[i..])
+            return value[0...i]
+          end
+        end
+        value  # No match
+      end
+    end
+
+    def pattern_to_regex(pattern, position, greedy)
+      # Convert shell glob pattern to regex
+      # * -> .* or .*?
+      # ? -> .
+      # [...] -> [...]
+      regex_str = +''
+      i = 0
+      while i < pattern.length
+        char = pattern[i]
+        case char
+        when '*'
+          regex_str << (greedy == :longest ? '.*' : '.*?')
+        when '?'
+          regex_str << '.'
+        when '['
+          # Find matching ]
+          j = i + 1
+          j += 1 if j < pattern.length && pattern[j] == '!'
+          j += 1 if j < pattern.length && pattern[j] == ']'
+          j += 1 while j < pattern.length && pattern[j] != ']'
+          if j < pattern.length
+            bracket = pattern[i..j]
+            bracket = bracket.sub('[!', '[^')  # Convert [! to [^
+            regex_str << bracket
+            i = j
+          else
+            regex_str << Regexp.escape(char)
+          end
+        else
+          regex_str << Regexp.escape(char)
+        end
+        i += 1
+      end
+
+      case position
+      when :prefix
+        Regexp.new("\\A#{regex_str}")
+      when :suffix
+        Regexp.new("#{regex_str}\\z")
+      when :full
+        Regexp.new("\\A#{regex_str}\\z")
+      else
+        Regexp.new(regex_str)
+      end
+    end
+
     def __glob(pattern)
       # Expand glob pattern, return original if no matches
       matches = Dir.glob(pattern)

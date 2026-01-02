@@ -273,12 +273,13 @@ module Rubish
         return ["(@positional_params[#{n - 1}] || '')", 2]
       end
 
-      # ${VAR} form
+      # ${VAR} or ${VAR:operation} form
       if str[pos + 1] == '{'
-        end_brace = str.index('}', pos + 2)
+        end_brace = find_matching_brace(str, pos + 1)
         if end_brace
-          var_name = str[pos + 2...end_brace]
-          return ["ENV.fetch(#{var_name.inspect}, '')", end_brace - pos + 1]
+          content = str[pos + 2...end_brace]
+          expr = parse_parameter_expansion(content)
+          return [expr, end_brace - pos + 1]
         end
       end
 
@@ -481,6 +482,71 @@ module Rubish
 
     def escape_string(str)
       str.inspect
+    end
+
+    def find_matching_brace(str, open_pos)
+      # Find matching } for { at open_pos, handling nested braces
+      depth = 1
+      i = open_pos + 1
+      while i < str.length && depth > 0
+        case str[i]
+        when '{'
+          depth += 1
+        when '}'
+          depth -= 1
+        when '\\'
+          i += 1  # Skip escaped character
+        end
+        i += 1
+      end
+      depth == 0 ? i - 1 : nil
+    end
+
+    def parse_parameter_expansion(content)
+      # Handle ${#var} - length
+      if content =~ /\A#([a-zA-Z_][a-zA-Z0-9_]*)\z/
+        var_name = $1
+        return "__param_length(#{var_name.inspect})"
+      end
+
+      # Handle ${var:offset} and ${var:offset:length} - must check before other : operators
+      if content =~ /\A([a-zA-Z_][a-zA-Z0-9_]*):(-?\d+)(?::(-?\d+))?\z/
+        var_name = $1
+        offset = $2
+        length = $3
+        if length
+          return "__param_substring(#{var_name.inspect}, #{offset}, #{length})"
+        else
+          return "__param_substring(#{var_name.inspect}, #{offset}, nil)"
+        end
+      end
+
+      # Handle ${var##pattern} and ${var%%pattern} - greedy versions first
+      if content =~ /\A([a-zA-Z_][a-zA-Z0-9_]*)(##|%%)(.+)\z/
+        var_name = $1
+        operator = $2
+        operand = $3
+        return "__param_expand(#{var_name.inspect}, #{operator.inspect}, #{operand.inspect})"
+      end
+
+      # Handle ${var#pattern} and ${var%pattern} - non-greedy versions
+      if content =~ /\A([a-zA-Z_][a-zA-Z0-9_]*)(#|%)(.+)\z/
+        var_name = $1
+        operator = $2
+        operand = $3
+        return "__param_expand(#{var_name.inspect}, #{operator.inspect}, #{operand.inspect})"
+      end
+
+      # Handle ${var:-default}, ${var:=default}, ${var:+value}, ${var:?message}
+      if content =~ /\A([a-zA-Z_][a-zA-Z0-9_]*)(:-|:=|:\+|:\?)(.*)?\z/
+        var_name = $1
+        operator = $2
+        operand = $3 || ''
+        return "__param_expand(#{var_name.inspect}, #{operator.inspect}, #{operand.inspect})"
+      end
+
+      # Simple ${VAR}
+      "ENV.fetch(#{content.inspect}, '')"
     end
   end
 end
