@@ -92,4 +92,44 @@ class TestTildeExpansion < Test::Unit::TestCase
       omit 'root user not available on this system'
     end
   end
+
+  def test_tilde_plus_pwd
+    ENV['PWD'] = '/test/pwd'
+    assert_equal '/test/pwd', expand('~+')
+  end
+
+  def test_tilde_plus_with_path
+    ENV['PWD'] = '/test/pwd'
+    assert_equal '/test/pwd/subdir', expand('~+/subdir')
+  end
+
+  def test_tilde_minus_oldpwd
+    ENV['OLDPWD'] = '/old/path'
+    assert_equal '/old/path', expand('~-')
+  end
+
+  def test_tilde_minus_with_path
+    ENV['OLDPWD'] = '/old/path'
+    assert_equal '/old/path/subdir', expand('~-/subdir')
+  end
+
+  def test_tilde_minus_no_oldpwd
+    ENV.delete('OLDPWD')
+    assert_equal '~-', expand('~-')
+  end
+
+  def test_tilde_plus_in_command
+    ENV['PWD'] = '/current'
+    assert_equal 'ls /current', expand('ls ~+')
+  end
+
+  def test_tilde_minus_in_command
+    ENV['OLDPWD'] = '/previous'
+    assert_equal 'cd /previous', expand('cd ~-')
+  end
+
+  def test_tilde_plus_not_followed_by_slash_or_space
+    # ~+extra should expand ~ only, not ~+
+    assert_match(/\+extra$/, expand('~+extra'))
+  end
 end

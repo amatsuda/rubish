@@ -373,24 +373,38 @@ module Rubish
           at_word_start = prev_char.nil? || prev_char =~ /[\s"'=:]/
 
           if at_word_start
-            # Look for username after ~
-            j = i + 1
-            j += 1 while j < line.length && line[j] =~ /[a-zA-Z0-9_-]/
-
-            if j == i + 1
-              # Just ~ or ~/path
-              result << Dir.home
-              i = j
-            else
-              # ~username
-              username = line[i + 1...j]
-              begin
-                result << Dir.home(username)
-              rescue ArgumentError
-                # Unknown user, keep literal
-                result << line[i...j]
+            next_char = line[i + 1]
+            # Check for special ~+ (PWD) and ~- (OLDPWD)
+            if next_char == '+' && (line[i + 2].nil? || line[i + 2] =~ %r{[\s/]})
+              result << (ENV['PWD'] || Dir.pwd)
+              i += 2
+            elsif next_char == '-' && (line[i + 2].nil? || line[i + 2] =~ %r{[\s/]})
+              if ENV['OLDPWD']
+                result << ENV['OLDPWD']
+              else
+                result << '~-'  # Keep literal if OLDPWD not set
               end
-              i = j
+              i += 2
+            else
+              # Look for username after ~
+              j = i + 1
+              j += 1 while j < line.length && line[j] =~ /[a-zA-Z0-9_-]/
+
+              if j == i + 1
+                # Just ~ or ~/path
+                result << Dir.home
+                i = j
+              else
+                # ~username
+                username = line[i + 1...j]
+                begin
+                  result << Dir.home(username)
+                rescue ArgumentError
+                  # Unknown user, keep literal
+                  result << line[i...j]
+                end
+                i = j
+              end
             end
           else
             result << char
