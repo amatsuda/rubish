@@ -2,7 +2,7 @@
 
 module Rubish
   module Builtins
-    COMMANDS = %w(cd exit jobs fg bg export pwd history alias unalias source . shift set return read echo test [).freeze
+    COMMANDS = %w(cd exit jobs fg bg export pwd history alias unalias source . shift set return read echo test [ break continue).freeze
 
     @aliases = {}
     @executor = nil
@@ -57,6 +57,10 @@ module Rubish
         run_echo(args)
       when 'test', '['
         run_test(args)
+      when 'break'
+        run_break(args)
+      when 'continue'
+        run_continue(args)
       else
         false
       end
@@ -281,6 +285,18 @@ module Rubish
     def self.run_return(args)
       code = args.first&.to_i || 0
       throw :return, code
+    end
+
+    def self.run_break(args)
+      # Optional: break N to break out of N levels (default 1)
+      levels = args.first&.to_i || 1
+      throw :break_loop, levels
+    end
+
+    def self.run_continue(args)
+      # Optional: continue N to continue Nth enclosing loop (default 1)
+      levels = args.first&.to_i || 1
+      throw :continue_loop, levels
     end
 
     def self.run_test(args)
