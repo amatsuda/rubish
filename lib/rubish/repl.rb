@@ -425,6 +425,206 @@ module Rubish
       result
     end
 
+    def expand_history(line)
+      # History expansion: !!, !$, !^, !*, !n, !-n, !string, !?string, ^old^new
+      # Returns [expanded_line, was_expanded]
+      return [line, false] unless line.include?('!') || line.start_with?('^')
+
+      history = Reline::HISTORY.to_a
+      return [line, false] if history.empty?
+
+      result = +''
+      i = 0
+      expanded = false
+      in_single_quotes = false
+      in_double_quotes = false
+
+      while i < line.length
+        char = line[i]
+
+        # Track quote state - no expansion in single quotes
+        if char == "'" && !in_double_quotes
+          in_single_quotes = !in_single_quotes
+          result << char
+          i += 1
+          next
+        elsif char == '"' && !in_single_quotes
+          in_double_quotes = !in_double_quotes
+          result << char
+          i += 1
+          next
+        end
+
+        # Quick substitution: ^old^new^
+        if i == 0 && char == '^' && !in_single_quotes
+          if line =~ /\A\^([^^]*)\^([^^]*)\^?/
+            old_str = $1
+            new_str = $2
+            last_cmd = history[-1]
+            if last_cmd&.include?(old_str)
+              return [last_cmd.sub(old_str, new_str), true]
+            else
+              puts 'rubish: substitution failed'
+              return [nil, false]
+            end
+          end
+        end
+
+        if char == '!' && !in_single_quotes
+          # Check what follows !
+          next_char = line[i + 1]
+
+          case next_char
+          when '!'
+            # !! - last command
+            if history[-1]
+              result << history[-1]
+              expanded = true
+              i += 2
+            else
+              result << '!!'
+              i += 2
+            end
+          when '$'
+            # !$ - last argument of previous command
+            if history[-1]
+              args = parse_command_args(history[-1])
+              result << (args.last || '')
+              expanded = true
+            end
+            i += 2
+          when '^'
+            # !^ - first argument of previous command
+            if history[-1]
+              args = parse_command_args(history[-1])
+              result << (args[1] || '')  # args[0] is command, args[1] is first arg
+              expanded = true
+            end
+            i += 2
+          when '*'
+            # !* - all arguments of previous command
+            if history[-1]
+              args = parse_command_args(history[-1])
+              result << args[1..].join(' ')
+              expanded = true
+            end
+            i += 2
+          when '-'
+            # !-n - nth previous command
+            if line[i + 2..] =~ /\A(\d+)/
+              n = $1.to_i
+              cmd = history[-n]
+              if cmd
+                result << cmd
+                expanded = true
+              else
+                puts "rubish: !-#{n}: event not found"
+                return [nil, false]
+              end
+              i += 2 + $1.length
+            else
+              result << '!'
+              i += 1
+            end
+          when /\d/
+            # !n - command number n
+            if line[i + 1..] =~ /\A(\d+)/
+              n = $1.to_i
+              # History is 1-indexed for users
+              cmd = history[n - 1]
+              if cmd
+                result << cmd
+                expanded = true
+              else
+                puts "rubish: !#{n}: event not found"
+                return [nil, false]
+              end
+              i += 1 + $1.length
+            else
+              result << '!'
+              i += 1
+            end
+          when '?'
+            # !?string - most recent command containing string
+            if line[i + 2..] =~ /\A([^?\s]+)\??/
+              search = $1
+              cmd = history.reverse.find { |c| c.include?(search) }
+              if cmd
+                result << cmd
+                expanded = true
+                i += 2 + $1.length
+                i += 1 if line[i] == '?'  # skip optional closing ?
+              else
+                puts "rubish: !?#{search}: event not found"
+                return [nil, false]
+              end
+            else
+              result << '!'
+              i += 1
+            end
+          when /[a-zA-Z]/
+            # !string - most recent command starting with string
+            if line[i + 1..] =~ /\A([a-zA-Z][^\s]*)/
+              search = $1
+              cmd = history.reverse.find { |c| c.start_with?(search) }
+              if cmd
+                result << cmd
+                expanded = true
+                i += 1 + search.length
+              else
+                puts "rubish: !#{search}: event not found"
+                return [nil, false]
+              end
+            else
+              result << '!'
+              i += 1
+            end
+          when nil, ' ', "\t"
+            # Lone ! at end or followed by space - keep literal
+            result << '!'
+            i += 1
+          else
+            result << '!'
+            i += 1
+          end
+        else
+          result << char
+          i += 1
+        end
+      end
+
+      [result, expanded]
+    end
+
+    def parse_command_args(cmd)
+      # Simple tokenization for history expansion
+      # Handles quoted strings
+      args = []
+      current = +''
+      in_single = false
+      in_double = false
+      i = 0
+
+      while i < cmd.length
+        char = cmd[i]
+        if char == "'" && !in_double
+          in_single = !in_single
+          current << char
+        elsif char == '"' && !in_single
+          in_double = !in_double
+          current << char
+        elsif char =~ /\s/ && !in_single && !in_double
+          args << current unless current.empty?
+          current = +''
+        else
+          current << char
+        end
+        i += 1
+      end
+      args << current unless current.empty?
+      args
+    end
+
     def eval_in_context(code)
       result = binding.eval(code)
       if result.is_a?(Command) && @functions.key?(result.name)
