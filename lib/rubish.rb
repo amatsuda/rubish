@@ -5,6 +5,7 @@ require 'tempfile'
 require 'tmpdir'
 require 'singleton'
 require 'fileutils'
+require 'shellwords'
 require 'reline'
 
 require_relative 'rubish/lexer'

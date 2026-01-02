@@ -174,4 +174,142 @@ class TestHistoryExpansion < Test::Unit::TestCase
     args = @repl.send(:parse_command_args, "echo 'hello world'")
     assert_equal ['echo', "'hello world'"], args
   end
+
+  # Word designators
+  # :0 - command name
+  def test_word_designator_zero
+    add_history('grep pattern file.txt')
+    assert_equal 'echo grep', expand('echo !!:0')
+  end
+
+  # :1, :2, etc. - nth argument
+  def test_word_designator_number
+    add_history('cp file1.txt file2.txt')
+    assert_equal 'echo file1.txt', expand('echo !!:1')
+    assert_equal 'echo file2.txt', expand('echo !!:2')
+  end
+
+  # :^ - first argument (same as :1)
+  def test_word_designator_caret
+    add_history('ls -la /tmp')
+    assert_equal 'echo -la', expand('echo !!:^')
+  end
+
+  # :$ - last argument
+  def test_word_designator_dollar
+    add_history('grep -r pattern dir/')
+    assert_equal 'cd dir/', expand('cd !!:$')
+  end
+
+  # :* - all arguments
+  def test_word_designator_star
+    add_history('echo one two three')
+    assert_equal 'printf one two three', expand('printf !!:*')
+  end
+
+  # :n-m - range of words
+  def test_word_designator_range
+    add_history('cmd arg1 arg2 arg3 arg4')
+    assert_equal 'echo arg1 arg2', expand('echo !!:1-2')
+  end
+
+  # :n- - from n to last-1
+  def test_word_designator_range_from
+    add_history('cmd arg1 arg2 arg3')
+    assert_equal 'echo arg1 arg2', expand('echo !!:1-')
+  end
+
+  # :-n - from 0 to n
+  def test_word_designator_range_to
+    add_history('cmd arg1 arg2 arg3')
+    assert_equal 'echo cmd arg1', expand('echo !!:-1')
+  end
+
+  # Modifiers
+  # :h - head (dirname)
+  def test_modifier_head
+    add_history('cat /path/to/file.txt')
+    assert_equal 'cd /path/to', expand('cd !$:h')
+  end
+
+  # :t - tail (basename)
+  def test_modifier_tail
+    add_history('vim /path/to/file.txt')
+    assert_equal 'echo file.txt', expand('echo !$:t')
+  end
+
+  # :r - remove extension
+  def test_modifier_remove_extension
+    add_history('gcc source.c')
+    assert_equal './source', expand('./!$:r')
+  end
+
+  # :e - extension only
+  def test_modifier_extension
+    add_history('file document.pdf')
+    assert_equal 'echo pdf', expand('echo !$:e')
+  end
+
+  # :q - quote
+  def test_modifier_quote
+    add_history('echo hello world')
+    # The whole command gets quoted
+    result = expand('echo !!:q')
+    assert_match(/echo.*hello.*world/, result)
+  end
+
+  # :s/old/new/ - substitute
+  def test_modifier_substitute
+    add_history('cat file.txt')
+    assert_equal 'cat file.bak', expand('!!:s/txt/bak/')
+  end
+
+  def test_modifier_substitute_no_trailing_slash
+    add_history('echo hello')
+    assert_equal 'echo world', expand('!!:s/hello/world')
+  end
+
+  # :gs/old/new/ - global substitute
+  def test_modifier_global_substitute
+    add_history('echo foo foo foo')
+    assert_equal 'echo bar bar bar', expand('!!:gs/foo/bar/')
+  end
+
+  # Chained modifiers
+  def test_chained_modifiers
+    add_history('vim /path/to/file.txt')
+    assert_equal 'echo file', expand('echo !$:t:r')
+  end
+
+  # Word designator with modifier
+  def test_word_designator_with_modifier
+    add_history('cp /src/file.txt /dest/')
+    assert_equal 'cat /src', expand('cat !!:1:h')
+  end
+
+  # :p - print only (prints and returns nil)
+  def test_modifier_print_only
+    add_history('rm important.txt')
+    output = capture_output { @repl.send(:expand_history, '!!:p') }
+    assert_match(/rm important\.txt/, output)
+  end
+
+  # Event designators with word designators
+  def test_event_with_word_designator
+    add_history('first command', 'second command')
+    assert_equal 'echo first', expand('echo !1:0')
+    assert_equal 'echo second', expand('echo !2:0')
+  end
+
+  def test_negative_event_with_word_designator
+    add_history('alpha one', 'beta two', 'gamma three')
+    assert_equal 'echo three', expand('echo !-1:1')
+    assert_equal 'echo two', expand('echo !-2:1')
+  end
+
+  # String search with word designator
+  def test_string_search_with_word_designator
+    add_history('grep pattern file.txt', 'ls -la')
+    assert_equal 'cat file.txt', expand('cat !grep:$')
+  end
 end

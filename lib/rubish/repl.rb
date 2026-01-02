@@ -426,7 +426,8 @@ module Rubish
     end
 
     def expand_history(line)
-      # History expansion: !!, !$, !^, !*, !n, !-n, !string, !?string, ^old^new
+      # History expansion with word designators and modifiers
+      # Format: !event[:word][:modifier...]
       # Returns [expanded_line, was_expanded]
       return [line, false] unless line.include?('!') || line.start_with?('^')
 
@@ -436,6 +437,7 @@ module Rubish
       result = +''
       i = 0
       expanded = false
+      print_only = false
       in_single_quotes = false
       in_double_quotes = false
 
@@ -471,118 +473,16 @@ module Rubish
         end
 
         if char == '!' && !in_single_quotes
-          # Check what follows !
-          next_char = line[i + 1]
-
-          case next_char
-          when '!'
-            # !! - last command
-            if history[-1]
-              result << history[-1]
-              expanded = true
-              i += 2
-            else
-              result << '!!'
-              i += 2
-            end
-          when '$'
-            # !$ - last argument of previous command
-            if history[-1]
-              args = parse_command_args(history[-1])
-              result << (args.last || '')
-              expanded = true
-            end
-            i += 2
-          when '^'
-            # !^ - first argument of previous command
-            if history[-1]
-              args = parse_command_args(history[-1])
-              result << (args[1] || '')  # args[0] is command, args[1] is first arg
-              expanded = true
-            end
-            i += 2
-          when '*'
-            # !* - all arguments of previous command
-            if history[-1]
-              args = parse_command_args(history[-1])
-              result << args[1..].join(' ')
-              expanded = true
-            end
-            i += 2
-          when '-'
-            # !-n - nth previous command
-            if line[i + 2..] =~ /\A(\d+)/
-              n = $1.to_i
-              cmd = history[-n]
-              if cmd
-                result << cmd
-                expanded = true
-              else
-                puts "rubish: !-#{n}: event not found"
-                return [nil, false]
-              end
-              i += 2 + $1.length
-            else
-              result << '!'
-              i += 1
-            end
-          when /\d/
-            # !n - command number n
-            if line[i + 1..] =~ /\A(\d+)/
-              n = $1.to_i
-              # History is 1-indexed for users
-              cmd = history[n - 1]
-              if cmd
-                result << cmd
-                expanded = true
-              else
-                puts "rubish: !#{n}: event not found"
-                return [nil, false]
-              end
-              i += 1 + $1.length
-            else
-              result << '!'
-              i += 1
-            end
-          when '?'
-            # !?string - most recent command containing string
-            if line[i + 2..] =~ /\A([^?\s]+)\??/
-              search = $1
-              cmd = history.reverse.find { |c| c.include?(search) }
-              if cmd
-                result << cmd
-                expanded = true
-                i += 2 + $1.length
-                i += 1 if line[i] == '?'  # skip optional closing ?
-              else
-                puts "rubish: !?#{search}: event not found"
-                return [nil, false]
-              end
-            else
-              result << '!'
-              i += 1
-            end
-          when /[a-zA-Z]/
-            # !string - most recent command starting with string
-            if line[i + 1..] =~ /\A([a-zA-Z][^\s]*)/
-              search = $1
-              cmd = history.reverse.find { |c| c.start_with?(search) }
-              if cmd
-                result << cmd
-                expanded = true
-                i += 1 + search.length
-              else
-                puts "rubish: !#{search}: event not found"
-                return [nil, false]
-              end
-            else
-              result << '!'
-              i += 1
-            end
-          when nil, ' ', "\t"
-            # Lone ! at end or followed by space - keep literal
-            result << '!'
-            i += 1
+          expansion, consumed, error, is_print_only = parse_history_expansion(line, i, history)
+          if error
+            puts error
+            return [nil, false]
+          end
+          if expansion
+            result << expansion
+            expanded = true
+            print_only ||= is_print_only
+            i += consumed
           else
             result << '!'
             i += 1
@@ -593,7 +493,280 @@ module Rubish
         end
       end
 
+      # If :p modifier was used, print but don't execute
+      if print_only
+        puts result
+        return [nil, false]
+      end
+
       [result, expanded]
+    end
+
+    def parse_history_expansion(line, pos, history)
+      # Parse history expansion starting at pos
+      # Returns [expansion, chars_consumed, error_message, print_only]
+      i = pos + 1  # skip !
+      return [nil, 0, nil, false] if i >= line.length
+
+      # Parse event designator
+      event_cmd, event_len, error = parse_event_designator(line, i, history)
+      return [nil, 0, error, false] if error
+      return [nil, 0, nil, false] unless event_cmd
+
+      i += event_len
+      args = parse_command_args(event_cmd)
+
+      # Check for word designator
+      selected_words = args  # default: all words
+      if i < line.length && line[i] == ':'
+        # Could be word designator or modifier
+        word_result, word_len = parse_word_designator(line, i + 1, args)
+        if word_result
+          selected_words = word_result
+          i += 1 + word_len
+        end
+      end
+
+      # Check for modifiers
+      result_text = selected_words.join(' ')
+      print_only = false
+
+      while i < line.length && line[i] == ':'
+        modifier, mod_len, mod_error = parse_modifier(line, i + 1, result_text)
+        break unless modifier || mod_error
+        if mod_error
+          return [nil, 0, mod_error, false]
+        end
+        if modifier == :print_only
+          print_only = true
+          i += 1 + mod_len
+        else
+          result_text = modifier
+          i += 1 + mod_len
+        end
+      end
+
+      [result_text, i - pos, nil, print_only]
+    end
+
+    def parse_event_designator(line, pos, history)
+      # Returns [command, chars_consumed, error]
+      return [nil, 0, nil] if pos >= line.length
+
+      char = line[pos]
+
+      case char
+      when '!'
+        # !! - last command
+        [history[-1], 1, nil]
+      when '$'
+        # !$ - last argument (shorthand, no word designator needed)
+        args = parse_command_args(history[-1] || '')
+        [args.last || '', 1, nil]
+      when '^'
+        # !^ - first argument
+        args = parse_command_args(history[-1] || '')
+        [args[1] || '', 1, nil]
+      when '*'
+        # !* - all arguments
+        args = parse_command_args(history[-1] || '')
+        [args[1..].join(' '), 1, nil]
+      when '-'
+        # !-n - nth previous command
+        if line[pos + 1..] =~ /\A(\d+)/
+          n = $1.to_i
+          cmd = history[-n]
+          if cmd
+            [cmd, 1 + $1.length, nil]
+          else
+            [nil, 0, "rubish: !-#{n}: event not found"]
+          end
+        else
+          [nil, 0, nil]
+        end
+      when /\d/
+        # !n - command number n
+        if line[pos..] =~ /\A(\d+)/
+          n = $1.to_i
+          cmd = history[n - 1]
+          if cmd
+            [cmd, $1.length, nil]
+          else
+            [nil, 0, "rubish: !#{n}: event not found"]
+          end
+        else
+          [nil, 0, nil]
+        end
+      when '?'
+        # !?string - contains string
+        if line[pos + 1..] =~ /\A([^?\s:]+)\??/
+          search = $1
+          cmd = history.reverse.find { |c| c.include?(search) }
+          if cmd
+            consumed = 1 + search.length
+            consumed += 1 if line[pos + consumed] == '?'
+            [cmd, consumed, nil]
+          else
+            [nil, 0, "rubish: !?#{search}: event not found"]
+          end
+        else
+          [nil, 0, nil]
+        end
+      when /[a-zA-Z]/
+        # !string - starts with string
+        if line[pos..] =~ /\A([a-zA-Z][^\s:]*)/
+          search = $1
+          cmd = history.reverse.find { |c| c.start_with?(search) }
+          if cmd
+            [cmd, search.length, nil]
+          else
+            [nil, 0, "rubish: !#{search}: event not found"]
+          end
+        else
+          [nil, 0, nil]
+        end
+      when ' ', "\t", nil
+        [nil, 0, nil]
+      else
+        [nil, 0, nil]
+      end
+    end
+
+    def parse_word_designator(line, pos, args)
+      # Returns [selected_words_array, chars_consumed] or [nil, 0]
+      return [nil, 0] if pos >= line.length
+
+      case line[pos]
+      when '0'
+        # :0 - command name
+        [[args[0] || ''], 1]
+      when '^'
+        # :^ - first argument
+        [[args[1] || ''], 1]
+      when '$'
+        # :$ - last argument
+        [[args.last || ''], 1]
+      when '*'
+        # :* - all arguments
+        [args[1..] || [], 1]
+      when '-'
+        # :-n - from 0 to n
+        if line[pos + 1..] =~ /\A(\d+)/
+          end_n = $1.to_i
+          [args[0..end_n] || [], 1 + $1.length]
+        else
+          [nil, 0]
+        end
+      when /\d/
+        # :n or :n-m or :n-$ or :n* or :n-
+        if line[pos..] =~ /\A(\d+)(-(\d+|\$|\*)?|\*)?/
+          start_n = $1.to_i
+          range_part = $2
+          consumed = $1.length + (range_part&.length || 0)
+
+          if range_part.nil?
+            # Just :n
+            [[args[start_n] || ''], consumed]
+          elsif range_part == '*'
+            # :n* - from n to end
+            [args[start_n..] || [], consumed]
+          elsif range_part == '-'
+            # :n- - from n to last-1
+            [args[start_n...-1] || [], consumed]
+          elsif range_part.start_with?('-')
+            end_part = range_part[1..]
+            if end_part == '$' || end_part == '*'
+              # :n-$ or :n-*
+              [args[start_n..] || [], consumed]
+            elsif end_part.empty?
+              # :n- - from n to last-1
+              [args[start_n...-1] || [], consumed]
+            else
+              # :n-m
+              end_n = end_part.to_i
+              [args[start_n..end_n] || [], consumed]
+            end
+          else
+            [[args[start_n] || ''], $1.length]
+          end
+        else
+          [nil, 0]
+        end
+      else
+        [nil, 0]
+      end
+    end
+
+    def parse_modifier(line, pos, text)
+      # Returns [modified_text_or_symbol, chars_consumed, error]
+      return [nil, 0, nil] if pos >= line.length
+
+      case line[pos]
+      when 'h'
+        # :h - head (dirname)
+        [File.dirname(text), 1, nil]
+      when 't'
+        # :t - tail (basename)
+        [File.basename(text), 1, nil]
+      when 'r'
+        # :r - remove extension
+        ext = File.extname(text)
+        [ext.empty? ? text : text[0...-ext.length], 1, nil]
+      when 'e'
+        # :e - extension only
+        ext = File.extname(text)
+        [ext.empty? ? '' : ext[1..], 1, nil]
+      when 'p'
+        # :p - print only, don't execute
+        [:print_only, 1, nil]
+      when 'q'
+        # :q - quote the text
+        [Shellwords.escape(text), 1, nil]
+      when 's', 'g'
+        # :s/old/new/ or :gs/old/new/ - substitute
+        global = line[pos] == 'g'
+        start = global ? pos + 1 : pos
+        return [nil, 0, nil] unless start < line.length && line[start] == 's'
+        return [nil, 0, nil] unless start + 1 < line.length
+
+        delimiter = line[start + 1]
+        return [nil, 0, nil] unless delimiter && delimiter =~ /[\/^]/
+
+        # Find old_str (between first and second delimiter)
+        old_start = start + 2
+        old_end = line.index(delimiter, old_start)
+        return [nil, 0, 'rubish: bad substitution'] unless old_end
+
+        old_str = line[old_start...old_end]
+
+        # Find new_str (between second and optional third delimiter)
+        new_start = old_end + 1
+        new_end = line.index(delimiter, new_start) || line.length
+        # Check if new_end is followed by word boundary or modifier
+        if new_end < line.length && line[new_end] == delimiter
+          new_str = line[new_start...new_end]
+          consumed = new_end - pos + 1  # include trailing delimiter
+        else
+          # No trailing delimiter, find end of word
+          new_end = new_start
+          while new_end < line.length && line[new_end] !~ /[\s:]/
+            new_end += 1
+          end
+          new_str = line[new_start...new_end]
+          consumed = new_end - pos
+        end
+
+        if global
+          [text.gsub(old_str, new_str), consumed, nil]
+        else
+          [text.sub(old_str, new_str), consumed, nil]
+        end
+      when '&'
+        # :& - repeat last substitution (not implemented, skip)
+        [nil, 0, nil]
+      else
+        [nil, 0, nil]
+      end
     end
 
     def parse_command_args(cmd)
