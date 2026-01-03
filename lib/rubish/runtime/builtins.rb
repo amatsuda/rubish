@@ -2,7 +2,7 @@
 
 module Rubish
   module Builtins
-    COMMANDS = %w(cd exit jobs fg bg export pwd history alias unalias source . shift set return read echo test [ break continue pushd popd dirs trap).freeze
+    COMMANDS = %w(cd exit jobs fg bg export pwd history alias unalias source . shift set return read echo test [ break continue pushd popd dirs trap getopts).freeze
 
     @aliases = {}
     @dir_stack = []
@@ -73,6 +73,8 @@ module Rubish
         run_dirs(args)
       when 'trap'
         run_trap(args)
+      when 'getopts'
+        run_getopts(args)
       else
         false
       end
@@ -302,6 +304,126 @@ module Rubish
       end
       @traps.clear
       @original_traps.clear
+    end
+
+    def self.run_getopts(args)
+      # getopts optstring name [args...]
+      # Returns true if option found, false when done
+      if args.length < 2
+        puts 'getopts: usage: getopts optstring name [arg ...]'
+        return false
+      end
+
+      optstring = args[0]
+      varname = args[1]
+
+      # Get arguments to parse - either from args or positional params
+      if args.length > 2
+        parse_args = args[2..]
+      else
+        parse_args = @positional_params_getter&.call || []
+      end
+
+      # Get current OPTIND (1-based index)
+      optind = (ENV['OPTIND'] || '1').to_i
+
+      # Check if we're done
+      if optind > parse_args.length
+        ENV[varname] = '?'
+        return false
+      end
+
+      # Get current argument
+      arg = parse_args[optind - 1]
+
+      # Check if it's an option
+      if arg.nil? || arg == '--' || !arg.start_with?('-') || arg == '-'
+        ENV[varname] = '?'
+        return false
+      end
+
+      # Handle -- to stop option processing
+      if arg == '--'
+        ENV['OPTIND'] = (optind + 1).to_s
+        ENV[varname] = '?'
+        return false
+      end
+
+      # Get the current character position within the option group
+      # OPTPOS tracks position in grouped options like -abc
+      optpos = (ENV['_OPTPOS'] || '1').to_i
+
+      opt_char = arg[optpos]
+
+      # Check if this is a valid option
+      opt_idx = optstring.index(opt_char)
+      silent_errors = optstring.start_with?(':')
+
+      if opt_idx.nil?
+        # Invalid option
+        ENV[varname] = '?'
+        ENV['OPTARG'] = opt_char if silent_errors
+        unless silent_errors
+          puts "getopts: illegal option -- #{opt_char}"
+        end
+        # Move to next character or next argument
+        if optpos + 1 < arg.length
+          ENV['_OPTPOS'] = (optpos + 1).to_s
+        else
+          ENV['OPTIND'] = (optind + 1).to_s
+          ENV['_OPTPOS'] = '1'
+        end
+        return true
+      end
+
+      # Check if option requires an argument
+      requires_arg = optstring[opt_idx + 1] == ':'
+
+      if requires_arg
+        # Check for argument
+        if optpos + 1 < arg.length
+          # Argument is rest of current arg (e.g., -ovalue)
+          ENV['OPTARG'] = arg[(optpos + 1)..]
+          ENV['OPTIND'] = (optind + 1).to_s
+          ENV['_OPTPOS'] = '1'
+        elsif optind < parse_args.length
+          # Argument is next arg
+          ENV['OPTARG'] = parse_args[optind]
+          ENV['OPTIND'] = (optind + 2).to_s
+          ENV['_OPTPOS'] = '1'
+        else
+          # Missing argument
+          if silent_errors
+            ENV[varname] = ':'
+            ENV['OPTARG'] = opt_char
+          else
+            ENV[varname] = '?'
+            puts "getopts: option requires an argument -- #{opt_char}"
+          end
+          ENV['OPTIND'] = (optind + 1).to_s
+          ENV['_OPTPOS'] = '1'
+          return true
+        end
+      else
+        # No argument required
+        ENV.delete('OPTARG')
+        # Move to next character or next argument
+        if optpos + 1 < arg.length
+          ENV['_OPTPOS'] = (optpos + 1).to_s
+        else
+          ENV['OPTIND'] = (optind + 1).to_s
+          ENV['_OPTPOS'] = '1'
+        end
+      end
+
+      ENV[varname] = opt_char
+      true
+    end
+
+    def self.reset_getopts
+      ENV['OPTIND'] = '1'
+      ENV['_OPTPOS'] = '1'
+      ENV.delete('OPTARG')
     end
 
     def self.run_export(args)
