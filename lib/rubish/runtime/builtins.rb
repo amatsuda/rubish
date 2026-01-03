@@ -2,7 +2,7 @@
 
 module Rubish
   module Builtins
-    COMMANDS = %w(cd exit jobs fg bg export pwd history alias unalias source . shift set return read echo test [ break continue pushd popd dirs trap getopts local unset readonly declare typeset let printf type which true false : eval command builtin wait kill umask exec times hash disown).freeze
+    COMMANDS = %w(cd exit jobs fg bg export pwd history alias unalias source . shift set return read echo test [ break continue pushd popd dirs trap getopts local unset readonly declare typeset let printf type which true false : eval command builtin wait kill umask exec times hash disown ulimit).freeze
 
     @aliases = {}
     @dir_stack = []
@@ -121,6 +121,8 @@ module Rubish
         run_hash(args)
       when 'disown'
         run_disown(args)
+      when 'ulimit'
+        run_ulimit(args)
       else
         false
       end
@@ -1753,6 +1755,180 @@ module Rubish
       end
 
       all_found
+    end
+
+    def self.run_ulimit(args)
+      # ulimit [-HSabcdefiklmnpqrstuvxPRT] [limit]
+      # -H: use hard limit
+      # -S: use soft limit (default for display)
+      # -a: show all limits
+      # Resource flags:
+      # -c: core file size (blocks)
+      # -d: data segment size (kbytes)
+      # -e: scheduling priority (nice)
+      # -f: file size (blocks) - default
+      # -i: pending signals
+      # -l: locked memory (kbytes)
+      # -m: resident set size (kbytes)
+      # -n: open files
+      # -p: pipe size (512 bytes)
+      # -q: POSIX message queues (bytes)
+      # -r: real-time priority
+      # -s: stack size (kbytes)
+      # -t: CPU time (seconds)
+      # -u: user processes
+      # -v: virtual memory (kbytes)
+      # -x: file locks
+
+      # Resource mapping to Ruby Process constants
+      resource_map = {
+        'c' => [:RLIMIT_CORE, 512, 'core file size'],           # blocks
+        'd' => [:RLIMIT_DATA, 1024, 'data seg size'],           # kbytes
+        'f' => [:RLIMIT_FSIZE, 512, 'file size'],               # blocks
+        'l' => [:RLIMIT_MEMLOCK, 1024, 'max locked memory'],    # kbytes
+        'm' => [:RLIMIT_RSS, 1024, 'max memory size'],          # kbytes
+        'n' => [:RLIMIT_NOFILE, 1, 'open files'],               # count
+        's' => [:RLIMIT_STACK, 1024, 'stack size'],             # kbytes
+        't' => [:RLIMIT_CPU, 1, 'cpu time'],                    # seconds
+        'u' => [:RLIMIT_NPROC, 1, 'max user processes'],        # count
+        'v' => [:RLIMIT_AS, 1024, 'virtual memory']             # kbytes
+      }
+
+      # Add platform-specific resources if available
+      resource_map['i'] = [:RLIMIT_SIGPENDING, 1, 'pending signals'] if Process.const_defined?(:RLIMIT_SIGPENDING)
+      resource_map['q'] = [:RLIMIT_MSGQUEUE, 1, 'POSIX message queues'] if Process.const_defined?(:RLIMIT_MSGQUEUE)
+      resource_map['e'] = [:RLIMIT_NICE, 1, 'scheduling priority'] if Process.const_defined?(:RLIMIT_NICE)
+      resource_map['r'] = [:RLIMIT_RTPRIO, 1, 'real-time priority'] if Process.const_defined?(:RLIMIT_RTPRIO)
+      resource_map['x'] = [:RLIMIT_LOCKS, 1, 'file locks'] if Process.const_defined?(:RLIMIT_LOCKS)
+
+      use_hard = false
+      use_soft = true  # default
+      show_all = false
+      resource_flag = 'f'  # default is file size
+      limit_value = nil
+
+      i = 0
+      while i < args.length
+        arg = args[i]
+
+        if arg.start_with?('-') && limit_value.nil?
+          arg[1..].each_char do |c|
+            case c
+            when 'H'
+              use_hard = true
+              use_soft = false
+            when 'S'
+              use_soft = true
+              use_hard = false
+            when 'a'
+              show_all = true
+            when *resource_map.keys
+              resource_flag = c
+            else
+              puts "ulimit: -#{c}: invalid option"
+              return false
+            end
+          end
+        else
+          limit_value = arg
+        end
+        i += 1
+      end
+
+      # Show all limits
+      if show_all
+        resource_map.each do |flag, (const_sym, divisor, description)|
+          next unless Process.const_defined?(const_sym)
+
+          const = Process.const_get(const_sym)
+          begin
+            soft, hard = Process.getrlimit(const)
+            value = use_hard ? hard : soft
+            if value == Process::RLIM_INFINITY
+              formatted = 'unlimited'
+            else
+              formatted = (value / divisor).to_s
+            end
+            unit = case flag
+                   when 't' then '(seconds, -t)'
+                   when 'n', 'u' then "(-#{flag})"
+                   else "(kbytes, -#{flag})"
+                   end
+            # Left-align description, right-align value
+            puts format('%-30s %s', "#{description} #{unit}", formatted)
+          rescue Errno::EINVAL
+            # Resource not supported on this platform
+          end
+        end
+        return true
+      end
+
+      # Get resource info
+      resource_info = resource_map[resource_flag]
+      unless resource_info
+        puts "ulimit: -#{resource_flag}: invalid option"
+        return false
+      end
+
+      const_sym, divisor, _description = resource_info
+
+      unless Process.const_defined?(const_sym)
+        puts "ulimit: -#{resource_flag}: not supported on this platform"
+        return false
+      end
+
+      const = Process.const_get(const_sym)
+
+      # Display current limit
+      if limit_value.nil?
+        begin
+          soft, hard = Process.getrlimit(const)
+          value = use_hard ? hard : soft
+          if value == Process::RLIM_INFINITY
+            puts 'unlimited'
+          else
+            puts (value / divisor).to_s
+          end
+          return true
+        rescue Errno::EINVAL
+          puts "ulimit: -#{resource_flag}: cannot get limit"
+          return false
+        end
+      end
+
+      # Set new limit
+      new_limit = if limit_value == 'unlimited' || limit_value == 'infinity'
+                    Process::RLIM_INFINITY
+                  elsif limit_value == 'hard'
+                    _, hard = Process.getrlimit(const)
+                    hard
+                  elsif limit_value == 'soft'
+                    soft, _ = Process.getrlimit(const)
+                    soft
+                  elsif limit_value =~ /^\d+$/
+                    limit_value.to_i * divisor
+                  else
+                    puts "ulimit: #{limit_value}: invalid limit"
+                    return false
+                  end
+
+      begin
+        soft, hard = Process.getrlimit(const)
+        if use_hard && use_soft
+          Process.setrlimit(const, new_limit, new_limit)
+        elsif use_hard
+          Process.setrlimit(const, soft, new_limit)
+        else
+          Process.setrlimit(const, new_limit, hard)
+        end
+        true
+      rescue Errno::EPERM
+        puts "ulimit: -#{resource_flag}: cannot modify limit"
+        false
+      rescue Errno::EINVAL
+        puts "ulimit: -#{resource_flag}: invalid limit"
+        false
+      end
     end
 
     def self.run_hash(args)
