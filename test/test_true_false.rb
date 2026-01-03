@@ -87,6 +87,37 @@ class TestTrueFalse < Test::Unit::TestCase
     assert_equal "fallback\n", File.read(file)
   end
 
+  # Test colon (null command)
+  def test_colon_returns_true
+    result = Rubish::Builtins.run(':', [])
+    assert result
+  end
+
+  def test_colon_with_args_returns_true
+    # : ignores all arguments
+    result = Rubish::Builtins.run(':', ['ignored', 'args'])
+    assert result
+  end
+
+  def test_colon_is_builtin
+    assert Rubish::Builtins.builtin?(':')
+  end
+
+  def test_colon_with_and
+    # : && command should run command
+    file = File.join(@tempdir, 'output.txt')
+    execute(": && echo success > #{file}")
+    assert_equal "success\n", File.read(file)
+  end
+
+  def test_colon_with_or
+    # : || command should NOT run command (: succeeds)
+    file = File.join(@tempdir, 'output.txt')
+    File.write(file, 'original')
+    execute(": || echo fallback > #{file}")
+    assert_equal 'original', File.read(file)
+  end
+
   # Test type identification
   def test_type_identifies_true_as_builtin
     output = capture_output { Rubish::Builtins.run('type', ['true']) }
@@ -96,5 +127,10 @@ class TestTrueFalse < Test::Unit::TestCase
   def test_type_identifies_false_as_builtin
     output = capture_output { Rubish::Builtins.run('type', ['false']) }
     assert_match(/false is a shell builtin/, output)
+  end
+
+  def test_type_identifies_colon_as_builtin
+    output = capture_output { Rubish::Builtins.run('type', [':']) }
+    assert_match(/: is a shell builtin/, output)
   end
 end
