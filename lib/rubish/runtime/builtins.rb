@@ -2,13 +2,14 @@
 
 module Rubish
   module Builtins
-    COMMANDS = %w(cd exit jobs fg bg export pwd history alias unalias source . shift set return read echo test [ break continue pushd popd dirs trap getopts local unset).freeze
+    COMMANDS = %w(cd exit jobs fg bg export pwd history alias unalias source . shift set return read echo test [ break continue pushd popd dirs trap getopts local unset readonly).freeze
 
     @aliases = {}
     @dir_stack = []
     @traps = {}
     @original_traps = {}
     @local_scope_stack = []  # Stack of hashes for local variable scopes
+    @readonly_vars = {}  # Hash of readonly variable names to their values
     @executor = nil
     @script_name_getter = nil
     @script_name_setter = nil
@@ -19,7 +20,7 @@ module Rubish
     @heredoc_content_setter = nil
 
     class << self
-      attr_reader :aliases, :dir_stack, :traps, :local_scope_stack
+      attr_reader :aliases, :dir_stack, :traps, :local_scope_stack, :readonly_vars
       attr_accessor :executor, :script_name_getter, :script_name_setter, :positional_params_getter, :positional_params_setter, :function_checker, :function_remover, :heredoc_content_setter
     end
 
@@ -81,6 +82,8 @@ module Rubish
         run_local(args)
       when 'unset'
         run_unset(args)
+      when 'readonly'
+        run_readonly(args)
       else
         false
       end
@@ -445,6 +448,11 @@ module Rubish
       args.each do |arg|
         if arg.include?('=')
           name, value = arg.split('=', 2)
+          # Check if readonly
+          if readonly?(name)
+            puts "local: #{name}: readonly variable"
+            next
+          end
           # Save original value if not already in this scope
           unless current_scope.key?(name)
             current_scope[name] = ENV.key?(name) ? ENV[name] : :unset
@@ -524,12 +532,64 @@ module Rubish
           # Remove function
           @function_remover&.call(name)
         else
+          # Check if readonly
+          if readonly?(name)
+            puts "unset: #{name}: readonly variable"
+            next
+          end
           # Remove environment variable
           ENV.delete(name)
         end
       end
 
       true
+    end
+
+    def self.run_readonly(args)
+      # readonly [-p] [name[=value] ...]
+      # -p: print all readonly variables in reusable format
+
+      if args.empty? || args == ['-p']
+        # List all readonly variables
+        @readonly_vars.each do |name, _|
+          value = ENV[name]
+          if value
+            puts "readonly #{name}=#{value.inspect}"
+          else
+            puts "readonly #{name}"
+          end
+        end
+        return true
+      end
+
+      # Filter out -p flag
+      names = args.reject { |a| a == '-p' }
+
+      names.each do |arg|
+        if arg.include?('=')
+          name, value = arg.split('=', 2)
+          # Check if already readonly with different value
+          if @readonly_vars.key?(name) && ENV[name] != value
+            puts "readonly: #{name}: readonly variable"
+            next
+          end
+          ENV[name] = value
+          @readonly_vars[name] = true
+        else
+          # Mark existing variable as readonly
+          @readonly_vars[arg] = true
+        end
+      end
+
+      true
+    end
+
+    def self.readonly?(name)
+      @readonly_vars.key?(name)
+    end
+
+    def self.clear_readonly_vars
+      @readonly_vars.clear
     end
 
     def self.run_export(args)
@@ -540,6 +600,10 @@ module Rubish
         args.each do |arg|
           if arg.include?('=')
             key, value = arg.split('=', 2)
+            if readonly?(key)
+              puts "export: #{key}: readonly variable"
+              next
+            end
             ENV[key] = value
           else
             # Just export existing variable (no-op in this simple impl)
