@@ -2,7 +2,7 @@
 
 module Rubish
   module Builtins
-    COMMANDS = %w(cd exit jobs fg bg export pwd history alias unalias source . shift set return read echo test [ break continue pushd popd dirs trap getopts local unset readonly declare typeset let printf type which true false : eval command builtin wait kill umask exec times hash disown ulimit suspend shopt enable caller complete compgen bind help fc mapfile readarray).freeze
+    COMMANDS = %w(cd exit logout jobs fg bg export pwd history alias unalias source . shift set return read echo test [ break continue pushd popd dirs trap getopts local unset readonly declare typeset let printf type which true false : eval command builtin wait kill umask exec times hash disown ulimit suspend shopt enable caller complete compgen bind help fc mapfile readarray).freeze
 
     @aliases = {}
     @dir_stack = []
@@ -78,6 +78,8 @@ module Rubish
         run_cd(args)
       when 'exit'
         run_exit(args)
+      when 'logout'
+        run_logout(args)
       when 'jobs'
         run_jobs(args)
       when 'fg'
@@ -4053,6 +4055,17 @@ module Rubish
       throw :exit, code
     end
 
+    def self.run_logout(args)
+      # In bash, logout only works in login shells
+      # For simplicity, we treat rubish as always being a login shell
+      # and logout behaves the same as exit
+      unless @shell_options['login_shell']
+        # If not a login shell, warn but still exit (bash behavior varies)
+        $stderr.puts 'logout: not login shell: use `exit\''
+      end
+      run_exit(args)
+    end
+
     def self.run_jobs(_args)
       jobs = JobManager.instance.active
       if jobs.empty?
@@ -4143,6 +4156,10 @@ module Rubish
       'exit' => {
         synopsis: 'exit [n]',
         description: 'Exit the shell with a status of n. If n is omitted, exit status is that of the last command executed.'
+      },
+      'logout' => {
+        synopsis: 'logout [n]',
+        description: 'Exit a login shell with a status of n. If n is omitted, exit status is that of the last command executed. Prints a warning if not in a login shell.'
       },
       'jobs' => {
         synopsis: 'jobs [-l|-p] [jobspec ...]',

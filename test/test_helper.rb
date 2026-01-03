@@ -5,6 +5,17 @@ require_relative '../lib/rubish'
 
 # Common test helper methods
 module TestHelper
+
+  # Capture stderr during block execution
+  def capture_stderr
+    original_stderr = $stderr
+    $stderr = StringIO.new
+    yield
+    $stderr.string
+  ensure
+    $stderr = original_stderr
+  end
+
   # Capture both stdout and stderr during block execution
   def capture_output
     original_stdout = $stdout
