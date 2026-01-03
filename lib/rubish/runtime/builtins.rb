@@ -2,7 +2,7 @@
 
 module Rubish
   module Builtins
-    COMMANDS = %w(cd exit logout jobs fg bg export pwd history alias unalias source . shift set return read echo test [ break continue pushd popd dirs trap getopts local unset readonly declare typeset let printf type which true false : eval command builtin wait kill umask exec times hash disown ulimit suspend shopt enable caller complete compgen bind help fc mapfile readarray).freeze
+    COMMANDS = %w(cd exit logout jobs fg bg export pwd history alias unalias source . shift set return read echo test [ break continue pushd popd dirs trap getopts local unset readonly declare typeset let printf type which true false : eval command builtin wait kill umask exec times hash disown ulimit suspend shopt enable caller complete compgen compopt bind help fc mapfile readarray).freeze
 
     @aliases = {}
     @dir_stack = []
@@ -16,6 +16,8 @@ module Rubish
     @disabled_builtins = Set.new  # Set of disabled builtin names
     @call_stack = []  # Stack of [line_number, function_name, filename] for caller builtin
     @completions = {}  # Hash of command names to completion specs
+    @completion_options = {}  # Hash of command names to Set of completion options
+    @current_completion_options = Set.new  # Options for currently executing completion
     @key_bindings = {}  # Hash of keyseq to function/macro/command
     @readline_variables = {}  # Hash of readline variable names to values
     @executor = nil
@@ -29,8 +31,8 @@ module Rubish
     @command_executor = nil  # Executor that bypasses functions/aliases
 
     class << self
-      attr_reader :aliases, :dir_stack, :traps, :local_scope_stack, :readonly_vars, :var_attributes, :command_hash, :shell_options, :disabled_builtins, :call_stack, :completions, :key_bindings, :readline_variables
-      attr_accessor :executor, :script_name_getter, :script_name_setter, :positional_params_getter, :positional_params_setter, :function_checker, :function_remover, :heredoc_content_setter, :command_executor
+      attr_reader :aliases, :dir_stack, :traps, :local_scope_stack, :readonly_vars, :var_attributes, :command_hash, :shell_options, :disabled_builtins, :call_stack, :completions, :completion_options, :key_bindings, :readline_variables
+      attr_accessor :executor, :script_name_getter, :script_name_setter, :positional_params_getter, :positional_params_setter, :function_checker, :function_remover, :heredoc_content_setter, :command_executor, :current_completion_options
     end
 
     # Valid shell options with their default values and descriptions
@@ -178,6 +180,8 @@ module Rubish
         run_complete(args)
       when 'compgen'
         run_compgen(args)
+      when 'compopt'
+        run_compopt(args)
       when 'bind'
         run_bind(args)
       when 'help'
@@ -2670,6 +2674,137 @@ module Rubish
       @completions.clear
     end
 
+    # Valid completion options for compopt
+    COMPLETION_OPTIONS = %w[
+      bashdefault default dirnames filenames noquote nosort nospace plusdirs
+    ].freeze
+
+    def self.run_compopt(args)
+      # compopt [-o option] [-DE] [+o option] [name ...]
+      # Modify completion options for each name, or for the currently executing completion
+      # -o option: Enable option
+      # +o option: Disable option
+      # -D: Apply to default completion (when no specific completion exists)
+      # -E: Apply to empty command completion (when completing on empty line)
+
+      enable_opts = []
+      disable_opts = []
+      names = []
+      apply_default = false
+      apply_empty = false
+
+      i = 0
+      while i < args.length
+        arg = args[i]
+        case arg
+        when '-o'
+          i += 1
+          opt = args[i]
+          if opt && COMPLETION_OPTIONS.include?(opt)
+            enable_opts << opt
+          elsif opt
+            $stderr.puts "compopt: #{opt}: invalid option name"
+            return false
+          end
+        when '+o'
+          i += 1
+          opt = args[i]
+          if opt && COMPLETION_OPTIONS.include?(opt)
+            disable_opts << opt
+          elsif opt
+            $stderr.puts "compopt: #{opt}: invalid option name"
+            return false
+          end
+        when '-D'
+          apply_default = true
+        when '-E'
+          apply_empty = true
+        when /\A-o(.+)/
+          # -oOPTION (combined form)
+          opt = $1
+          if COMPLETION_OPTIONS.include?(opt)
+            enable_opts << opt
+          else
+            $stderr.puts "compopt: #{opt}: invalid option name"
+            return false
+          end
+        when /\A\+o(.+)/
+          # +oOPTION (combined form)
+          opt = $1
+          if COMPLETION_OPTIONS.include?(opt)
+            disable_opts << opt
+          else
+            $stderr.puts "compopt: #{opt}: invalid option name"
+            return false
+          end
+        else
+          names << arg
+        end
+        i += 1
+      end
+
+      # If no options specified, print current options
+      if enable_opts.empty? && disable_opts.empty?
+        return print_compopt_options(names, apply_default, apply_empty)
+      end
+
+      # Apply options
+      if names.empty? && !apply_default && !apply_empty
+        # Apply to currently executing completion
+        enable_opts.each { |opt| @current_completion_options.add(opt) }
+        disable_opts.each { |opt| @current_completion_options.delete(opt) }
+      else
+        # Apply to named commands
+        targets = []
+        targets << :default if apply_default
+        targets << :empty if apply_empty
+        targets.concat(names)
+
+        targets.each do |name|
+          @completion_options[name] ||= Set.new
+          enable_opts.each { |opt| @completion_options[name].add(opt) }
+          disable_opts.each { |opt| @completion_options[name].delete(opt) }
+        end
+      end
+
+      true
+    end
+
+    def self.print_compopt_options(names, apply_default, apply_empty)
+      targets = []
+      targets << :default if apply_default
+      targets << :empty if apply_empty
+      targets.concat(names)
+
+      if targets.empty?
+        # Print current completion options
+        if @current_completion_options.empty?
+          puts 'compopt: no options set'
+        else
+          @current_completion_options.each { |opt| puts "compopt -o #{opt}" }
+        end
+      else
+        targets.each do |name|
+          opts = @completion_options[name] || Set.new
+          display_name = name.is_a?(Symbol) ? "-#{name.to_s[0].upcase}" : name
+          if opts.empty?
+            puts "compopt #{display_name}: no options"
+          else
+            opts.each { |opt| puts "compopt -o #{opt} #{display_name}" }
+          end
+        end
+      end
+      true
+    end
+
+    def self.get_completion_options(name)
+      @completion_options[name] || Set.new
+    end
+
+    def self.completion_option?(name, option)
+      (@completion_options[name] || Set.new).include?(option)
+    end
+
     # Readline function names for -l option
     READLINE_FUNCTIONS = %w[
       abort accept-line backward-char backward-delete-char backward-kill-line
@@ -4556,6 +4691,24 @@ module Rubish
           '-W wordlist' => 'words from wordlist',
           '-P prefix' => 'add prefix to each completion',
           '-S suffix' => 'add suffix to each completion'
+        }
+      },
+      'compopt' => {
+        synopsis: 'compopt [-o option] [-DE] [+o option] [name ...]',
+        description: 'Modify completion options for the currently executing completion, or for named commands.',
+        options: {
+          '-o option' => 'enable completion option',
+          '+o option' => 'disable completion option',
+          '-D' => 'apply to default completion',
+          '-E' => 'apply to empty command completion',
+          'bashdefault' => 'perform bash default completions if no matches',
+          'default' => 'use readline default filename completion',
+          'dirnames' => 'perform directory name completion',
+          'filenames' => 'tell readline completions are filenames',
+          'noquote' => 'do not quote completions',
+          'nosort' => 'do not sort completions alphabetically',
+          'nospace' => 'do not append space after completion',
+          'plusdirs' => 'add directory names to generated matches'
         }
       },
       'bind' => {
