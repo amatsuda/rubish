@@ -97,6 +97,7 @@ module Rubish
       return parse_while if peek(:WHILE)
       return parse_until if peek(:UNTIL)
       return parse_for if peek(:FOR)
+      return parse_select if peek(:SELECT)
       return parse_case if peek(:CASE)
       return parse_function_keyword if peek(:FUNCTION)
       return parse_subshell if peek(:LPAREN)
@@ -292,6 +293,27 @@ module Rubish
       consume_word('done') || raise('Expected "done" to close for loop')
 
       AST::For.new(variable, items, body)
+    end
+
+    # select_statement : SELECT WORD 'in' items 'do' body 'done'
+    def parse_select
+      consume(:SELECT)
+
+      variable = consume(:WORD)&.value || raise('Expected variable name after "select"')
+      consume_word('in') || raise('Expected "in" after select variable')
+
+      # Parse items until 'do' or ';'
+      items = []
+      while !peek_word('do') && !peek(:SEMICOLON) && peek(:WORD)
+        items << consume(:WORD).value
+      end
+
+      skip_semicolon
+      consume_word('do') || raise('Expected "do" after select items')
+      body = parse_while_body  # Reuse while body parser (stops at done)
+      consume_word('done') || raise('Expected "done" to close select loop')
+
+      AST::Select.new(variable, items, body)
     end
 
     # case_statement : CASE WORD 'in' (pattern ('|' pattern)* ')' body ';;')* ESAC

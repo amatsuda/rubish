@@ -34,6 +34,7 @@ module Rubish
       'while' => :WHILE,
       'until' => :UNTIL,
       'for' => :FOR,
+      'select' => :SELECT,
       'function' => :FUNCTION,
       'case' => :CASE,
       'esac' => :ESAC

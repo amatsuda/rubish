@@ -26,6 +26,8 @@ module Rubish
         generate_until(node)
       when AST::For
         generate_for(node)
+      when AST::Select
+        generate_select(node)
       when AST::Function
         generate_function(node)
       when AST::Case
@@ -455,6 +457,22 @@ module Rubish
         # Literal - no splitting needed
         item.inspect
       end
+    end
+
+    def generate_select(node)
+      items = node.items.map { |i| generate_for_item(i) }.join(', ')
+      parts = []
+      parts << '__loop_break = catch(:break_loop) do'
+      parts << "__select_loop(#{escape_string(node.variable)}, [#{items}].flatten) do"
+      parts << '__loop_cont = catch(:continue_loop) do'
+      parts << generate_loop_body(node.body)
+      parts << 'nil; end'
+      parts << 'throw(:continue_loop, __loop_cont - 1) if __loop_cont.is_a?(Integer) && __loop_cont > 1'
+      parts << 'next if __loop_cont'
+      parts << 'end'
+      parts << 'nil; end'
+      parts << 'throw(:break_loop, __loop_break - 1) if __loop_break.is_a?(Integer) && __loop_break > 1'
+      parts.join("\n")
     end
 
     def generate_loop_body(body)

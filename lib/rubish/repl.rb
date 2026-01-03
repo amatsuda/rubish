@@ -976,6 +976,51 @@ module Rubish
       end
     end
 
+    def __select_loop(variable, items, &block)
+      return if items.empty?
+
+      # Display menu once at start
+      display_select_menu(items)
+
+      loop do
+        # Get PS3 prompt (default "#? ")
+        prompt = ENV.fetch('PS3', '#? ')
+        print prompt
+
+        # Read user input
+        reply = $stdin.gets
+        break unless reply  # EOF
+
+        reply = reply.chomp
+        ENV['REPLY'] = reply
+
+        # Parse selection
+        if reply =~ /\A\d+\z/
+          num = reply.to_i
+          if num >= 1 && num <= items.length
+            ENV[variable] = items[num - 1]
+          else
+            ENV[variable] = ''
+          end
+        else
+          ENV[variable] = ''
+        end
+
+        # Execute body
+        block.call
+      end
+    end
+
+    def display_select_menu(items)
+      # Calculate column width for nice formatting
+      max_len = items.map(&:length).max || 0
+      num_width = items.length.to_s.length
+
+      items.each_with_index do |item, i|
+        puts "#{(i + 1).to_s.rjust(num_width)}) #{item}"
+      end
+    end
+
     def __arith(expr)
       # Evaluate arithmetic expression
       # Replace variable references with their values
