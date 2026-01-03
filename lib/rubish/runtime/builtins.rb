@@ -2,7 +2,7 @@
 
 module Rubish
   module Builtins
-    COMMANDS = %w(cd exit jobs fg bg export pwd history alias unalias source . shift set return read echo test [ break continue pushd popd dirs trap getopts local unset readonly declare typeset let printf type which true false : eval command builtin wait kill).freeze
+    COMMANDS = %w(cd exit jobs fg bg export pwd history alias unalias source . shift set return read echo test [ break continue pushd popd dirs trap getopts local unset readonly declare typeset let printf type which true false : eval command builtin wait kill umask).freeze
 
     @aliases = {}
     @dir_stack = []
@@ -110,6 +110,8 @@ module Rubish
         run_wait(args)
       when 'kill'
         run_kill(args)
+      when 'umask'
+        run_umask(args)
       else
         false
       end
@@ -1648,6 +1650,134 @@ module Rubish
       end
 
       results
+    end
+
+    def self.run_umask(args)
+      # umask [-p] [-S] [mode]
+      # -p: output in a form that can be reused as input
+      # -S: output in symbolic form
+      # mode: octal or symbolic mode
+
+      symbolic = false
+      print_reusable = false
+      mode_arg = nil
+
+      args.each do |arg|
+        case arg
+        when '-S'
+          symbolic = true
+        when '-p'
+          print_reusable = true
+        else
+          mode_arg = arg
+        end
+      end
+
+      if mode_arg
+        # Set umask
+        new_mask = parse_umask(mode_arg)
+        if new_mask.nil?
+          puts "umask: #{mode_arg}: invalid mode"
+          return false
+        end
+        File.umask(new_mask)
+        true
+      else
+        # Display current umask
+        current = File.umask
+        if symbolic
+          # Symbolic format: u=rwx,g=rx,o=rx
+          sym = umask_to_symbolic(current)
+          if print_reusable
+            puts "umask -S #{sym}"
+          else
+            puts sym
+          end
+        else
+          # Octal format
+          if print_reusable
+            puts "umask #{format('%04o', current)}"
+          else
+            puts format('%04o', current)
+          end
+        end
+        true
+      end
+    end
+
+    def self.parse_umask(mode)
+      if mode =~ /\A[0-7]{1,4}\z/
+        # Octal mode
+        mode.to_i(8)
+      elsif mode =~ /\A[ugoa]*[=+-][rwx]*\z/ || mode.include?(',')
+        # Symbolic mode
+        parse_symbolic_umask(mode)
+      else
+        nil
+      end
+    end
+
+    def self.parse_symbolic_umask(mode)
+      current = File.umask
+      # Convert umask to permission bits (inverted)
+      perms = 0o777 - current
+
+      mode.split(',').each do |clause|
+        match = clause.match(/\A([ugoa]*)([-+=])([rwx]*)\z/)
+        return nil unless match
+
+        who = match[1]
+        op = match[2]
+        what = match[3]
+
+        who = 'ugo' if who.empty? || who == 'a'
+
+        # Calculate permission bits
+        bits = 0
+        bits |= 4 if what.include?('r')
+        bits |= 2 if what.include?('w')
+        bits |= 1 if what.include?('x')
+
+        who.each_char do |w|
+          shift = case w
+                  when 'u' then 6
+                  when 'g' then 3
+                  when 'o' then 0
+                  end
+          next unless shift
+
+          case op
+          when '='
+            # Clear and set
+            perms &= ~(7 << shift)
+            perms |= (bits << shift)
+          when '+'
+            perms |= (bits << shift)
+          when '-'
+            perms &= ~(bits << shift)
+          end
+        end
+      end
+
+      # Convert back to umask
+      0o777 - perms
+    end
+
+    def self.umask_to_symbolic(mask)
+      # Convert umask to symbolic format
+      perms = 0o777 - mask
+
+      parts = []
+      [['u', 6], ['g', 3], ['o', 0]].each do |who, shift|
+        bits = (perms >> shift) & 7
+        p = +''
+        p << 'r' if (bits & 4) != 0
+        p << 'w' if (bits & 2) != 0
+        p << 'x' if (bits & 1) != 0
+        parts << "#{who}=#{p}"
+      end
+
+      parts.join(',')
     end
 
     def self.run_kill(args)
