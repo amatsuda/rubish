@@ -268,9 +268,17 @@ module Rubish
         char = str[i]
 
         if char == '\\'
-          # Escape sequence
-          result << str[i + 1] if i + 1 < str.length
-          i += 2
+          # Escape sequence - only consume backslash for special characters
+          # In double quotes, only \$, \`, \", \\, and \newline are special
+          next_char = str[i + 1]
+          if next_char && '$`"\\'.include?(next_char)
+            result << next_char
+            i += 2
+          else
+            # Keep the backslash for other characters (like \C-a in bind)
+            result << char
+            i += 1
+          end
         elsif char == '`'
           # Backtick command substitution
           expanded, consumed = expand_backtick_at(str, i)

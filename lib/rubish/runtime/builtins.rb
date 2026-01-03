@@ -2,7 +2,7 @@
 
 module Rubish
   module Builtins
-    COMMANDS = %w(cd exit jobs fg bg export pwd history alias unalias source . shift set return read echo test [ break continue pushd popd dirs trap getopts local unset readonly declare typeset let printf type which true false : eval command builtin wait kill umask exec times hash disown ulimit suspend shopt enable caller complete compgen).freeze
+    COMMANDS = %w(cd exit jobs fg bg export pwd history alias unalias source . shift set return read echo test [ break continue pushd popd dirs trap getopts local unset readonly declare typeset let printf type which true false : eval command builtin wait kill umask exec times hash disown ulimit suspend shopt enable caller complete compgen bind).freeze
 
     @aliases = {}
     @dir_stack = []
@@ -16,6 +16,8 @@ module Rubish
     @disabled_builtins = Set.new  # Set of disabled builtin names
     @call_stack = []  # Stack of [line_number, function_name, filename] for caller builtin
     @completions = {}  # Hash of command names to completion specs
+    @key_bindings = {}  # Hash of keyseq to function/macro/command
+    @readline_variables = {}  # Hash of readline variable names to values
     @executor = nil
     @script_name_getter = nil
     @script_name_setter = nil
@@ -27,7 +29,7 @@ module Rubish
     @command_executor = nil  # Executor that bypasses functions/aliases
 
     class << self
-      attr_reader :aliases, :dir_stack, :traps, :local_scope_stack, :readonly_vars, :var_attributes, :command_hash, :shell_options, :disabled_builtins, :call_stack, :completions
+      attr_reader :aliases, :dir_stack, :traps, :local_scope_stack, :readonly_vars, :var_attributes, :command_hash, :shell_options, :disabled_builtins, :call_stack, :completions, :key_bindings, :readline_variables
       attr_accessor :executor, :script_name_getter, :script_name_setter, :positional_params_getter, :positional_params_setter, :function_checker, :function_remover, :heredoc_content_setter, :command_executor
     end
 
@@ -174,6 +176,8 @@ module Rubish
         run_complete(args)
       when 'compgen'
         run_compgen(args)
+      when 'bind'
+        run_bind(args)
       else
         false
       end
@@ -2656,6 +2660,335 @@ module Rubish
 
     def self.clear_completions
       @completions.clear
+    end
+
+    # Readline function names for -l option
+    READLINE_FUNCTIONS = %w[
+      abort accept-line backward-char backward-delete-char backward-kill-line
+      backward-kill-word backward-word beginning-of-history beginning-of-line
+      call-last-kbd-macro capitalize-word character-search character-search-backward
+      clear-screen complete delete-char delete-horizontal-space digit-argument
+      do-lowercase-version downcase-word dump-functions dump-macros dump-variables
+      emacs-editing-mode end-of-history end-of-line exchange-point-and-mark
+      forward-backward-delete-char forward-char forward-search-history forward-word
+      history-search-backward history-search-forward insert-comment insert-completions
+      kill-line kill-region kill-whole-line kill-word menu-complete menu-complete-backward
+      next-history non-incremental-forward-search-history non-incremental-reverse-search-history
+      overwrite-mode possible-completions previous-history quoted-insert
+      re-read-init-file redraw-current-line reverse-search-history revert-line
+      self-insert set-mark shell-backward-kill-word shell-backward-word shell-expand-line
+      shell-forward-word shell-kill-word start-kbd-macro tilde-expand transpose-chars
+      transpose-words undo universal-argument unix-filename-rubout unix-line-discard
+      unix-word-rubout upcase-word vi-append-eol vi-append-mode vi-arg-digit
+      vi-bWord vi-back-to-indent vi-bword vi-change-case vi-change-char vi-change-to
+      vi-char-search vi-column vi-complete vi-delete vi-delete-to vi-eWord vi-editing-mode
+      vi-end-word vi-eof-maybe vi-eword vi-fWord vi-fetch-history vi-first-print
+      vi-fword vi-goto-mark vi-insert-beg vi-insertion-mode vi-match vi-movement-mode
+      vi-next-word vi-overstrike vi-overstrike-delete vi-prev-word vi-put vi-redo
+      vi-replace vi-rubout vi-search vi-search-again vi-set-mark vi-subst vi-tilde-expand
+      vi-undo vi-yank-arg vi-yank-to yank yank-last-arg yank-nth-arg yank-pop
+    ].freeze
+
+    # Readline variable names for -v/-V options
+    READLINE_VARIABLES_LIST = %w[
+      bell-style bind-tty-special-chars blink-matching-paren colored-completion-prefix
+      colored-stats comment-begin completion-display-width completion-ignore-case
+      completion-map-case completion-prefix-display-length completion-query-items
+      convert-meta disable-completion echo-control-characters editing-mode
+      emacs-mode-string enable-bracketed-paste enable-keypad expand-tilde
+      history-preserve-point history-size horizontal-scroll-mode input-meta
+      isearch-terminators keymap keyseq-timeout mark-directories mark-modified-lines
+      mark-symlinked-directories match-hidden-files menu-complete-display-prefix
+      output-meta page-completions print-completions-horizontally revert-all-at-newline
+      show-all-if-ambiguous show-all-if-unmodified show-mode-in-prompt skip-completed-text
+      vi-cmd-mode-string vi-ins-mode-string visible-stats
+    ].freeze
+
+    def self.run_bind(args)
+      # bind [-m keymap] [-lpsvPSVX]
+      # bind [-m keymap] [-q function] [-u function] [-r keyseq]
+      # bind [-m keymap] -f filename
+      # bind [-m keymap] -x keyseq:shell-command
+      # bind [-m keymap] keyseq:function-name
+
+      keymap = 'emacs'  # default keymap
+      list_functions = false
+      print_bindings = false
+      print_bindings_readable = false
+      print_macros = false
+      print_macros_readable = false
+      print_variables = false
+      print_variables_readable = false
+      print_shell_bindings = false
+      query_function = nil
+      unbind_function = nil
+      remove_keyseq = nil
+      read_file = nil
+      shell_command_binding = nil
+      bindings_to_add = []
+
+      i = 0
+      while i < args.length
+        arg = args[i]
+
+        if arg.start_with?('-')
+          case arg
+          when '-m'
+            i += 1
+            keymap = args[i] if args[i]
+          when '-l'
+            list_functions = true
+          when '-p'
+            print_bindings_readable = true
+          when '-P'
+            print_bindings = true
+          when '-s'
+            print_macros_readable = true
+          when '-S'
+            print_macros = true
+          when '-v'
+            print_variables_readable = true
+          when '-V'
+            print_variables = true
+          when '-X'
+            print_shell_bindings = true
+          when '-q'
+            i += 1
+            query_function = args[i]
+          when '-u'
+            i += 1
+            unbind_function = args[i]
+          when '-r'
+            i += 1
+            remove_keyseq = args[i]
+          when '-f'
+            i += 1
+            read_file = args[i]
+          when '-x'
+            i += 1
+            shell_command_binding = args[i]
+          else
+            # Handle combined flags
+            arg[1..].each_char do |c|
+              case c
+              when 'l' then list_functions = true
+              when 'p' then print_bindings_readable = true
+              when 'P' then print_bindings = true
+              when 's' then print_macros_readable = true
+              when 'S' then print_macros = true
+              when 'v' then print_variables_readable = true
+              when 'V' then print_variables = true
+              when 'X' then print_shell_bindings = true
+              else
+                puts "bind: -#{c}: invalid option"
+                return false
+              end
+            end
+          end
+        elsif arg.include?(':')
+          # keyseq:function-name or keyseq:macro
+          bindings_to_add << arg
+        else
+          puts "bind: #{arg}: invalid key binding"
+          return false
+        end
+        i += 1
+      end
+
+      # List all readline function names
+      if list_functions
+        READLINE_FUNCTIONS.each { |f| puts f }
+        return true
+      end
+
+      # Print key bindings in reusable format
+      if print_bindings_readable
+        @key_bindings.each do |keyseq, binding|
+          next if binding[:type] == :macro || binding[:type] == :command
+
+          puts "\"#{escape_keyseq(keyseq)}\": #{binding[:value]}"
+        end
+        return true
+      end
+
+      # Print key bindings with function names
+      if print_bindings
+        @key_bindings.each do |keyseq, binding|
+          next if binding[:type] == :macro || binding[:type] == :command
+
+          puts "#{escape_keyseq(keyseq)} can be found in #{binding[:value]}."
+        end
+        return true
+      end
+
+      # Print macros in reusable format
+      if print_macros_readable
+        @key_bindings.each do |keyseq, binding|
+          next unless binding[:type] == :macro
+
+          puts "\"#{escape_keyseq(keyseq)}\": \"#{binding[:value]}\""
+        end
+        return true
+      end
+
+      # Print macros
+      if print_macros
+        @key_bindings.each do |keyseq, binding|
+          next unless binding[:type] == :macro
+
+          puts "#{escape_keyseq(keyseq)} outputs #{binding[:value]}"
+        end
+        return true
+      end
+
+      # Print readline variables in reusable format
+      if print_variables_readable
+        READLINE_VARIABLES_LIST.each do |var|
+          value = @readline_variables[var] || 'off'
+          puts "set #{var} #{value}"
+        end
+        return true
+      end
+
+      # Print readline variables
+      if print_variables
+        READLINE_VARIABLES_LIST.each do |var|
+          value = @readline_variables[var] || 'off'
+          puts "#{var} is set to `#{value}'"
+        end
+        return true
+      end
+
+      # Print shell command bindings
+      if print_shell_bindings
+        @key_bindings.each do |keyseq, binding|
+          next unless binding[:type] == :command
+
+          puts "\"#{escape_keyseq(keyseq)}\": \"#{binding[:value]}\""
+        end
+        return true
+      end
+
+      # Query which keys invoke a function
+      if query_function
+        found = false
+        @key_bindings.each do |keyseq, binding|
+          if binding[:value] == query_function && binding[:type] == :function
+            puts "#{query_function} can be invoked via \"#{escape_keyseq(keyseq)}\"."
+            found = true
+          end
+        end
+        puts "#{query_function} is not bound to any keys." unless found
+        return true
+      end
+
+      # Unbind all keys for a function
+      if unbind_function
+        @key_bindings.delete_if { |_, binding| binding[:value] == unbind_function }
+        return true
+      end
+
+      # Remove binding for keyseq
+      if remove_keyseq
+        @key_bindings.delete(remove_keyseq)
+        return true
+      end
+
+      # Read bindings from file
+      if read_file
+        unless File.exist?(read_file)
+          puts "bind: #{read_file}: cannot read: No such file or directory"
+          return false
+        end
+
+        File.readlines(read_file).each do |line|
+          line = line.strip
+          next if line.empty? || line.start_with?('#')
+
+          if line.start_with?('set ')
+            # Variable setting: set variable value
+            parts = line.split(' ', 3)
+            if parts.length >= 3
+              @readline_variables[parts[1]] = parts[2]
+            end
+          elsif line.include?(':')
+            parse_and_add_binding(line)
+          end
+        end
+        return true
+      end
+
+      # Add shell command binding
+      if shell_command_binding
+        if shell_command_binding.include?(':')
+          keyseq, command = shell_command_binding.split(':', 2)
+          keyseq = unescape_keyseq(keyseq.delete('"'))
+          command = command.delete('"').strip
+          @key_bindings[keyseq] = {type: :command, value: command, keymap: keymap}
+        else
+          puts "bind: #{shell_command_binding}: invalid key binding"
+          return false
+        end
+        return true
+      end
+
+      # Add bindings from arguments
+      bindings_to_add.each do |binding|
+        parse_and_add_binding(binding, keymap)
+      end
+
+      true
+    end
+
+    def self.parse_and_add_binding(binding_str, keymap = 'emacs')
+      keyseq, value = binding_str.split(':', 2)
+      return unless keyseq && value
+
+      keyseq = unescape_keyseq(keyseq.delete('"').strip)
+      value = value.strip
+
+      # Determine if it's a function or macro
+      if value.start_with?('"') && value.end_with?('"')
+        # Macro
+        @key_bindings[keyseq] = {type: :macro, value: value[1..-2], keymap: keymap}
+      else
+        # Function
+        @key_bindings[keyseq] = {type: :function, value: value, keymap: keymap}
+      end
+    end
+
+    def self.escape_keyseq(keyseq)
+      keyseq.gsub("\e", '\\e').gsub("\C-a", '\\C-a').gsub("\t", '\\t').gsub("\n", '\\n')
+    end
+
+    def self.unescape_keyseq(keyseq)
+      result = keyseq.dup
+
+      # Handle escape sequences
+      result.gsub!('\\e', "\e")
+      result.gsub!('\\t', "\t")
+      result.gsub!('\\n', "\n")
+      result.gsub!('\\r', "\r")
+
+      # Handle control characters \C-x format
+      result.gsub!(/\\C-([a-z@\[\]\\^_])/) do |_|
+        char = ::Regexp.last_match(1)
+        (char.ord - 'a'.ord + 1).chr
+      end
+
+      # Handle control characters \C-? format for DEL
+      result.gsub!('\\C-?', "\x7F")
+
+      result
+    end
+
+    def self.get_key_binding(keyseq)
+      @key_bindings[keyseq]
+    end
+
+    def self.clear_key_bindings
+      @key_bindings.clear
+      @readline_variables.clear
     end
 
     def self.run_hash(args)
