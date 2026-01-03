@@ -2,7 +2,7 @@
 
 module Rubish
   module Builtins
-    COMMANDS = %w(cd exit jobs fg bg export pwd history alias unalias source . shift set return read echo test [ break continue pushd popd dirs trap getopts local unset readonly declare typeset let printf).freeze
+    COMMANDS = %w(cd exit jobs fg bg export pwd history alias unalias source . shift set return read echo test [ break continue pushd popd dirs trap getopts local unset readonly declare typeset let printf type).freeze
 
     @aliases = {}
     @dir_stack = []
@@ -91,6 +91,8 @@ module Rubish
         run_let(args)
       when 'printf'
         run_printf(args)
+      when 'type'
+        run_type(args)
       else
         false
       end
@@ -1482,6 +1484,131 @@ module Rubish
       end
 
       result
+    end
+
+    def self.run_type(args)
+      # type [-afptP] name [name ...]
+      # -a: display all locations containing an executable named name
+      # -f: suppress function lookup
+      # -p: return path only for external commands
+      # -t: output single word: alias, keyword, function, builtin, file, or nothing
+      # -P: force PATH search even if name is alias, function, or builtin
+
+      if args.empty?
+        puts 'type: usage: type [-afptP] name [name ...]'
+        return false
+      end
+
+      # Parse options
+      show_all = false
+      suppress_functions = false
+      path_only = false
+      type_only = false
+      force_path = false
+      names = []
+
+      args.each do |arg|
+        if arg.start_with?('-') && arg.length > 1
+          arg[1..].each_char do |c|
+            case c
+            when 'a' then show_all = true
+            when 'f' then suppress_functions = true
+            when 'p' then path_only = true
+            when 't' then type_only = true
+            when 'P' then force_path = true
+            end
+          end
+        else
+          names << arg
+        end
+      end
+
+      if names.empty?
+        puts 'type: usage: type [-afptP] name [name ...]'
+        return false
+      end
+
+      all_found = true
+
+      names.each do |name|
+        found = false
+
+        # Check alias (unless force_path)
+        unless force_path
+          if @aliases.key?(name)
+            found = true
+            if type_only
+              puts 'alias'
+            elsif !path_only
+              puts "#{name} is aliased to '#{@aliases[name]}'"
+            end
+            next unless show_all
+          end
+        end
+
+        # Check function (unless force_path or suppress_functions)
+        unless force_path || suppress_functions
+          if @function_checker&.call(name)
+            found = true
+            if type_only
+              puts 'function'
+            elsif !path_only
+              puts "#{name} is a function"
+            end
+            next unless show_all
+          end
+        end
+
+        # Check builtin (unless force_path)
+        unless force_path
+          if builtin?(name)
+            found = true
+            if type_only
+              puts 'builtin'
+            elsif !path_only
+              puts "#{name} is a shell builtin"
+            end
+            next unless show_all
+          end
+        end
+
+        # Check PATH for external command
+        path = find_in_path(name)
+        if path
+          found = true
+          if type_only
+            puts 'file'
+          elsif path_only || force_path
+            puts path
+          else
+            puts "#{name} is #{path}"
+          end
+        end
+
+        unless found
+          puts "type: #{name}: not found" unless type_only
+          all_found = false
+        end
+      end
+
+      all_found
+    end
+
+    def self.find_in_path(name)
+      # If name contains a slash, check if it's executable
+      if name.include?('/')
+        return name if File.executable?(name)
+        return nil
+      end
+
+      # Search PATH
+      path_dirs = (ENV['PATH'] || '').split(File::PATH_SEPARATOR)
+      path_dirs.each do |dir|
+        full_path = File.join(dir, name)
+        return full_path if File.executable?(full_path) && !File.directory?(full_path)
+      end
+
+      nil
     end
 
     def self.run_read(args)
