@@ -2,7 +2,7 @@
 
 module Rubish
   module Builtins
-    COMMANDS = %w(cd exit jobs fg bg export pwd history alias unalias source . shift set return read echo test [ break continue pushd popd dirs trap getopts local unset readonly declare typeset let printf type which true false : eval command builtin wait kill umask exec times hash disown ulimit suspend shopt enable caller complete compgen bind help fc).freeze
+    COMMANDS = %w(cd exit jobs fg bg export pwd history alias unalias source . shift set return read echo test [ break continue pushd popd dirs trap getopts local unset readonly declare typeset let printf type which true false : eval command builtin wait kill umask exec times hash disown ulimit suspend shopt enable caller complete compgen bind help fc mapfile readarray).freeze
 
     @aliases = {}
     @dir_stack = []
@@ -4328,6 +4328,24 @@ module Rubish
           '-r' => 'reverse the order of the commands',
           '-s' => 're-execute command without invoking editor'
         }
+      },
+      'mapfile' => {
+        synopsis: 'mapfile [-d delim] [-n count] [-O origin] [-s count] [-t] [-u fd] [-C callback] [-c quantum] [array]',
+        description: 'Read lines from standard input into an indexed array variable.',
+        options: {
+          '-d delim' => 'use delim as line delimiter instead of newline',
+          '-n count' => 'read at most count lines (0 means all)',
+          '-O origin' => 'begin assigning at index origin (default 0)',
+          '-s count' => 'skip the first count lines',
+          '-t' => 'remove trailing delimiter from each line',
+          '-u fd' => 'read from file descriptor fd instead of stdin',
+          '-C callback' => 'evaluate callback each time quantum lines are read',
+          '-c quantum' => 'specify the number of lines between callback calls (default 5000)'
+        }
+      },
+      'readarray' => {
+        synopsis: 'readarray [-d delim] [-n count] [-O origin] [-s count] [-t] [-u fd] [-C callback] [-c quantum] [array]',
+        description: 'Read lines from standard input into an indexed array variable. Synonym for mapfile.'
       }
     }.freeze
 
@@ -4591,7 +4609,7 @@ module Rubish
             end
 
       unless cmd
-        puts "fc: no command found"
+        puts 'fc: no command found'
         return false
       end
 
@@ -4713,6 +4731,149 @@ module Rubish
       ensure
         tempfile.unlink
       end
+    end
+
+    def self.run_mapfile(args)
+      # Parse options
+      delimiter = "\n"
+      max_count = 0  # 0 means unlimited
+      origin = 0
+      skip_count = 0
+      strip_trailing = false
+      fd = nil
+      callback = nil
+      quantum = 5000
+      array_name = 'MAPFILE'
+
+      while args.first&.start_with?('-')
+        opt = args.shift
+        case opt
+        when '-d'
+          delimiter = args.shift
+          unless delimiter
+            puts 'mapfile: -d: option requires an argument'
+            return false
+          end
+          # Handle escape sequences
+          delimiter = delimiter.gsub('\n', "\n").gsub('\t', "\t").gsub('\0', "\0")
+        when '-n'
+          count_str = args.shift
+          unless count_str
+            puts 'mapfile: -n: option requires an argument'
+            return false
+          end
+          max_count = count_str.to_i
+        when '-O'
+          origin_str = args.shift
+          unless origin_str
+            puts 'mapfile: -O: option requires an argument'
+            return false
+          end
+          origin = origin_str.to_i
+        when '-s'
+          skip_str = args.shift
+          unless skip_str
+            puts 'mapfile: -s: option requires an argument'
+            return false
+          end
+          skip_count = skip_str.to_i
+        when '-t'
+          strip_trailing = true
+        when '-u'
+          fd_str = args.shift
+          unless fd_str
+            puts 'mapfile: -u: option requires an argument'
+            return false
+          end
+          fd = fd_str.to_i
+        when '-C'
+          callback = args.shift
+          unless callback
+            puts 'mapfile: -C: option requires an argument'
+            return false
+          end
+        when '-c'
+          quantum_str = args.shift
+          unless quantum_str
+            puts 'mapfile: -c: option requires an argument'
+            return false
+          end
+          quantum = quantum_str.to_i
+        else
+          puts "mapfile: #{opt}: invalid option"
+          puts 'mapfile: usage: mapfile [-d delim] [-n count] [-O origin] [-s count] [-t] [-u fd] [-C callback] [-c quantum] [array]'
+          return false
+        end
+      end
+
+      # Get array name if provided
+      array_name = args.shift if args.first
+
+      # Read input
+      input = if fd
+                begin
+                  IO.new(fd).read
+                rescue Errno::EBADF
+                  puts "mapfile: #{fd}: invalid file descriptor"
+                  return false
+                end
+              else
+                $stdin.read
+              end
+
+      return true if input.nil? || input.empty?
+
+      # Split into lines using delimiter
+      lines = if delimiter == "\n"
+                input.lines(chomp: false)
+              else
+                input.split(delimiter, -1).map { |l| "#{l}#{delimiter}" }
+              end
+
+      # Remove the last empty element if input ended with delimiter
+      lines.pop if lines.last == delimiter || lines.last&.empty?
+
+      # Skip first N lines
+      lines = lines.drop(skip_count) if skip_count > 0
+
+      # Limit to max_count lines
+      lines = lines.take(max_count) if max_count > 0
+
+      # Clear existing array elements (from origin onwards)
+      ENV.keys.select { |k| k.start_with?("#{array_name}_") }.each do |k|
+        idx = k.sub("#{array_name}_", '').to_i
+        ENV.delete(k) if idx >= origin
+      end
+
+      # Store lines in array
+      lines.each_with_index do |line, i|
+        # Strip trailing delimiter if -t was used
+        line = line.chomp(delimiter) if strip_trailing
+
+        idx = origin + i
+        ENV["#{array_name}_#{idx}"] = line
+
+        # Call callback if specified
+        if callback && ((i + 1) % quantum == 0)
+          @executor&.call("#{callback} #{idx} #{line.inspect}")
+        end
+      end
+
+      # Set array length marker
+      ENV["#{array_name}_LENGTH"] = lines.length.to_s
+
+      true
+    end
+
+    # Helper to get mapfile array contents
+    def self.get_mapfile_array(name = 'MAPFILE')
+      length = ENV["#{name}_LENGTH"]&.to_i || 0
+      (0...length).map { |i| ENV["#{name}_#{i}"] }
+    end
+
+    # Helper to clear mapfile array
+    def self.clear_mapfile_array(name = 'MAPFILE')
+      ENV.keys.select { |k| k.start_with?("#{name}_") }.each { |k| ENV.delete(k) }
     end
 
     def self.detect_heredoc(line)
