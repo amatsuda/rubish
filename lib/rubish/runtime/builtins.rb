@@ -2,7 +2,7 @@
 
 module Rubish
   module Builtins
-    COMMANDS = %w(cd exit jobs fg bg export pwd history alias unalias source . shift set return read echo test [ break continue pushd popd dirs trap getopts local unset readonly).freeze
+    COMMANDS = %w(cd exit jobs fg bg export pwd history alias unalias source . shift set return read echo test [ break continue pushd popd dirs trap getopts local unset readonly declare typeset).freeze
 
     @aliases = {}
     @dir_stack = []
@@ -10,6 +10,7 @@ module Rubish
     @original_traps = {}
     @local_scope_stack = []  # Stack of hashes for local variable scopes
     @readonly_vars = {}  # Hash of readonly variable names to their values
+    @var_attributes = {}  # Hash of variable names to Set of attributes (:integer, :lowercase, :uppercase, :export)
     @executor = nil
     @script_name_getter = nil
     @script_name_setter = nil
@@ -20,7 +21,7 @@ module Rubish
     @heredoc_content_setter = nil
 
     class << self
-      attr_reader :aliases, :dir_stack, :traps, :local_scope_stack, :readonly_vars
+      attr_reader :aliases, :dir_stack, :traps, :local_scope_stack, :readonly_vars, :var_attributes
       attr_accessor :executor, :script_name_getter, :script_name_setter, :positional_params_getter, :positional_params_setter, :function_checker, :function_remover, :heredoc_content_setter
     end
 
@@ -84,6 +85,8 @@ module Rubish
         run_unset(args)
       when 'readonly'
         run_readonly(args)
+      when 'declare', 'typeset'
+        run_declare(args)
       else
         false
       end
@@ -592,6 +595,209 @@ module Rubish
       @readonly_vars.clear
     end
 
+    def self.run_declare(args)
+      # declare [-aAilrux] [-p] [name[=value] ...]
+      # -i: integer attribute (arithmetic evaluation)
+      # -l: lowercase attribute
+      # -u: uppercase attribute
+      # -r: readonly attribute
+      # -x: export attribute
+      # -p: print declarations
+      # +attr: remove attribute
+
+      # Parse options
+      print_mode = false
+      add_attrs = Set.new
+      remove_attrs = Set.new
+      names = []
+
+      args.each do |arg|
+        if arg.start_with?('-')
+          if arg == '-p'
+            print_mode = true
+          else
+            # Parse attribute flags
+            arg[1..].each_char do |c|
+              case c
+              when 'i' then add_attrs << :integer
+              when 'l' then add_attrs << :lowercase
+              when 'u' then add_attrs << :uppercase
+              when 'r' then add_attrs << :readonly
+              when 'x' then add_attrs << :export
+              when 'p' then print_mode = true
+              end
+            end
+          end
+        elsif arg.start_with?('+')
+          # Remove attributes
+          arg[1..].each_char do |c|
+            case c
+            when 'i' then remove_attrs << :integer
+            when 'l' then remove_attrs << :lowercase
+            when 'u' then remove_attrs << :uppercase
+            when 'x' then remove_attrs << :export
+            # Note: can't remove readonly
+            end
+          end
+        else
+          names << arg
+        end
+      end
+
+      # Print mode with no names: show all declared variables
+      if print_mode && names.empty?
+        print_all_declarations(add_attrs)
+        return true
+      end
+
+      # Print mode with names: show specific declarations
+      if print_mode && names.any?
+        names.each do |name|
+          var_name = name.split('=', 2).first
+          print_declaration(var_name)
+        end
+        return true
+      end
+
+      # No names and no attrs: list all
+      if names.empty? && add_attrs.empty? && remove_attrs.empty?
+        print_all_declarations(Set.new)
+        return true
+      end
+
+      # Process each name
+      names.each do |arg|
+        if arg.include?('=')
+          name, value = arg.split('=', 2)
+        else
+          name = arg
+          value = nil
+        end
+
+        # Check readonly
+        if readonly?(name) && value
+          puts "declare: #{name}: readonly variable"
+          next
+        end
+
+        # Initialize attributes set for this variable
+        @var_attributes[name] ||= Set.new
+
+        # Add new attributes
+        add_attrs.each { |attr| @var_attributes[name] << attr }
+
+        # Remove attributes (except readonly)
+        remove_attrs.each { |attr| @var_attributes[name].delete(attr) }
+
+        # Handle readonly attribute
+        if add_attrs.include?(:readonly)
+          @readonly_vars[name] = true
+        end
+
+        # Handle export attribute
+        if add_attrs.include?(:export)
+          # Variable is marked for export (already in ENV)
+        end
+
+        # Set value if provided
+        if value
+          value = apply_attributes(name, value)
+          ENV[name] = value
+        end
+      end
+
+      true
+    end
+
+    def self.apply_attributes(name, value)
+      attrs = @var_attributes[name] || Set.new
+
+      # Apply integer attribute
+      if attrs.include?(:integer)
+        # Evaluate as arithmetic expression
+        begin
+          # Simple arithmetic evaluation
+          result = eval(value.gsub(/[a-zA-Z_][a-zA-Z0-9_]*/) { |var| ENV[var] || '0' })
+          value = result.to_s
+        rescue StandardError
+          value = '0'
+        end
+      end
+
+      # Apply case attributes (lowercase takes precedence if both set)
+      if attrs.include?(:lowercase)
+        value = value.downcase
+      elsif attrs.include?(:uppercase)
+        value = value.upcase
+      end
+
+      value
+    end
+
+    def self.set_var_with_attributes(name, value)
+      # Apply attributes when setting a variable
+      if @var_attributes[name]
+        value = apply_attributes(name, value)
+      end
+      ENV[name] = value
+    end
+
+    def self.print_declaration(name)
+      attrs = @var_attributes[name] || Set.new
+      flags = +''
+      flags << 'i' if attrs.include?(:integer)
+      flags << 'l' if attrs.include?(:lowercase)
+      flags << 'u' if attrs.include?(:uppercase)
+      flags << 'r' if readonly?(name)
+      flags << 'x' if attrs.include?(:export)
+
+      value = ENV[name]
+      if flags.empty?
+        if value
+          puts "declare -- #{name}=#{value.inspect}"
+        else
+          puts "declare -- #{name}"
+        end
+      else
+        if value
+          puts "declare -#{flags} #{name}=#{value.inspect}"
+        else
+          puts "declare -#{flags} #{name}"
+        end
+      end
+    end
+
+    def self.print_all_declarations(filter_attrs)
+      # Collect all variables with attributes
+      vars_to_print = Set.new
+
+      @var_attributes.each_key { |name| vars_to_print << name }
+      @readonly_vars.each_key { |name| vars_to_print << name }
+
+      vars_to_print.each do |name|
+        attrs = @var_attributes[name] || Set.new
+        attrs = attrs.dup
+        attrs << :readonly if readonly?(name)
+
+        # Filter by attributes if specified
+        if filter_attrs.empty? || filter_attrs.subset?(attrs)
+          print_declaration(name)
+        end
+      end
+    end
+
+    def self.get_var_attributes(name)
+      @var_attributes[name] || Set.new
+    end
+
+    def self.has_attribute?(name, attr)
+      (@var_attributes[name] || Set.new).include?(attr)
+    end
+
+    def self.clear_var_attributes
+      @var_attributes.clear
+    end
+
     def self.run_export(args)
       if args.empty?
         # List all environment variables
@@ -604,9 +810,16 @@ module Rubish
               puts "export: #{key}: readonly variable"
               next
             end
+            # Apply attributes if any
+            value = apply_attributes(key, value)
             ENV[key] = value
+            # Mark as exported
+            @var_attributes[key] ||= Set.new
+            @var_attributes[key] << :export
           else
-            # Just export existing variable (no-op in this simple impl)
+            # Just export existing variable
+            @var_attributes[arg] ||= Set.new
+            @var_attributes[arg] << :export
             puts "export: #{arg}=#{ENV[arg]}" if ENV.key?(arg)
           end
         end
