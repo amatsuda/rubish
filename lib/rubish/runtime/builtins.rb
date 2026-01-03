@@ -2,7 +2,7 @@
 
 module Rubish
   module Builtins
-    COMMANDS = %w(cd exit jobs fg bg export pwd history alias unalias source . shift set return read echo test [ break continue pushd popd dirs trap getopts local unset readonly declare typeset let printf type which true false : eval command builtin wait kill umask exec times).freeze
+    COMMANDS = %w(cd exit jobs fg bg export pwd history alias unalias source . shift set return read echo test [ break continue pushd popd dirs trap getopts local unset readonly declare typeset let printf type which true false : eval command builtin wait kill umask exec times hash).freeze
 
     @aliases = {}
     @dir_stack = []
@@ -11,6 +11,7 @@ module Rubish
     @local_scope_stack = []  # Stack of hashes for local variable scopes
     @readonly_vars = {}  # Hash of readonly variable names to their values
     @var_attributes = {}  # Hash of variable names to Set of attributes (:integer, :lowercase, :uppercase, :export)
+    @command_hash = {}  # Hash of command names to their cached paths
     @executor = nil
     @script_name_getter = nil
     @script_name_setter = nil
@@ -22,7 +23,7 @@ module Rubish
     @command_executor = nil  # Executor that bypasses functions/aliases
 
     class << self
-      attr_reader :aliases, :dir_stack, :traps, :local_scope_stack, :readonly_vars, :var_attributes
+      attr_reader :aliases, :dir_stack, :traps, :local_scope_stack, :readonly_vars, :var_attributes, :command_hash
       attr_accessor :executor, :script_name_getter, :script_name_setter, :positional_params_getter, :positional_params_setter, :function_checker, :function_remover, :heredoc_content_setter, :command_executor
     end
 
@@ -116,6 +117,8 @@ module Rubish
         run_exec(args)
       when 'times'
         run_times(args)
+      when 'hash'
+        run_hash(args)
       else
         false
       end
@@ -1654,6 +1657,156 @@ module Rubish
       end
 
       results
+    end
+
+    def self.run_hash(args)
+      # hash [-lr] [-p path] [-dt] [name ...]
+      # -r: forget all cached paths
+      # -d: forget cached path for each name
+      # -l: list in reusable format
+      # -p path: cache name with given path
+      # -t: print cached path for each name
+
+      if args.empty?
+        # List all cached paths
+        if @command_hash.empty?
+          puts 'hash: hash table empty'
+        else
+          @command_hash.each do |name, path|
+            puts "#{name}=#{path}"
+          end
+        end
+        return true
+      end
+
+      # Parse options
+      clear_all = false
+      delete_mode = false
+      list_mode = false
+      print_mode = false
+      set_path = nil
+      names = []
+      i = 0
+
+      while i < args.length
+        arg = args[i]
+
+        if arg == '-r' && names.empty?
+          clear_all = true
+          i += 1
+        elsif arg == '-d' && names.empty?
+          delete_mode = true
+          i += 1
+        elsif arg == '-l' && names.empty?
+          list_mode = true
+          i += 1
+        elsif arg == '-t' && names.empty?
+          print_mode = true
+          i += 1
+        elsif arg == '-p' && names.empty? && i + 1 < args.length
+          set_path = args[i + 1]
+          i += 2
+        elsif arg.start_with?('-') && names.empty?
+          # Handle combined flags
+          arg[1..].each_char do |c|
+            case c
+            when 'r' then clear_all = true
+            when 'd' then delete_mode = true
+            when 'l' then list_mode = true
+            when 't' then print_mode = true
+            else
+              puts "hash: -#{c}: invalid option"
+              return false
+            end
+          end
+          i += 1
+        else
+          names << arg
+          i += 1
+        end
+      end
+
+      # Handle -r (clear all)
+      if clear_all
+        @command_hash.clear
+        return true
+      end
+
+      # Handle -l (list mode) with no names
+      if list_mode && names.empty?
+        @command_hash.each do |name, path|
+          puts "hash -p #{path} #{name}"
+        end
+        return true
+      end
+
+      # Handle names
+      all_found = true
+
+      if names.empty? && !set_path
+        # No names and no path to set, just list
+        if @command_hash.empty?
+          puts 'hash: hash table empty'
+        else
+          @command_hash.each do |name, path|
+            puts "#{name}=#{path}"
+          end
+        end
+        return true
+      end
+
+      names.each do |name|
+        if delete_mode
+          # Forget cached path
+          if @command_hash.key?(name)
+            @command_hash.delete(name)
+          else
+            puts "hash: #{name}: not found"
+            all_found = false
+          end
+        elsif print_mode
+          # Print cached path
+          if @command_hash.key?(name)
+            puts @command_hash[name]
+          else
+            # Try to find and cache
+            path = find_in_path(name)
+            if path
+              @command_hash[name] = path
+              puts path
+            else
+              puts "hash: #{name}: not found"
+              all_found = false
+            end
+          end
+        elsif set_path
+          # Set specific path
+          @command_hash[name] = set_path
+        else
+          # Cache the command
+          path = find_in_path(name)
+          if path
+            @command_hash[name] = path
+          else
+            puts "hash: #{name}: not found"
+            all_found = false
+          end
+        end
+      end
+
+      all_found
+    end
+
+    def self.hash_lookup(name)
+      @command_hash[name]
+    end
+
+    def self.hash_store(name, path)
+      @command_hash[name] = path
+    end
+
+    def self.clear_hash
+      @command_hash.clear
     end
 
     def self.run_times(_args)
