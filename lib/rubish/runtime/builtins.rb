@@ -2,7 +2,7 @@
 
 module Rubish
   module Builtins
-    COMMANDS = %w(cd exit jobs fg bg export pwd history alias unalias source . shift set return read echo test [ break continue pushd popd dirs trap getopts local unset readonly declare typeset let).freeze
+    COMMANDS = %w(cd exit jobs fg bg export pwd history alias unalias source . shift set return read echo test [ break continue pushd popd dirs trap getopts local unset readonly declare typeset let printf).freeze
 
     @aliases = {}
     @dir_stack = []
@@ -89,6 +89,8 @@ module Rubish
         run_declare(args)
       when 'let'
         run_let(args)
+      when 'printf'
+        run_printf(args)
       else
         false
       end
@@ -1273,6 +1275,213 @@ module Rubish
       end
 
       true
+    end
+
+    def self.run_printf(args)
+      # printf format [arguments...]
+      # Supports: %s, %d, %i, %f, %e, %g, %x, %X, %o, %c, %b, %%
+      # Also supports width, precision, and flags: %-10s, %05d, %.2f, etc.
+
+      if args.empty?
+        puts 'printf: usage: printf format [arguments]'
+        return false
+      end
+
+      format = args.first
+      arguments = args[1..] || []
+      arg_index = 0
+
+      # Process escape sequences in format string
+      format = process_escape_sequences(format)
+
+      # Build output by processing format specifiers
+      output = +''
+      i = 0
+      while i < format.length
+        if format[i] == '%'
+          if i + 1 < format.length && format[i + 1] == '%'
+            # Literal %
+            output << '%'
+            i += 2
+            next
+          end
+
+          # Parse format specifier
+          spec_start = i
+          i += 1
+
+          # Parse flags
+          flags = +''
+          while i < format.length && '-+ #0'.include?(format[i])
+            flags << format[i]
+            i += 1
+          end
+
+          # Parse width
+          width = +''
+          while i < format.length && format[i] =~ /\d/
+            width << format[i]
+            i += 1
+          end
+
+          # Parse precision
+          precision = nil
+          if i < format.length && format[i] == '.'
+            i += 1
+            precision = +''
+            while i < format.length && format[i] =~ /\d/
+              precision << format[i]
+              i += 1
+            end
+          end
+
+          # Parse conversion specifier
+          if i < format.length
+            specifier = format[i]
+            i += 1
+
+            # Get argument (reuse arguments if we run out)
+            arg = if arg_index < arguments.length
+                    arguments[arg_index]
+                  else
+                    specifier =~ /[diouxXeEfFgG]/ ? '0' : ''
+                  end
+            arg_index += 1
+
+            # Format the argument
+            output << format_arg(specifier, arg, flags, width, precision)
+          end
+        else
+          output << format[i]
+          i += 1
+        end
+      end
+
+      print output
+      true
+    end
+
+    def self.process_escape_sequences(str)
+      str.gsub(/\\(.)/) do |match|
+        case $1
+        when 'n' then "\n"
+        when 't' then "\t"
+        when 'r' then "\r"
+        when 'a' then "\a"
+        when 'b' then "\b"
+        when 'f' then "\f"
+        when 'v' then "\v"
+        when '\\' then '\\'
+        when "'" then "'"
+        when '"' then '"'
+        when '0'
+          # Octal escape - simplified handling
+          '\0'
+        else
+          match
+        end
+      end
+    end
+
+    def self.format_arg(specifier, arg, flags, width, precision)
+      width_int = width.empty? ? nil : width.to_i
+      prec_int = precision.nil? ? nil : (precision.empty? ? 0 : precision.to_i)
+
+      result = case specifier
+               when 's'
+                 # String
+                 s = arg.to_s
+                 s = s[0, prec_int] if prec_int
+                 s
+               when 'd', 'i'
+                 # Signed integer
+                 num = arg.to_i
+                 if prec_int
+                   format("%0#{prec_int}d", num)
+                 else
+                   num.to_s
+                 end
+               when 'u'
+                 # Unsigned integer
+                 num = arg.to_i
+                 num = num & 0xFFFFFFFF if num < 0
+                 num.to_s
+               when 'o'
+                 # Octal
+                 num = arg.to_i
+                 prefix = flags.include?('#') ? '0' : ''
+                 "#{prefix}#{num.to_s(8)}"
+               when 'x'
+                 # Hexadecimal lowercase
+                 num = arg.to_i
+                 prefix = flags.include?('#') ? '0x' : ''
+                 "#{prefix}#{num.to_s(16)}"
+               when 'X'
+                 # Hexadecimal uppercase
+                 num = arg.to_i
+                 prefix = flags.include?('#') ? '0X' : ''
+                 "#{prefix}#{num.to_s(16).upcase}"
+               when 'f', 'F'
+                 # Floating point
+                 num = arg.to_f
+                 prec = prec_int || 6
+                 format("%.#{prec}f", num)
+               when 'e'
+                 # Scientific notation lowercase
+                 num = arg.to_f
+                 prec = prec_int || 6
+                 format("%.#{prec}e", num)
+               when 'E'
+                 # Scientific notation uppercase
+                 num = arg.to_f
+                 prec = prec_int || 6
+                 format("%.#{prec}E", num)
+               when 'g'
+                 # Shorter of %e or %f
+                 num = arg.to_f
+                 prec = prec_int || 6
+                 format("%.#{prec}g", num)
+               when 'G'
+                 # Shorter of %E or %F
+                 num = arg.to_f
+                 prec = prec_int || 6
+                 format("%.#{prec}G", num)
+               when 'c'
+                 # Character
+                 arg.to_s[0] || ''
+               when 'b'
+                 # String with backslash escapes
+                 process_escape_sequences(arg.to_s)
+               else
+                 arg.to_s
+               end
+
+      # Apply width and alignment
+      if width_int
+        if flags.include?('-')
+          # Left-justify
+          result = result.ljust(width_int)
+        elsif flags.include?('0') && specifier =~ /[diouxXeEfFgG]/
+          # Zero-pad numbers
+          if result[0] == '-'
+            result = "-#{result[1..].rjust(width_int - 1, '0')}"
+          else
+            result = result.rjust(width_int, '0')
+          end
+        else
+          # Right-justify with spaces
+          result = result.rjust(width_int)
+        end
+      end
+
+      # Handle + flag for numbers
+      if flags.include?('+') && specifier =~ /[dieEfFgG]/ && !result.start_with?('-')
+        result = "+#{result}"
+      elsif flags.include?(' ') && specifier =~ /[dieEfFgG]/ && !result.start_with?('-')
+        result = " #{result}"
+      end
+
+      result
     end
 
     def self.run_read(args)
