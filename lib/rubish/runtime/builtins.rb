@@ -2,7 +2,7 @@
 
 module Rubish
   module Builtins
-    COMMANDS = %w(cd exit jobs fg bg export pwd history alias unalias source . shift set return read echo test [ break continue pushd popd dirs trap getopts local unset readonly declare typeset let printf type which true false : eval command builtin wait kill umask exec).freeze
+    COMMANDS = %w(cd exit jobs fg bg export pwd history alias unalias source . shift set return read echo test [ break continue pushd popd dirs trap getopts local unset readonly declare typeset let printf type which true false : eval command builtin wait kill umask exec times).freeze
 
     @aliases = {}
     @dir_stack = []
@@ -114,6 +114,8 @@ module Rubish
         run_umask(args)
       when 'exec'
         run_exec(args)
+      when 'times'
+        run_times(args)
       else
         false
       end
@@ -1652,6 +1654,28 @@ module Rubish
       end
 
       results
+    end
+
+    def self.run_times(_args)
+      # times
+      # Display accumulated user and system times for shell and children
+      # Format: user system (for shell), then user system (for children)
+
+      t = Process.times
+
+      # Format times as minutes and seconds
+      format_time = ->(seconds) {
+        mins = (seconds / 60).to_i
+        secs = seconds % 60
+        format('%dm%0.3fs', mins, secs)
+      }
+
+      # Shell times (user and system)
+      puts "#{format_time.call(t.utime)} #{format_time.call(t.stime)}"
+      # Children times (user and system)
+      puts "#{format_time.call(t.cutime)} #{format_time.call(t.cstime)}"
+
+      true
     end
 
     def self.run_exec(args)
