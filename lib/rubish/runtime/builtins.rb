@@ -2,7 +2,7 @@
 
 module Rubish
   module Builtins
-    COMMANDS = %w(cd exit jobs fg bg export pwd history alias unalias source . shift set return read echo test [ break continue pushd popd dirs trap getopts local unset readonly declare typeset let printf type which).freeze
+    COMMANDS = %w(cd exit jobs fg bg export pwd history alias unalias source . shift set return read echo test [ break continue pushd popd dirs trap getopts local unset readonly declare typeset let printf type which true false).freeze
 
     @aliases = {}
     @dir_stack = []
@@ -95,6 +95,10 @@ module Rubish
         run_type(args)
       when 'which'
         run_which(args)
+      when 'true'
+        true
+      when 'false'
+        false
       else
         false
       end
