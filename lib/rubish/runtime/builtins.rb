@@ -2,7 +2,7 @@
 
 module Rubish
   module Builtins
-    COMMANDS = %w(cd exit jobs fg bg export pwd history alias unalias source . shift set return read echo test [ break continue pushd popd dirs trap getopts local unset readonly declare typeset let printf type which true false : eval command builtin wait).freeze
+    COMMANDS = %w(cd exit jobs fg bg export pwd history alias unalias source . shift set return read echo test [ break continue pushd popd dirs trap getopts local unset readonly declare typeset let printf type which true false : eval command builtin wait kill).freeze
 
     @aliases = {}
     @dir_stack = []
@@ -108,6 +108,8 @@ module Rubish
         run_builtin(args)
       when 'wait'
         run_wait(args)
+      when 'kill'
+        run_kill(args)
       else
         false
       end
@@ -1646,6 +1648,117 @@ module Rubish
       end
 
       results
+    end
+
+    def self.run_kill(args)
+      # kill [-s signal | -signal] pid|%jobspec ...
+      # kill -l [signal]
+      # Send signals to processes or jobs
+
+      if args.empty?
+        puts 'kill: usage: kill [-s signal | -signal] pid|%jobspec ... or kill -l [signal]'
+        return false
+      end
+
+      # Handle -l (list signals)
+      if args.first == '-l'
+        if args.length == 1
+          # List all signals
+          Signal.list.each do |name, num|
+            puts "#{num}) SIG#{name}" unless name == 'EXIT'
+          end
+        else
+          # Convert signal number to name or vice versa
+          args[1..].each do |arg|
+            if arg =~ /\A\d+\z/
+              # Number to name
+              num = arg.to_i
+              name = Signal.list.key(num)
+              puts name || num
+            else
+              # Name to number
+              sig_name = arg.upcase.delete_prefix('SIG')
+              num = Signal.list[sig_name]
+              puts num || arg
+            end
+          end
+        end
+        return true
+      end
+
+      # Parse signal specification
+      signal = 'TERM'  # Default signal
+      pids = []
+      i = 0
+
+      while i < args.length
+        arg = args[i]
+
+        if arg == '-s' && i + 1 < args.length
+          # -s SIGNAL
+          signal = args[i + 1].upcase.delete_prefix('SIG')
+          i += 2
+        elsif arg =~ /\A-(\d+)\z/
+          # -N (signal number)
+          signal = $1.to_i
+          i += 1
+        elsif arg =~ /\A-([A-Za-z][A-Za-z0-9]*)\z/
+          # -SIGNAL (signal name)
+          signal = $1.upcase.delete_prefix('SIG')
+          i += 1
+        else
+          pids << arg
+          i += 1
+        end
+      end
+
+      if pids.empty?
+        puts 'kill: usage: kill [-s signal | -signal] pid|%jobspec ...'
+        return false
+      end
+
+      # Normalize signal
+      sig = if signal.is_a?(Integer)
+              signal
+            else
+              Signal.list[signal] || Signal.list[signal.delete_prefix('SIG')]
+            end
+
+      unless sig
+        puts "kill: #{signal}: invalid signal specification"
+        return false
+      end
+
+      all_success = true
+      manager = JobManager.instance
+
+      pids.each do |pid_arg|
+        begin
+          if pid_arg.start_with?('%')
+            # Job spec
+            job_id = pid_arg[1..].to_i
+            job = manager.get(job_id)
+            unless job
+              puts "kill: %#{job_id}: no such job"
+              all_success = false
+              next
+            end
+            Process.kill(sig, -job.pgid)
+          else
+            # PID
+            pid = pid_arg.to_i
+            Process.kill(sig, pid)
+          end
+        rescue Errno::ESRCH
+          puts "kill: (#{pid_arg}) - No such process"
+          all_success = false
+        rescue Errno::EPERM
+          puts "kill: (#{pid_arg}) - Operation not permitted"
+          all_success = false
+        end
+      end
+
+      all_success
     end
 
     def self.run_wait(args)
