@@ -2,10 +2,12 @@
 
 module Rubish
   module Builtins
-    COMMANDS = %w(cd exit jobs fg bg export pwd history alias unalias source . shift set return read echo test [ break continue pushd popd dirs).freeze
+    COMMANDS = %w(cd exit jobs fg bg export pwd history alias unalias source . shift set return read echo test [ break continue pushd popd dirs trap).freeze
 
     @aliases = {}
     @dir_stack = []
+    @traps = {}
+    @original_traps = {}
     @executor = nil
     @script_name_getter = nil
     @script_name_setter = nil
@@ -15,7 +17,7 @@ module Rubish
     @heredoc_content_setter = nil
 
     class << self
-      attr_reader :aliases, :dir_stack
+      attr_reader :aliases, :dir_stack, :traps
       attr_accessor :executor, :script_name_getter, :script_name_setter, :positional_params_getter, :positional_params_setter, :function_checker, :heredoc_content_setter
     end
 
@@ -69,6 +71,8 @@ module Rubish
         run_popd(args)
       when 'dirs'
         run_dirs(args)
+      when 'trap'
+        run_trap(args)
       else
         false
       end
@@ -146,6 +150,158 @@ module Rubish
 
     def self.clear_dir_stack
       @dir_stack.clear
+    end
+
+    # Signal name mapping
+    SIGNALS = {
+      'EXIT' => 0,
+      'HUP' => 'HUP', 'SIGHUP' => 'HUP',
+      'INT' => 'INT', 'SIGINT' => 'INT',
+      'QUIT' => 'QUIT', 'SIGQUIT' => 'QUIT',
+      'TERM' => 'TERM', 'SIGTERM' => 'TERM',
+      'USR1' => 'USR1', 'SIGUSR1' => 'USR1',
+      'USR2' => 'USR2', 'SIGUSR2' => 'USR2',
+      'ALRM' => 'ALRM', 'SIGALRM' => 'ALRM',
+      'CHLD' => 'CHLD', 'SIGCHLD' => 'CHLD',
+      'CONT' => 'CONT', 'SIGCONT' => 'CONT',
+      'TSTP' => 'TSTP', 'SIGTSTP' => 'TSTP',
+      'TTIN' => 'TTIN', 'SIGTTIN' => 'TTIN',
+      'TTOU' => 'TTOU', 'SIGTTOU' => 'TTOU',
+      'WINCH' => 'WINCH', 'SIGWINCH' => 'WINCH'
+    }.freeze
+
+    def self.run_trap(args)
+      if args.empty?
+        # List all traps
+        @traps.each do |sig, cmd|
+          sig_name = sig == 0 ? 'EXIT' : sig
+          puts "trap -- #{cmd.inspect} #{sig_name}"
+        end
+        return true
+      end
+
+      # trap -l: list signal names
+      if args.first == '-l'
+        puts Signal.list.keys.sort.join(' ')
+        return true
+      end
+
+      # trap -p [signal...]: print trap commands
+      if args.first == '-p'
+        signals = args[1..] || []
+        if signals.empty?
+          @traps.each do |sig, cmd|
+            sig_name = sig == 0 ? 'EXIT' : sig
+            puts "trap -- #{cmd.inspect} #{sig_name}"
+          end
+        else
+          signals.each do |sig_arg|
+            sig = normalize_signal(sig_arg)
+            next unless sig
+
+            if @traps.key?(sig)
+              sig_name = sig == 0 ? 'EXIT' : sig
+              puts "trap -- #{@traps[sig].inspect} #{sig_name}"
+            end
+          end
+        end
+        return true
+      end
+
+      # trap command signal [signal...]
+      # trap '' signal - ignore signal
+      # trap - signal - reset to default
+      command = args.first
+      signals = args[1..]
+
+      if signals.nil? || signals.empty?
+        puts 'trap: usage: trap [-lp] [[command] signal_spec ...]'
+        return false
+      end
+
+      signals.each do |sig_arg|
+        sig = normalize_signal(sig_arg)
+        unless sig
+          puts "trap: #{sig_arg}: invalid signal specification"
+          next
+        end
+
+        if command == '-'
+          # Reset to default
+          reset_trap(sig)
+        elsif command.empty? || command == ''
+          # Ignore signal
+          set_trap(sig, '')
+        else
+          # Set trap
+          set_trap(sig, command)
+        end
+      end
+
+      true
+    end
+
+    def self.normalize_signal(sig_arg)
+      # Handle numeric signals
+      if sig_arg =~ /\A\d+\z/
+        return sig_arg.to_i
+      end
+
+      # Handle signal names
+      sig_upper = sig_arg.upcase
+      SIGNALS[sig_upper]
+    end
+
+    def self.set_trap(sig, command)
+      # Store the trap command
+      @traps[sig] = command
+
+      # Handle EXIT specially - it's called when the shell exits
+      return if sig == 0
+
+      # Save original handler if not already saved
+      @original_traps[sig] ||= Signal.trap(sig, 'DEFAULT') rescue nil
+
+      if command.empty?
+        # Ignore the signal
+        Signal.trap(sig, 'IGNORE')
+      else
+        # Set up the handler
+        Signal.trap(sig) do
+          @executor&.call(command) if @executor
+        end
+      end
+    rescue ArgumentError => e
+      puts "trap: #{e.message}"
+    end
+
+    def self.reset_trap(sig)
+      @traps.delete(sig)
+
+      return if sig == 0
+
+      # Restore original handler
+      if @original_traps.key?(sig)
+        Signal.trap(sig, @original_traps.delete(sig) || 'DEFAULT')
+      else
+        Signal.trap(sig, 'DEFAULT')
+      end
+    rescue ArgumentError => e
+      puts "trap: #{e.message}"
+    end
+
+    def self.run_exit_traps
+      return unless @traps.key?(0)
+
+      @executor&.call(@traps[0]) if @executor
+    end
+
+    def self.clear_traps
+      @traps.each_key do |sig|
+        reset_trap(sig) unless sig == 0
+      end
+      @traps.clear
+      @original_traps.clear
     end
 
     def self.run_export(args)
@@ -515,6 +671,7 @@ module Rubish
 
     def self.run_exit(args)
       code = args.first&.to_i || 0
+      run_exit_traps
       throw :exit, code
     end
 
