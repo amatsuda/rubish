@@ -2,12 +2,13 @@
 
 module Rubish
   module Builtins
-    COMMANDS = %w(cd exit jobs fg bg export pwd history alias unalias source . shift set return read echo test [ break continue pushd popd dirs trap getopts).freeze
+    COMMANDS = %w(cd exit jobs fg bg export pwd history alias unalias source . shift set return read echo test [ break continue pushd popd dirs trap getopts local).freeze
 
     @aliases = {}
     @dir_stack = []
     @traps = {}
     @original_traps = {}
+    @local_scope_stack = []  # Stack of hashes for local variable scopes
     @executor = nil
     @script_name_getter = nil
     @script_name_setter = nil
@@ -17,7 +18,7 @@ module Rubish
     @heredoc_content_setter = nil
 
     class << self
-      attr_reader :aliases, :dir_stack, :traps
+      attr_reader :aliases, :dir_stack, :traps, :local_scope_stack
       attr_accessor :executor, :script_name_getter, :script_name_setter, :positional_params_getter, :positional_params_setter, :function_checker, :heredoc_content_setter
     end
 
@@ -75,6 +76,8 @@ module Rubish
         run_trap(args)
       when 'getopts'
         run_getopts(args)
+      when 'local'
+        run_local(args)
       else
         false
       end
@@ -424,6 +427,62 @@ module Rubish
       ENV['OPTIND'] = '1'
       ENV['_OPTPOS'] = '1'
       ENV.delete('OPTARG')
+    end
+
+    def self.run_local(args)
+      # local var=value or local var
+      # Only valid inside a function (when scope stack is not empty)
+      if @local_scope_stack.empty?
+        puts 'local: can only be used in a function'
+        return false
+      end
+
+      current_scope = @local_scope_stack.last
+
+      args.each do |arg|
+        if arg.include?('=')
+          name, value = arg.split('=', 2)
+          # Save original value if not already in this scope
+          unless current_scope.key?(name)
+            current_scope[name] = ENV.key?(name) ? ENV[name] : :unset
+          end
+          ENV[name] = value
+        else
+          # Just declare as local without value
+          unless current_scope.key?(arg)
+            current_scope[arg] = ENV.key?(arg) ? ENV[arg] : :unset
+          end
+          # Don't change the value, just mark it as local
+        end
+      end
+
+      true
+    end
+
+    def self.push_local_scope
+      @local_scope_stack.push({})
+    end
+
+    def self.pop_local_scope
+      return if @local_scope_stack.empty?
+
+      scope = @local_scope_stack.pop
+      # Restore original values
+      scope.each do |name, original_value|
+        if original_value == :unset
+          ENV.delete(name)
+        else
+          ENV[name] = original_value
+        end
+      end
+    end
+
+    def self.in_function?
+      !@local_scope_stack.empty?
+    end
+
+    def self.clear_local_scopes
+      @local_scope_stack.clear
     end
 
     def self.run_export(args)

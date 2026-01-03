@@ -140,6 +140,9 @@ module Rubish
       saved_params = @positional_params
       @positional_params = args
 
+      # Push a new local scope for this function
+      Builtins.push_local_scope
+
       begin
         result = func.call
         # Handle return value
@@ -152,6 +155,8 @@ module Rubish
         # return was called in function
         true
       ensure
+        # Pop local scope and restore variables
+        Builtins.pop_local_scope
         @positional_params = saved_params
       end
     end
@@ -1390,7 +1395,7 @@ module Rubish
     end
 
     # Builtins that must run in current process (affect shell state)
-    PROCESS_BUILTINS = %w[cd export set shift source . return exit break continue].freeze
+    PROCESS_BUILTINS = %w[cd export set shift source . return exit break continue local].freeze
 
     def __run_cmd(&block)
       result = block.call
