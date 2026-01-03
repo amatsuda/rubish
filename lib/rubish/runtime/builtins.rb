@@ -2,7 +2,7 @@
 
 module Rubish
   module Builtins
-    COMMANDS = %w(cd exit jobs fg bg export pwd history alias unalias source . shift set return read echo test [ break continue pushd popd dirs trap getopts local unset readonly declare typeset let printf type which true false : eval command builtin wait kill umask exec times hash disown ulimit suspend shopt enable caller).freeze
+    COMMANDS = %w(cd exit jobs fg bg export pwd history alias unalias source . shift set return read echo test [ break continue pushd popd dirs trap getopts local unset readonly declare typeset let printf type which true false : eval command builtin wait kill umask exec times hash disown ulimit suspend shopt enable caller complete compgen).freeze
 
     @aliases = {}
     @dir_stack = []
@@ -15,6 +15,7 @@ module Rubish
     @shell_options = {}  # Hash of shell option names to boolean values
     @disabled_builtins = Set.new  # Set of disabled builtin names
     @call_stack = []  # Stack of [line_number, function_name, filename] for caller builtin
+    @completions = {}  # Hash of command names to completion specs
     @executor = nil
     @script_name_getter = nil
     @script_name_setter = nil
@@ -26,7 +27,7 @@ module Rubish
     @command_executor = nil  # Executor that bypasses functions/aliases
 
     class << self
-      attr_reader :aliases, :dir_stack, :traps, :local_scope_stack, :readonly_vars, :var_attributes, :command_hash, :shell_options, :disabled_builtins, :call_stack
+      attr_reader :aliases, :dir_stack, :traps, :local_scope_stack, :readonly_vars, :var_attributes, :command_hash, :shell_options, :disabled_builtins, :call_stack, :completions
       attr_accessor :executor, :script_name_getter, :script_name_setter, :positional_params_getter, :positional_params_setter, :function_checker, :function_remover, :heredoc_content_setter, :command_executor
     end
 
@@ -169,6 +170,10 @@ module Rubish
         run_enable(args)
       when 'caller'
         run_caller(args)
+      when 'complete'
+        run_complete(args)
+      when 'compgen'
+        run_compgen(args)
       else
         false
       end
@@ -2298,6 +2303,359 @@ module Rubish
 
     def self.clear_call_stack
       @call_stack.clear
+    end
+
+    def self.run_complete(args)
+      # complete [-abcdefgjksuv] [-o option] [-A action] [-G globpat] [-W wordlist]
+      #          [-F function] [-C command] [-X filterpat] [-P prefix] [-S suffix]
+      #          [-p] [-r] [name ...]
+      # Define completion specifications for commands
+
+      # Parse options
+      print_mode = false
+      remove_mode = false
+      spec = {
+        actions: [],
+        wordlist: nil,
+        function: nil,
+        command: nil,
+        globpat: nil,
+        filterpat: nil,
+        prefix: nil,
+        suffix: nil,
+        options: []
+      }
+      names = []
+
+      # Action flags mapping
+      action_flags = {
+        'a' => :alias,
+        'b' => :builtin,
+        'c' => :command,
+        'd' => :directory,
+        'e' => :export,
+        'f' => :file,
+        'g' => :group,
+        'j' => :job,
+        'k' => :keyword,
+        's' => :service,
+        'u' => :user,
+        'v' => :variable
+      }
+
+      i = 0
+      while i < args.length
+        arg = args[i]
+
+        if arg.start_with?('-') && names.empty?
+          case arg
+          when '-p'
+            print_mode = true
+          when '-r'
+            remove_mode = true
+          when '-o'
+            i += 1
+            spec[:options] << args[i] if args[i]
+          when '-A'
+            i += 1
+            spec[:actions] << args[i].to_sym if args[i]
+          when '-G'
+            i += 1
+            spec[:globpat] = args[i]
+          when '-W'
+            i += 1
+            spec[:wordlist] = args[i]
+          when '-F'
+            i += 1
+            spec[:function] = args[i]
+          when '-C'
+            i += 1
+            spec[:command] = args[i]
+          when '-X'
+            i += 1
+            spec[:filterpat] = args[i]
+          when '-P'
+            i += 1
+            spec[:prefix] = args[i]
+          when '-S'
+            i += 1
+            spec[:suffix] = args[i]
+          else
+            # Handle combined flags like -df
+            arg[1..].each_char do |c|
+              if action_flags.key?(c)
+                spec[:actions] << action_flags[c]
+              else
+                puts "complete: -#{c}: invalid option"
+                return false
+              end
+            end
+          end
+        else
+          names << arg
+        end
+        i += 1
+      end
+
+      # Print mode
+      if print_mode
+        if names.empty?
+          # Print all completions
+          @completions.each do |name, s|
+            puts format_completion_spec(name, s)
+          end
+        else
+          # Print specified completions
+          names.each do |name|
+            if @completions.key?(name)
+              puts format_completion_spec(name, @completions[name])
+            else
+              puts "complete: #{name}: no completion specification"
+              return false
+            end
+          end
+        end
+        return true
+      end
+
+      # Remove mode
+      if remove_mode
+        if names.empty?
+          # Remove all completions
+          @completions.clear
+        else
+          names.each do |name|
+            @completions.delete(name)
+          end
+        end
+        return true
+      end
+
+      # Define completions
+      if names.empty?
+        puts 'complete: usage: complete [-abcdefgjksuv] [-pr] [-o option] [-A action] [name ...]'
+        return false
+      end
+
+      names.each do |name|
+        @completions[name] = spec.dup
+      end
+
+      true
+    end
+
+    def self.format_completion_spec(name, spec)
+      parts = ['complete']
+
+      spec[:actions].each do |action|
+        case action
+        when :alias then parts << '-a'
+        when :builtin then parts << '-b'
+        when :command then parts << '-c'
+        when :directory then parts << '-d'
+        when :export then parts << '-e'
+        when :file then parts << '-f'
+        when :group then parts << '-g'
+        when :job then parts << '-j'
+        when :keyword then parts << '-k'
+        when :service then parts << '-s'
+        when :user then parts << '-u'
+        when :variable then parts << '-v'
+        else
+          parts << "-A #{action}"
+        end
+      end
+
+      spec[:options].each { |o| parts << "-o #{o}" }
+      parts << "-G #{spec[:globpat]}" if spec[:globpat]
+      parts << "-W '#{spec[:wordlist]}'" if spec[:wordlist]
+      parts << "-F #{spec[:function]}" if spec[:function]
+      parts << "-C #{spec[:command]}" if spec[:command]
+      parts << "-X '#{spec[:filterpat]}'" if spec[:filterpat]
+      parts << "-P '#{spec[:prefix]}'" if spec[:prefix]
+      parts << "-S '#{spec[:suffix]}'" if spec[:suffix]
+
+      parts << name
+      parts.join(' ')
+    end
+
+    def self.run_compgen(args)
+      # compgen [-abcdefgjksuv] [-o option] [-A action] [-G globpat] [-W wordlist]
+      #         [-F function] [-C command] [-X filterpat] [-P prefix] [-S suffix] [word]
+      # Generate completions matching word
+
+      spec = {
+        actions: [],
+        wordlist: nil,
+        function: nil,
+        command: nil,
+        globpat: nil,
+        filterpat: nil,
+        prefix: nil,
+        suffix: nil,
+        options: []
+      }
+      word = ''
+
+      action_flags = {
+        'a' => :alias,
+        'b' => :builtin,
+        'c' => :command,
+        'd' => :directory,
+        'e' => :export,
+        'f' => :file,
+        'g' => :group,
+        'j' => :job,
+        'k' => :keyword,
+        's' => :service,
+        'u' => :user,
+        'v' => :variable
+      }
+
+      i = 0
+      while i < args.length
+        arg = args[i]
+
+        if arg.start_with?('-')
+          case arg
+          when '-o'
+            i += 1
+            spec[:options] << args[i] if args[i]
+          when '-A'
+            i += 1
+            spec[:actions] << args[i].to_sym if args[i]
+          when '-G'
+            i += 1
+            spec[:globpat] = args[i]
+          when '-W'
+            i += 1
+            spec[:wordlist] = args[i]
+          when '-F'
+            i += 1
+            spec[:function] = args[i]
+          when '-C'
+            i += 1
+            spec[:command] = args[i]
+          when '-X'
+            i += 1
+            spec[:filterpat] = args[i]
+          when '-P'
+            i += 1
+            spec[:prefix] = args[i]
+          when '-S'
+            i += 1
+            spec[:suffix] = args[i]
+          else
+            arg[1..].each_char do |c|
+              if action_flags.key?(c)
+                spec[:actions] << action_flags[c]
+              else
+                puts "compgen: -#{c}: invalid option"
+                return false
+              end
+            end
+          end
+        else
+          word = arg
+        end
+        i += 1
+      end
+
+      completions = generate_completions(spec, word)
+
+      completions.each { |c| puts c }
+      !completions.empty?
+    end
+
+    def self.generate_completions(spec, word = '')
+      results = []
+
+      spec[:actions].each do |action|
+        case action
+        when :alias
+          results.concat(@aliases.keys.select { |a| a.start_with?(word) })
+        when :builtin
+          results.concat(COMMANDS.select { |c| c.start_with?(word) })
+        when :command
+          # Commands from PATH
+          ENV['PATH'].to_s.split(':').each do |dir|
+            next unless Dir.exist?(dir)
+
+            Dir.entries(dir).each do |entry|
+              next if entry.start_with?('.')
+
+              path = File.join(dir, entry)
+              results << entry if entry.start_with?(word) && File.executable?(path)
+            end
+          rescue Errno::EACCES
+            # Skip directories we can't read
+          end
+          results.concat(COMMANDS.select { |c| c.start_with?(word) })
+        when :directory
+          pattern = word.empty? ? '*' : "#{word}*"
+          Dir.glob(pattern).each do |entry|
+            results << entry if File.directory?(entry)
+          end
+        when :export
+          ENV.keys.select { |k| k.start_with?(word) }.each { |k| results << k }
+        when :file
+          pattern = word.empty? ? '*' : "#{word}*"
+          results.concat(Dir.glob(pattern))
+        when :job
+          JobManager.instance.all.each do |job|
+            job_spec = "%#{job.id}"
+            results << job_spec if job_spec.start_with?(word)
+          end
+        when :user
+          begin
+            Etc.passwd { |u| results << u.name if u.name.start_with?(word) }
+          rescue StandardError
+            # Etc may not be available
+          end
+        when :variable
+          ENV.keys.select { |k| k.start_with?(word) }.each { |k| results << k }
+        when :group
+          begin
+            Etc.group { |g| results << g.name if g.name.start_with?(word) }
+          rescue StandardError
+            # Etc may not be available
+          end
+        end
+      end
+
+      # Wordlist
+      if spec[:wordlist]
+        words = spec[:wordlist].split
+        results.concat(words.select { |w| w.start_with?(word) })
+      end
+
+      # Glob pattern
+      if spec[:globpat]
+        results.concat(Dir.glob(spec[:globpat]).select { |f| f.start_with?(word) })
+      end
+
+      # Filter pattern
+      if spec[:filterpat]
+        pattern = Regexp.new(spec[:filterpat].gsub('*', '.*').gsub('?', '.'))
+        results.reject! { |r| r.match?(pattern) }
+      end
+
+      # Add prefix/suffix
+      if spec[:prefix] || spec[:suffix]
+        results.map! do |r|
+          "#{spec[:prefix]}#{r}#{spec[:suffix]}"
+        end
+      end
+
+      results.uniq.sort
+    end
+
+    def self.get_completion_spec(name)
+      @completions[name]
+    end
+
+    def self.clear_completions
+      @completions.clear
     end
 
     def self.run_hash(args)

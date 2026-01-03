@@ -1,0 +1,251 @@
+# frozen_string_literal: true
+
+require_relative 'test_helper'
+
+class TestComplete < Test::Unit::TestCase
+  def setup
+    @repl = Rubish::REPL.new
+    @original_env = ENV.to_h.dup
+    @tempdir = Dir.mktmpdir('rubish_complete_test')
+    @original_dir = Dir.pwd
+    Dir.chdir(@tempdir)
+    Rubish::Builtins.clear_completions
+  end
+
+  def teardown
+    Rubish::Builtins.clear_completions
+    Dir.chdir(@original_dir)
+    FileUtils.rm_rf(@tempdir)
+    ENV.clear
+    @original_env.each { |k, v| ENV[k] = v }
+  end
+
+  # Test complete is a builtin
+  def test_complete_is_builtin
+    assert Rubish::Builtins.builtin?('complete')
+  end
+
+  # Test compgen is a builtin
+  def test_compgen_is_builtin
+    assert Rubish::Builtins.builtin?('compgen')
+  end
+
+  # Test complete with no args shows usage
+  def test_complete_no_args
+    output = capture_output do
+      result = Rubish::Builtins.run('complete', [])
+      assert_false result
+    end
+    assert_match(/usage/, output)
+  end
+
+  # Test complete -f sets file completion
+  def test_complete_f_files
+    result = Rubish::Builtins.run('complete', ['-f', 'mycommand'])
+    assert result
+
+    spec = Rubish::Builtins.get_completion_spec('mycommand')
+    assert_not_nil spec
+    assert_includes spec[:actions], :file
+  end
+
+  # Test complete -d sets directory completion
+  def test_complete_d_directories
+    result = Rubish::Builtins.run('complete', ['-d', 'mycommand'])
+    assert result
+
+    spec = Rubish::Builtins.get_completion_spec('mycommand')
+    assert_includes spec[:actions], :directory
+  end
+
+  # Test complete -W sets wordlist
+  def test_complete_W_wordlist
+    result = Rubish::Builtins.run('complete', ['-W', 'foo bar baz', 'mycommand'])
+    assert result
+
+    spec = Rubish::Builtins.get_completion_spec('mycommand')
+    assert_equal 'foo bar baz', spec[:wordlist]
+  end
+
+  # Test complete -F sets function
+  def test_complete_F_function
+    result = Rubish::Builtins.run('complete', ['-F', '_my_completion', 'mycommand'])
+    assert result
+
+    spec = Rubish::Builtins.get_completion_spec('mycommand')
+    assert_equal '_my_completion', spec[:function]
+  end
+
+  # Test complete -p prints completions
+  def test_complete_p_prints
+    Rubish::Builtins.run('complete', ['-f', 'cmd1'])
+    Rubish::Builtins.run('complete', ['-d', 'cmd2'])
+
+    output = capture_output { Rubish::Builtins.run('complete', ['-p']) }
+    assert_match(/complete -f cmd1/, output)
+    assert_match(/complete -d cmd2/, output)
+  end
+
+  # Test complete -p with specific command
+  def test_complete_p_specific
+    Rubish::Builtins.run('complete', ['-f', 'mycommand'])
+
+    output = capture_output { Rubish::Builtins.run('complete', ['-p', 'mycommand']) }
+    assert_match(/complete -f mycommand/, output)
+  end
+
+  # Test complete -r removes completions
+  def test_complete_r_removes
+    Rubish::Builtins.run('complete', ['-f', 'mycommand'])
+    assert_not_nil Rubish::Builtins.get_completion_spec('mycommand')
+
+    Rubish::Builtins.run('complete', ['-r', 'mycommand'])
+    assert_nil Rubish::Builtins.get_completion_spec('mycommand')
+  end
+
+  # Test complete -r without args removes all
+  def test_complete_r_removes_all
+    Rubish::Builtins.run('complete', ['-f', 'cmd1'])
+    Rubish::Builtins.run('complete', ['-d', 'cmd2'])
+
+    Rubish::Builtins.run('complete', ['-r'])
+    assert Rubish::Builtins.completions.empty?
+  end
+
+  # Test complete with invalid option
+  def test_complete_invalid_option
+    output = capture_output do
+      result = Rubish::Builtins.run('complete', ['-z', 'mycommand'])
+      assert_false result
+    end
+    assert_match(/invalid option/, output)
+  end
+
+  # Test compgen -b lists builtins
+  def test_compgen_b_builtins
+    output = capture_output { Rubish::Builtins.run('compgen', ['-b']) }
+    assert_match(/^cd$/, output)
+    assert_match(/^echo$/, output)
+    assert_match(/^exit$/, output)
+  end
+
+  # Test compgen -b with prefix
+  def test_compgen_b_with_prefix
+    output = capture_output { Rubish::Builtins.run('compgen', ['-b', 'ec']) }
+    assert_match(/^echo$/, output)
+    assert_no_match(/^cd$/, output)
+  end
+
+  # Test compgen -W wordlist
+  def test_compgen_W_wordlist
+    output = capture_output { Rubish::Builtins.run('compgen', ['-W', 'apple banana cherry', 'ba']) }
+    assert_equal "banana\n", output
+  end
+
+  # Test compgen -f files
+  def test_compgen_f_files
+    FileUtils.touch('file1.txt')
+    FileUtils.touch('file2.txt')
+    FileUtils.mkdir('subdir')
+
+    output = capture_output { Rubish::Builtins.run('compgen', ['-f', 'file']) }
+    assert_match(/file1\.txt/, output)
+    assert_match(/file2\.txt/, output)
+  end
+
+  # Test compgen -d directories
+  def test_compgen_d_directories
+    FileUtils.touch('file1.txt')
+    FileUtils.mkdir('subdir1')
+    FileUtils.mkdir('subdir2')
+
+    output = capture_output { Rubish::Builtins.run('compgen', ['-d', 'sub']) }
+    assert_match(/subdir1/, output)
+    assert_match(/subdir2/, output)
+    assert_no_match(/file1/, output)
+  end
+
+  # Test compgen -a aliases
+  def test_compgen_a_aliases
+    Rubish::Builtins.run('alias', ['ll=ls -la'])
+    Rubish::Builtins.run('alias', ['la=ls -a'])
+
+    output = capture_output { Rubish::Builtins.run('compgen', ['-a', 'l']) }
+    assert_match(/ll/, output)
+    assert_match(/la/, output)
+  end
+
+  # Test compgen -v variables
+  def test_compgen_v_variables
+    ENV['MY_TEST_VAR'] = 'value'
+
+    output = capture_output { Rubish::Builtins.run('compgen', ['-v', 'MY_TEST']) }
+    assert_match(/MY_TEST_VAR/, output)
+  end
+
+  # Test compgen with -P prefix
+  def test_compgen_P_prefix
+    output = capture_output { Rubish::Builtins.run('compgen', ['-W', 'foo bar', '-P', '--', 'f']) }
+    assert_equal "--foo\n", output
+  end
+
+  # Test compgen with -S suffix
+  def test_compgen_S_suffix
+    output = capture_output { Rubish::Builtins.run('compgen', ['-W', 'foo bar', '-S', '=', 'f']) }
+    assert_equal "foo=\n", output
+  end
+
+  # Test compgen with invalid option
+  def test_compgen_invalid_option
+    output = capture_output do
+      result = Rubish::Builtins.run('compgen', ['-z'])
+      assert_false result
+    end
+    assert_match(/invalid option/, output)
+  end
+
+  # Test type identifies complete as builtin
+  def test_type_identifies_complete_as_builtin
+    output = capture_output { Rubish::Builtins.run('type', ['complete']) }
+    assert_match(/complete is a shell builtin/, output)
+  end
+
+  # Test type identifies compgen as builtin
+  def test_type_identifies_compgen_as_builtin
+    output = capture_output { Rubish::Builtins.run('type', ['compgen']) }
+    assert_match(/compgen is a shell builtin/, output)
+  end
+
+  # Test complete via REPL
+  def test_complete_via_repl
+    execute('complete -W "one two three" testcmd')
+    spec = Rubish::Builtins.get_completion_spec('testcmd')
+    assert_equal 'one two three', spec[:wordlist]
+  end
+
+  # Test compgen via REPL
+  def test_compgen_via_repl
+    output = capture_output { execute('compgen -W "apple banana" a') }
+    assert_equal "apple\n", output
+  end
+
+  # Test complete multiple commands
+  def test_complete_multiple_commands
+    result = Rubish::Builtins.run('complete', ['-f', 'cmd1', 'cmd2', 'cmd3'])
+    assert result
+
+    assert_not_nil Rubish::Builtins.get_completion_spec('cmd1')
+    assert_not_nil Rubish::Builtins.get_completion_spec('cmd2')
+    assert_not_nil Rubish::Builtins.get_completion_spec('cmd3')
+  end
+
+  # Test complete combined flags
+  def test_complete_combined_flags
+    result = Rubish::Builtins.run('complete', ['-df', 'mycommand'])
+    assert result
+
+    spec = Rubish::Builtins.get_completion_spec('mycommand')
+    assert_includes spec[:actions], :directory
+    assert_includes spec[:actions], :file
+  end
+end
