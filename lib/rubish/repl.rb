@@ -1396,7 +1396,7 @@ module Rubish
     end
 
     # Builtins that must run in current process (affect shell state)
-    PROCESS_BUILTINS = %w[cd export set shift source . return exit break continue local unset readonly declare typeset let].freeze
+    PROCESS_BUILTINS = %w[cd export set shift source . return exit break continue local unset readonly declare typeset let eval].freeze
 
     def __run_cmd(&block)
       result = block.call

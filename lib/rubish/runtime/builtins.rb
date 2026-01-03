@@ -2,7 +2,7 @@
 
 module Rubish
   module Builtins
-    COMMANDS = %w(cd exit jobs fg bg export pwd history alias unalias source . shift set return read echo test [ break continue pushd popd dirs trap getopts local unset readonly declare typeset let printf type which true false :).freeze
+    COMMANDS = %w(cd exit jobs fg bg export pwd history alias unalias source . shift set return read echo test [ break continue pushd popd dirs trap getopts local unset readonly declare typeset let printf type which true false : eval).freeze
 
     @aliases = {}
     @dir_stack = []
@@ -99,6 +99,8 @@ module Rubish
         true
       when 'false'
         false
+      when 'eval'
+        run_eval(args)
       else
         false
       end
@@ -1637,6 +1639,27 @@ module Rubish
       end
 
       results
+    end
+
+    def self.run_eval(args)
+      # eval [arg ...]
+      # Concatenate arguments and execute as a shell command
+      return true if args.empty?
+
+      command = args.join(' ')
+
+      unless @executor
+        puts 'eval: executor not configured'
+        return false
+      end
+
+      begin
+        @executor.call(command)
+        true
+      rescue => e
+        puts "eval: #{e.message}"
+        false
+      end
     end
 
     def self.run_which(args)
