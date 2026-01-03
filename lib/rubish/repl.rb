@@ -19,6 +19,7 @@ module Rubish
       Builtins.positional_params_getter = -> { @positional_params }
       Builtins.positional_params_setter = ->(params) { @positional_params = params }
       Builtins.function_checker = ->(name) { @functions.key?(name) }
+      Builtins.function_remover = ->(name) { @functions.delete(name) }
       Builtins.heredoc_content_setter = ->(content) { @heredoc_content = content }
       # Set up Command class to handle functions in pipelines
       Command.function_checker = ->(name) { @functions.key?(name) }
@@ -1395,7 +1396,7 @@ module Rubish
     end
 
     # Builtins that must run in current process (affect shell state)
-    PROCESS_BUILTINS = %w[cd export set shift source . return exit break continue local].freeze
+    PROCESS_BUILTINS = %w[cd export set shift source . return exit break continue local unset].freeze
 
     def __run_cmd(&block)
       result = block.call

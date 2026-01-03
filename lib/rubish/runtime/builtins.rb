@@ -2,7 +2,7 @@
 
 module Rubish
   module Builtins
-    COMMANDS = %w(cd exit jobs fg bg export pwd history alias unalias source . shift set return read echo test [ break continue pushd popd dirs trap getopts local).freeze
+    COMMANDS = %w(cd exit jobs fg bg export pwd history alias unalias source . shift set return read echo test [ break continue pushd popd dirs trap getopts local unset).freeze
 
     @aliases = {}
     @dir_stack = []
@@ -15,11 +15,12 @@ module Rubish
     @positional_params_getter = nil
     @positional_params_setter = nil
     @function_checker = nil
+    @function_remover = nil
     @heredoc_content_setter = nil
 
     class << self
       attr_reader :aliases, :dir_stack, :traps, :local_scope_stack
-      attr_accessor :executor, :script_name_getter, :script_name_setter, :positional_params_getter, :positional_params_setter, :function_checker, :heredoc_content_setter
+      attr_accessor :executor, :script_name_getter, :script_name_setter, :positional_params_getter, :positional_params_setter, :function_checker, :function_remover, :heredoc_content_setter
     end
 
     def self.builtin?(name)
@@ -78,6 +79,8 @@ module Rubish
         run_getopts(args)
       when 'local'
         run_local(args)
+      when 'unset'
+        run_unset(args)
       else
         false
       end
@@ -483,6 +486,50 @@ module Rubish
 
     def self.clear_local_scopes
       @local_scope_stack.clear
+    end
+
+    def self.run_unset(args)
+      # unset [-fv] name [name ...]
+      # -f: treat names as function names
+      # -v: treat names as variable names (default)
+      mode = :variable  # default mode
+
+      if args.empty?
+        puts 'unset: usage: unset [-f] [-v] name [name ...]'
+        return false
+      end
+
+      names = []
+      args.each do |arg|
+        case arg
+        when '-f'
+          mode = :function
+        when '-v'
+          mode = :variable
+        when '-fv', '-vf'
+          # Last one wins in bash, but typically -v is ignored when -f present
+          mode = :function
+        else
+          names << arg
+        end
+      end
+
+      if names.empty?
+        puts 'unset: usage: unset [-f] [-v] name [name ...]'
+        return false
+      end
+
+      names.each do |name|
+        if mode == :function
+          # Remove function
+          @function_remover&.call(name)
+        else
+          # Remove environment variable
+          ENV.delete(name)
+        end
+      end
+
+      true
     end
 
     def self.run_export(args)
