@@ -2,7 +2,7 @@
 
 module Rubish
   module Builtins
-    COMMANDS = %w(cd exit jobs fg bg export pwd history alias unalias source . shift set return read echo test [ break continue pushd popd dirs trap getopts local unset readonly declare typeset let printf type which true false : eval command builtin wait kill umask exec times hash disown ulimit suspend shopt).freeze
+    COMMANDS = %w(cd exit jobs fg bg export pwd history alias unalias source . shift set return read echo test [ break continue pushd popd dirs trap getopts local unset readonly declare typeset let printf type which true false : eval command builtin wait kill umask exec times hash disown ulimit suspend shopt enable).freeze
 
     @aliases = {}
     @dir_stack = []
@@ -13,6 +13,7 @@ module Rubish
     @var_attributes = {}  # Hash of variable names to Set of attributes (:integer, :lowercase, :uppercase, :export)
     @command_hash = {}  # Hash of command names to their cached paths
     @shell_options = {}  # Hash of shell option names to boolean values
+    @disabled_builtins = Set.new  # Set of disabled builtin names
     @executor = nil
     @script_name_getter = nil
     @script_name_setter = nil
@@ -24,7 +25,7 @@ module Rubish
     @command_executor = nil  # Executor that bypasses functions/aliases
 
     class << self
-      attr_reader :aliases, :dir_stack, :traps, :local_scope_stack, :readonly_vars, :var_attributes, :command_hash, :shell_options
+      attr_reader :aliases, :dir_stack, :traps, :local_scope_stack, :readonly_vars, :var_attributes, :command_hash, :shell_options, :disabled_builtins
       attr_accessor :executor, :script_name_getter, :script_name_setter, :positional_params_getter, :positional_params_setter, :function_checker, :function_remover, :heredoc_content_setter, :command_executor
     end
 
@@ -56,7 +57,15 @@ module Rubish
     }.freeze
 
     def self.builtin?(name)
+      COMMANDS.include?(name) && !@disabled_builtins.include?(name)
+    end
+
+    def self.builtin_exists?(name)
       COMMANDS.include?(name)
+    end
+
+    def self.builtin_enabled?(name)
+      COMMANDS.include?(name) && !@disabled_builtins.include?(name)
     end
 
     def self.run(name, args)
@@ -155,6 +164,8 @@ module Rubish
         run_suspend(args)
       when 'shopt'
         run_shopt(args)
+      when 'enable'
+        run_enable(args)
       else
         false
       end
@@ -2133,6 +2144,102 @@ module Rubish
       else
         false
       end
+    end
+
+    def self.run_enable(args)
+      # enable [-a] [-dnps] [-f filename] [name ...]
+      # -a: list all builtins (enabled and disabled)
+      # -n: disable builtins
+      # -p: print in reusable format
+      # -s: list only POSIX special builtins
+      # -d: remove a builtin loaded with -f (not implemented)
+      # -f: load builtin from shared object (not implemented)
+
+      show_all = false
+      disable_mode = false
+      print_mode = false
+      special_only = false
+      names = []
+
+      i = 0
+      while i < args.length
+        arg = args[i]
+
+        if arg.start_with?('-') && names.empty?
+          arg[1..].each_char do |c|
+            case c
+            when 'a'
+              show_all = true
+            when 'n'
+              disable_mode = true
+            when 'p'
+              print_mode = true
+            when 's'
+              special_only = true
+            when 'd', 'f'
+              # -d and -f are for dynamic loading, not implemented
+              puts "enable: -#{c}: not supported"
+              return false
+            else
+              puts "enable: -#{c}: invalid option"
+              return false
+            end
+          end
+        else
+          names << arg
+        end
+        i += 1
+      end
+
+      # POSIX special builtins
+      special_builtins = %w[. : break continue eval exec exit export readonly return set shift trap unset].freeze
+
+      # Helper to print a builtin
+      print_builtin = lambda do |name, enabled|
+        if print_mode
+          puts "enable #{enabled ? '' : '-n '}#{name}"
+        else
+          puts "enable #{enabled ? '' : '-n '}#{name}"
+        end
+      end
+
+      # No names specified: list builtins
+      if names.empty?
+        builtins_to_show = special_only ? special_builtins : COMMANDS
+
+        builtins_to_show.each do |name|
+          next unless COMMANDS.include?(name)
+
+          enabled = !@disabled_builtins.include?(name)
+
+          if show_all
+            print_builtin.call(name, enabled)
+          elsif disable_mode
+            # -n without names: show disabled builtins
+            print_builtin.call(name, enabled) unless enabled
+          else
+            # No flags: show enabled builtins
+            print_builtin.call(name, enabled) if enabled
+          end
+        end
+        return true
+      end
+
+      # Enable or disable specified builtins
+      names.each do |name|
+        unless COMMANDS.include?(name)
+          puts "enable: #{name}: not a shell builtin"
+          return false
+        end
+
+        if disable_mode
+          @disabled_builtins.add(name)
+        else
+          @disabled_builtins.delete(name)
+        end
+      end
+
+      true
     end
 
     def self.run_hash(args)
