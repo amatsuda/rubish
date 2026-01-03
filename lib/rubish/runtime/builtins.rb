@@ -2,7 +2,7 @@
 
 module Rubish
   module Builtins
-    COMMANDS = %w(cd exit jobs fg bg export pwd history alias unalias source . shift set return read echo test [ break continue pushd popd dirs trap getopts local unset readonly declare typeset let printf type which true false : eval command).freeze
+    COMMANDS = %w(cd exit jobs fg bg export pwd history alias unalias source . shift set return read echo test [ break continue pushd popd dirs trap getopts local unset readonly declare typeset let printf type which true false : eval command builtin).freeze
 
     @aliases = {}
     @dir_stack = []
@@ -104,6 +104,8 @@ module Rubish
         run_eval(args)
       when 'command'
         run_command(args)
+      when 'builtin'
+        run_builtin(args)
       else
         false
       end
@@ -1642,6 +1644,27 @@ module Rubish
       end
 
       results
+    end
+
+    def self.run_builtin(args)
+      # builtin command [arguments...]
+      # Run a shell builtin directly, bypassing functions and aliases
+      # Returns error if command is not a builtin
+
+      if args.empty?
+        puts 'builtin: usage: builtin command [arguments]'
+        return false
+      end
+
+      cmd_name = args.first
+      cmd_args = args[1..] || []
+
+      unless builtin?(cmd_name)
+        puts "builtin: #{cmd_name}: not a shell builtin"
+        return false
+      end
+
+      run(cmd_name, cmd_args)
     end
 
     def self.run_command(args)
