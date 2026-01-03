@@ -245,6 +245,16 @@ module Rubish
           # Escape sequence
           result << str[i + 1] if i + 1 < str.length
           i += 2
+        elsif char == '`'
+          # Backtick command substitution
+          expanded, consumed = expand_backtick_at(str, i)
+          if consumed > 0
+            result << expanded
+            i += consumed
+          else
+            result << char
+            i += 1
+          end
         elsif char == '$'
           expanded, consumed = expand_variable_at(str, i)
           if consumed > 0
@@ -261,6 +271,28 @@ module Rubish
       end
 
       result
+    end
+
+    def expand_backtick_at(str, pos)
+      return ['', 0] unless str[pos] == '`'
+
+      # Find matching closing backtick
+      j = pos + 1
+      while j < str.length
+        if str[j] == '\\'
+          # Skip escaped character
+          j += 2
+        elsif str[j] == '`'
+          # Found closing backtick
+          cmd = str[pos + 1...j]
+          output = `#{cmd}`.chomp
+          return [output, j - pos + 1]
+        else
+          j += 1
+        end
+      end
+
+      ['', 0]  # Unclosed backtick
     end
 
     def expand_variable_at(str, pos)

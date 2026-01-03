@@ -392,6 +392,9 @@ module Rubish
           read_double_quoted_string
         elsif char == "'"
           read_single_quoted_string
+        elsif char == '`'
+          # Backtick command substitution `...`
+          read_backtick_substitution
         elsif char == '$' && @input[@pos + 1] == '('
           # Command substitution $(...)
           read_command_substitution
@@ -444,6 +447,23 @@ module Rubish
         elsif char == "'"
           read_single_quoted_string
           next
+        end
+        @pos += 1
+      end
+    end
+
+    def read_backtick_substitution
+      # `...`
+      @pos += 1 # skip opening `
+      while @pos < @input.length
+        char = @input[@pos]
+        if char == '\\'
+          # Skip escaped character (including escaped backtick)
+          @pos += 2
+          next
+        elsif char == '`'
+          @pos += 1 # skip closing `
+          break
         end
         @pos += 1
       end

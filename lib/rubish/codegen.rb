@@ -154,8 +154,8 @@ module Rubish
         return "ENV.fetch(#{$1.inspect}, '')"
       end
 
-      # Check if string contains any variables
-      if str.include?('$')
+      # Check if string contains any variables or backtick substitution
+      if str.include?('$') || str.include?('`')
         generate_interpolated_string(str)
       else
         str.inspect
@@ -195,6 +195,16 @@ module Rubish
           # Escape sequence - keep as-is
           result << str[i, 2]
           i += 2
+        elsif char == '`'
+          # Backtick command substitution
+          cmd_expr, consumed = parse_backtick_substitution(str, i)
+          if cmd_expr
+            result << '#{' << cmd_expr << '}'
+            i += consumed
+          else
+            result << '`'
+            i += 1
+          end
         elsif char == '$'
           # Variable expansion
           var_expr, consumed = parse_variable(str, i)
@@ -299,6 +309,27 @@ module Rubish
       end
 
       nil
+    end
+
+    def parse_backtick_substitution(str, pos)
+      return nil unless str[pos] == '`'
+
+      # Find matching closing backtick
+      j = pos + 1
+      while j < str.length
+        if str[j] == '\\'
+          # Skip escaped character
+          j += 2
+        elsif str[j] == '`'
+          # Found closing backtick
+          cmd = str[pos + 1...j]
+          return ["`#{cmd}`.chomp", j - pos + 1]
+        else
+          j += 1
+        end
+      end
+
+      nil  # Unclosed backtick
     end
 
     def generate_pipeline(node)

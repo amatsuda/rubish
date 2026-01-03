@@ -99,6 +99,34 @@ class TestVariableExpansion < Test::Unit::TestCase
     assert_equal 'HELLO', expand('$(echo hello | tr a-z A-Z)')
   end
 
+  # Backtick command substitution tests
+  def test_backtick_substitution
+    assert_equal 'hello', expand('`echo hello`')
+  end
+
+  def test_backtick_substitution_in_double_quotes
+    assert_equal 'hello', expand('"`echo hello`"')
+  end
+
+  def test_backtick_substitution_not_in_single_quotes
+    assert_equal '`echo hello`', expand("'`echo hello`'")
+  end
+
+  def test_backtick_substitution_strips_trailing_newline
+    result = expand('`printf "hello\n"`')
+    assert_equal 'hello', result
+  end
+
+  def test_backtick_substitution_with_pipe
+    assert_equal 'HELLO', expand('`echo hello | tr a-z A-Z`')
+  end
+
+  def test_backtick_mixed_with_variable
+    ENV['NAME'] = 'world'
+    execute("echo `echo hello` $NAME > #{output_file}")
+    assert_equal "hello world\n", File.read(output_file)
+  end
+
   # Execution tests for multi-word expansion
   def test_multiple_variables_in_execution
     ENV['A'] = 'hello'
