@@ -2,7 +2,7 @@
 
 module Rubish
   module Builtins
-    COMMANDS = %w(cd exit jobs fg bg export pwd history alias unalias source . shift set return read echo test [ break continue pushd popd dirs trap getopts local unset readonly declare typeset let printf type which true false : eval command builtin wait kill umask exec times hash disown ulimit suspend shopt enable caller complete compgen bind help).freeze
+    COMMANDS = %w(cd exit jobs fg bg export pwd history alias unalias source . shift set return read echo test [ break continue pushd popd dirs trap getopts local unset readonly declare typeset let printf type which true false : eval command builtin wait kill umask exec times hash disown ulimit suspend shopt enable caller complete compgen bind help fc).freeze
 
     @aliases = {}
     @dir_stack = []
@@ -180,6 +180,10 @@ module Rubish
         run_bind(args)
       when 'help'
         run_help(args)
+      when 'fc'
+        run_fc(args)
+      when 'mapfile', 'readarray'
+        run_mapfile(args)
       else
         false
       end
@@ -4313,6 +4317,17 @@ module Rubish
           '-m' => 'display in pseudo-manpage format',
           '-s' => 'output only a short usage synopsis'
         }
+      },
+      'fc' => {
+        synopsis: 'fc [-e ename] [-lnr] [first] [last] or fc -s [pat=rep] [command]',
+        description: 'Display or edit and re-execute commands from the history list.',
+        options: {
+          '-e ename' => 'use ename as the editor (default: $FCEDIT or $EDITOR or vi)',
+          '-l' => 'list commands instead of editing',
+          '-n' => 'suppress line numbers when listing',
+          '-r' => 'reverse the order of the commands',
+          '-s' => 're-execute command without invoking editor'
+        }
       }
     }.freeze
 
@@ -4474,6 +4489,230 @@ module Rubish
       end
       lines << current unless current.empty?
       lines
+    end
+
+    def self.run_fc(args)
+      # Parse options
+      list_mode = false
+      suppress_numbers = false
+      reverse_order = false
+      reexecute_mode = false
+      editor = nil
+
+      while args.first&.start_with?('-') && args.first != '-' && args.first !~ /\A-\d+\z/
+        opt = args.shift
+        case opt
+        when '-l'
+          list_mode = true
+        when '-n'
+          suppress_numbers = true
+        when '-r'
+          reverse_order = true
+        when '-s'
+          reexecute_mode = true
+        when '-e'
+          editor = args.shift
+          unless editor
+            puts 'fc: -e: option requires an argument'
+            return false
+          end
+        when /\A-[lnr]+\z/
+          # Combined flags like -ln, -lr, -lnr
+          opt.chars[1..].each do |c|
+            case c
+            when 'l' then list_mode = true
+            when 'n' then suppress_numbers = true
+            when 'r' then reverse_order = true
+            end
+          end
+        else
+          puts "fc: #{opt}: invalid option"
+          puts 'fc: usage: fc [-e ename] [-lnr] [first] [last] or fc -s [pat=rep] [command]'
+          return false
+        end
+      end
+
+      history = Reline::HISTORY.to_a
+      return true if history.empty?
+
+      # Handle -s (re-execute) mode
+      if reexecute_mode
+        return fc_reexecute(args, history)
+      end
+
+      # Parse first and last arguments
+      first_arg = args.shift
+      last_arg = args.shift
+
+      # Resolve range
+      first_idx, last_idx = fc_resolve_range(first_arg, last_arg, history, list_mode)
+      return false unless first_idx
+
+      # Get commands in range
+      commands = fc_get_range(history, first_idx, last_idx)
+      commands.reverse! if reverse_order
+
+      if list_mode
+        # List mode: display commands
+        fc_list_commands(commands, first_idx, last_idx, reverse_order, suppress_numbers)
+        true
+      else
+        # Edit mode: edit and execute commands
+        fc_edit_and_execute(commands, editor)
+      end
+    end
+
+    def self.fc_reexecute(args, history)
+      # fc -s [pat=rep] [command]
+      substitution = nil
+      command_spec = nil
+
+      args.each do |arg|
+        if arg.include?('=') && substitution.nil?
+          substitution = arg
+        else
+          command_spec = arg
+        end
+      end
+
+      # Find the command to re-execute
+      cmd = if command_spec.nil?
+              history.last
+            elsif command_spec =~ /\A-?\d+\z/
+              idx = command_spec.to_i
+              if idx < 0
+                history[idx]
+              else
+                history[idx - 1]
+              end
+            else
+              # Find command starting with string
+              history.reverse.find { |c| c.start_with?(command_spec) }
+            end
+
+      unless cmd
+        puts "fc: no command found"
+        return false
+      end
+
+      # Apply substitution if specified
+      if substitution
+        pat, rep = substitution.split('=', 2)
+        cmd = cmd.sub(pat, rep || '')
+      end
+
+      # Display and execute the command
+      puts cmd
+      @executor&.call(cmd) if @executor
+      true
+    end
+
+    def self.fc_resolve_range(first_arg, last_arg, history, list_mode)
+      hist_size = history.size
+
+      # Default range for list mode: last 16 commands
+      # Default range for edit mode: last command
+      if first_arg.nil?
+        if list_mode
+          first_idx = [hist_size - 16, 0].max
+          last_idx = hist_size - 1
+        else
+          first_idx = hist_size - 1
+          last_idx = hist_size - 1
+        end
+        return [first_idx, last_idx]
+      end
+
+      # Parse first argument
+      first_idx = fc_parse_history_ref(first_arg, history)
+      unless first_idx
+        puts "fc: #{first_arg}: history specification out of range"
+        return nil
+      end
+
+      # Parse last argument (defaults to first in list mode, or first in edit mode)
+      if last_arg.nil?
+        last_idx = list_mode ? hist_size - 1 : first_idx
+      else
+        last_idx = fc_parse_history_ref(last_arg, history)
+        unless last_idx
+          puts "fc: #{last_arg}: history specification out of range"
+          return nil
+        end
+      end
+
+      [first_idx, last_idx]
+    end
+
+    def self.fc_parse_history_ref(ref, history)
+      hist_size = history.size
+
+      if ref =~ /\A-?\d+\z/
+        n = ref.to_i
+        if n < 0
+          # Negative: relative to end
+          idx = hist_size + n
+        elsif n == 0
+          idx = hist_size - 1
+        else
+          # Positive: absolute (1-based)
+          idx = n - 1
+        end
+        return nil if idx < 0 || idx >= hist_size
+        idx
+      else
+        # String: find most recent command starting with string
+        idx = history.rindex { |cmd| cmd.start_with?(ref) }
+        idx
+      end
+    end
+
+    def self.fc_get_range(history, first_idx, last_idx)
+      if first_idx <= last_idx
+        (first_idx..last_idx).map { |i| [i + 1, history[i]] }
+      else
+        (last_idx..first_idx).map { |i| [i + 1, history[i]] }.reverse
+      end
+    end
+
+    def self.fc_list_commands(commands, first_idx, last_idx, reverse_order, suppress_numbers)
+      commands.each do |num, cmd|
+        if suppress_numbers
+          puts cmd
+        else
+          puts format('%5d  %s', num, cmd)
+        end
+      end
+    end
+
+    def self.fc_edit_and_execute(commands, editor)
+      # Determine editor
+      editor ||= ENV['FCEDIT'] || ENV['EDITOR'] || 'vi'
+
+      # Create temp file with commands
+      tempfile = Tempfile.new(['fc', '.sh'])
+      begin
+        commands.each { |_num, cmd| tempfile.puts cmd }
+        tempfile.close
+
+        # Open editor
+        system(editor, tempfile.path)
+
+        # Read edited commands
+        edited = File.read(tempfile.path)
+
+        # Execute each line
+        edited.each_line do |line|
+          line = line.chomp
+          next if line.empty? || line.start_with?('#')
+          puts line
+          @executor&.call(line) if @executor
+        end
+
+        true
+      ensure
+        tempfile.unlink
+      end
     end
 
     def self.detect_heredoc(line)
