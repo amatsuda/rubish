@@ -2,7 +2,7 @@
 
 module Rubish
   module Builtins
-    COMMANDS = %w(cd exit jobs fg bg export pwd history alias unalias source . shift set return read echo test [ break continue pushd popd dirs trap getopts local unset readonly declare typeset let printf type which true false : eval command builtin wait kill umask exec times hash disown ulimit suspend shopt enable caller complete compgen bind).freeze
+    COMMANDS = %w(cd exit jobs fg bg export pwd history alias unalias source . shift set return read echo test [ break continue pushd popd dirs trap getopts local unset readonly declare typeset let printf type which true false : eval command builtin wait kill umask exec times hash disown ulimit suspend shopt enable caller complete compgen bind help).freeze
 
     @aliases = {}
     @dir_stack = []
@@ -178,6 +178,8 @@ module Rubish
         run_compgen(args)
       when 'bind'
         run_bind(args)
+      when 'help'
+        run_help(args)
       else
         false
       end
@@ -3875,6 +3877,603 @@ module Rubish
         end
         job
       end
+    end
+
+    # Documentation for builtin commands
+    BUILTIN_HELP = {
+      'cd' => {
+        synopsis: 'cd [-L|-P] [dir]',
+        description: 'Change the current directory to dir. If dir is not specified, change to $HOME.',
+        options: {
+          '-L' => 'follow symbolic links (default)',
+          '-P' => 'use physical directory structure'
+        }
+      },
+      'exit' => {
+        synopsis: 'exit [n]',
+        description: 'Exit the shell with a status of n. If n is omitted, exit status is that of the last command executed.'
+      },
+      'jobs' => {
+        synopsis: 'jobs [-l|-p] [jobspec ...]',
+        description: 'List active jobs.',
+        options: {
+          '-l' => 'list process IDs in addition to normal info',
+          '-p' => 'list process IDs only'
+        }
+      },
+      'fg' => {
+        synopsis: 'fg [job_spec]',
+        description: 'Move job to the foreground. If job_spec is not present, the most recent job is used.'
+      },
+      'bg' => {
+        synopsis: 'bg [job_spec ...]',
+        description: 'Move jobs to the background. If job_spec is not present, the most recent job is used.'
+      },
+      'export' => {
+        synopsis: 'export [-n] [name[=value] ...]',
+        description: 'Set export attribute for shell variables. Exported variables are passed to child processes.',
+        options: {
+          '-n' => 'remove the export property from each name',
+          '-p' => 'display all exported variables'
+        }
+      },
+      'pwd' => {
+        synopsis: 'pwd [-L|-P]',
+        description: 'Print the current working directory.',
+        options: {
+          '-L' => 'print logical path (default)',
+          '-P' => 'print physical path (resolve symlinks)'
+        }
+      },
+      'history' => {
+        synopsis: 'history [-c] [-d offset] [n]',
+        description: 'Display or manipulate the history list.',
+        options: {
+          '-c' => 'clear the history list',
+          '-d offset' => 'delete the history entry at offset',
+          'n' => 'list only the last n entries'
+        }
+      },
+      'alias' => {
+        synopsis: 'alias [name[=value] ...]',
+        description: 'Define or display aliases. Without arguments, print all aliases. With arguments, define aliases.'
+      },
+      'unalias' => {
+        synopsis: 'unalias [-a] name [name ...]',
+        description: 'Remove each name from the list of defined aliases.',
+        options: {
+          '-a' => 'remove all alias definitions'
+        }
+      },
+      'source' => {
+        synopsis: 'source filename [arguments]',
+        description: 'Read and execute commands from filename in the current shell environment.'
+      },
+      '.' => {
+        synopsis: '. filename [arguments]',
+        description: 'Read and execute commands from filename in the current shell environment. Same as source.'
+      },
+      'shift' => {
+        synopsis: 'shift [n]',
+        description: 'Shift positional parameters to the left by n (default 1).'
+      },
+      'set' => {
+        synopsis: 'set [--] [arg ...]',
+        description: 'Set positional parameters, or display shell variables. With -- args, set $1, $2, etc.'
+      },
+      'return' => {
+        synopsis: 'return [n]',
+        description: 'Return from a shell function with return value n. If n is omitted, return status is that of the last command.'
+      },
+      'read' => {
+        synopsis: 'read [-r] [-p prompt] [-t timeout] [-n nchars] [-a array] [name ...]',
+        description: 'Read a line from standard input and split into fields.',
+        options: {
+          '-r' => 'do not allow backslash escapes',
+          '-p prompt' => 'display prompt before reading',
+          '-t timeout' => 'time out after timeout seconds',
+          '-n nchars' => 'read only nchars characters',
+          '-a array' => 'store words in an indexed array (simulated via env vars)',
+          '-s' => 'do not echo input (silent mode)'
+        }
+      },
+      'echo' => {
+        synopsis: 'echo [-n] [-e] [arg ...]',
+        description: 'Write arguments to standard output.',
+        options: {
+          '-n' => 'do not append a newline',
+          '-e' => 'enable interpretation of backslash escapes'
+        }
+      },
+      'test' => {
+        synopsis: 'test expr',
+        description: 'Evaluate conditional expression and return 0 (true) or 1 (false).',
+        options: {
+          '-e file' => 'true if file exists',
+          '-f file' => 'true if file is a regular file',
+          '-d file' => 'true if file is a directory',
+          '-r file' => 'true if file is readable',
+          '-w file' => 'true if file is writable',
+          '-x file' => 'true if file is executable',
+          '-s file' => 'true if file has size greater than zero',
+          '-z string' => 'true if string length is zero',
+          '-n string' => 'true if string length is non-zero',
+          's1 = s2' => 'true if strings are equal',
+          's1 != s2' => 'true if strings are not equal',
+          'n1 -eq n2' => 'true if integers are equal',
+          'n1 -ne n2' => 'true if integers are not equal',
+          'n1 -lt n2' => 'true if n1 < n2',
+          'n1 -le n2' => 'true if n1 <= n2',
+          'n1 -gt n2' => 'true if n1 > n2',
+          'n1 -ge n2' => 'true if n1 >= n2'
+        }
+      },
+      '[' => {
+        synopsis: '[ expr ]',
+        description: 'Evaluate conditional expression. Same as test, but requires closing ].'
+      },
+      'break' => {
+        synopsis: 'break [n]',
+        description: 'Exit from within a for, while, or until loop. If n is specified, break n levels.'
+      },
+      'continue' => {
+        synopsis: 'continue [n]',
+        description: 'Resume the next iteration of the enclosing for, while, or until loop.'
+      },
+      'pushd' => {
+        synopsis: 'pushd [dir | +N | -N]',
+        description: 'Save current directory on stack and change to dir.',
+        options: {
+          '+N' => 'rotate stack, bringing Nth directory to top',
+          '-N' => 'rotate stack, bringing Nth directory from bottom to top'
+        }
+      },
+      'popd' => {
+        synopsis: 'popd [+N | -N]',
+        description: 'Remove entries from the directory stack.',
+        options: {
+          '+N' => 'remove Nth entry from top of stack',
+          '-N' => 'remove Nth entry from bottom of stack'
+        }
+      },
+      'dirs' => {
+        synopsis: 'dirs [-c] [-l] [-p] [-v]',
+        description: 'Display the directory stack.',
+        options: {
+          '-c' => 'clear the directory stack',
+          '-l' => 'use full pathnames (no ~ substitution)',
+          '-p' => 'print one entry per line',
+          '-v' => 'print with index numbers'
+        }
+      },
+      'trap' => {
+        synopsis: 'trap [-lp] [[arg] signal_spec ...]',
+        description: 'Set or display signal handlers.',
+        options: {
+          '-l' => 'list signal names and numbers',
+          '-p' => 'display current trap settings'
+        }
+      },
+      'getopts' => {
+        synopsis: 'getopts optstring name [args]',
+        description: 'Parse positional parameters as options. Sets OPTIND and OPTARG.'
+      },
+      'local' => {
+        synopsis: 'local [name[=value] ...]',
+        description: 'Create local variables within a function. Only valid inside a function.'
+      },
+      'unset' => {
+        synopsis: 'unset [-v] [-f] [name ...]',
+        description: 'Unset values and attributes of variables and functions.',
+        options: {
+          '-v' => 'unset variables (default)',
+          '-f' => 'unset functions'
+        }
+      },
+      'readonly' => {
+        synopsis: 'readonly [-p] [name[=value] ...]',
+        description: 'Mark variables as read-only.',
+        options: {
+          '-p' => 'display all readonly variables'
+        }
+      },
+      'declare' => {
+        synopsis: 'declare [-aAfFgilnprtux] [-p] [name[=value] ...]',
+        description: 'Declare variables and give them attributes.',
+        options: {
+          '-a' => 'indexed array',
+          '-A' => 'associative array',
+          '-i' => 'integer attribute',
+          '-l' => 'convert value to lowercase',
+          '-u' => 'convert value to uppercase',
+          '-r' => 'make readonly',
+          '-x' => 'export to environment',
+          '-p' => 'display attributes and values'
+        }
+      },
+      'typeset' => {
+        synopsis: 'typeset [-aAfFgilnprtux] [-p] [name[=value] ...]',
+        description: 'Declare variables and give them attributes. Same as declare.'
+      },
+      'let' => {
+        synopsis: 'let arg [arg ...]',
+        description: 'Evaluate arithmetic expressions. Each arg is an arithmetic expression.'
+      },
+      'printf' => {
+        synopsis: 'printf format [arguments]',
+        description: 'Write formatted output. Format specifiers: %s (string), %d (integer), %f (float), etc.'
+      },
+      'type' => {
+        synopsis: 'type [-t|-p|-a] name [name ...]',
+        description: 'Display information about command type.',
+        options: {
+          '-t' => 'print single word: alias, keyword, function, builtin, or file',
+          '-p' => 'print disk file path',
+          '-a' => 'print all locations'
+        }
+      },
+      'which' => {
+        synopsis: 'which [-a] name [name ...]',
+        description: 'Locate a command in PATH.',
+        options: {
+          '-a' => 'print all matching pathnames'
+        }
+      },
+      'true' => {
+        synopsis: 'true',
+        description: 'Return a successful result (exit status 0).'
+      },
+      'false' => {
+        synopsis: 'false',
+        description: 'Return an unsuccessful result (exit status 1).'
+      },
+      ':' => {
+        synopsis: ':',
+        description: 'Null command. Does nothing, returns success.'
+      },
+      'eval' => {
+        synopsis: 'eval [arg ...]',
+        description: 'Concatenate arguments and execute as a shell command.'
+      },
+      'command' => {
+        synopsis: 'command [-pVv] command [arg ...]',
+        description: 'Execute command bypassing shell functions.',
+        options: {
+          '-p' => 'use default PATH for command search',
+          '-v' => 'print command description',
+          '-V' => 'print verbose command description'
+        }
+      },
+      'builtin' => {
+        synopsis: 'builtin shell-builtin [arguments]',
+        description: 'Execute a shell builtin, bypassing functions and aliases.'
+      },
+      'wait' => {
+        synopsis: 'wait [-n] [id ...]',
+        description: 'Wait for job completion and return exit status.',
+        options: {
+          '-n' => 'wait for any single job to complete'
+        }
+      },
+      'kill' => {
+        synopsis: 'kill [-s sigspec | -n signum | -sigspec] pid | jobspec ...',
+        description: 'Send a signal to a job or process.',
+        options: {
+          '-l' => 'list signal names',
+          '-s sigspec' => 'specify signal by name',
+          '-n signum' => 'specify signal by number'
+        }
+      },
+      'umask' => {
+        synopsis: 'umask [-p] [-S] [mode]',
+        description: 'Display or set file mode creation mask.',
+        options: {
+          '-p' => 'output in form that may be reused as input',
+          '-S' => 'use symbolic output (u=rwx,g=rx,o=rx)'
+        }
+      },
+      'exec' => {
+        synopsis: 'exec [-cl] [-a name] [command [arguments ...]]',
+        description: 'Replace the shell with command. With no command, redirections affect current shell.',
+        options: {
+          '-c' => 'execute with empty environment',
+          '-l' => 'place dash in argv[0] (login shell)',
+          '-a name' => 'set argv[0] to name'
+        }
+      },
+      'times' => {
+        synopsis: 'times',
+        description: 'Print accumulated user and system times for the shell and its children.'
+      },
+      'hash' => {
+        synopsis: 'hash [-lr] [-p filename] [-dt] [name ...]',
+        description: 'Remember or report command locations.',
+        options: {
+          '-r' => 'forget all remembered locations',
+          '-l' => 'display in reusable format',
+          '-p filename' => 'use filename as location for name',
+          '-d' => 'forget remembered location for name',
+          '-t' => 'print location for name'
+        }
+      },
+      'disown' => {
+        synopsis: 'disown [-h] [-ar] [jobspec ...]',
+        description: 'Remove jobs from the job table.',
+        options: {
+          '-h' => 'mark jobs so they do not receive SIGHUP',
+          '-a' => 'remove all jobs',
+          '-r' => 'remove only running jobs'
+        }
+      },
+      'ulimit' => {
+        synopsis: 'ulimit [-SHa] [-bcdefiklmnpqrstuvxT] [limit]',
+        description: 'Control process resource limits.',
+        options: {
+          '-S' => 'use soft limit',
+          '-H' => 'use hard limit',
+          '-a' => 'all current limits are reported',
+          '-c' => 'core file size',
+          '-d' => 'data segment size',
+          '-f' => 'file size',
+          '-l' => 'locked memory size',
+          '-m' => 'resident set size',
+          '-n' => 'open file descriptors',
+          '-s' => 'stack size',
+          '-t' => 'CPU time',
+          '-u' => 'user processes',
+          '-v' => 'virtual memory'
+        }
+      },
+      'suspend' => {
+        synopsis: 'suspend [-f]',
+        description: 'Suspend shell execution.',
+        options: {
+          '-f' => 'force suspend even if this is a login shell'
+        }
+      },
+      'shopt' => {
+        synopsis: 'shopt [-pqsu] [-o] [optname ...]',
+        description: 'Set and unset shell options.',
+        options: {
+          '-s' => 'enable (set) each optname',
+          '-u' => 'disable (unset) each optname',
+          '-p' => 'display in reusable format',
+          '-q' => 'quiet mode, return status indicates if set',
+          '-o' => 'restrict optnames to those defined for set -o'
+        }
+      },
+      'enable' => {
+        synopsis: 'enable [-a] [-dnps] [-f filename] [name ...]',
+        description: 'Enable and disable shell builtins.',
+        options: {
+          '-a' => 'print all builtins with enabled/disabled status',
+          '-n' => 'disable builtin names',
+          '-p' => 'print enabled builtins',
+          '-s' => 'print only special builtins'
+        }
+      },
+      'caller' => {
+        synopsis: 'caller [expr]',
+        description: 'Return the context of the current subroutine call. With expr, return the nth entry from the call stack.'
+      },
+      'complete' => {
+        synopsis: 'complete [-abcdefgjksuv] [-pr] [-DEI] [-o comp-option] [-A action] [-G globpat] [-W wordlist] [-F function] [-C command] [-X filterpat] [-P prefix] [-S suffix] [name ...]',
+        description: 'Specify how arguments are to be completed.',
+        options: {
+          '-p' => 'print completion specifications',
+          '-r' => 'remove completion specifications',
+          '-f' => 'complete with filenames',
+          '-d' => 'complete with directories',
+          '-b' => 'complete with builtins',
+          '-a' => 'complete with aliases',
+          '-v' => 'complete with variables',
+          '-W wordlist' => 'split wordlist and complete with results',
+          '-F function' => 'call function for completions'
+        }
+      },
+      'compgen' => {
+        synopsis: 'compgen [-abcdefgjksuv] [-o option] [-A action] [-G globpat] [-W wordlist] [-F function] [-C command] [-X filterpat] [-P prefix] [-S suffix] [word]',
+        description: 'Generate possible completions matching word.',
+        options: {
+          '-b' => 'builtins',
+          '-a' => 'aliases',
+          '-f' => 'filenames',
+          '-d' => 'directories',
+          '-v' => 'variables',
+          '-W wordlist' => 'words from wordlist',
+          '-P prefix' => 'add prefix to each completion',
+          '-S suffix' => 'add suffix to each completion'
+        }
+      },
+      'bind' => {
+        synopsis: 'bind [-m keymap] [-lpsvPSVX] [-f filename] [-q name] [-u name] [-r keyseq] [-x keyseq:shell-command] [keyseq:readline-function or keyseq:"macro"]',
+        description: 'Set or display readline key bindings and variables.',
+        options: {
+          '-l' => 'list readline function names',
+          '-p' => 'print key bindings',
+          '-P' => 'print key bindings with descriptions',
+          '-s' => 'print macro bindings',
+          '-S' => 'print macro bindings with descriptions',
+          '-v' => 'print readline variables',
+          '-V' => 'print readline variables with descriptions',
+          '-X' => 'print shell command bindings',
+          '-q name' => 'query which keys invoke named function',
+          '-u name' => 'unbind all keys bound to named function',
+          '-r keyseq' => 'remove binding for keyseq',
+          '-f filename' => 'read bindings from filename',
+          '-x keyseq:cmd' => 'bind keyseq to shell command',
+          '-m keymap' => 'use keymap for subsequent bindings'
+        }
+      },
+      'help' => {
+        synopsis: 'help [-dms] [pattern ...]',
+        description: 'Display information about builtin commands.',
+        options: {
+          '-d' => 'output short description for each topic',
+          '-m' => 'display in pseudo-manpage format',
+          '-s' => 'output only a short usage synopsis'
+        }
+      }
+    }.freeze
+
+    def self.run_help(args)
+      # Parse options
+      short_desc = false
+      manpage = false
+      synopsis_only = false
+
+      while args.first&.start_with?('-')
+        opt = args.shift
+        case opt
+        when '-d'
+          short_desc = true
+        when '-m'
+          manpage = true
+        when '-s'
+          synopsis_only = true
+        else
+          puts "help: #{opt}: invalid option"
+          puts 'help: usage: help [-dms] [pattern ...]'
+          return false
+        end
+      end
+
+      if args.empty?
+        # No pattern: list all builtins with short descriptions
+        print_all_builtins(short_desc)
+        return true
+      end
+
+      found_any = false
+      args.each do |pattern|
+        # Find matching builtins (exact match first, then glob patterns)
+        matches = if COMMANDS.include?(pattern)
+                    [pattern]
+                  else
+                    COMMANDS.select { |cmd| File.fnmatch(pattern, cmd) }
+                  end
+
+        if matches.empty?
+          puts "help: no help topics match '#{pattern}'."
+        else
+          matches.each do |cmd|
+            found_any = true
+            print_help_for(cmd, short_desc: short_desc, manpage: manpage, synopsis_only: synopsis_only)
+          end
+        end
+      end
+
+      found_any
+    end
+
+    def self.print_all_builtins(short_desc)
+      puts 'Shell builtin commands:'
+      puts
+
+      if short_desc
+        # Print each builtin with short description
+        COMMANDS.sort.each do |cmd|
+          info = BUILTIN_HELP[cmd]
+          if info
+            puts "#{cmd} - #{info[:description].split('.').first}."
+          else
+            puts cmd
+          end
+        end
+      else
+        # Print in columns
+        builtins = COMMANDS.sort
+        col_width = builtins.map(&:length).max + 2
+        cols = 80 / col_width
+        cols = 1 if cols < 1
+
+        builtins.each_slice(cols) do |row|
+          puts row.map { |b| b.ljust(col_width) }.join
+        end
+      end
+    end
+
+    def self.print_help_for(cmd, short_desc: false, manpage: false, synopsis_only: false)
+      info = BUILTIN_HELP[cmd]
+
+      unless info
+        puts "#{cmd}: no help available"
+        return
+      end
+
+      if synopsis_only
+        puts "#{cmd}: #{info[:synopsis]}"
+        return
+      end
+
+      if short_desc
+        puts "#{cmd} - #{info[:description].split('.').first}."
+        return
+      end
+
+      if manpage
+        print_manpage_format(cmd, info)
+      else
+        print_standard_format(cmd, info)
+      end
+    end
+
+    def self.print_standard_format(cmd, info)
+      puts "#{cmd}: #{info[:synopsis]}"
+      puts "    #{info[:description]}"
+
+      if info[:options] && !info[:options].empty?
+        puts
+        puts '    Options:'
+        info[:options].each do |opt, desc|
+          puts "      #{opt.ljust(16)} #{desc}"
+        end
+      end
+      puts
+    end
+
+    def self.print_manpage_format(cmd, info)
+      puts 'NAME'
+      short_desc = info[:description].split('.').first
+      puts "    #{cmd} - #{short_desc.downcase}"
+      puts
+      puts 'SYNOPSIS'
+      puts "    #{info[:synopsis]}"
+      puts
+      puts 'DESCRIPTION'
+      # Wrap description at ~70 chars
+      desc_lines = wrap_text(info[:description], 66)
+      desc_lines.each { |line| puts "    #{line}" }
+
+      if info[:options] && !info[:options].empty?
+        puts
+        puts 'OPTIONS'
+        info[:options].each do |opt, desc|
+          puts "    #{opt}"
+          wrapped = wrap_text(desc, 62)
+          wrapped.each { |line| puts "        #{line}" }
+        end
+      end
+      puts
+    end
+
+    def self.wrap_text(text, width)
+      return [text] if text.length <= width
+
+      lines = []
+      current = +''
+      text.split.each do |word|
+        if current.empty?
+          current = word
+        elsif current.length + word.length + 1 <= width
+          current << ' ' << word
+        else
+          lines << current
+          current = word
+        end
+      end
+      lines << current unless current.empty?
+      lines
     end
 
     def self.detect_heredoc(line)
