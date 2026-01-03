@@ -2,9 +2,10 @@
 
 module Rubish
   module Builtins
-    COMMANDS = %w(cd exit jobs fg bg export pwd history alias unalias source . shift set return read echo test [ break continue).freeze
+    COMMANDS = %w(cd exit jobs fg bg export pwd history alias unalias source . shift set return read echo test [ break continue pushd popd dirs).freeze
 
     @aliases = {}
+    @dir_stack = []
     @executor = nil
     @script_name_getter = nil
     @script_name_setter = nil
@@ -14,7 +15,7 @@ module Rubish
     @heredoc_content_setter = nil
 
     class << self
-      attr_reader :aliases
+      attr_reader :aliases, :dir_stack
       attr_accessor :executor, :script_name_getter, :script_name_setter, :positional_params_getter, :positional_params_setter, :function_checker, :heredoc_content_setter
     end
 
@@ -62,6 +63,12 @@ module Rubish
         run_break(args)
       when 'continue'
         run_continue(args)
+      when 'pushd'
+        run_pushd(args)
+      when 'popd'
+        run_popd(args)
+      when 'dirs'
+        run_dirs(args)
       else
         false
       end
@@ -74,6 +81,71 @@ module Rubish
     rescue Errno::ENOENT => e
       puts "cd: #{e.message}"
       false
+    end
+
+    def self.run_pushd(args)
+      if args.empty?
+        # Swap top two directories
+        if @dir_stack.empty?
+          puts 'pushd: no other directory'
+          return false
+        end
+        current = Dir.pwd
+        target = @dir_stack.shift
+        begin
+          Dir.chdir(target)
+          @dir_stack.unshift(current)
+          print_dir_stack
+          true
+        rescue Errno::ENOENT => e
+          puts "pushd: #{e.message}"
+          false
+        end
+      else
+        dir = args.first
+        dir = File.expand_path(dir)
+        current = Dir.pwd
+        begin
+          Dir.chdir(dir)
+          @dir_stack.unshift(current)
+          print_dir_stack
+          true
+        rescue Errno::ENOENT => e
+          puts "pushd: #{e.message}"
+          false
+        end
+      end
+    end
+
+    def self.run_popd(args)
+      if @dir_stack.empty?
+        puts 'popd: directory stack empty'
+        return false
+      end
+
+      target = @dir_stack.shift
+      begin
+        Dir.chdir(target)
+        print_dir_stack
+        true
+      rescue Errno::ENOENT => e
+        puts "popd: #{e.message}"
+        false
+      end
+    end
+
+    def self.run_dirs(args)
+      print_dir_stack
+      true
+    end
+
+    def self.print_dir_stack
+      stack = [Dir.pwd] + @dir_stack
+      puts stack.map { |d| d.sub(ENV['HOME'], '~') }.join(' ')
+    end
+
+    def self.clear_dir_stack
+      @dir_stack.clear
     end
 
     def self.run_export(args)
