@@ -2,7 +2,7 @@
 
 module Rubish
   module Builtins
-    COMMANDS = %w(cd exit jobs fg bg export pwd history alias unalias source . shift set return read echo test [ break continue pushd popd dirs trap getopts local unset readonly declare typeset let printf type).freeze
+    COMMANDS = %w(cd exit jobs fg bg export pwd history alias unalias source . shift set return read echo test [ break continue pushd popd dirs trap getopts local unset readonly declare typeset let printf type which).freeze
 
     @aliases = {}
     @dir_stack = []
@@ -93,6 +93,8 @@ module Rubish
         run_printf(args)
       when 'type'
         run_type(args)
+      when 'which'
+        run_which(args)
       else
         false
       end
@@ -1609,6 +1611,79 @@ module Rubish
       end
 
       nil
+    end
+
+    def self.find_all_in_path(name)
+      # Find all matching executables in PATH
+      results = []
+
+      # If name contains a slash, just check if it's executable
+      if name.include?('/')
+        results << name if File.executable?(name)
+        return results
+      end
+
+      # Search PATH
+      path_dirs = (ENV['PATH'] || '').split(File::PATH_SEPARATOR)
+      path_dirs.each do |dir|
+        full_path = File.join(dir, name)
+        if File.executable?(full_path) && !File.directory?(full_path)
+          results << full_path
+        end
+      end
+
+      results
+    end
+
+    def self.run_which(args)
+      # which [-a] name [name ...]
+      # -a: print all matching executables in PATH, not just the first
+
+      if args.empty?
+        puts 'which: usage: which [-a] name [name ...]'
+        return false
+      end
+
+      # Parse options
+      show_all = false
+      names = []
+
+      args.each do |arg|
+        if arg == '-a'
+          show_all = true
+        else
+          names << arg
+        end
+      end
+
+      if names.empty?
+        puts 'which: usage: which [-a] name [name ...]'
+        return false
+      end
+
+      all_found = true
+
+      names.each do |name|
+        if show_all
+          paths = find_all_in_path(name)
+          if paths.empty?
+            puts "#{name} not found"
+            all_found = false
+          else
+            paths.each { |p| puts p }
+          end
+        else
+          path = find_in_path(name)
+          if path
+            puts path
+          else
+            puts "#{name} not found"
+            all_found = false
+          end
+        end
+      end
+
+      all_found
     end
 
     def self.run_read(args)
