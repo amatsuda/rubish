@@ -2,7 +2,7 @@
 
 module Rubish
   module Builtins
-    COMMANDS = %w(cd exit jobs fg bg export pwd history alias unalias source . shift set return read echo test [ break continue pushd popd dirs trap getopts local unset readonly declare typeset let printf type which true false : eval command builtin wait kill umask exec times hash disown ulimit suspend shopt enable).freeze
+    COMMANDS = %w(cd exit jobs fg bg export pwd history alias unalias source . shift set return read echo test [ break continue pushd popd dirs trap getopts local unset readonly declare typeset let printf type which true false : eval command builtin wait kill umask exec times hash disown ulimit suspend shopt enable caller).freeze
 
     @aliases = {}
     @dir_stack = []
@@ -14,6 +14,7 @@ module Rubish
     @command_hash = {}  # Hash of command names to their cached paths
     @shell_options = {}  # Hash of shell option names to boolean values
     @disabled_builtins = Set.new  # Set of disabled builtin names
+    @call_stack = []  # Stack of [line_number, function_name, filename] for caller builtin
     @executor = nil
     @script_name_getter = nil
     @script_name_setter = nil
@@ -25,7 +26,7 @@ module Rubish
     @command_executor = nil  # Executor that bypasses functions/aliases
 
     class << self
-      attr_reader :aliases, :dir_stack, :traps, :local_scope_stack, :readonly_vars, :var_attributes, :command_hash, :shell_options, :disabled_builtins
+      attr_reader :aliases, :dir_stack, :traps, :local_scope_stack, :readonly_vars, :var_attributes, :command_hash, :shell_options, :disabled_builtins, :call_stack
       attr_accessor :executor, :script_name_getter, :script_name_setter, :positional_params_getter, :positional_params_setter, :function_checker, :function_remover, :heredoc_content_setter, :command_executor
     end
 
@@ -166,6 +167,8 @@ module Rubish
         run_shopt(args)
       when 'enable'
         run_enable(args)
+      when 'caller'
+        run_caller(args)
       else
         false
       end
@@ -2240,6 +2243,61 @@ module Rubish
       end
 
       true
+    end
+
+    def self.run_caller(args)
+      # caller [expr]
+      # Display the call stack of the current subroutine call
+      # With expr: display stack frame at that depth (0 = current)
+      # Returns false if no call stack or expr is out of range
+
+      # Check for invalid options
+      if args.any? { |arg| arg.start_with?('-') }
+        puts "caller: #{args.first}: invalid option"
+        return false
+      end
+
+      # Get the frame number (default 0)
+      frame = 0
+      if args.any?
+        arg = args.first
+        unless arg =~ /^\d+$/
+          puts "caller: #{arg}: invalid number"
+          return false
+        end
+        frame = arg.to_i
+      end
+
+      # Check if we have a call stack
+      if @call_stack.empty?
+        return false
+      end
+
+      # Check if frame is in range
+      if frame >= @call_stack.length
+        return false
+      end
+
+      # Get the frame (stack is stored with most recent first)
+      # But caller 0 should be the immediate caller, so we need to reverse
+      stack_frame = @call_stack[-(frame + 1)]
+      return false unless stack_frame
+
+      line_number, function_name, filename = stack_frame
+      puts "#{line_number} #{function_name} #{filename}"
+      true
+    end
+
+    def self.push_call_frame(line_number, function_name, filename)
+      @call_stack.push([line_number, function_name, filename])
+    end
+
+    def self.pop_call_frame
+      @call_stack.pop
+    end
+
+    def self.clear_call_stack
+      @call_stack.clear
     end
 
     def self.run_hash(args)
