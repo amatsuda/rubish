@@ -2,7 +2,7 @@
 
 module Rubish
   module Builtins
-    COMMANDS = %w(cd exit jobs fg bg export pwd history alias unalias source . shift set return read echo test [ break continue pushd popd dirs trap getopts local unset readonly declare typeset let printf type which true false : eval command builtin wait kill umask exec times hash disown ulimit).freeze
+    COMMANDS = %w(cd exit jobs fg bg export pwd history alias unalias source . shift set return read echo test [ break continue pushd popd dirs trap getopts local unset readonly declare typeset let printf type which true false : eval command builtin wait kill umask exec times hash disown ulimit suspend).freeze
 
     @aliases = {}
     @dir_stack = []
@@ -123,6 +123,8 @@ module Rubish
         run_disown(args)
       when 'ulimit'
         run_ulimit(args)
+      when 'suspend'
+        run_suspend(args)
       else
         false
       end
@@ -1927,6 +1929,41 @@ module Rubish
         false
       rescue Errno::EINVAL
         puts "ulimit: -#{resource_flag}: invalid limit"
+        false
+      end
+    end
+
+    def self.run_suspend(args)
+      # suspend [-f]
+      # Suspend shell execution
+      # -f: force suspend even if login shell
+
+      force = false
+
+      args.each do |arg|
+        if arg == '-f'
+          force = true
+        elsif arg.start_with?('-')
+          puts "suspend: #{arg}: invalid option"
+          return false
+        end
+      end
+
+      # Check if this is a login shell (unless -f is specified)
+      unless force
+        # A login shell typically has $0 starting with '-' or SHLVL=1
+        if ENV['SHLVL'] == '1'
+          puts 'suspend: cannot suspend a login shell'
+          return false
+        end
+      end
+
+      # Send SIGSTOP to ourselves
+      begin
+        Process.kill('STOP', Process.pid)
+        true
+      rescue Errno::EPERM
+        puts 'suspend: cannot suspend'
         false
       end
     end
