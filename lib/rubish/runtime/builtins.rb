@@ -2,7 +2,7 @@
 
 module Rubish
   module Builtins
-    COMMANDS = %w(cd exit jobs fg bg export pwd history alias unalias source . shift set return read echo test [ break continue pushd popd dirs trap getopts local unset readonly declare typeset let printf type which true false : eval command builtin wait kill umask).freeze
+    COMMANDS = %w(cd exit jobs fg bg export pwd history alias unalias source . shift set return read echo test [ break continue pushd popd dirs trap getopts local unset readonly declare typeset let printf type which true false : eval command builtin wait kill umask exec).freeze
 
     @aliases = {}
     @dir_stack = []
@@ -112,6 +112,8 @@ module Rubish
         run_kill(args)
       when 'umask'
         run_umask(args)
+      when 'exec'
+        run_exec(args)
       else
         false
       end
@@ -1650,6 +1652,102 @@ module Rubish
       end
 
       results
+    end
+
+    def self.run_exec(args)
+      # exec [-cl] [-a name] [command [arguments]]
+      # -c: execute command with empty environment
+      # -l: place dash at beginning of argv[0] (login shell)
+      # -a name: pass name as argv[0]
+      # If no command, exec succeeds but does nothing (useful for redirects)
+
+      clear_env = false
+      login_shell = false
+      argv0 = nil
+      cmd_args = []
+      i = 0
+
+      while i < args.length
+        arg = args[i]
+
+        if arg == '-c' && cmd_args.empty?
+          clear_env = true
+          i += 1
+        elsif arg == '-l' && cmd_args.empty?
+          login_shell = true
+          i += 1
+        elsif arg == '-a' && cmd_args.empty? && i + 1 < args.length
+          argv0 = args[i + 1]
+          i += 2
+        elsif arg == '-cl' || arg == '-lc' && cmd_args.empty?
+          clear_env = true
+          login_shell = true
+          i += 1
+        elsif arg.start_with?('-') && cmd_args.empty? && arg.length > 1
+          # Handle combined flags like -cla
+          arg[1..].each_char do |c|
+            case c
+            when 'c' then clear_env = true
+            when 'l' then login_shell = true
+            else
+              puts "exec: -#{c}: invalid option"
+              return false
+            end
+          end
+          i += 1
+        else
+          cmd_args = args[i..]
+          break
+        end
+      end
+
+      # If no command, just return success (useful for fd redirects only)
+      return true if cmd_args.empty?
+
+      command = cmd_args.first
+      command_args = cmd_args[1..] || []
+
+      # Find the command in PATH if not absolute
+      unless command.include?('/')
+        path = find_in_path(command)
+        if path
+          command = path
+        else
+          puts "exec: #{cmd_args.first}: not found"
+          return false
+        end
+      end
+
+      # Prepare argv[0]
+      if argv0
+        exec_argv0 = argv0
+      elsif login_shell
+        exec_argv0 = "-#{File.basename(command)}"
+      else
+        exec_argv0 = File.basename(command)
+      end
+
+      # Run exit traps before exec
+      run_exit_traps
+
+      # Execute
+      begin
+        if clear_env
+          # Clear environment and exec
+          exec([command, exec_argv0], *command_args, unsetenv_others: true)
+        else
+          exec([command, exec_argv0], *command_args)
+        end
+      rescue Errno::ENOENT
+        puts "exec: #{cmd_args.first}: not found"
+        false
+      rescue Errno::EACCES
+        puts "exec: #{cmd_args.first}: permission denied"
+        false
+      rescue => e
+        puts "exec: #{e.message}"
+        false
+      end
     end
 
     def self.run_umask(args)
