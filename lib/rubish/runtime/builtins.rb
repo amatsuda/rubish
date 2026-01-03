@@ -2,7 +2,7 @@
 
 module Rubish
   module Builtins
-    COMMANDS = %w(cd exit jobs fg bg export pwd history alias unalias source . shift set return read echo test [ break continue pushd popd dirs trap getopts local unset readonly declare typeset let printf type which true false : eval command builtin wait kill umask exec times hash).freeze
+    COMMANDS = %w(cd exit jobs fg bg export pwd history alias unalias source . shift set return read echo test [ break continue pushd popd dirs trap getopts local unset readonly declare typeset let printf type which true false : eval command builtin wait kill umask exec times hash disown).freeze
 
     @aliases = {}
     @dir_stack = []
@@ -119,6 +119,8 @@ module Rubish
         run_times(args)
       when 'hash'
         run_hash(args)
+      when 'disown'
+        run_disown(args)
       else
         false
       end
@@ -1657,6 +1659,100 @@ module Rubish
       end
 
       results
+    end
+
+    def self.run_disown(args)
+      # disown [-h] [-ar] [jobspec ...]
+      # -h: mark jobs so SIGHUP is not sent (but keep in table)
+      # -a: remove all jobs
+      # -r: remove only running jobs
+      # Without args: removes current job
+
+      mark_nohup = false
+      all_jobs = false
+      running_only = false
+      job_specs = []
+
+      args.each do |arg|
+        if arg.start_with?('-') && job_specs.empty?
+          arg[1..].each_char do |c|
+            case c
+            when 'h' then mark_nohup = true
+            when 'a' then all_jobs = true
+            when 'r' then running_only = true
+            else
+              puts "disown: -#{c}: invalid option"
+              return false
+            end
+          end
+        else
+          job_specs << arg
+        end
+      end
+
+      manager = JobManager.instance
+
+      if all_jobs
+        # Remove/mark all jobs
+        jobs = manager.all
+        jobs = jobs.select(&:running?) if running_only
+        jobs.each do |job|
+          if mark_nohup
+            job.status = :nohup
+          else
+            manager.remove(job.id)
+          end
+        end
+        return true
+      end
+
+      if job_specs.empty?
+        # Remove current job
+        job = manager.last
+        unless job
+          puts 'disown: current: no such job'
+          return false
+        end
+        if mark_nohup
+          job.status = :nohup
+        else
+          manager.remove(job.id)
+        end
+        return true
+      end
+
+      # Remove specified jobs
+      all_found = true
+      job_specs.each do |spec|
+        job = nil
+
+        if spec.start_with?('%')
+          job_id = spec[1..].to_i
+          job = manager.get(job_id)
+        else
+          # Try as PID
+          pid = spec.to_i
+          job = manager.find_by_pid(pid)
+        end
+
+        unless job
+          puts "disown: #{spec}: no such job"
+          all_found = false
+          next
+        end
+
+        if running_only && !job.running?
+          next
+        end
+
+        if mark_nohup
+          job.status = :nohup
+        else
+          manager.remove(job.id)
+        end
+      end
+
+      all_found
     end
 
     def self.run_hash(args)
