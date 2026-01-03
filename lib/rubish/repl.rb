@@ -21,6 +21,7 @@ module Rubish
       Builtins.function_checker = ->(name) { @functions.key?(name) }
       Builtins.function_remover = ->(name) { @functions.delete(name) }
       Builtins.heredoc_content_setter = ->(content) { @heredoc_content = content }
+      Builtins.command_executor = ->(args) { execute_command_directly(args) }
       # Set up Command class to handle functions in pipelines
       Command.function_checker = ->(name) { @functions.key?(name) }
       Command.function_caller = ->(name, args) { call_function(name, args) }
@@ -131,6 +132,25 @@ module Rubish
       @last_status = extract_exit_status(result)
     ensure
       @heredoc_content = nil
+    end
+
+    def execute_command_directly(args)
+      # Execute a command directly without checking functions or aliases
+      return true if args.empty?
+
+      name = args.first
+      cmd_args = args[1..] || []
+
+      # Check if it's a builtin first
+      if Builtins.builtin?(name)
+        Builtins.run(name, cmd_args)
+      else
+        # Run as external command
+        cmd = Command.new(name, *cmd_args)
+        cmd.run
+        @last_status = cmd.success? ? 0 : 1
+        cmd.success?
+      end
     end
 
     def call_function(name, args)
@@ -1396,7 +1416,7 @@ module Rubish
     end
 
     # Builtins that must run in current process (affect shell state)
-    PROCESS_BUILTINS = %w[cd export set shift source . return exit break continue local unset readonly declare typeset let eval].freeze
+    PROCESS_BUILTINS = %w[cd export set shift source . return exit break continue local unset readonly declare typeset let eval command].freeze
 
     def __run_cmd(&block)
       result = block.call

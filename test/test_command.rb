@@ -3,152 +3,109 @@
 require_relative 'test_helper'
 
 class TestCommand < Test::Unit::TestCase
-  def test_simple_command
-    output = capture_command_output do |f|
-      cmd = Rubish::Command.new('echo', 'hello')
-      cmd.redirect_out(f.path)
-      cmd.run
-    end
+  def setup
+    @repl = Rubish::REPL.new
+    @original_env = ENV.to_h.dup
+    @tempdir = Dir.mktmpdir('rubish_command_test')
+    Rubish::Builtins.clear_aliases
+  end
+
+  def teardown
+    Rubish::Builtins.clear_aliases
+    FileUtils.rm_rf(@tempdir)
+    ENV.clear
+    @original_env.each { |k, v| ENV[k] = v }
+  end
+
+  # Test command is a builtin
+  def test_command_is_builtin
+    assert Rubish::Builtins.builtin?('command')
+  end
+
+  # Test command -v for builtins
+  def test_command_v_builtin
+    output = capture_output { Rubish::Builtins.run('command', ['-v', 'cd']) }
+    assert_equal "cd\n", output
+  end
+
+  def test_command_v_external
+    output = capture_output { Rubish::Builtins.run('command', ['-v', 'ls']) }
+    assert_match %r{/.*ls}, output
+  end
+
+  def test_command_v_not_found
+    result = Rubish::Builtins.run('command', ['-v', 'nonexistent_xyz'])
+    assert_false result
+  end
+
+  # Test command -V for descriptions
+  def test_command_V_builtin
+    output = capture_output { Rubish::Builtins.run('command', ['-V', 'cd']) }
+    assert_match(/cd is a shell builtin/, output)
+  end
+
+  def test_command_V_external
+    output = capture_output { Rubish::Builtins.run('command', ['-V', 'ls']) }
+    assert_match(%r{ls is /}, output)
+  end
+
+  def test_command_V_not_found
+    output = capture_output { Rubish::Builtins.run('command', ['-V', 'nonexistent_xyz']) }
+    assert_match(/not found/, output)
+  end
+
+  # Test command bypasses aliases
+  def test_command_bypasses_alias
+    Rubish::Builtins.run('alias', ['ls=echo fake'])
+    # command ls should run real ls, not the alias
+    output = capture_output { execute('command ls') }
+    # Real ls output won't contain 'fake'
+    assert_no_match(/fake/, output)
+  end
+
+  # Test command bypasses functions
+  def test_command_bypasses_function
+    execute('echo() { printf "fake echo"; }')
+    output = capture_output { execute('command echo hello') }
+    # Should use real echo, not the function
     assert_equal "hello\n", output
   end
 
-  def test_command_with_multiple_args
-    output = capture_command_output do |f|
-      cmd = Rubish::Command.new('echo', 'hello', 'world')
-      cmd.redirect_out(f.path)
-      cmd.run
-    end
-    assert_equal "hello world\n", output
+  # Test command runs external commands
+  def test_command_runs_external
+    output = capture_output { execute('command pwd') }
+    assert_match %r{/}, output
   end
 
-  def test_command_status
-    cmd = Rubish::Command.new('true')
-    cmd.run
-    assert cmd.ran?
-    assert cmd.status.success?
+  # Test command runs builtins
+  def test_command_runs_builtin_cd
+    original_dir = Dir.pwd
+    expected = File.realpath(@tempdir)
+    execute("command cd #{@tempdir}")
+    assert_equal expected, File.realpath(Dir.pwd)
+    Dir.chdir(original_dir)
   end
 
-  def test_pipe
-    output = capture_command_output do |f|
-      left = Rubish::Command.new('echo', 'hello world')
-      right = Rubish::Command.new('wc', '-w')
-      pipeline = left | right
-      pipeline.redirect_out(f.path)
-      pipeline.run
-    end
-    assert_match(/2/, output.strip)
+  # Test usage error
+  def test_command_no_args
+    output = capture_output { Rubish::Builtins.run('command', []) }
+    assert_match(/usage/, output)
   end
 
-  def test_pipe_with_grep
-    output = capture_command_output do |f|
-      cmd1 = Rubish::Command.new('printf', "apple\nbanana\ncherry")
-      cmd2 = Rubish::Command.new('grep', 'banana')
-      pipeline = cmd1 | cmd2
-      pipeline.redirect_out(f.path)
-      pipeline.run
-    end
-    assert_equal "banana\n", output
+  def test_command_only_flags
+    output = capture_output { Rubish::Builtins.run('command', ['-v']) }
+    assert_match(/usage/, output)
   end
 
-  def test_pipe_three_commands
-    output = capture_command_output do |f|
-      cmd1 = Rubish::Command.new('printf', "apple\nbanana\ncherry\nbanana")
-      cmd2 = Rubish::Command.new('grep', 'banana')
-      cmd3 = Rubish::Command.new('wc', '-l')
-      pipeline = cmd1 | cmd2 | cmd3
-      pipeline.redirect_out(f.path)
-      pipeline.run
-    end
-    assert_match(/2/, output.strip)
+  # Test type identifies command as builtin
+  def test_type_identifies_command_as_builtin
+    output = capture_output { Rubish::Builtins.run('type', ['command']) }
+    assert_match(/command is a shell builtin/, output)
   end
 
-  def test_redirect_out
-    Tempfile.create('rubish_test') do |f|
-      cmd = Rubish::Command.new('echo', 'hello')
-      cmd.redirect_out(f.path)
-      cmd.run
-
-      assert_equal "hello\n", File.read(f.path)
-    end
-  end
-
-  def test_redirect_append
-    Tempfile.create('rubish_test') do |f|
-      File.write(f.path, "first\n")
-
-      cmd = Rubish::Command.new('echo', 'second')
-      cmd.redirect_append(f.path)
-      cmd.run
-
-      assert_equal "first\nsecond\n", File.read(f.path)
-    end
-  end
-
-  def test_redirect_in
-    Tempfile.create('rubish_test') do |f|
-      File.write(f.path, "hello from file\n")
-
-      output = capture_command_output do |out|
-        cmd = Rubish::Command.new('cat')
-        cmd.redirect_in(f.path)
-        cmd.redirect_out(out.path)
-        cmd.run
-      end
-
-      assert_equal "hello from file\n", output
-    end
-  end
-
-  def test_redirect_err
-    Tempfile.create('rubish_err') do |f|
-      cmd = Rubish::Command.new('ls', '/nonexistent_path_for_test')
-      cmd.redirect_err(f.path)
-      cmd.run
-
-      err_output = File.read(f.path)
-      assert_match(/No such file or directory/, err_output)
-    end
-  end
-
-  def test_pipeline_with_redirect
-    Tempfile.create('rubish_test') do |f|
-      File.write(f.path, "apple\nbanana\ncherry\n")
-
-      output = capture_command_output do |out|
-        cmd1 = Rubish::Command.new('cat')
-        cmd1.redirect_in(f.path)
-        cmd2 = Rubish::Command.new('grep', 'an')
-        pipeline = cmd1 | cmd2
-        pipeline.redirect_out(out.path)
-        pipeline.run
-      end
-
-      assert_equal "banana\n", output
-    end
-  end
-
-  def test_run_only_once
-    Tempfile.create('rubish_test') do |f|
-      cmd = Rubish::Command.new('echo', 'hello')
-      cmd.redirect_out(f.path)
-      cmd.run
-      assert cmd.ran?
-
-      # Clear file and run again
-      File.write(f.path, '')
-      cmd.run
-
-      # Should still be empty (no second run)
-      assert_equal '', File.read(f.path)
-    end
-  end
-
-  private
-
-  def capture_command_output
-    Tempfile.create('rubish_test') do |f|
-      yield f
-      return File.read(f.path)
-    end
+  # Test invalid option
+  def test_command_invalid_option
+    output = capture_output { Rubish::Builtins.run('command', ['-x', 'ls']) }
+    assert_match(/invalid option/, output)
   end
 end

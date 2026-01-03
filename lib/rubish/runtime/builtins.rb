@@ -2,7 +2,7 @@
 
 module Rubish
   module Builtins
-    COMMANDS = %w(cd exit jobs fg bg export pwd history alias unalias source . shift set return read echo test [ break continue pushd popd dirs trap getopts local unset readonly declare typeset let printf type which true false : eval).freeze
+    COMMANDS = %w(cd exit jobs fg bg export pwd history alias unalias source . shift set return read echo test [ break continue pushd popd dirs trap getopts local unset readonly declare typeset let printf type which true false : eval command).freeze
 
     @aliases = {}
     @dir_stack = []
@@ -19,10 +19,11 @@ module Rubish
     @function_checker = nil
     @function_remover = nil
     @heredoc_content_setter = nil
+    @command_executor = nil  # Executor that bypasses functions/aliases
 
     class << self
       attr_reader :aliases, :dir_stack, :traps, :local_scope_stack, :readonly_vars, :var_attributes
-      attr_accessor :executor, :script_name_getter, :script_name_setter, :positional_params_getter, :positional_params_setter, :function_checker, :function_remover, :heredoc_content_setter
+      attr_accessor :executor, :script_name_getter, :script_name_setter, :positional_params_getter, :positional_params_setter, :function_checker, :function_remover, :heredoc_content_setter, :command_executor
     end
 
     def self.builtin?(name)
@@ -101,6 +102,8 @@ module Rubish
         false
       when 'eval'
         run_eval(args)
+      when 'command'
+        run_command(args)
       else
         false
       end
@@ -1639,6 +1642,92 @@ module Rubish
       end
 
       results
+    end
+
+    def self.run_command(args)
+      # command [-pVv] command [arguments...]
+      # -p: use default PATH to search for command
+      # -v: print pathname or command type (similar to type -t)
+      # -V: print description (similar to type)
+      # Without flags: execute command bypassing functions and aliases
+
+      if args.empty?
+        puts 'command: usage: command [-pVv] command [arguments]'
+        return false
+      end
+
+      use_default_path = false
+      print_path = false
+      print_description = false
+      cmd_args = []
+
+      i = 0
+      while i < args.length
+        arg = args[i]
+        if arg.start_with?('-') && arg.length > 1 && cmd_args.empty?
+          arg[1..].each_char do |c|
+            case c
+            when 'p' then use_default_path = true
+            when 'v' then print_path = true
+            when 'V' then print_description = true
+            else
+              puts "command: -#{c}: invalid option"
+              return false
+            end
+          end
+        else
+          cmd_args = args[i..]
+          break
+        end
+        i += 1
+      end
+
+      if cmd_args.empty?
+        puts 'command: usage: command [-pVv] command [arguments]'
+        return false
+      end
+
+      cmd_name = cmd_args.first
+
+      # Handle -v flag: print path or type
+      if print_path
+        if builtin?(cmd_name)
+          puts cmd_name
+          return true
+        end
+        path = find_in_path(cmd_name)
+        if path
+          puts path
+          return true
+        end
+        return false
+      end
+
+      # Handle -V flag: print description
+      if print_description
+        if builtin?(cmd_name)
+          puts "#{cmd_name} is a shell builtin"
+          return true
+        end
+        path = find_in_path(cmd_name)
+        if path
+          puts "#{cmd_name} is #{path}"
+          return true
+        end
+        puts "command: #{cmd_name}: not found"
+        return false
+      end
+
+      # Execute command bypassing functions and aliases
+      if @command_executor
+        @command_executor.call(cmd_args)
+        true
+      else
+        # Fallback: just use regular executor with the command
+        # This won't bypass functions but at least runs something
+        @executor&.call(cmd_args.join(' '))
+        true
+      end
     end
 
     def self.run_eval(args)
