@@ -2,7 +2,7 @@
 
 module Rubish
   module Builtins
-    COMMANDS = %w(cd exit jobs fg bg export pwd history alias unalias source . shift set return read echo test [ break continue pushd popd dirs trap getopts local unset readonly declare typeset let printf type which true false : eval command builtin wait kill umask exec times hash disown ulimit suspend).freeze
+    COMMANDS = %w(cd exit jobs fg bg export pwd history alias unalias source . shift set return read echo test [ break continue pushd popd dirs trap getopts local unset readonly declare typeset let printf type which true false : eval command builtin wait kill umask exec times hash disown ulimit suspend shopt).freeze
 
     @aliases = {}
     @dir_stack = []
@@ -12,6 +12,7 @@ module Rubish
     @readonly_vars = {}  # Hash of readonly variable names to their values
     @var_attributes = {}  # Hash of variable names to Set of attributes (:integer, :lowercase, :uppercase, :export)
     @command_hash = {}  # Hash of command names to their cached paths
+    @shell_options = {}  # Hash of shell option names to boolean values
     @executor = nil
     @script_name_getter = nil
     @script_name_setter = nil
@@ -23,9 +24,36 @@ module Rubish
     @command_executor = nil  # Executor that bypasses functions/aliases
 
     class << self
-      attr_reader :aliases, :dir_stack, :traps, :local_scope_stack, :readonly_vars, :var_attributes, :command_hash
+      attr_reader :aliases, :dir_stack, :traps, :local_scope_stack, :readonly_vars, :var_attributes, :command_hash, :shell_options
       attr_accessor :executor, :script_name_getter, :script_name_setter, :positional_params_getter, :positional_params_setter, :function_checker, :function_remover, :heredoc_content_setter, :command_executor
     end
+
+    # Valid shell options with their default values and descriptions
+    SHELL_OPTIONS = {
+      'autocd' => [false, 'cd to a directory when typed as command'],
+      'cdspell' => [false, 'correct minor spelling errors in cd'],
+      'checkhash' => [false, 'check hash table before executing'],
+      'checkjobs' => [false, 'check for running jobs before exit'],
+      'cmdhist' => [true, 'save multi-line commands as single history entry'],
+      'dotglob' => [false, 'include dotfiles in pathname expansion'],
+      'expand_aliases' => [true, 'expand aliases'],
+      'extglob' => [false, 'enable extended pattern matching'],
+      'globstar' => [false, 'enable ** for recursive globbing'],
+      'histappend' => [false, 'append to history file'],
+      'histreedit' => [false, 'allow re-editing of failed history substitution'],
+      'histverify' => [false, 'verify history substitution before executing'],
+      'hostcomplete' => [true, 'attempt hostname completion'],
+      'interactive_comments' => [true, 'allow comments in interactive shell'],
+      'lithist' => [false, 'preserve newlines in multi-line history'],
+      'login_shell' => [false, 'shell is a login shell (read-only)'],
+      'nocaseglob' => [false, 'case-insensitive pathname expansion'],
+      'nocasematch' => [false, 'case-insensitive pattern matching'],
+      'nullglob' => [false, 'patterns matching nothing expand to null'],
+      'progcomp' => [true, 'enable programmable completion'],
+      'promptvars' => [true, 'expand variables in prompt strings'],
+      'sourcepath' => [true, 'use PATH to find sourced files'],
+      'xpg_echo' => [false, 'echo expands backslash-escape sequences']
+    }.freeze
 
     def self.builtin?(name)
       COMMANDS.include?(name)
@@ -125,6 +153,8 @@ module Rubish
         run_ulimit(args)
       when 'suspend'
         run_suspend(args)
+      when 'shopt'
+        run_shopt(args)
       else
         false
       end
@@ -1964,6 +1994,143 @@ module Rubish
         true
       rescue Errno::EPERM
         puts 'suspend: cannot suspend'
+        false
+      end
+    end
+
+    def self.run_shopt(args)
+      # shopt [-pqsu] [-o] [optname ...]
+      # -s: enable (set) options
+      # -u: disable (unset) options
+      # -p: print in reusable format
+      # -q: quiet mode, return status only
+      # -o: restrict to set -o options (not implemented)
+
+      set_mode = false
+      unset_mode = false
+      print_mode = false
+      quiet_mode = false
+      opt_names = []
+
+      i = 0
+      while i < args.length
+        arg = args[i]
+
+        if arg.start_with?('-') && opt_names.empty?
+          arg[1..].each_char do |c|
+            case c
+            when 's'
+              set_mode = true
+            when 'u'
+              unset_mode = true
+            when 'p'
+              print_mode = true
+            when 'q'
+              quiet_mode = true
+            when 'o'
+              # -o is for set -o options, we'll just ignore it
+              nil
+            else
+              puts "shopt: -#{c}: invalid option"
+              return false
+            end
+          end
+        else
+          opt_names << arg
+        end
+        i += 1
+      end
+
+      # Can't use both -s and -u
+      if set_mode && unset_mode
+        puts 'shopt: cannot set and unset options simultaneously'
+        return false
+      end
+
+      # Helper to get current value of an option
+      get_option = lambda do |name|
+        if @shell_options.key?(name)
+          @shell_options[name]
+        elsif SHELL_OPTIONS.key?(name)
+          SHELL_OPTIONS[name][0]  # default value
+        else
+          nil
+        end
+      end
+
+      # Helper to print an option
+      print_option = lambda do |name, value|
+        unless quiet_mode
+          if print_mode
+            puts "shopt #{value ? '-s' : '-u'} #{name}"
+          else
+            puts "#{name}\t\t#{value ? 'on' : 'off'}"
+          end
+        end
+      end
+
+      # No options specified: list all or specified options
+      unless set_mode || unset_mode
+        if opt_names.empty?
+          # List all options
+          SHELL_OPTIONS.each_key do |name|
+            value = get_option.call(name)
+            print_option.call(name, value)
+          end
+          return true
+        else
+          # List specified options
+          all_on = true
+          opt_names.each do |name|
+            unless SHELL_OPTIONS.key?(name)
+              puts "shopt: #{name}: invalid shell option name" unless quiet_mode
+              return false
+            end
+            value = get_option.call(name)
+            print_option.call(name, value)
+            all_on = false unless value
+          end
+          return all_on  # Return status indicates if all are on
+        end
+      end
+
+      # Set or unset options
+      if opt_names.empty?
+        # List options that are on (with -s) or off (with -u)
+        SHELL_OPTIONS.each_key do |name|
+          value = get_option.call(name)
+          if (set_mode && value) || (unset_mode && !value)
+            print_option.call(name, value)
+          end
+        end
+        return true
+      end
+
+      # Set or unset specified options
+      opt_names.each do |name|
+        unless SHELL_OPTIONS.key?(name)
+          puts "shopt: #{name}: invalid shell option name"
+          return false
+        end
+
+        # Check for read-only options
+        if name == 'login_shell'
+          puts "shopt: #{name}: cannot set option"
+          return false
+        end
+
+        @shell_options[name] = set_mode
+      end
+
+      true
+    end
+
+    def self.shopt_enabled?(name)
+      if @shell_options.key?(name)
+        @shell_options[name]
+      elsif SHELL_OPTIONS.key?(name)
+        SHELL_OPTIONS[name][0]
+      else
         false
       end
     end
