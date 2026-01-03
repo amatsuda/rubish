@@ -2,7 +2,7 @@
 
 module Rubish
   module Builtins
-    COMMANDS = %w(cd exit jobs fg bg export pwd history alias unalias source . shift set return read echo test [ break continue pushd popd dirs trap getopts local unset readonly declare typeset let printf type which true false : eval command builtin).freeze
+    COMMANDS = %w(cd exit jobs fg bg export pwd history alias unalias source . shift set return read echo test [ break continue pushd popd dirs trap getopts local unset readonly declare typeset let printf type which true false : eval command builtin wait).freeze
 
     @aliases = {}
     @dir_stack = []
@@ -106,6 +106,8 @@ module Rubish
         run_command(args)
       when 'builtin'
         run_builtin(args)
+      when 'wait'
+        run_wait(args)
       else
         false
       end
@@ -1644,6 +1646,81 @@ module Rubish
       end
 
       results
+    end
+
+    def self.run_wait(args)
+      # wait [pid|%jobspec ...]
+      # Wait for background jobs to complete
+      # With no args, waits for all background jobs
+      # Returns exit status of last job waited for
+
+      manager = JobManager.instance
+      last_status = true
+
+      if args.empty?
+        # Wait for all background jobs
+        jobs = manager.active
+        if jobs.empty?
+          return true
+        end
+
+        jobs.each do |job|
+          begin
+            _, status = Process.wait2(job.pid)
+            manager.update_status(job.pid, status)
+            manager.remove(job.id)
+            last_status = status.success?
+          rescue Errno::ECHILD
+            # Process already gone
+            manager.remove(job.id)
+          end
+        end
+      else
+        # Wait for specific jobs
+        args.each do |arg|
+          job = nil
+
+          if arg.start_with?('%')
+            # Job spec
+            job_id = arg[1..].to_i
+            job = manager.get(job_id)
+            unless job
+              puts "wait: %#{job_id}: no such job"
+              last_status = false
+              next
+            end
+          else
+            # PID
+            pid = arg.to_i
+            job = manager.find_by_pid(pid)
+            unless job
+              # Try waiting for any child with this PID
+              begin
+                _, status = Process.wait2(pid)
+                last_status = status.success?
+                next
+              rescue Errno::ECHILD
+                puts "wait: pid #{pid} is not a child of this shell"
+                last_status = false
+                next
+              end
+            end
+          end
+
+          if job
+            begin
+              _, status = Process.wait2(job.pid)
+              manager.update_status(job.pid, status)
+              manager.remove(job.id)
+              last_status = status.success?
+            rescue Errno::ECHILD
+              manager.remove(job.id)
+            end
+          end
+        end
+      end
+
+      last_status
     end
 
     def self.run_builtin(args)
