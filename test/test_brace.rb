@@ -57,6 +57,32 @@ class TestBrace < Test::Unit::TestCase
     assert_equal ['-2', '-1', '0', '1', '2'], result
   end
 
+  def test_expand_braces_numeric_sequence_with_step
+    result = @repl.send(:expand_braces, '{1..10..2}')
+    assert_equal ['1', '3', '5', '7', '9'], result
+  end
+
+  def test_expand_braces_numeric_sequence_with_step_reverse
+    result = @repl.send(:expand_braces, '{10..1..2}')
+    assert_equal ['10', '8', '6', '4', '2'], result
+  end
+
+  def test_expand_braces_numeric_sequence_with_step_3
+    result = @repl.send(:expand_braces, '{0..10..3}')
+    assert_equal ['0', '3', '6', '9'], result
+  end
+
+  def test_expand_braces_numeric_sequence_negative_step_ignored
+    # Step sign is ignored, direction comes from start/end
+    result = @repl.send(:expand_braces, '{1..5..-1}')
+    assert_equal ['1', '2', '3', '4', '5'], result
+  end
+
+  def test_expand_braces_numeric_sequence_zero_padded_with_step
+    result = @repl.send(:expand_braces, '{01..10..3}')
+    assert_equal ['01', '04', '07', '10'], result
+  end
+
   def test_expand_braces_letter_sequence
     result = @repl.send(:expand_braces, '{a..e}')
     assert_equal ['a', 'b', 'c', 'd', 'e'], result
@@ -70,6 +96,21 @@ class TestBrace < Test::Unit::TestCase
   def test_expand_braces_letter_sequence_uppercase
     result = @repl.send(:expand_braces, '{A..E}')
     assert_equal ['A', 'B', 'C', 'D', 'E'], result
+  end
+
+  def test_expand_braces_letter_sequence_with_step
+    result = @repl.send(:expand_braces, '{a..z..5}')
+    assert_equal ['a', 'f', 'k', 'p', 'u', 'z'], result
+  end
+
+  def test_expand_braces_letter_sequence_with_step_reverse
+    result = @repl.send(:expand_braces, '{z..a..5}')
+    assert_equal ['z', 'u', 'p', 'k', 'f', 'a'], result
+  end
+
+  def test_expand_braces_letter_sequence_with_step_2
+    result = @repl.send(:expand_braces, '{a..g..2}')
+    assert_equal ['a', 'c', 'e', 'g'], result
   end
 
   def test_expand_braces_multiple_groups
@@ -206,5 +247,44 @@ class TestBrace < Test::Unit::TestCase
 
     execute("source #{script}")
     assert_equal "1\n2\n3\n", File.read(output_file)
+  end
+
+  # Step/increment execution tests
+  def test_echo_brace_numeric_step
+    execute("echo {1..10..2} > #{output_file}")
+    assert_equal "1 3 5 7 9\n", File.read(output_file)
+  end
+
+  def test_echo_brace_numeric_step_reverse
+    execute("echo {10..1..3} > #{output_file}")
+    assert_equal "10 7 4 1\n", File.read(output_file)
+  end
+
+  def test_echo_brace_letter_step
+    execute("echo {a..z..5} > #{output_file}")
+    assert_equal "a f k p u z\n", File.read(output_file)
+  end
+
+  def test_echo_brace_zero_padded_step
+    execute("echo {001..010..2} > #{output_file}")
+    assert_equal "001 003 005 007 009\n", File.read(output_file)
+  end
+
+  def test_brace_step_in_for_loop
+    script = File.join(@tempdir, 'brace_step_for.sh')
+    File.write(script, <<~SCRIPT)
+      for i in {0..10..2}
+      do
+        echo $i >> #{output_file}
+      done
+    SCRIPT
+
+    execute("source #{script}")
+    assert_equal "0\n2\n4\n6\n8\n10\n", File.read(output_file)
+  end
+
+  def test_brace_step_with_prefix_suffix
+    execute("echo file{1..5..2}.txt > #{output_file}")
+    assert_equal "file1.txt file3.txt file5.txt\n", File.read(output_file)
   end
 end

@@ -1290,9 +1290,13 @@ module Rubish
             suffix = str[i + 1..]
             content = str[start_idx + 1...i]
 
-            # Check if it's a sequence {a..b} or a list {a,b,c}
-            expansions = if content =~ /\A(-?\d+)\.\.(-?\d+)\z/
+            # Check if it's a sequence {a..b}, {a..b..step} or a list {a,b,c}
+            expansions = if content =~ /\A(-?\d+)\.\.(-?\d+)\.\.(-?\d+)\z/
+                           expand_numeric_sequence($1, $2, $3.to_i)
+                         elsif content =~ /\A(-?\d+)\.\.(-?\d+)\z/
                            expand_numeric_sequence($1, $2)
+                         elsif content =~ /\A([a-zA-Z])\.\.([a-zA-Z])\.\.(-?\d+)\z/
+                           expand_letter_sequence($1, $2, $3.to_i)
                          elsif content =~ /\A([a-zA-Z])\.\.([a-zA-Z])\z/
                            expand_letter_sequence($1, $2)
                          elsif content.include?(',')
@@ -1318,7 +1322,7 @@ module Rubish
       [str]
     end
 
-    def expand_numeric_sequence(start_str, end_str)
+    def expand_numeric_sequence(start_str, end_str, step = nil)
       start_val = start_str.to_i
       end_val = end_str.to_i
 
@@ -1331,8 +1335,27 @@ module Rubish
                 0
               end
 
-      range = start_val <= end_val ? (start_val..end_val) : (end_val..start_val).to_a.reverse
-      range.map do |n|
+      # Determine step (use absolute value, direction is determined by start/end)
+      step = step&.abs || 1
+      step = 1 if step == 0  # Prevent infinite loop
+
+      # Generate sequence
+      result = []
+      if start_val <= end_val
+        n = start_val
+        while n <= end_val
+          result << n
+          n += step
+        end
+      else
+        n = start_val
+        while n >= end_val
+          result << n
+          n -= step
+        end
+      end
+
+      result.map do |n|
         if width > 0
           format("%0#{width}d", n)
         else
@@ -1341,12 +1364,25 @@ module Rubish
       end
     end
 
-    def expand_letter_sequence(start_char, end_char)
+    def expand_letter_sequence(start_char, end_char, step = nil)
+      step = step&.abs || 1
+      step = 1 if step == 0  # Prevent infinite loop
+
+      result = []
       if start_char <= end_char
-        (start_char..end_char).to_a
+        c = start_char
+        while c <= end_char
+          result << c
+          c = (c.ord + step).chr
+        end
       else
-        (end_char..start_char).to_a.reverse
+        c = start_char
+        while c >= end_char
+          result << c
+          c = (c.ord - step).chr
+        end
       end
+      result
     end
 
     def expand_brace_list(content)
