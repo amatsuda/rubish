@@ -111,6 +111,13 @@ module Rubish
         @heredoc_content = collect_heredoc_content(heredoc.delimiter, heredoc.strip_tabs)
       end
 
+      # Check for bare variable assignment (VAR=value or VAR=value VAR2=value2 ...)
+      if ast.is_a?(AST::Command) && bare_assignment?(ast.name) && ast.args.all? { |a| bare_assignment?(a) }
+        handle_bare_assignments([ast.name] + ast.args)
+        @last_status = 0
+        return
+      end
+
       # Check for builtins (simple command only)
       if ast.is_a?(AST::Command) && Builtins.builtin?(ast.name)
         # Expand variables in args for builtins
@@ -185,6 +192,38 @@ module Rubish
 
     def expand_args_for_builtin(args)
       args.flat_map { |arg| expand_single_arg_with_brace_and_glob(arg) }
+    end
+
+    def bare_assignment?(str)
+      # Check if string is a bare variable assignment: VAR=value
+      str.is_a?(String) && str =~ /\A[a-zA-Z_][a-zA-Z0-9_]*=/
+    end
+
+    def handle_bare_assignments(assignments)
+      assignments.each do |assignment|
+        if assignment =~ /\A([a-zA-Z_][a-zA-Z0-9_]*)=(.*)\z/
+          var_name = $1
+          value = $2
+          expanded_value = expand_assignment_value(value)
+          ENV[var_name] = expanded_value
+        end
+      end
+    end
+
+    def expand_assignment_value(value)
+      return '' if value.nil? || value.empty?
+
+      # Handle quoted strings
+      if value.start_with?("'") && value.end_with?("'")
+        return value[1...-1]
+      end
+
+      if value.start_with?('"') && value.end_with?('"')
+        return expand_string_content(value[1...-1])
+      end
+
+      # Expand variables and command substitution in unquoted values
+      expand_string_content(value)
     end
 
     def expand_single_arg_with_brace_and_glob(arg)
