@@ -153,6 +153,9 @@ module Rubish
       # Check for builtins (simple command only)
       if ast.is_a?(AST::Command) && Builtins.builtin?(ast.name)
         begin
+          # Run DEBUG trap before command
+          Builtins.run_debug_trap
+
           # Expand variables in args for builtins
           expanded_args = expand_args_for_builtin(ast.args)
           result = Builtins.run(ast.name, expanded_args)
@@ -169,6 +172,9 @@ module Rubish
       # Check for user-defined functions (simple command only)
       if ast.is_a?(AST::Command) && @functions.key?(ast.name)
         begin
+          # Run DEBUG trap before function call
+          Builtins.run_debug_trap
+
           expanded_args = expand_args_for_builtin(ast.args)
           result = call_function(ast.name, expanded_args)
           @last_status = result ? 0 : 1
@@ -245,6 +251,12 @@ module Rubish
         saved_err_trap = Builtins.save_and_clear_err_trap
       end
 
+      # If functrace is not set, DEBUG/RETURN traps are not inherited by functions
+      saved_functrace_traps = nil
+      unless Builtins.set_option?('T')
+        saved_functrace_traps = Builtins.save_and_clear_functrace_traps
+      end
+
       begin
         result = func.call
         # Handle return value
@@ -257,8 +269,14 @@ module Rubish
         # return was called in function
         true
       ensure
+        # Run RETURN trap before leaving function (if functrace is on, trap exists)
+        Builtins.run_return_trap
+
         # Restore ERR trap if we cleared it
         Builtins.restore_err_trap(saved_err_trap) if saved_err_trap
+
+        # Restore DEBUG/RETURN traps if we cleared them
+        Builtins.restore_functrace_traps(saved_functrace_traps) if saved_functrace_traps
 
         # Pop local scope and restore variables
         Builtins.pop_local_scope
@@ -2144,6 +2162,10 @@ module Rubish
 
     def __run_cmd(&block)
       result = block.call
+
+      # Run DEBUG trap before each command
+      Builtins.run_debug_trap
+
       if result.is_a?(Command) && PROCESS_BUILTINS.include?(result.name)
         # Run process-affecting builtins directly in current process
         success = Builtins.run(result.name, result.args)

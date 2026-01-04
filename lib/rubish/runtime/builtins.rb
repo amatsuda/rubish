@@ -365,7 +365,9 @@ module Rubish
     # Signal name mapping
     SIGNALS = {
       'EXIT' => 0,
-      'ERR' => 'ERR',  # Pseudo-signal: triggered on command failure
+      'ERR' => 'ERR',      # Pseudo-signal: triggered on command failure
+      'DEBUG' => 'DEBUG',  # Pseudo-signal: triggered before each command
+      'RETURN' => 'RETURN', # Pseudo-signal: triggered when function/sourced script returns
       'HUP' => 'HUP', 'SIGHUP' => 'HUP',
       'INT' => 'INT', 'SIGINT' => 'INT',
       'QUIT' => 'QUIT', 'SIGQUIT' => 'QUIT',
@@ -463,12 +465,15 @@ module Rubish
       SIGNALS[sig_upper]
     end
 
+    # Pseudo-signals that are not real OS signals
+    PSEUDO_SIGNALS = [0, 'ERR', 'DEBUG', 'RETURN'].freeze
+
     def self.set_trap(sig, command)
       # Store the trap command
       @traps[sig] = command
 
-      # Handle EXIT and ERR specially - they're pseudo-signals
-      return if sig == 0 || sig == 'ERR'
+      # Pseudo-signals are handled by the shell, not the OS
+      return if PSEUDO_SIGNALS.include?(sig)
 
       # Save original handler if not already saved
       @original_traps[sig] ||= Signal.trap(sig, 'DEFAULT') rescue nil
@@ -489,8 +494,8 @@ module Rubish
     def self.reset_trap(sig)
       @traps.delete(sig)
 
-      # EXIT and ERR are pseudo-signals, no OS signal to reset
-      return if sig == 0 || sig == 'ERR'
+      # Pseudo-signals have no OS signal to reset
+      return if PSEUDO_SIGNALS.include?(sig)
 
       # Restore original handler
       if @original_traps.key?(sig)
@@ -508,10 +513,18 @@ module Rubish
       @executor&.call(@traps[0]) if @executor
     end
 
+    @in_err_trap = false
+
     def self.run_err_trap
       return unless @traps.key?('ERR')
+      return if @in_err_trap  # Prevent recursion
 
-      @executor&.call(@traps['ERR']) if @executor
+      @in_err_trap = true
+      begin
+        @executor&.call(@traps['ERR']) if @executor
+      ensure
+        @in_err_trap = false
+      end
     end
 
     def self.err_trap_set?
@@ -531,9 +544,61 @@ module Rubish
       end
     end
 
+    @in_debug_trap = false
+
+    def self.run_debug_trap
+      return unless @traps.key?('DEBUG')
+      return if @in_debug_trap  # Prevent recursion
+
+      @in_debug_trap = true
+      begin
+        @executor&.call(@traps['DEBUG']) if @executor
+      ensure
+        @in_debug_trap = false
+      end
+    end
+
+    def self.debug_trap_set?
+      @traps.key?('DEBUG') && !@traps['DEBUG'].empty?
+    end
+
+    @in_return_trap = false
+
+    def self.run_return_trap
+      return unless @traps.key?('RETURN')
+      return if @in_return_trap  # Prevent recursion
+
+      @in_return_trap = true
+      begin
+        @executor&.call(@traps['RETURN']) if @executor
+      ensure
+        @in_return_trap = false
+      end
+    end
+
+    def self.return_trap_set?
+      @traps.key?('RETURN') && !@traps['RETURN'].empty?
+    end
+
+    def self.save_and_clear_functrace_traps
+      # Save DEBUG and RETURN traps and clear them (for functions when functrace is off)
+      saved = {}
+      saved['DEBUG'] = @traps.delete('DEBUG') if @traps.key?('DEBUG')
+      saved['RETURN'] = @traps.delete('RETURN') if @traps.key?('RETURN')
+      saved.empty? ? nil : saved
+    end
+
+    def self.restore_functrace_traps(saved)
+      # Restore previously saved DEBUG and RETURN traps
+      return unless saved
+
+      @traps['DEBUG'] = saved['DEBUG'] if saved['DEBUG']
+      @traps['RETURN'] = saved['RETURN'] if saved['RETURN']
+    end
+
     def self.clear_traps
       @traps.each_key do |sig|
-        reset_trap(sig) unless sig == 0 || sig == 'ERR'
+        reset_trap(sig) unless PSEUDO_SIGNALS.include?(sig)
       end
       @traps.clear
       @original_traps.clear
@@ -1422,6 +1487,7 @@ module Rubish
     @set_options = {
       'e' => false,  # errexit: exit on error
       'E' => false,  # errtrace: ERR trap inherited by functions/subshells
+      'T' => false,  # functrace: DEBUG/RETURN traps inherited by functions/subshells
       'x' => false,  # xtrace: print commands
       'u' => false,  # nounset: error on unset variables
       'n' => false,  # noexec: don't execute (syntax check)
@@ -1499,9 +1565,9 @@ module Rubish
     def self.list_set_options
       # Print current option settings
       long_names = {
-        'e' => 'errexit', 'E' => 'errtrace', 'x' => 'xtrace', 'u' => 'nounset',
-        'n' => 'noexec', 'v' => 'verbose', 'f' => 'noglob',
-        'C' => 'noclobber', 'a' => 'allexport', 'b' => 'notify',
+        'e' => 'errexit', 'E' => 'errtrace', 'T' => 'functrace',
+        'x' => 'xtrace', 'u' => 'nounset', 'n' => 'noexec', 'v' => 'verbose',
+        'f' => 'noglob', 'C' => 'noclobber', 'a' => 'allexport', 'b' => 'notify',
         'h' => 'hashall', 'm' => 'monitor', 'pipefail' => 'pipefail'
       }
       @set_options.each do |flag, value|
@@ -1514,9 +1580,9 @@ module Rubish
 
     def self.set_long_option(name, value)
       mapping = {
-        'errexit' => 'e', 'errtrace' => 'E', 'xtrace' => 'x', 'nounset' => 'u',
-        'noexec' => 'n', 'verbose' => 'v', 'noglob' => 'f',
-        'noclobber' => 'C', 'allexport' => 'a', 'notify' => 'b',
+        'errexit' => 'e', 'errtrace' => 'E', 'functrace' => 'T',
+        'xtrace' => 'x', 'nounset' => 'u', 'noexec' => 'n', 'verbose' => 'v',
+        'noglob' => 'f', 'noclobber' => 'C', 'allexport' => 'a', 'notify' => 'b',
         'hashall' => 'h', 'monitor' => 'm', 'pipefail' => 'pipefail'
       }
       flag = mapping[name]

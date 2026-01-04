@@ -713,4 +713,80 @@ class TestSetOptions < Test::Unit::TestCase
     assert_no_match(/ERR_IN_FUNC/, output)
     execute('trap - ERR')
   end
+
+  # set -T (functrace)
+  def test_set_minus_T_enables_functrace
+    execute('set -T')
+    assert Rubish::Builtins.set_option?('T')
+  end
+
+  def test_set_plus_T_disables_functrace
+    execute('set -T')
+    execute('set +T')
+    assert_false Rubish::Builtins.set_option?('T')
+  end
+
+  def test_set_o_functrace
+    execute('set -o functrace')
+    assert Rubish::Builtins.set_option?('T')
+  end
+
+  def test_debug_trap_runs_before_command
+    execute("trap 'echo DEBUG_RAN' DEBUG")
+    output = capture_stdout do
+      execute('true')
+    end
+    assert_match(/DEBUG_RAN/, output)
+    execute('trap - DEBUG')
+  end
+
+  def test_return_trap_runs_on_function_return
+    execute('set -T')  # Enable functrace so RETURN trap is inherited
+    execute("trap 'echo RETURN_RAN' RETURN")
+    execute('myfunc() { true; }')
+    output = capture_stdout do
+      execute('myfunc')
+    end
+    assert_match(/RETURN_RAN/, output)
+    execute('trap - RETURN')
+    execute('set +T')
+  end
+
+  def test_functrace_debug_trap_inherited_by_function
+    execute('set -T')
+    execute("trap 'echo DEBUG_IN_FUNC' DEBUG")
+    execute('myfunc() { true; }')
+    output = capture_stdout do
+      execute('myfunc')
+    end
+    assert_match(/DEBUG_IN_FUNC/, output)
+    execute('trap - DEBUG')
+    execute('set +T')
+  end
+
+  def test_no_functrace_debug_trap_not_inherited_by_function
+    execute('set +T')  # Ensure functrace is off
+    execute("trap 'echo DEBUG_IN_FUNC' DEBUG")
+    execute('myfunc() { true; }')
+    output = capture_stdout do
+      execute('myfunc')
+    end
+    # DEBUG trap from inside function should NOT appear (only the one for calling myfunc)
+    # Count occurrences - should be exactly 1 (for the myfunc call itself)
+    count = output.scan(/DEBUG_IN_FUNC/).length
+    assert_equal 1, count, 'DEBUG trap should run once for myfunc call, not inside function'
+    execute('trap - DEBUG')
+  end
+
+  def test_no_functrace_return_trap_not_inherited_by_function
+    execute('set +T')  # Ensure functrace is off
+    execute("trap 'echo RETURN_RAN' RETURN")
+    execute('myfunc() { true; }')
+    output = capture_stdout do
+      execute('myfunc')
+    end
+    # RETURN trap should NOT run when functrace is off
+    assert_no_match(/RETURN_RAN/, output)
+    execute('trap - RETURN')
+  end
 end
