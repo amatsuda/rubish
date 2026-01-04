@@ -157,6 +157,7 @@ module Rubish
           expanded_args = expand_args_for_builtin(ast.args)
           result = Builtins.run(ast.name, expanded_args)
           @last_status = result ? 0 : 1
+          run_err_trap_if_failed
           check_errexit
         rescue NounsetError
           @last_status = 1
@@ -171,6 +172,7 @@ module Rubish
           expanded_args = expand_args_for_builtin(ast.args)
           result = call_function(ast.name, expanded_args)
           @last_status = result ? 0 : 1
+          # Don't run ERR trap here - it was already handled inside the function if errtrace is on
           check_errexit
         rescue NounsetError
           @last_status = 1
@@ -198,8 +200,11 @@ module Rubish
     end
 
     def check_errexit
+      return if @last_status == 0
+
       # Exit if errexit is set and last command failed
-      if Builtins.set_option?('e') && @last_status != 0
+      # Note: ERR trap is run in __run_cmd at command execution time
+      if Builtins.set_option?('e')
         throw(:exit, @last_status)
       end
     end
@@ -234,6 +239,12 @@ module Rubish
       # Push a new local scope for this function
       Builtins.push_local_scope
 
+      # If errtrace is not set, ERR trap is not inherited by functions
+      saved_err_trap = nil
+      unless Builtins.set_option?('E')
+        saved_err_trap = Builtins.save_and_clear_err_trap
+      end
+
       begin
         result = func.call
         # Handle return value
@@ -246,6 +257,9 @@ module Rubish
         # return was called in function
         true
       ensure
+        # Restore ERR trap if we cleared it
+        Builtins.restore_err_trap(saved_err_trap) if saved_err_trap
+
         # Pop local scope and restore variables
         Builtins.pop_local_scope
         @positional_params = saved_params
@@ -2134,15 +2148,25 @@ module Rubish
         # Run process-affecting builtins directly in current process
         success = Builtins.run(result.name, result.args)
         @last_status = success ? 0 : 1
+        run_err_trap_if_failed
         result
       elsif result.is_a?(Command) && @functions.key?(result.name)
         # Call user-defined function with redirects
         call_function_with_redirects(result)
+        # Don't run ERR trap here - it was already handled inside the function
         result
       else
         result.run if result.is_a?(Command) || result.is_a?(Pipeline) || result.is_a?(Subshell)
+        if result.respond_to?(:status)
+          @last_status = result.status&.exitstatus || 0
+          run_err_trap_if_failed
+        end
         result
       end
+    end
+
+    def run_err_trap_if_failed
+      Builtins.run_err_trap if @last_status != 0
     end
 
     def complete(input)

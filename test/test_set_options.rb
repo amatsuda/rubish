@@ -654,4 +654,63 @@ class TestSetOptions < Test::Unit::TestCase
     execute("false | true > #{output_file}")
     assert_equal 0, @repl.instance_variable_get(:@last_status)
   end
+
+  # set -E (errtrace)
+  def test_set_minus_E_enables_errtrace
+    execute('set -E')
+    assert Rubish::Builtins.set_option?('E')
+  end
+
+  def test_set_plus_E_disables_errtrace
+    execute('set -E')
+    execute('set +E')
+    assert_false Rubish::Builtins.set_option?('E')
+  end
+
+  def test_set_o_errtrace
+    execute('set -o errtrace')
+    assert Rubish::Builtins.set_option?('E')
+  end
+
+  def test_err_trap_runs_on_command_failure
+    execute("trap 'echo ERR_TRIGGERED' ERR")
+    output = capture_stdout do
+      execute('false')
+    end
+    assert_match(/ERR_TRIGGERED/, output)
+    execute('trap - ERR')
+  end
+
+  def test_err_trap_not_run_on_success
+    execute("trap 'echo ERR_TRIGGERED' ERR")
+    output = capture_stdout do
+      execute('true')
+    end
+    assert_no_match(/ERR_TRIGGERED/, output)
+    execute('trap - ERR')
+  end
+
+  def test_errtrace_err_trap_inherited_by_function
+    execute('set -E')
+    execute("trap 'echo ERR_IN_FUNC' ERR")
+    execute('myfunc() { false; }')
+    output = capture_stdout do
+      execute('myfunc')
+    end
+    assert_match(/ERR_IN_FUNC/, output)
+    execute('trap - ERR')
+    execute('set +E')
+  end
+
+  def test_no_errtrace_err_trap_not_inherited_by_function
+    execute('set +E')  # Ensure errtrace is off
+    execute("trap 'echo ERR_IN_FUNC' ERR")
+    execute('myfunc() { false; }')
+    output = capture_stdout do
+      execute('myfunc')
+    end
+    # ERR trap should NOT run inside function when errtrace is off
+    assert_no_match(/ERR_IN_FUNC/, output)
+    execute('trap - ERR')
+  end
 end

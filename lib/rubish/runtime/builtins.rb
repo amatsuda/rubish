@@ -365,6 +365,7 @@ module Rubish
     # Signal name mapping
     SIGNALS = {
       'EXIT' => 0,
+      'ERR' => 'ERR',  # Pseudo-signal: triggered on command failure
       'HUP' => 'HUP', 'SIGHUP' => 'HUP',
       'INT' => 'INT', 'SIGINT' => 'INT',
       'QUIT' => 'QUIT', 'SIGQUIT' => 'QUIT',
@@ -466,8 +467,8 @@ module Rubish
       # Store the trap command
       @traps[sig] = command
 
-      # Handle EXIT specially - it's called when the shell exits
-      return if sig == 0
+      # Handle EXIT and ERR specially - they're pseudo-signals
+      return if sig == 0 || sig == 'ERR'
 
       # Save original handler if not already saved
       @original_traps[sig] ||= Signal.trap(sig, 'DEFAULT') rescue nil
@@ -488,7 +489,8 @@ module Rubish
     def self.reset_trap(sig)
       @traps.delete(sig)
 
-      return if sig == 0
+      # EXIT and ERR are pseudo-signals, no OS signal to reset
+      return if sig == 0 || sig == 'ERR'
 
       # Restore original handler
       if @original_traps.key?(sig)
@@ -506,9 +508,32 @@ module Rubish
       @executor&.call(@traps[0]) if @executor
     end
 
+    def self.run_err_trap
+      return unless @traps.key?('ERR')
+
+      @executor&.call(@traps['ERR']) if @executor
+    end
+
+    def self.err_trap_set?
+      @traps.key?('ERR') && !@traps['ERR'].empty?
+    end
+
+    def self.save_and_clear_err_trap
+      # Save ERR trap and clear it (for functions/subshells when errtrace is off)
+      saved = @traps.delete('ERR')
+      saved
+    end
+
+    def self.restore_err_trap(saved)
+      # Restore a previously saved ERR trap
+      if saved
+        @traps['ERR'] = saved
+      end
+    end
+
     def self.clear_traps
       @traps.each_key do |sig|
-        reset_trap(sig) unless sig == 0
+        reset_trap(sig) unless sig == 0 || sig == 'ERR'
       end
       @traps.clear
       @original_traps.clear
@@ -1396,6 +1421,7 @@ module Rubish
     # Shell option flags (set -o options)
     @set_options = {
       'e' => false,  # errexit: exit on error
+      'E' => false,  # errtrace: ERR trap inherited by functions/subshells
       'x' => false,  # xtrace: print commands
       'u' => false,  # nounset: error on unset variables
       'n' => false,  # noexec: don't execute (syntax check)
@@ -1473,7 +1499,7 @@ module Rubish
     def self.list_set_options
       # Print current option settings
       long_names = {
-        'e' => 'errexit', 'x' => 'xtrace', 'u' => 'nounset',
+        'e' => 'errexit', 'E' => 'errtrace', 'x' => 'xtrace', 'u' => 'nounset',
         'n' => 'noexec', 'v' => 'verbose', 'f' => 'noglob',
         'C' => 'noclobber', 'a' => 'allexport', 'b' => 'notify',
         'h' => 'hashall', 'm' => 'monitor', 'pipefail' => 'pipefail'
@@ -1488,7 +1514,7 @@ module Rubish
 
     def self.set_long_option(name, value)
       mapping = {
-        'errexit' => 'e', 'xtrace' => 'x', 'nounset' => 'u',
+        'errexit' => 'e', 'errtrace' => 'E', 'xtrace' => 'x', 'nounset' => 'u',
         'noexec' => 'n', 'verbose' => 'v', 'noglob' => 'f',
         'noclobber' => 'C', 'allexport' => 'a', 'notify' => 'b',
         'hashall' => 'h', 'monitor' => 'm', 'pipefail' => 'pipefail'
