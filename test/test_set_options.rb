@@ -19,7 +19,10 @@ class TestSetOptions < Test::Unit::TestCase
   end
 
   def reset_set_options
+    # Reset all options to their defaults
     Rubish::Builtins.set_options.each_key { |k| Rubish::Builtins.set_options[k] = false }
+    # Braceexpand is enabled by default
+    Rubish::Builtins.set_options['B'] = true
   end
 
   def output_file
@@ -788,5 +791,61 @@ class TestSetOptions < Test::Unit::TestCase
     # RETURN trap should NOT run when functrace is off
     assert_no_match(/RETURN_RAN/, output)
     execute('trap - RETURN')
+  end
+
+  # set -B (braceexpand)
+  def test_braceexpand_enabled_by_default
+    # Braceexpand should be enabled by default
+    assert Rubish::Builtins.set_option?('B')
+  end
+
+  def test_set_plus_B_disables_braceexpand
+    execute('set +B')
+    assert_false Rubish::Builtins.set_option?('B')
+    execute('set -B')  # Re-enable for other tests
+  end
+
+  def test_set_minus_B_enables_braceexpand
+    execute('set +B')
+    execute('set -B')
+    assert Rubish::Builtins.set_option?('B')
+  end
+
+  def test_set_o_braceexpand
+    execute('set +o braceexpand')
+    execute('set -o braceexpand')
+    assert Rubish::Builtins.set_option?('B')
+  end
+
+  def test_braceexpand_expands_comma_list
+    execute('set -B')
+    execute("echo {a,b,c} > #{output_file}")
+    result = File.read(output_file).strip
+    assert_equal 'a b c', result
+  end
+
+  def test_braceexpand_expands_sequence
+    execute('set -B')
+    execute("echo {1..3} > #{output_file}")
+    result = File.read(output_file).strip
+    assert_equal '1 2 3', result
+  end
+
+  def test_braceexpand_disabled_no_expansion
+    execute('set +B')
+    execute("echo {a,b,c} > #{output_file}")
+    result = File.read(output_file).strip
+    # When disabled, braces are kept as literal text
+    assert_equal '{a,b,c}', result
+    execute('set -B')  # Re-enable for other tests
+  end
+
+  def test_braceexpand_disabled_sequence_no_expansion
+    execute('set +B')
+    execute("echo {1..3} > #{output_file}")
+    result = File.read(output_file).strip
+    # When disabled, braces are kept as literal text
+    assert_equal '{1..3}', result
+    execute('set -B')  # Re-enable for other tests
   end
 end

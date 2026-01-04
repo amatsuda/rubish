@@ -1485,6 +1485,7 @@ module Rubish
 
     # Shell option flags (set -o options)
     @set_options = {
+      'B' => true,   # braceexpand: enable brace expansion (enabled by default)
       'e' => false,  # errexit: exit on error
       'E' => false,  # errtrace: ERR trap inherited by functions/subshells
       'T' => false,  # functrace: DEBUG/RETURN traps inherited by functions/subshells
@@ -1565,7 +1566,7 @@ module Rubish
     def self.list_set_options
       # Print current option settings
       long_names = {
-        'e' => 'errexit', 'E' => 'errtrace', 'T' => 'functrace',
+        'B' => 'braceexpand', 'e' => 'errexit', 'E' => 'errtrace', 'T' => 'functrace',
         'x' => 'xtrace', 'u' => 'nounset', 'n' => 'noexec', 'v' => 'verbose',
         'f' => 'noglob', 'C' => 'noclobber', 'a' => 'allexport', 'b' => 'notify',
         'h' => 'hashall', 'm' => 'monitor', 'pipefail' => 'pipefail'
@@ -1580,7 +1581,7 @@ module Rubish
 
     def self.set_long_option(name, value)
       mapping = {
-        'errexit' => 'e', 'errtrace' => 'E', 'functrace' => 'T',
+        'braceexpand' => 'B', 'errexit' => 'e', 'errtrace' => 'E', 'functrace' => 'T',
         'xtrace' => 'x', 'nounset' => 'u', 'noexec' => 'n', 'verbose' => 'v',
         'noglob' => 'f', 'noclobber' => 'C', 'allexport' => 'a', 'notify' => 'b',
         'hashall' => 'h', 'monitor' => 'm', 'pipefail' => 'pipefail'

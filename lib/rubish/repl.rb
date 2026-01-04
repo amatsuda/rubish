@@ -458,8 +458,8 @@ module Rubish
       end
 
       # Brace expansion first (before variable expansion in shell, but we do it after for simplicity)
-      # Expand braces first
-      brace_expanded = if arg.include?('{') && !arg.start_with?('$')
+      # Expand braces first (only if braceexpand option is enabled)
+      brace_expanded = if Builtins.set_option?('B') && arg.include?('{') && !arg.start_with?('$')
                          expand_braces(arg)
                        else
                          [arg]
@@ -1914,6 +1914,9 @@ module Rubish
 
     def __brace(pattern)
       # Expand brace patterns like {a,b,c} or {1..5}
+      # Only expand if braceexpand option is enabled
+      return [pattern] unless Builtins.set_option?('B')
+
       expand_braces(pattern)
     end
 
