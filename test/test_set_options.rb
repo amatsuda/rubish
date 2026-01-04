@@ -206,12 +206,65 @@ class TestSetOptions < Test::Unit::TestCase
     assert_match(/^\d+$/, result)
   end
 
-  # Other options (should at least not error)
-
-  def test_set_minus_f_noglob
+  # set -f (noglob)
+  def test_set_minus_f_enables_noglob
     execute('set -f')
     assert Rubish::Builtins.set_option?('f')
   end
+
+  def test_set_plus_f_disables_noglob
+    execute('set -f')
+    execute('set +f')
+    assert_false Rubish::Builtins.set_option?('f')
+  end
+
+  def test_set_o_noglob
+    execute('set -o noglob')
+    assert Rubish::Builtins.set_option?('f')
+  end
+
+  def test_noglob_prevents_glob_expansion
+    # Create test files
+    File.write(File.join(@tempdir, 'test1.txt'), 'a')
+    File.write(File.join(@tempdir, 'test2.txt'), 'b')
+
+    # Without noglob, *.txt should expand
+    execute("echo #{@tempdir}/*.txt > #{output_file}")
+    without_noglob = File.read(output_file).chomp
+
+    # With noglob, *.txt should NOT expand
+    execute('set -f')
+    execute("echo #{@tempdir}/*.txt > #{output_file}")
+    with_noglob = File.read(output_file).chomp
+    execute('set +f')
+
+    # Without noglob should have expanded to actual files
+    assert_match(/test1\.txt/, without_noglob)
+    assert_match(/test2\.txt/, without_noglob)
+
+    # With noglob should have the literal *.txt
+    assert_match(/\*\.txt/, with_noglob)
+  end
+
+  def test_noglob_preserves_question_mark
+    execute('set -f')
+    execute("echo test?.txt > #{output_file}")
+    result = File.read(output_file).chomp
+    execute('set +f')
+
+    assert_equal 'test?.txt', result
+  end
+
+  def test_noglob_preserves_brackets
+    execute('set -f')
+    execute("echo test[123].txt > #{output_file}")
+    result = File.read(output_file).chomp
+    execute('set +f')
+
+    assert_equal 'test[123].txt', result
+  end
+
+  # Other options (should at least not error)
 
   def test_set_minus_C_noclobber
     execute('set -C')

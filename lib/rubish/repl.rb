@@ -1576,6 +1576,9 @@ module Rubish
     end
 
     def __glob(pattern)
+      # If noglob is set, return pattern as-is (no expansion)
+      return [pattern] if Builtins.set_option?('f')
+
       # Expand glob pattern, return original if no matches
       # Check for extended globs if extglob is enabled
       if Builtins.shell_options['extglob'] && has_extglob?(pattern)
