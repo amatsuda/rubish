@@ -1562,6 +1562,8 @@ module Rubish
       'ignoreeof' => false,  # ignoreeof: don't exit on EOF (Ctrl+D)
       'extglob' => false,    # extglob: extended pattern matching operators
       'P' => false,          # physical: don't follow symlinks for cd/pwd
+      'emacs' => true,       # emacs: use emacs-style line editing (default)
+      'vi' => false,         # vi: use vi-style line editing
     }
 
     def self.set_options
@@ -1635,7 +1637,7 @@ module Rubish
         'h' => 'hashall', 'm' => 'monitor', 'pipefail' => 'pipefail',
         'globstar' => 'globstar', 'nullglob' => 'nullglob', 'failglob' => 'failglob',
         'dotglob' => 'dotglob', 'nocaseglob' => 'nocaseglob', 'ignoreeof' => 'ignoreeof',
-        'extglob' => 'extglob', 'P' => 'physical'
+        'extglob' => 'extglob', 'P' => 'physical', 'emacs' => 'emacs', 'vi' => 'vi'
       }
       @set_options.each do |flag, value|
         name = long_names[flag] || flag
@@ -1654,10 +1656,33 @@ module Rubish
         'hashall' => 'h', 'monitor' => 'm', 'pipefail' => 'pipefail',
         'globstar' => 'globstar', 'nullglob' => 'nullglob', 'failglob' => 'failglob',
         'dotglob' => 'dotglob', 'nocaseglob' => 'nocaseglob', 'ignoreeof' => 'ignoreeof',
-        'extglob' => 'extglob', 'physical' => 'P'
+        'extglob' => 'extglob', 'physical' => 'P', 'emacs' => 'emacs', 'vi' => 'vi'
       }
       flag = mapping[name]
-      @set_options[flag] = value if flag
+      return unless flag
+
+      # vi and emacs are mutually exclusive
+      if flag == 'vi' && value
+        @set_options['vi'] = true
+        @set_options['emacs'] = false
+        Reline.vi_editing_mode if defined?(Reline)
+      elsif flag == 'emacs' && value
+        @set_options['emacs'] = true
+        @set_options['vi'] = false
+        Reline.emacs_editing_mode if defined?(Reline)
+      elsif flag == 'vi' && !value
+        # Disabling vi enables emacs
+        @set_options['vi'] = false
+        @set_options['emacs'] = true
+        Reline.emacs_editing_mode if defined?(Reline)
+      elsif flag == 'emacs' && !value
+        # Disabling emacs enables vi
+        @set_options['emacs'] = false
+        @set_options['vi'] = true
+        Reline.vi_editing_mode if defined?(Reline)
+      else
+        @set_options[flag] = value
+      end
     end
 
     def self.run_return(args)

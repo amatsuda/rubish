@@ -21,9 +21,10 @@ class TestSetOptions < Test::Unit::TestCase
   def reset_set_options
     # Reset all options to their defaults
     Rubish::Builtins.set_options.each_key { |k| Rubish::Builtins.set_options[k] = false }
-    # Braceexpand and histexpand are enabled by default
+    # Braceexpand, histexpand, and emacs are enabled by default
     Rubish::Builtins.set_options['B'] = true
     Rubish::Builtins.set_options['H'] = true
+    Rubish::Builtins.set_options['emacs'] = true
   end
 
   def output_file
@@ -1727,5 +1728,107 @@ class TestSetOptions < Test::Unit::TestCase
     ensure
       Dir.chdir(original_dir)
     end
+  end
+
+  # set -o emacs and set -o vi
+  def test_emacs_enabled_by_default
+    # Emacs should be enabled by default
+    assert Rubish::Builtins.set_option?('emacs')
+  end
+
+  def test_vi_disabled_by_default
+    # Vi should be disabled by default
+    assert_false Rubish::Builtins.set_option?('vi')
+  end
+
+  def test_set_o_vi_enables_vi
+    execute('set -o vi')
+    assert Rubish::Builtins.set_option?('vi')
+    execute('set -o emacs')  # Reset to default
+  end
+
+  def test_set_o_vi_disables_emacs
+    execute('set -o vi')
+    assert_false Rubish::Builtins.set_option?('emacs')
+    execute('set -o emacs')  # Reset to default
+  end
+
+  def test_set_o_emacs_enables_emacs
+    execute('set -o vi')
+    execute('set -o emacs')
+    assert Rubish::Builtins.set_option?('emacs')
+  end
+
+  def test_set_o_emacs_disables_vi
+    execute('set -o vi')
+    execute('set -o emacs')
+    assert_false Rubish::Builtins.set_option?('vi')
+  end
+
+  def test_set_plus_o_vi_enables_emacs
+    # Disabling vi should enable emacs
+    execute('set -o vi')
+    execute('set +o vi')
+    assert Rubish::Builtins.set_option?('emacs')
+    assert_false Rubish::Builtins.set_option?('vi')
+  end
+
+  def test_set_plus_o_emacs_enables_vi
+    # Disabling emacs should enable vi
+    execute('set +o emacs')
+    assert Rubish::Builtins.set_option?('vi')
+    assert_false Rubish::Builtins.set_option?('emacs')
+    execute('set -o emacs')  # Reset to default
+  end
+
+  def test_vi_listed_in_set_options
+    output = capture_stdout { execute('set -o') }
+    assert_match(/vi/, output)
+  end
+
+  def test_emacs_listed_in_set_options
+    output = capture_stdout { execute('set -o') }
+    assert_match(/emacs/, output)
+  end
+
+  def test_vi_shows_enabled_state
+    execute('set -o vi')
+    output = capture_stdout { execute('set -o') }
+    execute('set -o emacs')  # Reset
+
+    assert_match(/set -o vi/, output)
+  end
+
+  def test_vi_shows_disabled_state
+    execute('set -o emacs')
+    output = capture_stdout { execute('set -o') }
+
+    assert_match(/set \+o vi/, output)
+  end
+
+  def test_emacs_shows_enabled_state
+    execute('set -o emacs')
+    output = capture_stdout { execute('set -o') }
+
+    assert_match(/set -o emacs/, output)
+  end
+
+  def test_emacs_shows_disabled_state
+    execute('set -o vi')
+    output = capture_stdout { execute('set -o') }
+    execute('set -o emacs')  # Reset
+
+    assert_match(/set \+o emacs/, output)
+  end
+
+  def test_vi_and_emacs_mutually_exclusive
+    # They should never both be true or both be false
+    execute('set -o vi')
+    assert Rubish::Builtins.set_option?('vi')
+    assert_false Rubish::Builtins.set_option?('emacs')
+
+    execute('set -o emacs')
+    assert Rubish::Builtins.set_option?('emacs')
+    assert_false Rubish::Builtins.set_option?('vi')
   end
 end
