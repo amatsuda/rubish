@@ -1567,6 +1567,7 @@ module Rubish
       'nocasematch' => false, # nocasematch: case-insensitive pattern matching in case/[[
       't' => false,          # onecmd: exit after reading and executing one command
       'k' => false,          # keyword: all assignment args placed in environment
+      'p' => false,          # privileged: don't read startup files, ignore some env vars
     }
 
     def self.set_options
@@ -1641,7 +1642,8 @@ module Rubish
         'globstar' => 'globstar', 'nullglob' => 'nullglob', 'failglob' => 'failglob',
         'dotglob' => 'dotglob', 'nocaseglob' => 'nocaseglob', 'ignoreeof' => 'ignoreeof',
         'extglob' => 'extglob', 'P' => 'physical', 'emacs' => 'emacs', 'vi' => 'vi',
-        'nocasematch' => 'nocasematch', 't' => 'onecmd', 'k' => 'keyword'
+        'nocasematch' => 'nocasematch', 't' => 'onecmd', 'k' => 'keyword',
+        'p' => 'privileged'
       }
       @set_options.each do |flag, value|
         name = long_names[flag] || flag
@@ -1661,7 +1663,8 @@ module Rubish
         'globstar' => 'globstar', 'nullglob' => 'nullglob', 'failglob' => 'failglob',
         'dotglob' => 'dotglob', 'nocaseglob' => 'nocaseglob', 'ignoreeof' => 'ignoreeof',
         'extglob' => 'extglob', 'physical' => 'P', 'emacs' => 'emacs', 'vi' => 'vi',
-        'nocasematch' => 'nocasematch', 'onecmd' => 't', 'keyword' => 'k'
+        'nocasematch' => 'nocasematch', 'onecmd' => 't', 'keyword' => 'k',
+        'privileged' => 'p'
       }
       flag = mapping[name]
       return unless flag

@@ -2091,4 +2091,54 @@ class TestSetOptions < Test::Unit::TestCase
     assert File.exist?(output_file)
     assert_equal "hello\n", File.read(output_file)
   end
+
+  # set -p (privileged)
+  def test_privileged_disabled_by_default
+    # Privileged should be disabled by default
+    assert_false Rubish::Builtins.set_option?('p')
+  end
+
+  def test_set_minus_p_enables_privileged
+    execute('set -p')
+    assert Rubish::Builtins.set_option?('p')
+    execute('set +p')
+  end
+
+  def test_set_plus_p_disables_privileged
+    execute('set -p')
+    execute('set +p')
+    assert_false Rubish::Builtins.set_option?('p')
+  end
+
+  def test_set_o_privileged_enables_privileged
+    execute('set -o privileged')
+    assert Rubish::Builtins.set_option?('p')
+    execute('set +o privileged')
+  end
+
+  def test_set_plus_o_privileged_disables_privileged
+    execute('set -o privileged')
+    execute('set +o privileged')
+    assert_false Rubish::Builtins.set_option?('p')
+  end
+
+  def test_privileged_listed_in_set_options
+    output = capture_stdout { execute('set -o') }
+    assert_match(/privileged/, output)
+  end
+
+  def test_privileged_shows_enabled_state
+    execute('set -o privileged')
+    output = capture_stdout { execute('set -o') }
+    execute('set +o privileged')
+
+    assert_match(/set -o privileged/, output)
+  end
+
+  def test_privileged_shows_disabled_state
+    execute('set +o privileged')
+    output = capture_stdout { execute('set -o') }
+
+    assert_match(/set \+o privileged/, output)
+  end
 end

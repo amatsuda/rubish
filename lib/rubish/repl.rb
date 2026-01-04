@@ -63,6 +63,9 @@ module Rubish
     end
 
     def load_config
+      # privileged mode: don't read startup files
+      return if Builtins.set_option?('p')
+
       rc_files = [
         File.expand_path('~/.rubishrc'),
         File.expand_path('./.rubishrc')
