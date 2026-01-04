@@ -448,25 +448,52 @@ module Rubish
     end
 
     # Signal name mapping
+    # Map signal names/numbers to canonical signal names
+    # Includes both short names (HUP) and long names (SIGHUP)
     SIGNALS = {
+      # Pseudo-signals (shell-specific, not OS signals)
       'EXIT' => 0,
-      'ERR' => 'ERR',      # Pseudo-signal: triggered on command failure
-      'DEBUG' => 'DEBUG',  # Pseudo-signal: triggered before each command
-      'RETURN' => 'RETURN', # Pseudo-signal: triggered when function/sourced script returns
-      'HUP' => 'HUP', 'SIGHUP' => 'HUP',
-      'INT' => 'INT', 'SIGINT' => 'INT',
-      'QUIT' => 'QUIT', 'SIGQUIT' => 'QUIT',
-      'TERM' => 'TERM', 'SIGTERM' => 'TERM',
-      'USR1' => 'USR1', 'SIGUSR1' => 'USR1',
-      'USR2' => 'USR2', 'SIGUSR2' => 'USR2',
-      'ALRM' => 'ALRM', 'SIGALRM' => 'ALRM',
-      'CHLD' => 'CHLD', 'SIGCHLD' => 'CHLD',
-      'CONT' => 'CONT', 'SIGCONT' => 'CONT',
-      'TSTP' => 'TSTP', 'SIGTSTP' => 'TSTP',
-      'TTIN' => 'TTIN', 'SIGTTIN' => 'TTIN',
-      'TTOU' => 'TTOU', 'SIGTTOU' => 'TTOU',
-      'WINCH' => 'WINCH', 'SIGWINCH' => 'WINCH'
+      'ERR' => 'ERR',        # Triggered on command failure
+      'DEBUG' => 'DEBUG',    # Triggered before each command
+      'RETURN' => 'RETURN',  # Triggered when function/sourced script returns
+
+      # Standard signals with numeric mappings
+      '0' => 0,              # EXIT
+      '1' => 'HUP',  'HUP' => 'HUP',   'SIGHUP' => 'HUP',
+      '2' => 'INT',  'INT' => 'INT',   'SIGINT' => 'INT',
+      '3' => 'QUIT', 'QUIT' => 'QUIT', 'SIGQUIT' => 'QUIT',
+      '4' => 'ILL',  'ILL' => 'ILL',   'SIGILL' => 'ILL',
+      '5' => 'TRAP', 'TRAP' => 'TRAP', 'SIGTRAP' => 'TRAP',
+      '6' => 'ABRT', 'ABRT' => 'ABRT', 'SIGABRT' => 'ABRT', 'IOT' => 'ABRT', 'SIGIOT' => 'ABRT',
+      '7' => 'EMT',  'EMT' => 'EMT',   'SIGEMT' => 'EMT',
+      '8' => 'FPE',  'FPE' => 'FPE',   'SIGFPE' => 'FPE',
+      '9' => 'KILL', 'KILL' => 'KILL', 'SIGKILL' => 'KILL',
+      '10' => 'BUS', 'BUS' => 'BUS',   'SIGBUS' => 'BUS',
+      '11' => 'SEGV', 'SEGV' => 'SEGV', 'SIGSEGV' => 'SEGV',
+      '12' => 'SYS', 'SYS' => 'SYS',   'SIGSYS' => 'SYS',
+      '13' => 'PIPE', 'PIPE' => 'PIPE', 'SIGPIPE' => 'PIPE',
+      '14' => 'ALRM', 'ALRM' => 'ALRM', 'SIGALRM' => 'ALRM',
+      '15' => 'TERM', 'TERM' => 'TERM', 'SIGTERM' => 'TERM',
+      '16' => 'URG', 'URG' => 'URG',   'SIGURG' => 'URG',
+      '17' => 'STOP', 'STOP' => 'STOP', 'SIGSTOP' => 'STOP',
+      '18' => 'TSTP', 'TSTP' => 'TSTP', 'SIGTSTP' => 'TSTP',
+      '19' => 'CONT', 'CONT' => 'CONT', 'SIGCONT' => 'CONT',
+      '20' => 'CHLD', 'CHLD' => 'CHLD', 'SIGCHLD' => 'CHLD', 'CLD' => 'CHLD', 'SIGCLD' => 'CHLD',
+      '21' => 'TTIN', 'TTIN' => 'TTIN', 'SIGTTIN' => 'TTIN',
+      '22' => 'TTOU', 'TTOU' => 'TTOU', 'SIGTTOU' => 'TTOU',
+      '23' => 'IO',   'IO' => 'IO',     'SIGIO' => 'IO', 'POLL' => 'IO', 'SIGPOLL' => 'IO',
+      '24' => 'XCPU', 'XCPU' => 'XCPU', 'SIGXCPU' => 'XCPU',
+      '25' => 'XFSZ', 'XFSZ' => 'XFSZ', 'SIGXFSZ' => 'XFSZ',
+      '26' => 'VTALRM', 'VTALRM' => 'VTALRM', 'SIGVTALRM' => 'VTALRM',
+      '27' => 'PROF', 'PROF' => 'PROF', 'SIGPROF' => 'PROF',
+      '28' => 'WINCH', 'WINCH' => 'WINCH', 'SIGWINCH' => 'WINCH',
+      '29' => 'INFO', 'INFO' => 'INFO', 'SIGINFO' => 'INFO',
+      '30' => 'USR1', 'USR1' => 'USR1', 'SIGUSR1' => 'USR1',
+      '31' => 'USR2', 'USR2' => 'USR2', 'SIGUSR2' => 'USR2'
     }.freeze
+
+    # Signals that cannot be trapped (for error messages)
+    UNTRAPABLE_SIGNALS = %w[KILL STOP].freeze
 
     def self.run_trap(args)
       if args.empty?
@@ -478,9 +505,24 @@ module Rubish
         return true
       end
 
-      # trap -l: list signal names
+      # trap -l: list signal names (bash-style format)
       if args.first == '-l'
-        puts Signal.list.keys.sort.join(' ')
+        # Get unique signals sorted by number, format like bash: " 1) HUP  2) INT ..."
+        signals = Signal.list.reject { |k, _| k == 'EXIT' }  # EXIT is 0, handled specially
+        by_num = signals.group_by { |_, v| v }.transform_values { |pairs| pairs.map(&:first).min }
+        sorted = by_num.sort_by { |num, _| num }
+
+        # Print in columns like bash
+        col = 0
+        sorted.each do |num, name|
+          print format('%2d) %-8s', num, name)
+          col += 1
+          if col >= 5
+            puts
+            col = 0
+          end
+        end
+        puts if col > 0
         return true
       end
 
@@ -540,25 +582,37 @@ module Rubish
     end
 
     def self.normalize_signal(sig_arg)
-      # Handle numeric signals
-      if sig_arg =~ /\A\d+\z/
-        return sig_arg.to_i
+      sig_str = sig_arg.to_s
+
+      # Look up in SIGNALS hash (handles both numeric and named signals)
+      sig_upper = sig_str.upcase
+      result = SIGNALS[sig_upper]
+      return result if result
+
+      # For pure numeric input not in SIGNALS, return as integer
+      if sig_str =~ /\A\d+\z/
+        return sig_str.to_i
       end
 
-      # Handle signal names
-      sig_upper = sig_arg.upcase
-      SIGNALS[sig_upper]
+      nil
     end
 
     # Pseudo-signals that are not real OS signals
     PSEUDO_SIGNALS = [0, 'ERR', 'DEBUG', 'RETURN'].freeze
 
     def self.set_trap(sig, command)
+      # KILL and STOP cannot be trapped or ignored
+      sig_name = sig.is_a?(Integer) ? nil : sig.to_s.upcase
+      if UNTRAPABLE_SIGNALS.include?(sig_name)
+        puts "trap: #{sig_name}: cannot be trapped"
+        return false
+      end
+
       # Store the trap command
       @traps[sig] = command
 
       # Pseudo-signals are handled by the shell, not the OS
-      return if PSEUDO_SIGNALS.include?(sig)
+      return true if PSEUDO_SIGNALS.include?(sig)
 
       # Save original handler if not already saved
       @original_traps[sig] ||= Signal.trap(sig, 'DEFAULT') rescue nil
@@ -572,8 +626,10 @@ module Rubish
           @executor&.call(command) if @executor
         end
       end
+      true
     rescue ArgumentError => e
       puts "trap: #{e.message}"
+      false
     end
 
     def self.reset_trap(sig)
