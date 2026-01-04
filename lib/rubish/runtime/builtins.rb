@@ -1388,17 +1388,107 @@ module Rubish
       true
     end
 
+    # Shell option flags (set -o options)
+    @set_options = {
+      'e' => false,  # errexit: exit on error
+      'x' => false,  # xtrace: print commands
+      'u' => false,  # nounset: error on unset variables
+      'n' => false,  # noexec: don't execute (syntax check)
+      'v' => false,  # verbose: print input lines
+      'f' => false,  # noglob: disable globbing
+      'C' => false,  # noclobber: don't overwrite files with >
+      'a' => false,  # allexport: export all variables
+      'b' => false,  # notify: report job status immediately
+      'h' => false,  # hashall: hash commands
+      'm' => false,  # monitor: job control
+    }
+
+    def self.set_options
+      @set_options
+    end
+
+    def self.set_option?(flag)
+      @set_options[flag] || false
+    end
+
     def self.run_set(args)
-      # set -- arg1 arg2 arg3  sets positional params
-      # set (no args) could list variables, but for now just clear params
+      # set [-+abCefhmnuvx] [-o option] [--] [arg...]
+      # With no args, clear positional params (original behavior)
       if args.empty?
         @positional_params_setter&.call([])
-      elsif args.first == '--'
-        @positional_params_setter&.call(args[1..] || [])
-      else
-        @positional_params_setter&.call(args)
+        return true
+      end
+
+      i = 0
+      while i < args.length
+        arg = args[i]
+
+        if arg == '--'
+          # Everything after -- is positional params
+          @positional_params_setter&.call(args[i + 1..] || [])
+          return true
+        elsif arg == '-o'
+          # Long option form: set -o errexit, or just set -o to list
+          i += 1
+          opt_name = args[i]
+          if opt_name
+            set_long_option(opt_name, true)
+          else
+            # set -o with no option name lists all options
+            list_set_options
+            return true
+          end
+        elsif arg == '+o'
+          # Disable long option: set +o errexit, or list with set +o
+          i += 1
+          opt_name = args[i]
+          if opt_name
+            set_long_option(opt_name, false)
+          else
+            list_set_options
+            return true
+          end
+        elsif arg.start_with?('-') && arg.length > 1 && arg != '-'
+          # Short options: -e, -x, -ex
+          arg[1..].each_char { |c| @set_options[c] = true if @set_options.key?(c) }
+        elsif arg.start_with?('+') && arg.length > 1
+          # Disable short options: +e, +x
+          arg[1..].each_char { |c| @set_options[c] = false if @set_options.key?(c) }
+        else
+          # Positional parameters
+          @positional_params_setter&.call(args[i..])
+          return true
+        end
+        i += 1
       end
       true
+    end
+
+    def self.list_set_options
+      # Print current option settings
+      long_names = {
+        'e' => 'errexit', 'x' => 'xtrace', 'u' => 'nounset',
+        'n' => 'noexec', 'v' => 'verbose', 'f' => 'noglob',
+        'C' => 'noclobber', 'a' => 'allexport', 'b' => 'notify',
+        'h' => 'hashall', 'm' => 'monitor'
+      }
+      @set_options.each do |flag, value|
+        name = long_names[flag] || flag
+        state = value ? '-o' : '+o'
+        puts "set #{state} #{name}"
+      end
+      true
+    end
+
+    def self.set_long_option(name, value)
+      mapping = {
+        'errexit' => 'e', 'xtrace' => 'x', 'nounset' => 'u',
+        'noexec' => 'n', 'verbose' => 'v', 'noglob' => 'f',
+        'noclobber' => 'C', 'allexport' => 'a', 'notify' => 'b',
+        'hashall' => 'h', 'monitor' => 'm'
+      }
+      flag = mapping[name]
+      @set_options[flag] = value if flag
     end
 
     def self.run_return(args)

@@ -101,6 +101,9 @@ module Rubish
       line = Builtins.expand_alias(line)
       line = expand_tilde(line)
 
+      # xtrace: print commands before execution
+      xtrace(line) if Builtins.set_option?('x')
+
       # Check for array assignment before tokenizing (arr=(a b c) pattern)
       if (array_assignments = extract_array_assignments(line))
         handle_bare_assignments(array_assignments)
@@ -132,6 +135,7 @@ module Rubish
         expanded_args = expand_args_for_builtin(ast.args)
         result = Builtins.run(ast.name, expanded_args)
         @last_status = result ? 0 : 1
+        check_errexit
         return
       end
 
@@ -140,14 +144,29 @@ module Rubish
         expanded_args = expand_args_for_builtin(ast.args)
         result = call_function(ast.name, expanded_args)
         @last_status = result ? 0 : 1
+        check_errexit
         return
       end
 
       code = @codegen.generate(ast)
       result = eval_in_context(code)
       @last_status = extract_exit_status(result)
+      check_errexit
     ensure
       @heredoc_content = nil
+    end
+
+    def xtrace(line)
+      # Print trace with PS4 prefix (default: '+ ')
+      ps4 = ENV['PS4'] || '+ '
+      $stderr.puts "#{ps4}#{line}"
+    end
+
+    def check_errexit
+      # Exit if errexit is set and last command failed
+      if Builtins.set_option?('e') && @last_status != 0
+        throw(:exit, @last_status)
+      end
     end
 
     def execute_command_directly(args)
