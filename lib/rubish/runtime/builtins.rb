@@ -32,10 +32,16 @@ module Rubish
     @function_remover = nil
     @heredoc_content_setter = nil
     @command_executor = nil  # Executor that bypasses functions/aliases
+    @history_file_getter = nil  # Gets HISTFILE path
+    @history_loader = nil  # Loads history from file
+    @history_saver = nil  # Saves history to file
+    @history_appender = nil  # Appends new entries to file
+    @last_history_line = 0  # Track last line read for -n option
 
     class << self
       attr_reader :aliases, :dir_stack, :traps, :local_scope_stack, :readonly_vars, :var_attributes, :command_hash, :shell_options, :disabled_builtins, :call_stack, :completions, :completion_options, :key_bindings, :readline_variables, :arrays, :assoc_arrays, :coprocs
       attr_accessor :executor, :script_name_getter, :script_name_setter, :positional_params_getter, :positional_params_setter, :function_checker, :function_remover, :heredoc_content_setter, :command_executor, :current_completion_options
+      attr_accessor :history_file_getter, :history_loader, :history_saver, :history_appender, :last_history_line
     end
 
     # Array variable methods
@@ -1448,12 +1454,141 @@ module Rubish
     end
 
     def self.run_history(args)
+      # Parse options
+      clear = false
+      delete_offset = nil
+      append_to_file = false
+      read_new = false
+      read_all = false
+      write_all = false
+      print_expand = false
+      store_args = false
+
+      i = 0
+      while i < args.length
+        arg = args[i]
+        case arg
+        when '-c'
+          clear = true
+        when '-d'
+          i += 1
+          delete_offset = args[i]&.to_i
+          if delete_offset.nil?
+            $stderr.puts 'history: -d: option requires an argument'
+            return false
+          end
+        when '-a'
+          append_to_file = true
+        when '-n'
+          read_new = true
+        when '-r'
+          read_all = true
+        when '-w'
+          write_all = true
+        when '-p'
+          print_expand = true
+          i += 1
+          break  # Remaining args are for expansion
+        when '-s'
+          store_args = true
+          i += 1
+          break  # Remaining args are for storing
+        when /^-/
+          $stderr.puts "history: #{arg}: invalid option"
+          return false
+        else
+          break  # First non-option is count or filename
+        end
+        i += 1
+      end
+
+      remaining_args = args[i..]
+
+      # Handle -c: clear history
+      if clear
+        Reline::HISTORY.clear
+        @last_history_line = 0
+        return true
+      end
+
+      # Handle -d offset: delete entry
+      if delete_offset
+        # Convert to 0-based index (history numbers are 1-based)
+        index = delete_offset - 1
+        if index < 0 || index >= Reline::HISTORY.size
+          $stderr.puts "history: #{delete_offset}: history position out of range"
+          return false
+        end
+        Reline::HISTORY.delete_at(index)
+        return true
+      end
+
+      # Handle -a: append new lines to history file
+      if append_to_file
+        @history_appender&.call
+        return true
+      end
+
+      # Handle -n: read new lines from history file
+      if read_new
+        file = @history_file_getter&.call
+        return true unless file && File.exist?(file)
+
+        begin
+          lines = File.readlines(file, chomp: true)
+          # Read lines after what we've already read
+          file_last_line = @last_history_line
+          new_lines = lines[file_last_line..]
+          if new_lines && !new_lines.empty?
+            new_lines.each { |line| Reline::HISTORY << line }
+            @last_history_line = lines.size
+          end
+        rescue => e
+          $stderr.puts "history: #{e.message}"
+          return false
+        end
+        return true
+      end
+
+      # Handle -r: read history file (replace current)
+      if read_all
+        Reline::HISTORY.clear
+        @last_history_line = 0
+        @history_loader&.call
+        return true
+      end
+
+      # Handle -w: write history to file
+      if write_all
+        @history_saver&.call
+        return true
+      end
+
+      # Handle -p: print history expansion
+      if print_expand
+        # For now, just print args as-is (full history expansion would require more work)
+        puts remaining_args.join(' ')
+        return true
+      end
+
+      # Handle -s: store args as single history entry
+      if store_args
+        line = remaining_args.join(' ')
+        Reline::HISTORY << line unless line.empty?
+        return true
+      end
+
+      # Default: display history
       history = Reline::HISTORY.to_a
-      count = args.first&.to_i || history.length
+      count = remaining_args.first&.to_i || history.length
+
+      if count <= 0
+        count = history.length
+      end
 
       start_index = [history.length - count, 0].max
-      history[start_index..].each_with_index do |line, i|
-        puts format('%5d  %s', start_index + i + 1, line)
+      history[start_index..].each_with_index do |line, idx|
+        puts format('%5d  %s', start_index + idx + 1, line)
       end
       true
     end

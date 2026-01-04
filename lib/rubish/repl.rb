@@ -26,6 +26,11 @@ module Rubish
       Builtins.function_remover = ->(name) { @functions.delete(name) }
       Builtins.heredoc_content_setter = ->(content) { @heredoc_content = content }
       Builtins.command_executor = ->(args) { execute_command_directly(args) }
+      # History callbacks
+      Builtins.history_file_getter = -> { history_file }
+      Builtins.history_loader = -> { load_history }
+      Builtins.history_saver = -> { save_history }
+      Builtins.history_appender = -> { append_history }
       # Set up Command class to handle functions in pipelines
       Command.function_checker = ->(name) { @functions.key?(name) }
       Command.function_caller = ->(name, args) { call_function(name, args) }
@@ -84,6 +89,8 @@ module Rubish
         # Only keep the last HISTSIZE entries
         lines = lines.last(max_entries) if lines.size > max_entries
         lines.each { |line| Reline::HISTORY << line }
+        # Track where we are for history -a (append)
+        Builtins.last_history_line = Reline::HISTORY.size
       rescue => e
         $stderr.puts "rubish: cannot read history file: #{e.message}"
       end
@@ -111,6 +118,32 @@ module Rubish
         end
       rescue => e
         $stderr.puts "rubish: cannot write history file: #{e.message}"
+      end
+    end
+
+    # Append new history entries to HISTFILE (for history -a)
+    def append_history
+      file = history_file
+      max_lines = histfilesize
+      return if max_lines <= 0
+
+      begin
+        history = Reline::HISTORY.to_a
+        last_line = Builtins.last_history_line
+        new_entries = history[last_line..]
+        return if new_entries.nil? || new_entries.empty?
+
+        # Create directory if needed
+        dir = File.dirname(file)
+        FileUtils.mkdir_p(dir) unless File.directory?(dir)
+
+        File.open(file, 'a') do |f|
+          new_entries.each { |line| f.puts(line) }
+        end
+
+        Builtins.last_history_line = history.size
+      rescue => e
+        $stderr.puts "rubish: cannot append to history file: #{e.message}"
       end
     end
 
