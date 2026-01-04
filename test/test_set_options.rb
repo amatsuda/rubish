@@ -514,4 +514,63 @@ class TestSetOptions < Test::Unit::TestCase
     assert Rubish::Builtins.set_option?('b')
     execute('set +b')
   end
+
+  # set -h (hashall)
+  def test_set_minus_h_enables_hashall
+    execute('set -h')
+    assert Rubish::Builtins.set_option?('h')
+    execute('set +h')
+  end
+
+  def test_set_plus_h_disables_hashall
+    execute('set -h')
+    execute('set +h')
+    assert_false Rubish::Builtins.set_option?('h')
+  end
+
+  def test_set_o_hashall
+    execute('set -o hashall')
+    assert Rubish::Builtins.set_option?('h')
+    execute('set +h')
+  end
+
+  def test_hashall_caches_command_path
+    Rubish::Builtins.clear_hash
+
+    execute('set -h')
+    execute("ls > #{output_file}")
+    execute('set +h')
+
+    # ls should now be in the hash
+    cached_path = Rubish::Builtins.hash_lookup('ls')
+    assert_not_nil cached_path
+    assert cached_path.end_with?('/ls')
+    assert File.executable?(cached_path)
+  end
+
+  def test_hashall_uses_cached_path
+    Rubish::Builtins.clear_hash
+
+    execute('set -h')
+    # First execution caches the path
+    execute("echo first > #{output_file}")
+    first_path = Rubish::Builtins.hash_lookup('echo')
+
+    # Second execution should use cached path
+    execute("echo second >> #{output_file}")
+    second_path = Rubish::Builtins.hash_lookup('echo')
+    execute('set +h')
+
+    assert_equal first_path, second_path
+  end
+
+  def test_hashall_disabled_does_not_cache
+    Rubish::Builtins.clear_hash
+
+    execute('set +h')  # Ensure disabled
+    execute("ls > #{output_file}")
+
+    # ls should NOT be in the hash
+    assert_nil Rubish::Builtins.hash_lookup('ls')
+  end
 end

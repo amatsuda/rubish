@@ -131,6 +131,9 @@ module Rubish
     end
 
     def run_simple
+      # Resolve command path before forking (so hash updates are visible in parent)
+      cmd_path = resolve_command_path(name)
+
       @pid = fork do
         $stdin.reopen(@stdin) if @stdin
         $stdout.reopen(@stdout) if @stdout
@@ -141,7 +144,7 @@ module Rubish
           Command.call_function(name, @args)
           exit(0)
         else
-          exec(name, *@args)
+          exec(cmd_path, *@args)
         end
       end
 
@@ -156,12 +159,15 @@ module Rubish
     def run_with_block
       reader, writer = IO.pipe
 
+      # Resolve command path before forking (so hash updates are visible in parent)
+      cmd_path = resolve_command_path(name)
+
       @pid = fork do
         reader.close
         $stdin.reopen(@stdin) if @stdin
         $stdout.reopen(writer)
         $stderr.reopen(@stderr) if @stderr
-        exec(name, *@args)
+        exec(cmd_path, *@args)
       end
 
       writer.close
@@ -176,6 +182,28 @@ module Rubish
       Process.wait(@pid)
       @status = $?
       self
+    end
+
+    def resolve_command_path(cmd)
+      # If absolute path or not using hashall, return as-is
+      return cmd if cmd.include?('/') || !Builtins.set_option?('h')
+
+      # Check hash first
+      cached = Builtins.hash_lookup(cmd)
+      return cached if cached
+
+      # Search PATH and cache if found
+      path_dirs = (ENV['PATH'] || '').split(File::PATH_SEPARATOR)
+      path_dirs.each do |dir|
+        full_path = File.join(dir, cmd)
+        if File.executable?(full_path) && !File.directory?(full_path)
+          Builtins.hash_store(cmd, full_path)
+          return full_path
+        end
+      end
+
+      # Not found in PATH, return original (exec will fail with proper error)
+      cmd
     end
   end
 
