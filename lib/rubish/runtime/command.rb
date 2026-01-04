@@ -134,17 +134,23 @@ module Rubish
       # Resolve command path before forking (so hash updates are visible in parent)
       cmd_path = resolve_command_path(name)
 
+      # Extract keyword assignments if -k is set
+      cmd_args, keyword_env = extract_keyword_assignments(@args)
+
       @pid = fork do
         $stdin.reopen(@stdin) if @stdin
         $stdout.reopen(@stdout) if @stdout
         $stderr.reopen(@stderr) if @stderr
 
+        # Set keyword environment variables
+        keyword_env.each { |k, v| ENV[k] = v }
+
         # Check if this is a user-defined function
         if Command.function?(name)
-          Command.call_function(name, @args)
+          Command.call_function(name, cmd_args)
           exit(0)
         else
-          exec(cmd_path, *@args)
+          exec(cmd_path, *cmd_args)
         end
       end
 
@@ -162,12 +168,19 @@ module Rubish
       # Resolve command path before forking (so hash updates are visible in parent)
       cmd_path = resolve_command_path(name)
 
+      # Extract keyword assignments if -k is set
+      cmd_args, keyword_env = extract_keyword_assignments(@args)
+
       @pid = fork do
         reader.close
         $stdin.reopen(@stdin) if @stdin
         $stdout.reopen(writer)
         $stderr.reopen(@stderr) if @stderr
-        exec(cmd_path, *@args)
+
+        # Set keyword environment variables
+        keyword_env.each { |k, v| ENV[k] = v }
+
+        exec(cmd_path, *cmd_args)
       end
 
       writer.close
@@ -204,6 +217,26 @@ module Rubish
 
       # Not found in PATH, return original (exec will fail with proper error)
       cmd
+    end
+
+    def extract_keyword_assignments(args)
+      # When -k (keyword) is set, extract VAR=value from all args
+      return [args, {}] unless Builtins.set_option?('k')
+
+      keyword_env = {}
+      remaining_args = []
+
+      args.each do |arg|
+        if arg.is_a?(String) && arg.match?(/\A[A-Za-z_][A-Za-z0-9_]*=/)
+          # This is a keyword assignment
+          name, value = arg.split('=', 2)
+          keyword_env[name] = value || ''
+        else
+          remaining_args << arg
+        end
+      end
+
+      [remaining_args, keyword_env]
     end
   end
 

@@ -1566,6 +1566,7 @@ module Rubish
       'vi' => false,         # vi: use vi-style line editing
       'nocasematch' => false, # nocasematch: case-insensitive pattern matching in case/[[
       't' => false,          # onecmd: exit after reading and executing one command
+      'k' => false,          # keyword: all assignment args placed in environment
     }
 
     def self.set_options
@@ -1640,7 +1641,7 @@ module Rubish
         'globstar' => 'globstar', 'nullglob' => 'nullglob', 'failglob' => 'failglob',
         'dotglob' => 'dotglob', 'nocaseglob' => 'nocaseglob', 'ignoreeof' => 'ignoreeof',
         'extglob' => 'extglob', 'P' => 'physical', 'emacs' => 'emacs', 'vi' => 'vi',
-        'nocasematch' => 'nocasematch', 't' => 'onecmd'
+        'nocasematch' => 'nocasematch', 't' => 'onecmd', 'k' => 'keyword'
       }
       @set_options.each do |flag, value|
         name = long_names[flag] || flag
@@ -1660,7 +1661,7 @@ module Rubish
         'globstar' => 'globstar', 'nullglob' => 'nullglob', 'failglob' => 'failglob',
         'dotglob' => 'dotglob', 'nocaseglob' => 'nocaseglob', 'ignoreeof' => 'ignoreeof',
         'extglob' => 'extglob', 'physical' => 'P', 'emacs' => 'emacs', 'vi' => 'vi',
-        'nocasematch' => 'nocasematch', 'onecmd' => 't'
+        'nocasematch' => 'nocasematch', 'onecmd' => 't', 'keyword' => 'k'
       }
       flag = mapping[name]
       return unless flag

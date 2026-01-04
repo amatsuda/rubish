@@ -1987,4 +1987,108 @@ class TestSetOptions < Test::Unit::TestCase
 
     assert_match(/set \+o onecmd/, output)
   end
+
+  # set -k (keyword)
+  def test_keyword_disabled_by_default
+    # Keyword should be disabled by default
+    assert_false Rubish::Builtins.set_option?('k')
+  end
+
+  def test_set_minus_k_enables_keyword
+    execute('set -k')
+    assert Rubish::Builtins.set_option?('k')
+    execute('set +k')
+  end
+
+  def test_set_plus_k_disables_keyword
+    execute('set -k')
+    execute('set +k')
+    assert_false Rubish::Builtins.set_option?('k')
+  end
+
+  def test_set_o_keyword_enables_keyword
+    execute('set -o keyword')
+    assert Rubish::Builtins.set_option?('k')
+    execute('set +o keyword')
+  end
+
+  def test_set_plus_o_keyword_disables_keyword
+    execute('set -o keyword')
+    execute('set +o keyword')
+    assert_false Rubish::Builtins.set_option?('k')
+  end
+
+  def test_keyword_listed_in_set_options
+    output = capture_stdout { execute('set -o') }
+    assert_match(/keyword/, output)
+  end
+
+  def test_keyword_shows_enabled_state
+    execute('set -o keyword')
+    output = capture_stdout { execute('set -o') }
+    execute('set +o keyword')
+
+    assert_match(/set -o keyword/, output)
+  end
+
+  def test_keyword_shows_disabled_state
+    execute('set +o keyword')
+    output = capture_stdout { execute('set -o') }
+
+    assert_match(/set \+o keyword/, output)
+  end
+
+  # Keyword functionality tests
+  def test_extract_keyword_assignments_without_k
+    # Without -k, no extraction should happen
+    cmd = Rubish::Command.new('echo', 'FOO=bar', 'hello')
+    args, env = cmd.send(:extract_keyword_assignments, ['FOO=bar', 'hello'])
+    assert_equal ['FOO=bar', 'hello'], args
+    assert_equal({}, env)
+  end
+
+  def test_extract_keyword_assignments_with_k
+    execute('set -k')
+
+    cmd = Rubish::Command.new('echo', 'hello')
+    args, env = cmd.send(:extract_keyword_assignments, ['FOO=bar', 'hello', 'BAZ=qux'])
+    execute('set +k')
+
+    assert_equal ['hello'], args
+    assert_equal({'FOO' => 'bar', 'BAZ' => 'qux'}, env)
+  end
+
+  def test_extract_keyword_assignments_with_empty_value
+    execute('set -k')
+
+    cmd = Rubish::Command.new('echo', 'hello')
+    args, env = cmd.send(:extract_keyword_assignments, ['EMPTY=', 'hello'])
+    execute('set +k')
+
+    assert_equal ['hello'], args
+    assert_equal({'EMPTY' => ''}, env)
+  end
+
+  def test_extract_keyword_assignments_with_value_containing_equals
+    execute('set -k')
+
+    cmd = Rubish::Command.new('echo', 'hello')
+    args, env = cmd.send(:extract_keyword_assignments, ['KEY=val=ue', 'hello'])
+    execute('set +k')
+
+    assert_equal ['hello'], args
+    assert_equal({'KEY' => 'val=ue'}, env)
+  end
+
+  def test_keyword_env_passed_to_command
+    output_file = File.join(@tempdir, 'keyword_test.txt')
+
+    execute('set -k')
+    # Run a command that uses the environment variable
+    execute("sh -c 'echo $TESTVAR' TESTVAR=hello > #{output_file}")
+    execute('set +k')
+
+    assert File.exist?(output_file)
+    assert_equal "hello\n", File.read(output_file)
+  end
 end
