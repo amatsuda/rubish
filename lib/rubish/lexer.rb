@@ -84,6 +84,21 @@ module Rubish
         @pos += 2
         return read_heredoc_delimiter(:HEREDOC)
       end
+      # Extended test command [[ ]] - only when in command position
+      # Not when it's a nested array like [[1, 2], [3, 4]]
+      if two_char == '[['
+        # Check if followed by space (conditional) or digit/quote (array)
+        next_char = @input[@pos + 2]
+        if next_char.nil? || next_char =~ /[\s\-!]/
+          @pos += 2
+          return Token.new(:DOUBLE_LBRACKET, '[[')
+        end
+        # Otherwise it's a nested array, fall through to array handling
+      end
+      if two_char == ']]'
+        @pos += 2
+        return Token.new(:DOUBLE_RBRACKET, ']]')
+      end
       # Process substitution: <(...) and >(...)
       if two_char == '<('
         return read_process_substitution(:PROC_SUB_IN)

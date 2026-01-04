@@ -42,6 +42,8 @@ module Rubish
         generate_coproc(node)
       when AST::Time
         generate_time(node)
+      when AST::ConditionalExpr
+        generate_conditional_expr(node)
       else
         raise "Unknown AST node: #{node.class}"
       end
@@ -556,6 +558,27 @@ module Rubish
         # time with no command just prints timing info (zeros)
         "__time(#{node.posix_format}) { nil }"
       end
+    end
+
+    def generate_conditional_expr(node)
+      # Convert tokens to expression parts for runtime evaluation
+      parts = node.expression.map do |token|
+        case token.type
+        when :WORD
+          generate_string_arg(token.value)
+        when :AND
+          '"&&"'
+        when :OR
+          '"||"'
+        when :LPAREN
+          '"("'
+        when :RPAREN
+          '")"'
+        else
+          token.value.inspect
+        end
+      end
+      "__cond_test([#{parts.join(', ')}])"
     end
 
     def escape_string(str)

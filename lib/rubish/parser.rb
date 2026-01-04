@@ -120,7 +120,7 @@ module Rubish
       AST::Time.new(command: timed_cmd, posix_format: posix_format)
     end
 
-    # command : if_statement | while_statement | until_statement | for_statement | case_statement | function_def | subshell | coproc | WORD arg* block? (redirection)*
+    # command : if_statement | while_statement | until_statement | for_statement | case_statement | function_def | subshell | coproc | conditional_expr | WORD arg* block? (redirection)*
     # arg : WORD | ARRAY | REGEXP
     def parse_command
       # Check for control structures
@@ -133,6 +133,7 @@ module Rubish
       return parse_function_keyword if peek(:FUNCTION)
       return parse_subshell if peek(:LPAREN)
       return parse_coproc if peek(:COPROC)
+      return parse_conditional_expr if peek(:DOUBLE_LBRACKET)
 
       return nil unless peek(:WORD)
 
@@ -223,7 +224,8 @@ module Rubish
 
       consume(:FI) || raise('Expected "fi" to close if statement')
 
-      AST::If.new(branches: branches, else_body: else_body)
+      cmd = AST::If.new(branches: branches, else_body: else_body)
+      parse_redirections(cmd)
     end
 
     def skip_semicolon
@@ -446,6 +448,23 @@ module Rubish
       raise 'Expected command after coproc' unless command
 
       AST::Coproc.new(name: name, command: command)
+    end
+
+    # conditional_expr : '[[' expression ']]'
+    # Parses extended test command [[ expression ]]
+    def parse_conditional_expr
+      consume(:DOUBLE_LBRACKET)
+
+      # Collect all tokens until ]]
+      expression = []
+      until peek(:DOUBLE_RBRACKET) || @pos >= @tokens.length
+        token = consume
+        expression << token
+      end
+
+      consume(:DOUBLE_RBRACKET) || raise('Expected "]]" to close conditional expression')
+
+      AST::ConditionalExpr.new(expression)
     end
 
     # Parse body of case branch (stops at ;; or esac)

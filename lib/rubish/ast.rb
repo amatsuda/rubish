@@ -100,5 +100,11 @@ module Rubish
         super
       end
     end
+
+    # ConditionalExpr: [[ expression ]] - extended test command
+    # expression: array of tokens/strings representing the expression
+    # Supports: string comparison (==, !=, <, >), pattern matching, regex (=~),
+    #           file tests (-f, -d, -e, etc.), logical operators (&&, ||, !)
+    ConditionalExpr = Data.define(:expression)
   end
 end

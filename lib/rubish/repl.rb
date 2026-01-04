@@ -732,7 +732,11 @@ module Rubish
         elsif char == '~' && !in_single_quotes
           # Check if ~ is at start of a word (preceded by space, start, or quotes)
           prev_char = i > 0 ? line[i - 1] : nil
-          at_word_start = prev_char.nil? || prev_char =~ /[\s"'=:]/
+          next_char = i + 1 < line.length ? line[i + 1] : nil
+          # Don't expand ~ if it's part of =~ operator (= followed by ~ then space/end)
+          # But DO expand ~ in assignments like FOO=~/path (= followed by ~/)
+          is_regex_op = prev_char == '=' && (next_char.nil? || next_char =~ /[\s\]]/)
+          at_word_start = !is_regex_op && (prev_char.nil? || prev_char =~ /[\s"'=:]/)
 
           if at_word_start
             next_char = line[i + 1]
@@ -2266,6 +2270,219 @@ module Rubish
       else
         ExitStatus.new(0)
       end
+    end
+
+    def __cond_test(parts)
+      # Evaluate [[ ]] conditional expression
+      # Returns ExitStatus based on expression result
+      result = eval_cond_expr(parts, 0, parts.length)
+      ExitStatus.new(result ? 0 : 1)
+    end
+
+    def eval_cond_expr(parts, start_idx, end_idx)
+      # Handle empty expression
+      return true if start_idx >= end_idx
+
+      tokens = parts[start_idx...end_idx]
+      return true if tokens.empty?
+
+      # Handle logical OR (lowest precedence)
+      or_idx = find_logical_op(tokens, '||')
+      if or_idx
+        left = eval_cond_expr(tokens, 0, or_idx)
+        return true if left  # Short-circuit
+        return eval_cond_expr(tokens, or_idx + 1, tokens.length)
+      end
+
+      # Handle logical AND
+      and_idx = find_logical_op(tokens, '&&')
+      if and_idx
+        left = eval_cond_expr(tokens, 0, and_idx)
+        return false unless left  # Short-circuit
+        return eval_cond_expr(tokens, and_idx + 1, tokens.length)
+      end
+
+      # Handle grouping with parentheses
+      if tokens.first == '(' && tokens.last == ')'
+        return eval_cond_expr(tokens[1...-1], 0, tokens.length - 2)
+      end
+
+      # Handle negation
+      if tokens.first == '!'
+        return !eval_cond_expr(tokens[1..], 0, tokens.length - 1)
+      end
+
+      # Evaluate primary expression
+      eval_cond_primary(tokens)
+    end
+
+    def find_logical_op(tokens, op)
+      # Find logical operator at depth 0 (not inside parens)
+      depth = 0
+      tokens.each_with_index do |token, i|
+        case token
+        when '('
+          depth += 1
+        when ')'
+          depth -= 1
+        when op
+          return i if depth == 0
+        end
+      end
+      nil
+    end
+
+    def eval_cond_primary(tokens)
+      return true if tokens.empty?
+
+      # Unary file tests: -e file, -f file, etc.
+      if tokens.length == 2 && tokens[0].start_with?('-')
+        return eval_unary_test(tokens[0], tokens[1])
+      end
+
+      # Unary string tests
+      if tokens.length == 1
+        # Non-empty string is true
+        return !tokens[0].to_s.empty?
+      end
+
+      # Binary operators
+      if tokens.length == 3
+        left, op, right = tokens
+        return eval_binary_test(left, op, right)
+      end
+
+      # More complex expressions - try to find binary operator
+      if tokens.length > 3
+        # Look for binary operators in the middle
+        tokens.each_with_index do |token, i|
+          next if i == 0 || i == tokens.length - 1
+          if %w[== != =~ < > -eq -ne -lt -le -gt -ge -nt -ot -ef].include?(token)
+            left = tokens[0...i].join(' ')
+            right_parts = tokens[i + 1..]
+            # For regex (=~), reconstruct pattern without spaces around parens
+            right = if token == '=~'
+                      reconstruct_regex_pattern(right_parts)
+                    else
+                      right_parts.join(' ')
+                    end
+            return eval_binary_test(left, token, right)
+          end
+        end
+      end
+
+      # Default: non-empty is true
+      !tokens.join.empty?
+    end
+
+    def eval_unary_test(op, arg)
+      case op
+      when '-z' then arg.to_s.empty?
+      when '-n' then !arg.to_s.empty?
+      when '-e' then File.exist?(arg)
+      when '-f' then File.file?(arg)
+      when '-d' then File.directory?(arg)
+      when '-r' then File.readable?(arg)
+      when '-w' then File.writable?(arg)
+      when '-x' then File.executable?(arg)
+      when '-s' then File.exist?(arg) && File.size(arg) > 0
+      when '-L', '-h' then File.symlink?(arg)
+      when '-b' then File.exist?(arg) && File.stat(arg).blockdev?
+      when '-c' then File.exist?(arg) && File.stat(arg).chardev?
+      when '-p' then File.exist?(arg) && File.stat(arg).pipe?
+      when '-S' then File.exist?(arg) && File.stat(arg).socket?
+      when '-t' then $stdin.tty? && arg.to_i == 0  # -t fd
+      when '-O' then File.exist?(arg) && File.owned?(arg)
+      when '-G' then File.exist?(arg) && File.grpowned?(arg)
+      when '-N' then File.exist?(arg) && File.mtime(arg) > File.atime(arg)
+      when '-v' then ENV.key?(arg) || instance_variable_defined?("@#{arg}") rescue false
+      else false
+      end
+    rescue
+      false
+    end
+
+    def eval_binary_test(left, op, right)
+      case op
+      # String comparison
+      when '=='
+        # Pattern matching: right side is a pattern
+        cond_pattern_match?(left, right)
+      when '!='
+        !cond_pattern_match?(left, right)
+      when '=~'
+        # Regex matching
+        cond_regex_match?(left, right)
+      when '<'
+        left.to_s < right.to_s
+      when '>'
+        left.to_s > right.to_s
+      # Integer comparison
+      when '-eq' then left.to_i == right.to_i
+      when '-ne' then left.to_i != right.to_i
+      when '-lt' then left.to_i < right.to_i
+      when '-le' then left.to_i <= right.to_i
+      when '-gt' then left.to_i > right.to_i
+      when '-ge' then left.to_i >= right.to_i
+      # File comparison
+      when '-nt'
+        File.exist?(left) && File.exist?(right) && File.mtime(left) > File.mtime(right)
+      when '-ot'
+        File.exist?(left) && File.exist?(right) && File.mtime(left) < File.mtime(right)
+      when '-ef'
+        File.exist?(left) && File.exist?(right) &&
+          File.stat(left).dev == File.stat(right).dev &&
+          File.stat(left).ino == File.stat(right).ino
+      else
+        false
+      end
+    rescue
+      false
+    end
+
+    def cond_pattern_match?(string, pattern)
+      # In [[ ]], == does glob pattern matching (not literal)
+      # Convert glob pattern to regex
+      flags = Builtins.set_option?('nocasematch') ? File::FNM_CASEFOLD : 0
+      File.fnmatch(pattern, string, File::FNM_EXTGLOB | flags)
+    end
+
+    def reconstruct_regex_pattern(parts)
+      # Reconstruct regex pattern from tokenized parts
+      # Parentheses should be directly attached (no spaces)
+      result = +''
+      parts.each_with_index do |part, i|
+        if part == '('
+          result << part
+        elsif part == ')'
+          result << part
+        else
+          # Add space before if previous wasn't '(' and result doesn't end with '('
+          if i > 0 && parts[i - 1] != '(' && !result.end_with?('(')
+            # But don't add space if current is ')' or previous ended with '('
+            result << ' ' unless result.empty? || result.end_with?('(')
+          end
+          result << part
+        end
+      end
+      result
+    end
+
+    def cond_regex_match?(string, pattern)
+      # =~ does regex matching, sets BASH_REMATCH
+      flags = Builtins.set_option?('nocasematch') ? Regexp::IGNORECASE : 0
+      regex = Regexp.new(pattern, flags)
+      match = regex.match(string)
+      if match
+        # Set BASH_REMATCH array
+        Builtins.set_array('BASH_REMATCH', match.to_a)
+        true
+      else
+        Builtins.set_array('BASH_REMATCH', [])
+        false
+      end
+    rescue RegexpError
+      false
     end
 
     def expand_heredoc_content(content)
