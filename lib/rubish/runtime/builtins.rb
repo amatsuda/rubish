@@ -369,6 +369,27 @@ module Rubish
       end
 
       dir = remaining_args.first || ENV['HOME']
+      found_via_cdpath = false
+
+      # Handle CDPATH for relative directories (not starting with / or . or ..)
+      if dir && !dir.start_with?('/') && !dir.start_with?('./') && !dir.start_with?('../') && dir != '.' && dir != '..'
+        # First check if directory exists relative to current directory
+        unless File.directory?(dir)
+          # Search CDPATH
+          cdpath = ENV['CDPATH']
+          if cdpath && !cdpath.empty?
+            cdpath.split(':').each do |path|
+              path = '.' if path.empty?  # Empty entry means current directory
+              candidate = File.join(path, dir)
+              if File.directory?(candidate)
+                dir = candidate
+                found_via_cdpath = true
+                break
+              end
+            end
+          end
+        end
+      end
 
       # Save OLDPWD before changing
       ENV['OLDPWD'] = ENV['PWD'] || Dir.pwd
@@ -382,9 +403,13 @@ module Rubish
         Dir.chdir(dir)
         ENV['PWD'] = Dir.pwd
       end
+
+      # Print directory when found via CDPATH
+      puts ENV['PWD'] if found_via_cdpath
+
       true
     rescue Errno::ENOENT => e
-      puts "cd: #{e.message}"
+      $stderr.puts "cd: #{e.message}"
       false
     end
 
