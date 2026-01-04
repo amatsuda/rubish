@@ -495,4 +495,23 @@ class TestSetOptions < Test::Unit::TestCase
 
     assert_false File.exist?(File.join(@tempdir, 'should_not_exist.txt'))
   end
+
+  # set -b (notify)
+  def test_set_minus_b_enables_notify
+    execute('set -b')
+    assert Rubish::Builtins.set_option?('b')
+    execute('set +b')
+  end
+
+  def test_set_plus_b_disables_notify
+    execute('set -b')
+    execute('set +b')
+    assert_false Rubish::Builtins.set_option?('b')
+  end
+
+  def test_set_o_notify
+    execute('set -o notify')
+    assert Rubish::Builtins.set_option?('b')
+    execute('set +b')
+  end
 end

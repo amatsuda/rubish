@@ -52,6 +52,13 @@ module Rubish
       # They should only affect foreground jobs
       trap('INT') { puts }   # Just print newline on Ctrl+C
       trap('TSTP') { }       # Ignore Ctrl+Z for shell
+
+      # SIGCHLD handler for immediate job notification when set -b is enabled
+      trap('CHLD') do
+        if Builtins.set_option?('b')
+          JobManager.instance.check_background_jobs
+        end
+      end
     end
 
     def load_config
