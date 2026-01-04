@@ -121,6 +121,15 @@ module Rubish
       ast = @parser_class.new(tokens).parse
       return unless ast
 
+      # noexec: parse but don't execute (except 'set' to allow disabling noexec)
+      if Builtins.set_option?('n')
+        # Allow 'set' command through so we can turn noexec off
+        unless ast.is_a?(AST::Command) && ast.name == 'set'
+          @last_status = 0
+          return
+        end
+      end
+
       # Check for heredocs and collect content if needed
       # Skip if content was already set (e.g., by source command)
       if (heredoc = find_heredoc(ast)) && @heredoc_content.nil?

@@ -444,4 +444,55 @@ class TestSetOptions < Test::Unit::TestCase
   ensure
     ENV.delete('NO_EXPORT_TEST')
   end
+
+  # set -n (noexec)
+  def test_set_minus_n_enables_noexec
+    execute('set -n')
+    assert Rubish::Builtins.set_option?('n')
+    execute('set +n')  # Turn it off so other tests work
+  end
+
+  def test_set_plus_n_disables_noexec
+    execute('set -n')
+    execute('set +n')
+    assert_false Rubish::Builtins.set_option?('n')
+  end
+
+  def test_set_o_noexec
+    execute('set -o noexec')
+    assert Rubish::Builtins.set_option?('n')
+    execute('set +n')
+  end
+
+  def test_noexec_does_not_execute_commands
+    execute('set -n')
+    execute("echo should_not_appear > #{output_file}")
+    execute('set +n')
+
+    # File should not exist or be empty since command wasn't executed
+    assert_false File.exist?(output_file)
+  end
+
+  def test_noexec_still_parses_for_syntax_errors
+    execute('set -n')
+    # This should parse without error
+    execute('echo hello world')
+    assert_equal 0, @repl.instance_variable_get(:@last_status)
+    execute('set +n')
+  end
+
+  def test_noexec_allows_set_command
+    execute('set -n')
+    # set command should still work to allow turning off noexec
+    execute('set +n')
+    assert_false Rubish::Builtins.set_option?('n')
+  end
+
+  def test_noexec_does_not_run_external_commands
+    execute('set -n')
+    execute("touch #{File.join(@tempdir, 'should_not_exist.txt')}")
+    execute('set +n')
+
+    assert_false File.exist?(File.join(@tempdir, 'should_not_exist.txt'))
+  end
 end
