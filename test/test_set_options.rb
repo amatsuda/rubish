@@ -1193,4 +1193,100 @@ class TestSetOptions < Test::Unit::TestCase
     stderr_content = File.read(stderr_file)
     assert_match(/no match/, stderr_content)
   end
+
+  # set -o dotglob
+  def test_dotglob_disabled_by_default
+    # Dotglob should be disabled by default
+    assert_false Rubish::Builtins.set_option?('dotglob')
+  end
+
+  def test_set_o_dotglob_enables_dotglob
+    execute('set -o dotglob')
+    assert Rubish::Builtins.set_option?('dotglob')
+    execute('set +o dotglob')
+  end
+
+  def test_set_plus_o_dotglob_disables_dotglob
+    execute('set -o dotglob')
+    execute('set +o dotglob')
+    assert_false Rubish::Builtins.set_option?('dotglob')
+  end
+
+  def test_dotglob_matches_hidden_files
+    # Create hidden and normal files
+    File.write(File.join(@tempdir, '.hidden'), 'hidden')
+    File.write(File.join(@tempdir, 'visible'), 'visible')
+
+    execute('set -o dotglob')
+    matches = @repl.send(:__glob, "#{@tempdir}/*")
+    execute('set +o dotglob')
+
+    # With dotglob, should match both hidden and visible files
+    hidden_matched = matches.any? { |m| m.include?('.hidden') }
+    visible_matched = matches.any? { |m| m.include?('visible') }
+    assert hidden_matched, 'Should match hidden files with dotglob'
+    assert visible_matched, 'Should match visible files with dotglob'
+  end
+
+  def test_dotglob_disabled_no_hidden_files
+    # Create hidden and normal files
+    File.write(File.join(@tempdir, '.hidden'), 'hidden')
+    File.write(File.join(@tempdir, 'visible'), 'visible')
+
+    execute('set +o dotglob')  # Ensure disabled
+    matches = @repl.send(:__glob, "#{@tempdir}/*")
+
+    # Without dotglob, should only match visible files
+    hidden_matched = matches.any? { |m| m.include?('.hidden') }
+    visible_matched = matches.any? { |m| m.include?('visible') }
+    assert_false hidden_matched, 'Should NOT match hidden files without dotglob'
+    assert visible_matched, 'Should match visible files without dotglob'
+  end
+
+  def test_dotglob_excludes_dot_and_dotdot
+    # Create a subdirectory
+    subdir = File.join(@tempdir, 'subdir')
+    FileUtils.mkdir_p(subdir)
+    File.write(File.join(subdir, '.hidden'), 'hidden')
+
+    execute('set -o dotglob')
+    matches = @repl.send(:__glob, "#{subdir}/*")
+    execute('set +o dotglob')
+
+    # Should not include . or ..
+    dot_matched = matches.any? { |m| m.end_with?('/.') }
+    dotdot_matched = matches.any? { |m| m.end_with?('/..') }
+    assert_false dot_matched, 'Should NOT match . even with dotglob'
+    assert_false dotdot_matched, 'Should NOT match .. even with dotglob'
+  end
+
+  def test_dotglob_with_specific_pattern
+    # Create hidden files with specific extension
+    File.write(File.join(@tempdir, '.config.txt'), 'config')
+    File.write(File.join(@tempdir, 'normal.txt'), 'normal')
+
+    execute('set -o dotglob')
+    matches = @repl.send(:__glob, "#{@tempdir}/*.txt")
+    execute('set +o dotglob')
+
+    # Should match both
+    assert_equal 2, matches.length
+    assert matches.any? { |m| m.include?('.config.txt') }
+    assert matches.any? { |m| m.include?('normal.txt') }
+  end
+
+  def test_dotglob_echo_includes_hidden
+    # Create hidden and normal files
+    File.write(File.join(@tempdir, '.hidden.txt'), 'hidden')
+    File.write(File.join(@tempdir, 'visible.txt'), 'visible')
+
+    execute('set -o dotglob')
+    execute("echo #{@tempdir}/*.txt > #{output_file}")
+    result = File.read(output_file).strip
+    execute('set +o dotglob')
+
+    # Should include both hidden and visible files
+    assert_match(/\.hidden\.txt/, result)
+    assert_match(/visible\.txt/, result)
+  end
 end

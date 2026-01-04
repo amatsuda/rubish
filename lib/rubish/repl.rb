@@ -1657,10 +1657,18 @@ module Rubish
 
       # Expand glob pattern, return original if no matches (unless nullglob)
       # Check for extended globs if extglob is enabled
+      # dotglob: include files starting with . (except . and ..)
+      glob_flags = Builtins.set_option?('dotglob') ? File::FNM_DOTMATCH : 0
+
       if Builtins.shell_options['extglob'] && has_extglob?(glob_pattern)
         matches = expand_extglob(glob_pattern)
       else
-        matches = Dir.glob(glob_pattern)
+        matches = Dir.glob(glob_pattern, glob_flags)
+      end
+
+      # Filter out . and .. when dotglob is enabled
+      if Builtins.set_option?('dotglob')
+        matches = matches.reject { |m| m.end_with?('/.') || m.end_with?('/..') || m == '.' || m == '..' }
       end
 
       if matches.empty?
