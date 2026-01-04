@@ -1033,9 +1033,8 @@ module Rubish
           # $VAR form
           ENV.fetch($2, '0')
         elsif $3
-          # Plain variable name (only if it looks like a variable, not an operator)
-          # Check if it's a known variable, otherwise keep as-is (might be a function name)
-          ENV.key?($3) ? ENV[$3] : match
+          # Plain variable name - in arithmetic, unset vars default to 0
+          ENV.fetch($3, '0')
         else
           match
         end
