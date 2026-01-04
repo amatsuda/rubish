@@ -2166,6 +2166,60 @@ module Rubish
       HeredocCommand.new(content, &block)
     end
 
+    def __coproc(name, &block)
+      # Check if a coproc with this name already exists
+      if Builtins.coproc?(name)
+        $stderr.puts "rubish: coproc #{name}: already exists"
+        return ExitStatus.new(1)
+      end
+
+      # Create bidirectional pipes
+      # parent_read/child_write: child writes stdout, parent reads
+      # child_read/parent_write: parent writes, child reads stdin
+      parent_read, child_write = IO.pipe
+      child_read, parent_write = IO.pipe
+
+      pid = fork do
+        # Child process
+        parent_read.close
+        parent_write.close
+
+        # Redirect stdin/stdout
+        $stdin.reopen(child_read)
+        $stdout.reopen(child_write)
+        child_read.close
+        child_write.close
+
+        # Reset signal handlers
+        trap('INT', 'DEFAULT')
+        trap('TSTP', 'DEFAULT')
+
+        # Execute the command
+        result = block.call
+        result.run if result.is_a?(Command) || result.is_a?(Pipeline)
+        exit(result.respond_to?(:success?) && result.success? ? 0 : 1)
+      end
+
+      # Parent process
+      child_read.close
+      child_write.close
+
+      # Store the coproc info
+      Builtins.set_coproc(
+        name,
+        pid: pid,
+        read_fd: parent_read.fileno,
+        write_fd: parent_write.fileno,
+        reader: parent_read,
+        writer: parent_write
+      )
+
+      @last_bg_pid = pid
+      puts "[coproc] #{name} #{pid}"
+
+      ExitStatus.new(0)
+    end
+
     def expand_heredoc_content(content)
       # Expand variables in heredoc content
       expand_string_content(content)

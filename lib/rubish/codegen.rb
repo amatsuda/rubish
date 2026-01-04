@@ -38,6 +38,8 @@ module Rubish
         generate_heredoc(node)
       when AST::Herestring
         generate_herestring(node)
+      when AST::Coproc
+        generate_coproc(node)
       else
         raise "Unknown AST node: #{node.class}"
       end
@@ -537,6 +539,11 @@ module Rubish
       cmd_code = generate(node.command)
       string_expr = generate_string_arg(node.string)
       "__herestring(#{string_expr}) { #{cmd_code} }"
+    end
+
+    def generate_coproc(node)
+      cmd_code = generate(node.command)
+      "__coproc(#{node.name.inspect}) { #{cmd_code} }"
     end
 
     def escape_string(str)

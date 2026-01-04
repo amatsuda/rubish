@@ -89,7 +89,7 @@ module Rubish
       commands.length == 1 ? commands.first : AST::Pipeline.new(commands)
     end
 
-    # command : if_statement | while_statement | until_statement | for_statement | case_statement | function_def | subshell | WORD arg* block? (redirection)*
+    # command : if_statement | while_statement | until_statement | for_statement | case_statement | function_def | subshell | coproc | WORD arg* block? (redirection)*
     # arg : WORD | ARRAY | REGEXP
     def parse_command
       # Check for control structures
@@ -101,6 +101,7 @@ module Rubish
       return parse_case if peek(:CASE)
       return parse_function_keyword if peek(:FUNCTION)
       return parse_subshell if peek(:LPAREN)
+      return parse_coproc if peek(:COPROC)
 
       return nil unless peek(:WORD)
 
@@ -384,6 +385,36 @@ module Rubish
       end
 
       commands.length == 1 ? commands.first : AST::List.new(commands)
+    end
+
+    # coproc : COPROC [NAME] command
+    # If first word after coproc is a simple name (not a command), use it as coproc name
+    def parse_coproc
+      consume(:COPROC)
+
+      name = 'COPROC'
+
+      # Look ahead: if we have a WORD followed by another WORD or control structure,
+      # the first WORD is the coproc name
+      if peek(:WORD)
+        # Peek at the next token to decide if this WORD is a name or the command
+        saved_pos = @pos
+        first_word = consume(:WORD).value
+
+        if peek_any(:WORD, :IF, :WHILE, :FOR, :UNTIL, :SELECT, :CASE, :FUNCTION, :LPAREN, :LBRACE)
+          # First word is the name, next is the command
+          name = first_word
+        else
+          # First word is the command itself, restore position
+          @pos = saved_pos
+        end
+      end
+
+      # Parse the command (can be a simple command or compound command)
+      command = parse_command
+      raise 'Expected command after coproc' unless command
+
+      AST::Coproc.new(name: name, command: command)
     end
 
     # Parse body of case branch (stops at ;; or esac)

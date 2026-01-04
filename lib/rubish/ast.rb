@@ -82,5 +82,14 @@ module Rubish
 
     # Herestring: cmd <<< "string" - provides single-line string as stdin
     Herestring = Data.define(:command, :string)
+
+    # Coproc: coproc [NAME] command - runs command as coprocess with bidirectional pipes
+    # name: the coprocess name (defaults to "COPROC")
+    # command: the command to run
+    Coproc = Data.define(:name, :command) do
+      def initialize(name: 'COPROC', command:)
+        super
+      end
+    end
   end
 end

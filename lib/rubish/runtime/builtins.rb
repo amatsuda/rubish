@@ -22,6 +22,7 @@ module Rubish
     @readline_variables = {}  # Hash of readline variable names to values
     @arrays = {}  # Hash of array variable names to their values (Array)
     @assoc_arrays = {}  # Hash of associative array names to their values (Hash)
+    @coprocs = {}  # Hash of coproc names to {pid:, read_fd:, write_fd:, reader:, writer:}
     @executor = nil
     @script_name_getter = nil
     @script_name_setter = nil
@@ -33,7 +34,7 @@ module Rubish
     @command_executor = nil  # Executor that bypasses functions/aliases
 
     class << self
-      attr_reader :aliases, :dir_stack, :traps, :local_scope_stack, :readonly_vars, :var_attributes, :command_hash, :shell_options, :disabled_builtins, :call_stack, :completions, :completion_options, :key_bindings, :readline_variables, :arrays, :assoc_arrays
+      attr_reader :aliases, :dir_stack, :traps, :local_scope_stack, :readonly_vars, :var_attributes, :command_hash, :shell_options, :disabled_builtins, :call_stack, :completions, :completion_options, :key_bindings, :readline_variables, :arrays, :assoc_arrays, :coprocs
       attr_accessor :executor, :script_name_getter, :script_name_setter, :positional_params_getter, :positional_params_setter, :function_checker, :function_remover, :heredoc_content_setter, :command_executor, :current_completion_options
     end
 
@@ -126,6 +127,61 @@ module Rubish
     def self.unset_assoc_element(name, key)
       return unless @assoc_arrays[name]
       @assoc_arrays[name].delete(key)
+    end
+
+    # Coproc methods
+    def self.coproc?(name)
+      @coprocs.key?(name)
+    end
+
+    def self.get_coproc(name)
+      @coprocs[name]
+    end
+
+    def self.set_coproc(name, pid:, read_fd:, write_fd:, reader:, writer:)
+      @coprocs[name] = {
+        pid: pid,
+        read_fd: read_fd,
+        write_fd: write_fd,
+        reader: reader,
+        writer: writer
+      }
+      # Store file descriptors as array (bash-compatible)
+      set_array(name, [read_fd.to_s, write_fd.to_s])
+      # Store PID as NAME_PID
+      ENV["#{name}_PID"] = pid.to_s
+    end
+
+    def self.remove_coproc(name)
+      coproc = @coprocs.delete(name)
+      return unless coproc
+
+      # Close file descriptors
+      coproc[:reader]&.close rescue nil
+      coproc[:writer]&.close rescue nil
+      # Clean up array and PID env var
+      unset_array(name)
+      ENV.delete("#{name}_PID")
+    end
+
+    def self.coproc_read_fd(name)
+      @coprocs.dig(name, :read_fd)
+    end
+
+    def self.coproc_write_fd(name)
+      @coprocs.dig(name, :write_fd)
+    end
+
+    def self.coproc_pid(name)
+      @coprocs.dig(name, :pid)
+    end
+
+    def self.coproc_reader(name)
+      @coprocs.dig(name, :reader)
+    end
+
+    def self.coproc_writer(name)
+      @coprocs.dig(name, :writer)
     end
 
     # Valid shell options with their default values and descriptions
