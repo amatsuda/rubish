@@ -36,10 +36,12 @@ module Rubish
     def run
       setup_reline
       setup_signals
+      load_history
       load_config
       exit_code = catch(:exit) do
         loop { process_line }
       end
+      save_history
       exit_code
     end
 
@@ -47,6 +49,69 @@ module Rubish
 
     def setup_reline
       Reline.completion_proc = ->(input) { complete(input) }
+    end
+
+    # Get the history file path from HISTFILE or default
+    def history_file
+      ENV['HISTFILE'] || File.expand_path('~/.rubish_history')
+    end
+
+    # Get HISTSIZE (max entries in memory), default 500
+    def histsize
+      size = ENV['HISTSIZE']
+      return 500 if size.nil? || size.empty?
+      size.to_i
+    end
+
+    # Get HISTFILESIZE (max lines in file), default 500
+    def histfilesize
+      size = ENV['HISTFILESIZE']
+      return 500 if size.nil? || size.empty?
+      size.to_i
+    end
+
+    # Load history from HISTFILE
+    def load_history
+      file = history_file
+      return unless File.exist?(file)
+
+      max_entries = histsize
+      # If HISTSIZE is 0 or negative, don't load history
+      return if max_entries <= 0
+
+      begin
+        lines = File.readlines(file, chomp: true)
+        # Only keep the last HISTSIZE entries
+        lines = lines.last(max_entries) if lines.size > max_entries
+        lines.each { |line| Reline::HISTORY << line }
+      rescue => e
+        $stderr.puts "rubish: cannot read history file: #{e.message}"
+      end
+    end
+
+    # Save history to HISTFILE
+    def save_history
+      file = history_file
+      max_lines = histfilesize
+
+      # If HISTFILESIZE is 0 or negative, don't save history
+      return if max_lines <= 0
+
+      begin
+        history = Reline::HISTORY.to_a
+        # Only keep the last HISTFILESIZE entries
+        history = history.last(max_lines) if history.size > max_lines
+
+        # Create directory if needed
+        dir = File.dirname(file)
+        FileUtils.mkdir_p(dir) unless File.directory?(dir)
+
+        File.open(file, 'w') do |f|
+          history.each { |line| f.puts(line) }
+        end
+      rescue => e
+        $stderr.puts "rubish: cannot write history file: #{e.message}"
+      end
     end
 
     def setup_signals
