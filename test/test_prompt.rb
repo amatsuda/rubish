@@ -353,4 +353,94 @@ class TestPrompt < Test::Unit::TestCase
 
     assert_match(/^\+ true$/, output.strip)
   end
+
+  # PROMPT_COMMAND tests
+  def test_prompt_command_not_set
+    ENV.delete('PROMPT_COMMAND')
+    Rubish::Builtins.set_array('PROMPT_COMMAND', [])
+    # Should not raise any errors
+    @repl.send(:run_prompt_command)
+  end
+
+  def test_prompt_command_string
+    ENV['PROMPT_COMMAND'] = 'true'
+    Rubish::Builtins.set_array('PROMPT_COMMAND', [])
+    # Should execute without error
+    @repl.send(:run_prompt_command)
+  end
+
+  def test_prompt_command_sets_variable
+    Dir.chdir(@tempdir) do
+      ENV['PROMPT_COMMAND'] = 'echo "executed" > prompt_test.txt'
+      Rubish::Builtins.set_array('PROMPT_COMMAND', [])
+      @repl.send(:run_prompt_command)
+      assert File.exist?('prompt_test.txt'), 'PROMPT_COMMAND should have been executed'
+      assert_equal "executed\n", File.read('prompt_test.txt')
+    end
+  end
+
+  def test_prompt_command_preserves_exit_status
+    @repl.instance_variable_set(:@last_status, 42)
+    ENV['PROMPT_COMMAND'] = 'true'
+    Rubish::Builtins.set_array('PROMPT_COMMAND', [])
+    @repl.send(:run_prompt_command)
+    # PROMPT_COMMAND should not affect $?
+    assert_equal 42, @repl.instance_variable_get(:@last_status)
+  end
+
+  def test_prompt_command_array
+    Dir.chdir(@tempdir) do
+      ENV.delete('PROMPT_COMMAND')
+      Rubish::Builtins.set_array('PROMPT_COMMAND', [
+        'echo "first" > first.txt',
+        'echo "second" > second.txt'
+      ])
+      @repl.send(:run_prompt_command)
+      assert File.exist?('first.txt'), 'First command should have been executed'
+      assert File.exist?('second.txt'), 'Second command should have been executed'
+      assert_equal "first\n", File.read('first.txt')
+      assert_equal "second\n", File.read('second.txt')
+    end
+  end
+
+  def test_prompt_command_array_takes_precedence
+    Dir.chdir(@tempdir) do
+      ENV['PROMPT_COMMAND'] = 'echo "string" > string.txt'
+      Rubish::Builtins.set_array('PROMPT_COMMAND', ['echo "array" > array.txt'])
+      @repl.send(:run_prompt_command)
+      # Array should take precedence over string
+      assert File.exist?('array.txt'), 'Array command should have been executed'
+      assert !File.exist?('string.txt'), 'String command should not have been executed'
+    end
+  end
+
+  def test_prompt_command_with_multiple_commands
+    Dir.chdir(@tempdir) do
+      ENV['PROMPT_COMMAND'] = 'echo "one" > one.txt; echo "two" > two.txt'
+      Rubish::Builtins.set_array('PROMPT_COMMAND', [])
+      @repl.send(:run_prompt_command)
+      assert File.exist?('one.txt')
+      assert File.exist?('two.txt')
+    end
+  end
+
+  def test_prompt_command_empty_string
+    ENV['PROMPT_COMMAND'] = ''
+    Rubish::Builtins.set_array('PROMPT_COMMAND', [])
+    # Should not raise any errors
+    @repl.send(:run_prompt_command)
+  end
+
+  def test_prompt_command_skips_nil_in_array
+    Dir.chdir(@tempdir) do
+      ENV.delete('PROMPT_COMMAND')
+      arr = []
+      arr[0] = 'echo "zero" > zero.txt'
+      arr[2] = 'echo "two" > two.txt'  # arr[1] is nil
+      Rubish::Builtins.set_array('PROMPT_COMMAND', arr)
+      @repl.send(:run_prompt_command)
+      assert File.exist?('zero.txt')
+      assert File.exist?('two.txt')
+    end
+  end
 end

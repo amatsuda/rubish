@@ -111,6 +111,45 @@ module Rubish
       end
     end
 
+    # Execute PROMPT_COMMAND before displaying the prompt
+    # PROMPT_COMMAND can be:
+    #   - A single command string
+    #   - Multiple commands separated by semicolons
+    #   - An array of commands (PROMPT_COMMAND[0], PROMPT_COMMAND[1], etc.)
+    def run_prompt_command
+      # First check for PROMPT_COMMAND array
+      prompt_cmds = Builtins.get_array('PROMPT_COMMAND')
+      if prompt_cmds && !prompt_cmds.empty?
+        prompt_cmds.each do |cmd|
+          next if cmd.nil? || cmd.empty?
+          execute_prompt_command(cmd)
+        end
+        return
+      end
+
+      # Fall back to PROMPT_COMMAND as a string
+      cmd = ENV['PROMPT_COMMAND']
+      return if cmd.nil? || cmd.empty?
+
+      execute_prompt_command(cmd)
+    end
+
+    def execute_prompt_command(cmd)
+      # Save current state
+      saved_status = @last_status
+
+      # Execute the command silently (don't affect $?)
+      begin
+        execute(cmd)
+      rescue => e
+        # Silently ignore errors in PROMPT_COMMAND
+        $stderr.puts "rubish: PROMPT_COMMAND: #{e.message}" if Builtins.set_option?('x')
+      end
+
+      # Restore the exit status (PROMPT_COMMAND shouldn't affect $?)
+      @last_status = saved_status
+    end
+
     # Expand PS1/PS2 escape sequences
     # Supported escapes:
     #   \a - bell (ASCII 007)
@@ -250,6 +289,9 @@ module Rubish
     def process_line
       # Check for completed background jobs
       JobManager.instance.check_background_jobs
+
+      # Execute PROMPT_COMMAND before displaying prompt
+      run_prompt_command
 
       line = Reline.readline(prompt, true)
       unless line
