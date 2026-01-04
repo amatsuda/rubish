@@ -1061,6 +1061,9 @@ module Rubish
       when ':-'
         # ${var:-default} - use default if unset or null
         is_null ? operand : value
+      when '-'
+        # ${var-default} - use default only if unset (null is fine)
+        is_set ? value : operand
       when ':='
         # ${var:=default} - assign default if unset or null
         if is_null
@@ -1069,9 +1072,20 @@ module Rubish
         else
           value
         end
+      when '='
+        # ${var=default} - assign default only if unset
+        if is_set
+          value
+        else
+          ENV[var_name] = operand
+          operand
+        end
       when ':+'
         # ${var:+value} - use value if set and non-null
         is_null ? '' : operand
+      when '+'
+        # ${var+value} - use value if set (even if null)
+        is_set ? operand : ''
       when ':?'
         # ${var:?message} - error if unset or null
         if is_null
@@ -1079,6 +1093,13 @@ module Rubish
           raise msg
         end
         value
+      when '?'
+        # ${var?message} - error only if unset
+        unless is_set
+          msg = operand.empty? ? "#{var_name}: parameter not set" : operand
+          raise msg
+        end
+        value || ''
       when '#'
         # ${var#pattern} - remove shortest prefix
         return '' if value.nil?
@@ -1124,6 +1145,88 @@ module Rubish
       else
         value[offset..]
       end || ''
+    end
+
+    def __param_replace(var_name, operator, pattern, replacement)
+      # ${var/pattern/replacement} or ${var//pattern/replacement}
+      value = ENV[var_name] || ''
+      return '' if value.empty?
+
+      # Convert shell pattern to regex
+      regex = pattern_to_regex(pattern, :any, :longest)
+
+      case operator
+      when '//'
+        # Replace all occurrences
+        value.gsub(regex, replacement)
+      when '/'
+        # Replace first occurrence only
+        value.sub(regex, replacement)
+      else
+        value
+      end
+    end
+
+    def __param_case(var_name, operator, pattern)
+      # Case modification operators
+      value = ENV[var_name] || ''
+      return '' if value.empty?
+
+      case operator
+      when '^^'
+        # Uppercase all characters
+        if pattern.empty?
+          value.upcase
+        else
+          # Only uppercase characters matching pattern
+          regex = pattern_to_regex(pattern, :any, :longest)
+          value.gsub(regex) { |m| m.upcase }
+        end
+      when '^'
+        # Uppercase first character
+        if pattern.empty?
+          value[0].upcase + value[1..]
+        else
+          # Uppercase first char if it matches pattern
+          regex = pattern_to_regex(pattern, :any, :longest)
+          if value[0].match?(regex)
+            value[0].upcase + value[1..]
+          else
+            value
+          end
+        end
+      when ',,'
+        # Lowercase all characters
+        if pattern.empty?
+          value.downcase
+        else
+          # Only lowercase characters matching pattern
+          regex = pattern_to_regex(pattern, :any, :longest)
+          value.gsub(regex) { |m| m.downcase }
+        end
+      when ','
+        # Lowercase first character
+        if pattern.empty?
+          value[0].downcase + value[1..]
+        else
+          # Lowercase first char if it matches pattern
+          regex = pattern_to_regex(pattern, :any, :longest)
+          if value[0].match?(regex)
+            value[0].downcase + value[1..]
+          else
+            value
+          end
+        end
+      else
+        value
+      end
+    end
+
+    def __param_indirect(var_name)
+      # ${!var} - get value of variable whose name is in var
+      indirect_name = ENV[var_name]
+      return '' if indirect_name.nil? || indirect_name.empty?
+      ENV[indirect_name] || ''
     end
 
     def remove_suffix(value, pattern, mode)

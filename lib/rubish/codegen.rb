@@ -91,10 +91,12 @@ module Rubish
     def has_brace_expansion?(str)
       # Check for brace expansion patterns: {a,b} or {1..5}
       # Must have matching braces with either comma or ..
+      # But NOT ${...} which is parameter expansion
       return false unless str.include?('{') && str.include?('}')
 
-      # Simple check: contains {something,something} or {x..y}
-      str.match?(/\{[^}]*(?:,|\.\.)[^}]*\}/)
+      # Check for brace expansion, but exclude ${...} parameter expansion
+      # ${var,} or ${var,,} are case modification, not brace expansion
+      str.match?(/(?<!\$)\{[^}]*(?:,|\.\.)[^}]*\}/)
     end
 
     def generate_string_arg_with_glob(str)
@@ -559,6 +561,12 @@ module Rubish
     end
 
     def parse_parameter_expansion(content)
+      # Handle ${!var} - indirect expansion
+      if content =~ /\A!([a-zA-Z_][a-zA-Z0-9_]*)\z/
+        var_name = $1
+        return "__param_indirect(#{var_name.inspect})"
+      end
+
       # Handle ${#var} - length
       if content =~ /\A#([a-zA-Z_][a-zA-Z0-9_]*)\z/
         var_name = $1
@@ -575,6 +583,31 @@ module Rubish
         else
           return "__param_substring(#{var_name.inspect}, #{offset}, nil)"
         end
+      end
+
+      # Handle ${var//pattern/replacement} and ${var/pattern/replacement}
+      if content =~ /\A([a-zA-Z_][a-zA-Z0-9_]*)(\/\/|\/)((?:[^\/]|\\.)*)\/((?:[^\/]|\\.)*)?\z/
+        var_name = $1
+        operator = $2
+        pattern = $3
+        replacement = $4 || ''
+        return "__param_replace(#{var_name.inspect}, #{operator.inspect}, #{pattern.inspect}, #{replacement.inspect})"
+      end
+
+      # Handle ${var/pattern} - delete first match (no replacement)
+      if content =~ /\A([a-zA-Z_][a-zA-Z0-9_]*)(\/\/|\/)((?:[^\/]|\\.)+)\z/
+        var_name = $1
+        operator = $2
+        pattern = $3
+        return "__param_replace(#{var_name.inspect}, #{operator.inspect}, #{pattern.inspect}, '')"
+      end
+
+      # Handle ${var^^}, ${var^}, ${var,,}, ${var,} - case modification
+      if content =~ /\A([a-zA-Z_][a-zA-Z0-9_]*)(\^\^|\^|,,|,)(?:([^}]*))?\z/
+        var_name = $1
+        operator = $2
+        pattern = $3 || ''
+        return "__param_case(#{var_name.inspect}, #{operator.inspect}, #{pattern.inspect})"
       end
 
       # Handle ${var##pattern} and ${var%%pattern} - greedy versions first
@@ -595,6 +628,14 @@ module Rubish
 
       # Handle ${var:-default}, ${var:=default}, ${var:+value}, ${var:?message}
       if content =~ /\A([a-zA-Z_][a-zA-Z0-9_]*)(:-|:=|:\+|:\?)(.*)?\z/
+        var_name = $1
+        operator = $2
+        operand = $3 || ''
+        return "__param_expand(#{var_name.inspect}, #{operator.inspect}, #{operand.inspect})"
+      end
+
+      # Handle ${var-default}, ${var=default}, ${var+value}, ${var?message} (unset only, not null)
+      if content =~ /\A([a-zA-Z_][a-zA-Z0-9_]*)(-|=|\+|\?)(.*)?\z/
         var_name = $1
         operator = $2
         operand = $3 || ''
