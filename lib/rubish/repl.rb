@@ -1,6 +1,8 @@
 # frozen_string_literal: true
 
 module Rubish
+  class NounsetError < StandardError; end
+
   class REPL
     def initialize
       @lexer_class = Lexer
@@ -131,20 +133,30 @@ module Rubish
 
       # Check for builtins (simple command only)
       if ast.is_a?(AST::Command) && Builtins.builtin?(ast.name)
-        # Expand variables in args for builtins
-        expanded_args = expand_args_for_builtin(ast.args)
-        result = Builtins.run(ast.name, expanded_args)
-        @last_status = result ? 0 : 1
-        check_errexit
+        begin
+          # Expand variables in args for builtins
+          expanded_args = expand_args_for_builtin(ast.args)
+          result = Builtins.run(ast.name, expanded_args)
+          @last_status = result ? 0 : 1
+          check_errexit
+        rescue NounsetError
+          @last_status = 1
+          throw(:exit, 1) if Builtins.set_option?('u')
+        end
         return
       end
 
       # Check for user-defined functions (simple command only)
       if ast.is_a?(AST::Command) && @functions.key?(ast.name)
-        expanded_args = expand_args_for_builtin(ast.args)
-        result = call_function(ast.name, expanded_args)
-        @last_status = result ? 0 : 1
-        check_errexit
+        begin
+          expanded_args = expand_args_for_builtin(ast.args)
+          result = call_function(ast.name, expanded_args)
+          @last_status = result ? 0 : 1
+          check_errexit
+        rescue NounsetError
+          @last_status = 1
+          throw(:exit, 1) if Builtins.set_option?('u')
+        end
         return
       end
 
@@ -152,6 +164,10 @@ module Rubish
       result = eval_in_context(code)
       @last_status = extract_exit_status(result)
       check_errexit
+    rescue NounsetError
+      # Unbound variable error when set -u is enabled
+      @last_status = 1
+      throw(:exit, 1) if Builtins.set_option?('u')
     ensure
       @heredoc_content = nil
     end
@@ -584,7 +600,7 @@ module Rubish
         end_brace = str.index('}', pos + 2)
         if end_brace
           var_name = str[pos + 2...end_brace]
-          return [ENV.fetch(var_name, ''), end_brace - pos + 1]
+          return [fetch_var_with_nounset(var_name), end_brace - pos + 1]
         end
       end
 
@@ -593,10 +609,18 @@ module Rubish
         j = pos + 1
         j += 1 while j < str.length && str[j] =~ /[a-zA-Z0-9_]/
         var_name = str[pos + 1...j]
-        return [ENV.fetch(var_name, ''), j - pos]
+        return [fetch_var_with_nounset(var_name), j - pos]
       end
 
       ['', 0]
+    end
+
+    def fetch_var_with_nounset(var_name)
+      if Builtins.set_option?('u') && !ENV.key?(var_name)
+        $stderr.puts "rubish: #{var_name}: unbound variable"
+        raise NounsetError, "#{var_name}: unbound variable"
+      end
+      ENV.fetch(var_name, '')
     end
 
     def extract_exit_status(result)
@@ -1237,6 +1261,15 @@ module Rubish
       rescue StandardError
         '0'
       end
+    end
+
+    def __fetch_var(var_name)
+      # Fetch variable with nounset check
+      if Builtins.set_option?('u') && !ENV.key?(var_name)
+        $stderr.puts "rubish: #{var_name}: unbound variable"
+        raise NounsetError, "#{var_name}: unbound variable"
+      end
+      ENV.fetch(var_name, '')
     end
 
     def __param_expand(var_name, operator, operand)

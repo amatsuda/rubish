@@ -141,11 +141,72 @@ class TestSetOptions < Test::Unit::TestCase
     assert_match(/set \+o errexit/, output)
   end
 
-  # Other options (should at least not error)
-  def test_set_minus_u_nounset
+  # set -u (nounset)
+  def test_set_minus_u_enables_nounset
     execute('set -u')
     assert Rubish::Builtins.set_option?('u')
   end
+
+  def test_set_plus_u_disables_nounset
+    execute('set -u')
+    execute('set +u')
+    assert_false Rubish::Builtins.set_option?('u')
+  end
+
+  def test_set_o_nounset
+    execute('set -o nounset')
+    assert Rubish::Builtins.set_option?('u')
+  end
+
+  def test_nounset_error_on_unset_variable
+    execute('set -u')
+    stderr_file = File.join(@tempdir, 'stderr.txt')
+    old_stderr = $stderr
+    $stderr = File.open(stderr_file, 'w')
+    begin
+      # This should print an error to stderr
+      catch(:exit) { execute("echo $UNSET_VAR_FOR_TEST > #{output_file}") }
+    ensure
+      $stderr.close
+      $stderr = old_stderr
+    end
+    execute('set +u')
+
+    stderr_content = File.read(stderr_file)
+    assert_match(/UNSET_VAR_FOR_TEST.*unbound variable/, stderr_content)
+  end
+
+  def test_nounset_no_error_on_set_variable
+    ENV['NOUNSET_TEST_VAR'] = 'hello'
+    execute('set -u')
+    execute("echo $NOUNSET_TEST_VAR > #{output_file}")
+    execute('set +u')
+    assert_equal "hello\n", File.read(output_file)
+  ensure
+    ENV.delete('NOUNSET_TEST_VAR')
+  end
+
+  def test_nounset_no_error_on_empty_variable
+    # Empty variables are considered "set" even if empty
+    ENV['NOUNSET_EMPTY_VAR'] = ''
+    execute('set -u')
+    execute("echo \"x${NOUNSET_EMPTY_VAR}y\" > #{output_file}")
+    execute('set +u')
+    assert_equal "xy\n", File.read(output_file)
+  ensure
+    ENV.delete('NOUNSET_EMPTY_VAR')
+  end
+
+  def test_nounset_special_vars_always_set
+    # Special variables like $?, $$, $# should work even with nounset
+    execute('set -u')
+    execute("echo $? > #{output_file}")
+    result = File.read(output_file).chomp
+    execute('set +u')
+    assert_match(/^\d+$/, result)
+  end
+
+  # Other options (should at least not error)
 
   def test_set_minus_f_noglob
     execute('set -f')

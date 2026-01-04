@@ -155,7 +155,7 @@ module Rubish
       # Unquoted: expand variables
       # If it's just a simple variable (not special), return the expression directly
       if str =~ /\A\$([a-zA-Z_][a-zA-Z0-9_]*)\z/
-        return "ENV.fetch(#{$1.inspect}, '')"
+        return "__fetch_var(#{$1.inspect})"
       end
 
       # Check if string contains any variables or backtick substitution
@@ -309,7 +309,7 @@ module Rubish
         j = pos + 1
         j += 1 while j < str.length && str[j] =~ /[a-zA-Z0-9_]/
         var_name = str[pos + 1...j]
-        return ["ENV.fetch(#{var_name.inspect}, '')", j - pos]
+        return ["__fetch_var(#{var_name.inspect})", j - pos]
       end
 
       nil
@@ -669,7 +669,7 @@ module Rubish
       end
 
       # Simple ${VAR}
-      "ENV.fetch(#{content.inspect}, '')"
+      "__fetch_var(#{content.inspect})"
     end
   end
 end
