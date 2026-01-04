@@ -1831,4 +1831,110 @@ class TestSetOptions < Test::Unit::TestCase
     assert Rubish::Builtins.set_option?('emacs')
     assert_false Rubish::Builtins.set_option?('vi')
   end
+
+  # set -o nocasematch
+  def test_nocasematch_disabled_by_default
+    # Nocasematch should be disabled by default
+    assert_false Rubish::Builtins.set_option?('nocasematch')
+  end
+
+  def test_set_o_nocasematch_enables_nocasematch
+    execute('set -o nocasematch')
+    assert Rubish::Builtins.set_option?('nocasematch')
+    execute('set +o nocasematch')
+  end
+
+  def test_set_plus_o_nocasematch_disables_nocasematch
+    execute('set -o nocasematch')
+    execute('set +o nocasematch')
+    assert_false Rubish::Builtins.set_option?('nocasematch')
+  end
+
+  def test_nocasematch_listed_in_set_options
+    output = capture_stdout { execute('set -o') }
+    assert_match(/nocasematch/, output)
+  end
+
+  def test_nocasematch_shows_enabled_state
+    execute('set -o nocasematch')
+    output = capture_stdout { execute('set -o') }
+    execute('set +o nocasematch')
+
+    assert_match(/set -o nocasematch/, output)
+  end
+
+  def test_nocasematch_shows_disabled_state
+    execute('set +o nocasematch')
+    output = capture_stdout { execute('set -o') }
+
+    assert_match(/set \+o nocasematch/, output)
+  end
+
+  # Nocasematch functionality tests
+  def test_case_match_without_nocasematch_is_case_sensitive
+    # Without nocasematch, patterns should be case-sensitive
+    assert @repl.send(:__case_match, 'foo', 'foo')
+    assert_false @repl.send(:__case_match, 'foo', 'FOO')
+    assert_false @repl.send(:__case_match, 'FOO', 'foo')
+  end
+
+  def test_case_match_with_nocasematch_is_case_insensitive
+    execute('set -o nocasematch')
+
+    # With nocasematch, patterns should be case-insensitive
+    assert @repl.send(:__case_match, 'foo', 'foo')
+    assert @repl.send(:__case_match, 'foo', 'FOO')
+    assert @repl.send(:__case_match, 'FOO', 'foo')
+    assert @repl.send(:__case_match, 'FoO', 'fOo')
+
+    execute('set +o nocasematch')
+  end
+
+  def test_case_match_wildcard_with_nocasematch
+    execute('set -o nocasematch')
+
+    # Wildcards should work with case-insensitive matching
+    assert @repl.send(:__case_match, 'f*', 'FOO')
+    assert @repl.send(:__case_match, 'F*', 'foo')
+    assert @repl.send(:__case_match, '*.TXT', 'file.txt')
+    assert @repl.send(:__case_match, '*.txt', 'FILE.TXT')
+
+    execute('set +o nocasematch')
+  end
+
+  def test_case_match_question_mark_with_nocasematch
+    execute('set -o nocasematch')
+
+    # Single character wildcard should work case-insensitively
+    assert @repl.send(:__case_match, 'fo?', 'FOO')
+    assert @repl.send(:__case_match, 'FO?', 'foo')
+
+    execute('set +o nocasematch')
+  end
+
+  def test_case_match_bracket_with_nocasematch
+    execute('set -o nocasematch')
+
+    # Bracket expressions match characters in the set
+    # Note: FNM_CASEFOLD affects literal matching, not bracket contents
+    assert @repl.send(:__case_match, '[abc]', 'a')
+    assert @repl.send(:__case_match, '[abc]', 'b')
+    assert @repl.send(:__case_match, '[aAbBcC]', 'A')
+    assert @repl.send(:__case_match, '[aAbBcC]', 'a')
+
+    execute('set +o nocasematch')
+  end
+
+  def test_case_match_respects_nocasematch_toggle
+    # Start with case-sensitive
+    assert_false @repl.send(:__case_match, 'foo', 'FOO')
+
+    # Enable nocasematch
+    execute('set -o nocasematch')
+    assert @repl.send(:__case_match, 'foo', 'FOO')
+
+    # Disable nocasematch
+    execute('set +o nocasematch')
+    assert_false @repl.send(:__case_match, 'foo', 'FOO')
+  end
 end

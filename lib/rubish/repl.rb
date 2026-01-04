@@ -2125,7 +2125,9 @@ module Rubish
     def __case_match(pattern, word)
       # Shell pattern matching using fnmatch
       # Supports *, ?, [...] patterns
-      File.fnmatch(pattern, word, File::FNM_EXTGLOB)
+      flags = File::FNM_EXTGLOB
+      flags |= File::FNM_CASEFOLD if Builtins.set_option?('nocasematch')
+      File.fnmatch(pattern, word, flags)
     end
 
     def __subshell(&block)

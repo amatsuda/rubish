@@ -1564,6 +1564,7 @@ module Rubish
       'P' => false,          # physical: don't follow symlinks for cd/pwd
       'emacs' => true,       # emacs: use emacs-style line editing (default)
       'vi' => false,         # vi: use vi-style line editing
+      'nocasematch' => false, # nocasematch: case-insensitive pattern matching in case/[[
     }
 
     def self.set_options
@@ -1637,7 +1638,8 @@ module Rubish
         'h' => 'hashall', 'm' => 'monitor', 'pipefail' => 'pipefail',
         'globstar' => 'globstar', 'nullglob' => 'nullglob', 'failglob' => 'failglob',
         'dotglob' => 'dotglob', 'nocaseglob' => 'nocaseglob', 'ignoreeof' => 'ignoreeof',
-        'extglob' => 'extglob', 'P' => 'physical', 'emacs' => 'emacs', 'vi' => 'vi'
+        'extglob' => 'extglob', 'P' => 'physical', 'emacs' => 'emacs', 'vi' => 'vi',
+        'nocasematch' => 'nocasematch'
       }
       @set_options.each do |flag, value|
         name = long_names[flag] || flag
@@ -1656,7 +1658,8 @@ module Rubish
         'hashall' => 'h', 'monitor' => 'm', 'pipefail' => 'pipefail',
         'globstar' => 'globstar', 'nullglob' => 'nullglob', 'failglob' => 'failglob',
         'dotglob' => 'dotglob', 'nocaseglob' => 'nocaseglob', 'ignoreeof' => 'ignoreeof',
-        'extglob' => 'extglob', 'physical' => 'P', 'emacs' => 'emacs', 'vi' => 'vi'
+        'extglob' => 'extglob', 'physical' => 'P', 'emacs' => 'emacs', 'vi' => 'vi',
+        'nocasematch' => 'nocasematch'
       }
       flag = mapping[name]
       return unless flag
