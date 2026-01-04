@@ -94,6 +94,9 @@ module Rubish
     end
 
     def execute(line)
+      # verbose: print input lines as read (before any processing)
+      $stderr.puts line if Builtins.set_option?('v')
+
       line, expanded = expand_history(line)
       return unless line
 
@@ -103,7 +106,7 @@ module Rubish
       line = Builtins.expand_alias(line)
       line = expand_tilde(line)
 
-      # xtrace: print commands before execution
+      # xtrace: print commands before execution (after expansion)
       xtrace(line) if Builtins.set_option?('x')
 
       # Check for array assignment before tokenizing (arr=(a b c) pattern)

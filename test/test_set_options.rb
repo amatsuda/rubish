@@ -335,4 +335,61 @@ class TestSetOptions < Test::Unit::TestCase
 
     assert_equal "forced\n", File.read(output_file)
   end
+
+  # set -v (verbose)
+  def test_set_minus_v_enables_verbose
+    execute('set -v')
+    assert Rubish::Builtins.set_option?('v')
+  end
+
+  def test_set_plus_v_disables_verbose
+    execute('set -v')
+    execute('set +v')
+    assert_false Rubish::Builtins.set_option?('v')
+  end
+
+  def test_set_o_verbose
+    execute('set -o verbose')
+    assert Rubish::Builtins.set_option?('v')
+  end
+
+  def test_verbose_prints_input_to_stderr
+    stderr_file = File.join(@tempdir, 'stderr.txt')
+    old_stderr = $stderr
+    $stderr = File.open(stderr_file, 'w')
+
+    execute('set -v')
+    begin
+      execute("echo hello > #{output_file}")
+    ensure
+      $stderr.close
+      $stderr = old_stderr
+    end
+    execute('set +v')
+
+    stderr_content = File.read(stderr_file)
+    assert_match(/echo hello/, stderr_content)
+  end
+
+  def test_verbose_prints_before_expansion
+    ENV['VERBOSE_TEST'] = 'expanded_value'
+    stderr_file = File.join(@tempdir, 'stderr.txt')
+    old_stderr = $stderr
+    $stderr = File.open(stderr_file, 'w')
+
+    execute('set -v')
+    begin
+      execute("echo $VERBOSE_TEST > #{output_file}")
+    ensure
+      $stderr.close
+      $stderr = old_stderr
+    end
+    execute('set +v')
+
+    stderr_content = File.read(stderr_file)
+    # Should print with the variable reference, not the expanded value
+    assert_match(/\$VERBOSE_TEST/, stderr_content)
+  ensure
+    ENV.delete('VERBOSE_TEST')
+  end
 end
