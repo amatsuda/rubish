@@ -1380,4 +1380,42 @@ class TestSetOptions < Test::Unit::TestCase
     assert_equal 1, matches.length
     assert matches.first.include?('.HiddenConfig')
   end
+
+  # set -o ignoreeof
+  def test_ignoreeof_disabled_by_default
+    # Ignoreeof should be disabled by default
+    assert_false Rubish::Builtins.set_option?('ignoreeof')
+  end
+
+  def test_set_o_ignoreeof_enables_ignoreeof
+    execute('set -o ignoreeof')
+    assert Rubish::Builtins.set_option?('ignoreeof')
+    execute('set +o ignoreeof')
+  end
+
+  def test_set_plus_o_ignoreeof_disables_ignoreeof
+    execute('set -o ignoreeof')
+    execute('set +o ignoreeof')
+    assert_false Rubish::Builtins.set_option?('ignoreeof')
+  end
+
+  def test_ignoreeof_listed_in_set_options
+    output = capture_stdout { execute('set -o') }
+    assert_match(/ignoreeof/, output)
+  end
+
+  def test_ignoreeof_shows_enabled_state
+    execute('set -o ignoreeof')
+    output = capture_stdout { execute('set -o') }
+    execute('set +o ignoreeof')
+
+    assert_match(/set -o ignoreeof/, output)
+  end
+
+  def test_ignoreeof_shows_disabled_state
+    execute('set +o ignoreeof')
+    output = capture_stdout { execute('set -o') }
+
+    assert_match(/set \+o ignoreeof/, output)
+  end
 end

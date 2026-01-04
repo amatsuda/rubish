@@ -88,7 +88,15 @@ module Rubish
       JobManager.instance.check_background_jobs
 
       line = Reline.readline(prompt, true)
-      return throw(:exit, 0) unless line
+      unless line
+        # EOF received (Ctrl+D)
+        if Builtins.set_option?('ignoreeof')
+          puts "\nUse \"exit\" to leave the shell."
+          return
+        else
+          return throw(:exit, 0)
+        end
+      end
 
       line = line.strip
       return if line.empty?

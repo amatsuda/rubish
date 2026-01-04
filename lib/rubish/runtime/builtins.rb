@@ -1506,6 +1506,7 @@ module Rubish
       'failglob' => false,  # failglob: patterns matching nothing cause an error
       'dotglob' => false,   # dotglob: globs match files starting with .
       'nocaseglob' => false, # nocaseglob: case-insensitive globbing
+      'ignoreeof' => false,  # ignoreeof: don't exit on EOF (Ctrl+D)
     }
 
     def self.set_options
@@ -1578,7 +1579,7 @@ module Rubish
         'f' => 'noglob', 'C' => 'noclobber', 'a' => 'allexport', 'b' => 'notify',
         'h' => 'hashall', 'm' => 'monitor', 'pipefail' => 'pipefail',
         'globstar' => 'globstar', 'nullglob' => 'nullglob', 'failglob' => 'failglob',
-        'dotglob' => 'dotglob', 'nocaseglob' => 'nocaseglob'
+        'dotglob' => 'dotglob', 'nocaseglob' => 'nocaseglob', 'ignoreeof' => 'ignoreeof'
       }
       @set_options.each do |flag, value|
         name = long_names[flag] || flag
@@ -1596,7 +1597,7 @@ module Rubish
         'noglob' => 'f', 'noclobber' => 'C', 'allexport' => 'a', 'notify' => 'b',
         'hashall' => 'h', 'monitor' => 'm', 'pipefail' => 'pipefail',
         'globstar' => 'globstar', 'nullglob' => 'nullglob', 'failglob' => 'failglob',
-        'dotglob' => 'dotglob', 'nocaseglob' => 'nocaseglob'
+        'dotglob' => 'dotglob', 'nocaseglob' => 'nocaseglob', 'ignoreeof' => 'ignoreeof'
       }
       flag = mapping[name]
       @set_options[flag] = value if flag
