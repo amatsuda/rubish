@@ -610,4 +610,48 @@ class TestSetOptions < Test::Unit::TestCase
 
     assert_match(/no job control/, output)
   end
+
+  # set -o pipefail
+  def test_set_o_pipefail_enables_pipefail
+    execute('set -o pipefail')
+    assert Rubish::Builtins.set_option?('pipefail')
+  end
+
+  def test_set_plus_o_pipefail_disables_pipefail
+    execute('set -o pipefail')
+    execute('set +o pipefail')
+    assert_false Rubish::Builtins.set_option?('pipefail')
+  end
+
+  def test_pipefail_pipeline_fails_if_first_command_fails
+    execute('set -o pipefail')
+
+    # false | true should fail with pipefail
+    execute("false | true > #{output_file}")
+    assert_not_equal 0, @repl.instance_variable_get(:@last_status)
+  end
+
+  def test_pipefail_pipeline_fails_if_middle_command_fails
+    execute('set -o pipefail')
+
+    # true | false | true should fail with pipefail
+    execute("true | false | true > #{output_file}")
+    assert_not_equal 0, @repl.instance_variable_get(:@last_status)
+  end
+
+  def test_pipefail_pipeline_succeeds_if_all_commands_succeed
+    execute('set -o pipefail')
+
+    # true | true | true should succeed
+    execute('true | true | true')
+    assert_equal 0, @repl.instance_variable_get(:@last_status)
+  end
+
+  def test_without_pipefail_pipeline_succeeds_if_last_command_succeeds
+    execute('set +o pipefail')  # Ensure disabled
+
+    # false | true should succeed without pipefail (last command succeeds)
+    execute("false | true > #{output_file}")
+    assert_equal 0, @repl.instance_variable_get(:@last_status)
+  end
 end

@@ -321,9 +321,12 @@ module Rubish
         writer.close
       end
 
-      # Wait for all children
-      pids.each { |pid| Process.wait(pid) }
-      @status = $?
+      # Wait for all children and collect statuses
+      statuses = pids.map do |pid|
+        Process.wait(pid)
+        $?
+      end
+      @status = determine_pipeline_status(statuses)
       self
     end
 
@@ -387,10 +390,21 @@ module Rubish
       end
       last_reader.close
 
-      # Wait for all children
-      pids.each { |pid| Process.wait(pid) }
-      @status = $?
+      # Wait for all children and collect statuses
+      statuses = pids.map do |pid|
+        Process.wait(pid)
+        $?
+      end
+      @status = determine_pipeline_status(statuses)
       self
+    end
+
+    def determine_pipeline_status(statuses)
+      return statuses.last unless Builtins.set_option?('pipefail')
+
+      # With pipefail, return rightmost non-zero exit status
+      failed = statuses.reverse.find { |s| !s.success? }
+      failed || statuses.last
     end
   end
 
