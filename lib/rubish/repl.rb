@@ -761,6 +761,8 @@ module Rubish
       # History expansion with word designators and modifiers
       # Format: !event[:word][:modifier...]
       # Returns [expanded_line, was_expanded]
+      # If histexpand (set -H) is disabled, don't expand history
+      return [line, false] unless Builtins.set_option?('H')
       return [line, false] unless line.include?('!') || line.start_with?('^')
 
       history = Reline::HISTORY.to_a

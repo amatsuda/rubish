@@ -21,8 +21,9 @@ class TestSetOptions < Test::Unit::TestCase
   def reset_set_options
     # Reset all options to their defaults
     Rubish::Builtins.set_options.each_key { |k| Rubish::Builtins.set_options[k] = false }
-    # Braceexpand is enabled by default
+    # Braceexpand and histexpand are enabled by default
     Rubish::Builtins.set_options['B'] = true
+    Rubish::Builtins.set_options['H'] = true
   end
 
   def output_file
@@ -847,5 +848,101 @@ class TestSetOptions < Test::Unit::TestCase
     # When disabled, braces are kept as literal text
     assert_equal '{1..3}', result
     execute('set -B')  # Re-enable for other tests
+  end
+
+  # set -H (histexpand)
+  def test_histexpand_enabled_by_default
+    # Histexpand should be enabled by default
+    assert Rubish::Builtins.set_option?('H')
+  end
+
+  def test_set_plus_H_disables_histexpand
+    execute('set +H')
+    assert_false Rubish::Builtins.set_option?('H')
+    execute('set -H')  # Re-enable for other tests
+  end
+
+  def test_set_minus_H_enables_histexpand
+    execute('set +H')
+    execute('set -H')
+    assert Rubish::Builtins.set_option?('H')
+  end
+
+  def test_set_o_histexpand
+    execute('set +o histexpand')
+    execute('set -o histexpand')
+    assert Rubish::Builtins.set_option?('H')
+  end
+
+  def test_histexpand_expands_bang_bang
+    # Add a command to history first
+    Reline::HISTORY.clear
+    Reline::HISTORY.push('echo hello')
+
+    execute('set -H')
+    # !! should expand to last command
+    line, expanded = @repl.send(:expand_history, '!!')
+    assert expanded
+    assert_equal 'echo hello', line
+  end
+
+  def test_histexpand_disabled_no_expansion
+    # Add a command to history first
+    Reline::HISTORY.clear
+    Reline::HISTORY.push('echo hello')
+
+    execute('set +H')
+    # With histexpand disabled, !! should be kept literally
+    line, expanded = @repl.send(:expand_history, '!!')
+    assert_false expanded
+    assert_equal '!!', line
+    execute('set -H')  # Re-enable for other tests
+  end
+
+  def test_histexpand_expands_bang_number
+    Reline::HISTORY.clear
+    Reline::HISTORY.push('echo first')
+    Reline::HISTORY.push('echo second')
+
+    execute('set -H')
+    # !1 should refer to first command in history
+    line, expanded = @repl.send(:expand_history, '!1')
+    assert expanded
+    assert_equal 'echo first', line
+  end
+
+  def test_histexpand_disabled_bang_number_no_expansion
+    Reline::HISTORY.clear
+    Reline::HISTORY.push('echo first')
+
+    execute('set +H')
+    # With histexpand disabled, !1 should be kept literally
+    line, expanded = @repl.send(:expand_history, '!1')
+    assert_false expanded
+    assert_equal '!1', line
+    execute('set -H')  # Re-enable for other tests
+  end
+
+  def test_histexpand_caret_substitution
+    Reline::HISTORY.clear
+    Reline::HISTORY.push('echo hello')
+
+    execute('set -H')
+    # ^hello^world should substitute hello with world in last command
+    line, expanded = @repl.send(:expand_history, '^hello^world')
+    assert expanded
+    assert_equal 'echo world', line
+  end
+
+  def test_histexpand_disabled_caret_no_substitution
+    Reline::HISTORY.clear
+    Reline::HISTORY.push('echo hello')
+
+    execute('set +H')
+    # With histexpand disabled, ^old^new should be kept literally
+    line, expanded = @repl.send(:expand_history, '^hello^world')
+    assert_false expanded
+    assert_equal '^hello^world', line
+    execute('set -H')  # Re-enable for other tests
   end
 end
