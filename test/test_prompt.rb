@@ -264,4 +264,61 @@ class TestPrompt < Test::Unit::TestCase
     assert_match(/\e\[0m/, prompt)
     assert_match(/\e\[34m/, prompt)
   end
+
+  # PS4 tests (xtrace debugging prompt)
+  def test_ps4_default
+    ENV.delete('PS4')
+    output = capture_stderr do
+      @repl.send(:xtrace, 'echo hello')
+    end
+    assert_equal "+ echo hello\n", output
+  end
+
+  def test_ps4_custom
+    ENV['PS4'] = '>>> '
+    output = capture_stderr do
+      @repl.send(:xtrace, 'echo hello')
+    end
+    assert_equal ">>> echo hello\n", output
+  end
+
+  def test_ps4_with_escapes
+    ENV['PS4'] = '[\t] + '
+    output = capture_stderr do
+      @repl.send(:xtrace, 'echo hello')
+    end
+    # Should expand \t to time
+    assert_match(/^\[\d{2}:\d{2}:\d{2}\] \+ echo hello$/, output.strip)
+  end
+
+  def test_ps4_with_shell_name
+    ENV['PS4'] = '\s: '
+    output = capture_stderr do
+      @repl.send(:xtrace, 'ls')
+    end
+    assert_equal "rubish: ls\n", output
+  end
+
+  def test_ps4_with_command_number
+    ENV['PS4'] = '+(\#) '
+    output = capture_stderr do
+      @repl.send(:xtrace, 'echo test')
+    end
+    assert_match(/^\+\(\d+\) echo test$/, output.strip)
+  end
+
+  def test_ps4_integration_with_set_x
+    ENV['PS4'] = '+ '
+    # Enable xtrace
+    Rubish::Builtins.run('set', ['-x'])
+
+    output = capture_stderr do
+      @repl.send(:execute, 'true')
+    end
+
+    # Disable xtrace
+    Rubish::Builtins.run('set', ['+x'])
+
+    assert_match(/^\+ true$/, output.strip)
+  end
 end
