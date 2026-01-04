@@ -1031,4 +1031,75 @@ class TestSetOptions < Test::Unit::TestCase
     # Should include both files and directories
     assert matches.length >= 2
   end
+
+  # set -o nullglob
+  def test_nullglob_disabled_by_default
+    # Nullglob should be disabled by default
+    assert_false Rubish::Builtins.set_option?('nullglob')
+  end
+
+  def test_set_o_nullglob_enables_nullglob
+    execute('set -o nullglob')
+    assert Rubish::Builtins.set_option?('nullglob')
+    execute('set +o nullglob')
+  end
+
+  def test_set_plus_o_nullglob_disables_nullglob
+    execute('set -o nullglob')
+    execute('set +o nullglob')
+    assert_false Rubish::Builtins.set_option?('nullglob')
+  end
+
+  def test_nullglob_no_match_returns_empty
+    execute('set -o nullglob')
+    # Pattern that matches nothing
+    matches = @repl.send(:__glob, "#{@tempdir}/nonexistent_*.xyz")
+    execute('set +o nullglob')
+
+    # With nullglob, no matches should return empty array
+    assert_equal [], matches
+  end
+
+  def test_nullglob_disabled_no_match_returns_pattern
+    execute('set +o nullglob')  # Ensure disabled
+    # Pattern that matches nothing
+    pattern = "#{@tempdir}/nonexistent_*.xyz"
+    matches = @repl.send(:__glob, pattern)
+
+    # Without nullglob, no matches should return the original pattern
+    assert_equal [pattern], matches
+  end
+
+  def test_nullglob_with_matches_returns_matches
+    # Create a test file
+    File.write(File.join(@tempdir, 'test.txt'), 'content')
+
+    execute('set -o nullglob')
+    matches = @repl.send(:__glob, "#{@tempdir}/*.txt")
+    execute('set +o nullglob')
+
+    # With matches, should return the matches (not affected by nullglob)
+    assert_equal 1, matches.length
+    assert_match(/test\.txt/, matches.first)
+  end
+
+  def test_nullglob_echo_no_match_outputs_nothing
+    execute('set -o nullglob')
+    execute("echo #{@tempdir}/nonexistent_*.xyz > #{output_file}")
+    result = File.read(output_file).strip
+    execute('set +o nullglob')
+
+    # With nullglob, echo with no matches should output nothing (or just newline)
+    assert_equal '', result
+  end
+
+  def test_nullglob_disabled_echo_no_match_outputs_pattern
+    execute('set +o nullglob')  # Ensure disabled
+    pattern = "#{@tempdir}/no_match_*.xyz"
+    execute("echo #{pattern} > #{output_file}")
+    result = File.read(output_file).strip
+
+    # Without nullglob, echo should output the literal pattern
+    assert_equal pattern, result
+  end
 end

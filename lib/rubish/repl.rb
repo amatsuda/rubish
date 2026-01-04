@@ -1647,14 +1647,20 @@ module Rubish
                        pattern
                      end
 
-      # Expand glob pattern, return original if no matches
+      # Expand glob pattern, return original if no matches (unless nullglob)
       # Check for extended globs if extglob is enabled
       if Builtins.shell_options['extglob'] && has_extglob?(glob_pattern)
         matches = expand_extglob(glob_pattern)
       else
         matches = Dir.glob(glob_pattern)
       end
-      matches.empty? ? [pattern] : matches
+
+      if matches.empty?
+        # nullglob: patterns matching nothing expand to nothing
+        Builtins.set_option?('nullglob') ? [] : [pattern]
+      else
+        matches
+      end
     end
 
     def has_extglob?(pattern)
