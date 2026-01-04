@@ -2253,6 +2253,10 @@ module Rubish
         $stderr.puts format('real %.2f', real)
         $stderr.puts format('user %.2f', user)
         $stderr.puts format('sys %.2f', sys)
+      elsif ENV['TIMEFORMAT']
+        # Custom TIMEFORMAT
+        output = format_timeformat(ENV['TIMEFORMAT'], real, user, sys)
+        $stderr.puts output unless output.empty?
       else
         # Default bash-like format
         $stderr.puts
@@ -2269,6 +2273,106 @@ module Rubish
         result.success? ? ExitStatus.new(0) : ExitStatus.new(1)
       else
         ExitStatus.new(0)
+      end
+    end
+
+    # Format time output according to TIMEFORMAT variable
+    # Escape sequences:
+    #   %% - literal %
+    #   %[p][l]R - real (elapsed) time in seconds
+    #   %[p][l]U - user CPU time in seconds
+    #   %[p][l]S - system CPU time in seconds
+    #   %P - CPU percentage ((user + sys) / real * 100)
+    # Optional modifiers:
+    #   p - precision (0-3 digits after decimal, default 3)
+    #   l - long format with minutes (e.g., 1m30.000s)
+    def format_timeformat(fmt, real, user, sys)
+      result = +''
+      i = 0
+
+      while i < fmt.length
+        if fmt[i] == '%'
+          i += 1
+          break if i >= fmt.length
+
+          # Check for %%
+          if fmt[i] == '%'
+            result << '%'
+            i += 1
+            next
+          end
+
+          # Parse optional precision (0-9)
+          precision = 3
+          if fmt[i] =~ /[0-9]/
+            precision = fmt[i].to_i
+            i += 1
+          end
+
+          # Parse optional 'l' for long format
+          long_format = false
+          if i < fmt.length && fmt[i] == 'l'
+            long_format = true
+            i += 1
+          end
+
+          # Parse the time specifier
+          break if i >= fmt.length
+          case fmt[i]
+          when 'R'
+            result << format_time_value(real, precision, long_format)
+          when 'U'
+            result << format_time_value(user, precision, long_format)
+          when 'S'
+            result << format_time_value(sys, precision, long_format)
+          when 'P'
+            # CPU percentage
+            pct = real > 0 ? ((user + sys) / real * 100) : 0
+            result << format("%.#{precision}f", pct)
+          else
+            # Unknown specifier, keep literal
+            result << '%' << fmt[i]
+          end
+          i += 1
+        elsif fmt[i] == '\\'
+          # Handle escape sequences
+          i += 1
+          break if i >= fmt.length
+          case fmt[i]
+          when 'n'
+            result << "\n"
+          when 't'
+            result << "\t"
+          else
+            result << fmt[i]
+          end
+          i += 1
+        else
+          result << fmt[i]
+          i += 1
+        end
+      end
+
+      result
+    end
+
+    def format_time_value(seconds, precision, long_format)
+      if long_format
+        # Long format: minutes and seconds (e.g., 1m30.000s)
+        mins = (seconds / 60).to_i
+        secs = seconds % 60
+        if precision > 0
+          format('%dm%.*fs', mins, precision, secs)
+        else
+          format('%dm%ds', mins, secs.to_i)
+        end
+      else
+        # Short format: just seconds
+        if precision > 0
+          format('%.*f', precision, seconds)
+        else
+          format('%d', seconds.to_i)
+        end
       end
     end
 

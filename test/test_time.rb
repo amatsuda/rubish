@@ -163,4 +163,98 @@ class TestTime < Test::Unit::TestCase
     assert File.exist?(output_file)
     assert_equal "hello\n", File.read(output_file)
   end
+
+  # TIMEFORMAT tests
+  def test_timeformat_basic
+    ENV['TIMEFORMAT'] = 'real=%R user=%U sys=%S'
+    stderr = capture_stderr { execute('time true') }
+    assert_match(/real=[\d.]+/, stderr)
+    assert_match(/user=[\d.]+/, stderr)
+    assert_match(/sys=[\d.]+/, stderr)
+  end
+
+  def test_timeformat_with_precision
+    ENV['TIMEFORMAT'] = '%2R'
+    stderr = capture_stderr { execute('time true') }
+    # Should have exactly 2 decimal places
+    assert_match(/^\d+\.\d{2}$/, stderr.strip)
+  end
+
+  def test_timeformat_with_zero_precision
+    ENV['TIMEFORMAT'] = '%0R'
+    stderr = capture_stderr { execute('time true') }
+    # Should have no decimal places
+    assert_match(/^\d+$/, stderr.strip)
+  end
+
+  def test_timeformat_with_long_format
+    ENV['TIMEFORMAT'] = '%lR'
+    stderr = capture_stderr { execute('time true') }
+    # Should have minutes format: Xm0.XXXs
+    assert_match(/\d+m[\d.]+s/, stderr)
+  end
+
+  def test_timeformat_with_precision_and_long_format
+    ENV['TIMEFORMAT'] = '%2lR'
+    stderr = capture_stderr { execute('time true') }
+    # Should have minutes format with 2 decimal places
+    assert_match(/\d+m\d+\.\d{2}s/, stderr)
+  end
+
+  def test_timeformat_percentage
+    ENV['TIMEFORMAT'] = 'CPU: %P%%'
+    stderr = capture_stderr { execute('time true') }
+    assert_match(/CPU: [\d.]+%/, stderr)
+  end
+
+  def test_timeformat_literal_percent
+    ENV['TIMEFORMAT'] = '100%%'
+    stderr = capture_stderr { execute('time true') }
+    assert_equal "100%\n", stderr
+  end
+
+  def test_timeformat_newline_escape
+    ENV['TIMEFORMAT'] = 'real=%R\nuser=%U'
+    stderr = capture_stderr { execute('time true') }
+    lines = stderr.strip.split("\n")
+    assert_equal 2, lines.length
+    assert_match(/^real=/, lines[0])
+    assert_match(/^user=/, lines[1])
+  end
+
+  def test_timeformat_tab_escape
+    ENV['TIMEFORMAT'] = 'real\t%R'
+    stderr = capture_stderr { execute('time true') }
+    assert_match(/real\t[\d.]+/, stderr)
+  end
+
+  def test_timeformat_empty_suppresses_output
+    ENV['TIMEFORMAT'] = ''
+    stderr = capture_stderr { execute('time true') }
+    assert_equal '', stderr
+  end
+
+  def test_timeformat_all_specifiers
+    ENV['TIMEFORMAT'] = 'R=%R U=%U S=%S P=%P'
+    stderr = capture_stderr { execute('time true') }
+    assert_match(/R=[\d.]+/, stderr)
+    assert_match(/U=[\d.]+/, stderr)
+    assert_match(/S=[\d.]+/, stderr)
+    assert_match(/P=[\d.]+/, stderr)
+  end
+
+  def test_timeformat_overrides_default
+    ENV['TIMEFORMAT'] = 'CUSTOM: %R'
+    stderr = capture_stderr { execute('time true') }
+    assert_match(/^CUSTOM:/, stderr)
+    assert_no_match(/real\t/, stderr)  # Default format should not appear
+  end
+
+  def test_timeformat_posix_flag_overrides_timeformat
+    ENV['TIMEFORMAT'] = 'CUSTOM: %R'
+    stderr = capture_stderr { execute('time -p true') }
+    # -p flag should override TIMEFORMAT
+    assert_match(/^real /, stderr)
+    assert_no_match(/CUSTOM/, stderr)
+  end
 end
