@@ -4113,7 +4113,17 @@ module Rubish
         # Wait for all background jobs
         jobs = manager.active
         if jobs.empty?
-          return true
+          # No tracked jobs, but there may still be child processes
+          # (e.g., when monitor mode is off). Wait for all children.
+          begin
+            loop do
+              _, status = Process.wait2(-1)
+              last_status = status.success?
+            end
+          rescue Errno::ECHILD
+            # No more children
+          end
+          return last_status
         end
 
         jobs.each do |job|
