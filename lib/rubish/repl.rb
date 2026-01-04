@@ -702,6 +702,8 @@ module Rubish
       case result
       when Command, Pipeline, Subshell, HeredocCommand
         result.status&.exitstatus || 0
+      when ExitStatus
+        result.exitstatus
       when Integer
         result
       else
@@ -2218,6 +2220,52 @@ module Rubish
       puts "[coproc] #{name} #{pid}"
 
       ExitStatus.new(0)
+    end
+
+    def __time(posix_format = false, &block)
+      # Measure execution time of a command
+      start_time = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+      start_times = Process.times
+
+      result = nil
+      begin
+        result = block.call
+        result.run if result.is_a?(Command) || result.is_a?(Pipeline)
+      rescue => e
+        $stderr.puts "rubish: time: #{e.message}"
+      end
+
+      end_time = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+      end_times = Process.times
+
+      # Calculate times
+      real = end_time - start_time
+      user = (end_times.utime - start_times.utime) + (end_times.cutime - start_times.cutime)
+      sys = (end_times.stime - start_times.stime) + (end_times.cstime - start_times.cstime)
+
+      # Output timing information to stderr
+      if posix_format
+        # POSIX format: seconds with fractions
+        $stderr.puts format('real %.2f', real)
+        $stderr.puts format('user %.2f', user)
+        $stderr.puts format('sys %.2f', sys)
+      else
+        # Default bash-like format
+        $stderr.puts
+        $stderr.puts format("real\t%dm%.3fs", (real / 60).to_i, real % 60)
+        $stderr.puts format("user\t%dm%.3fs", (user / 60).to_i, user % 60)
+        $stderr.puts format("sys\t%dm%.3fs", (sys / 60).to_i, sys % 60)
+      end
+
+      # Return the result's exit status
+      if result.respond_to?(:status) && result.status
+        # Command/Pipeline with status
+        result.status.success? ? ExitStatus.new(0) : ExitStatus.new(result.status.exitstatus || 1)
+      elsif result.respond_to?(:success?)
+        result.success? ? ExitStatus.new(0) : ExitStatus.new(1)
+      else
+        ExitStatus.new(0)
+      end
     end
 
     def expand_heredoc_content(content)

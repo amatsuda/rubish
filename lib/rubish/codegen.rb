@@ -40,6 +40,8 @@ module Rubish
         generate_herestring(node)
       when AST::Coproc
         generate_coproc(node)
+      when AST::Time
+        generate_time(node)
       else
         raise "Unknown AST node: #{node.class}"
       end
@@ -544,6 +546,16 @@ module Rubish
     def generate_coproc(node)
       cmd_code = generate(node.command)
       "__coproc(#{node.name.inspect}) { #{cmd_code} }"
+    end
+
+    def generate_time(node)
+      if node.command
+        cmd_code = generate(node.command)
+        "__time(#{node.posix_format}) { #{cmd_code} }"
+      else
+        # time with no command just prints timing info (zeros)
+        "__time(#{node.posix_format}) { nil }"
+      end
     end
 
     def escape_string(str)

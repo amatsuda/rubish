@@ -91,5 +91,14 @@ module Rubish
         super
       end
     end
+
+    # Time: time [-p] pipeline - measure execution time of a command
+    # posix_format: true if -p flag is used (POSIX format output)
+    # command: the command/pipeline to time
+    Time = Data.define(:command, :posix_format) do
+      def initialize(command:, posix_format: false)
+        super
+      end
+    end
   end
 end

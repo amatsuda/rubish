@@ -74,8 +74,13 @@ module Rubish
       left
     end
 
-    # pipeline : command ('|' command)*
+    # pipeline : [time [-p]] command ('|' command)*
     def parse_pipeline
+      # Check for time prefix
+      if peek(:TIME)
+        return parse_time
+      end
+
       first = parse_command
       return nil unless first
 
@@ -87,6 +92,32 @@ module Rubish
       end
 
       commands.length == 1 ? commands.first : AST::Pipeline.new(commands)
+    end
+
+    # time : TIME [-p] pipeline
+    def parse_time
+      consume(:TIME)
+
+      # Check for -p flag (POSIX format)
+      posix_format = false
+      if peek(:WORD) && current.value == '-p'
+        consume(:WORD)
+        posix_format = true
+      end
+
+      # Parse the command/pipeline to time
+      first = parse_command
+      return AST::Time.new(command: nil, posix_format: posix_format) unless first
+
+      commands = [first]
+      while peek(:PIPE)
+        consume(:PIPE)
+        cmd = parse_command
+        commands << cmd if cmd
+      end
+
+      timed_cmd = commands.length == 1 ? commands.first : AST::Pipeline.new(commands)
+      AST::Time.new(command: timed_cmd, posix_format: posix_format)
     end
 
     # command : if_statement | while_statement | until_statement | for_statement | case_statement | function_def | subshell | coproc | WORD arg* block? (redirection)*

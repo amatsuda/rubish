@@ -39,7 +39,8 @@ module Rubish
       'function' => :FUNCTION,
       'case' => :CASE,
       'esac' => :ESAC,
-      'coproc' => :COPROC
+      'coproc' => :COPROC,
+      'time' => :TIME
       # Note: 'do', 'done', 'in' are handled as WORD tokens and checked by parser
       # to allow them as command arguments (e.g., "echo done")
     }.freeze
