@@ -1639,12 +1639,20 @@ module Rubish
       # If noglob is set, return pattern as-is (no expansion)
       return [pattern] if Builtins.set_option?('f')
 
+      # Handle globstar: ** matches directories recursively only when enabled
+      # When disabled, treat ** as * (non-recursive)
+      glob_pattern = if pattern.include?('**') && !Builtins.set_option?('globstar')
+                       pattern.gsub('**', '*')
+                     else
+                       pattern
+                     end
+
       # Expand glob pattern, return original if no matches
       # Check for extended globs if extglob is enabled
-      if Builtins.shell_options['extglob'] && has_extglob?(pattern)
-        matches = expand_extglob(pattern)
+      if Builtins.shell_options['extglob'] && has_extglob?(glob_pattern)
+        matches = expand_extglob(glob_pattern)
       else
-        matches = Dir.glob(pattern)
+        matches = Dir.glob(glob_pattern)
       end
       matches.empty? ? [pattern] : matches
     end

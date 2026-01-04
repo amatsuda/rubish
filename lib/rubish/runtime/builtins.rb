@@ -1501,6 +1501,7 @@ module Rubish
       'h' => false,  # hashall: hash commands
       'm' => false,  # monitor: job control
       'pipefail' => false,  # pipefail: pipeline fails if any command fails
+      'globstar' => false,  # globstar: ** matches directories recursively
     }
 
     def self.set_options
@@ -1571,7 +1572,8 @@ module Rubish
         'e' => 'errexit', 'E' => 'errtrace', 'T' => 'functrace',
         'x' => 'xtrace', 'u' => 'nounset', 'n' => 'noexec', 'v' => 'verbose',
         'f' => 'noglob', 'C' => 'noclobber', 'a' => 'allexport', 'b' => 'notify',
-        'h' => 'hashall', 'm' => 'monitor', 'pipefail' => 'pipefail'
+        'h' => 'hashall', 'm' => 'monitor', 'pipefail' => 'pipefail',
+        'globstar' => 'globstar'
       }
       @set_options.each do |flag, value|
         name = long_names[flag] || flag
@@ -1587,7 +1589,8 @@ module Rubish
         'errexit' => 'e', 'errtrace' => 'E', 'functrace' => 'T',
         'xtrace' => 'x', 'nounset' => 'u', 'noexec' => 'n', 'verbose' => 'v',
         'noglob' => 'f', 'noclobber' => 'C', 'allexport' => 'a', 'notify' => 'b',
-        'hashall' => 'h', 'monitor' => 'm', 'pipefail' => 'pipefail'
+        'hashall' => 'h', 'monitor' => 'm', 'pipefail' => 'pipefail',
+        'globstar' => 'globstar'
       }
       flag = mapping[name]
       @set_options[flag] = value if flag

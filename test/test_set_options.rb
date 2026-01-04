@@ -945,4 +945,90 @@ class TestSetOptions < Test::Unit::TestCase
     assert_equal '^hello^world', line
     execute('set -H')  # Re-enable for other tests
   end
+
+  # set -o globstar
+  def test_globstar_disabled_by_default
+    # Globstar should be disabled by default
+    assert_false Rubish::Builtins.set_option?('globstar')
+  end
+
+  def test_set_o_globstar_enables_globstar
+    execute('set -o globstar')
+    assert Rubish::Builtins.set_option?('globstar')
+    execute('set +o globstar')
+  end
+
+  def test_set_plus_o_globstar_disables_globstar
+    execute('set -o globstar')
+    execute('set +o globstar')
+    assert_false Rubish::Builtins.set_option?('globstar')
+  end
+
+  def test_globstar_recursive_match
+    # Create nested directory structure
+    subdir = File.join(@tempdir, 'a', 'b', 'c')
+    FileUtils.mkdir_p(subdir)
+    File.write(File.join(@tempdir, 'top.txt'), 'top')
+    File.write(File.join(@tempdir, 'a', 'mid.txt'), 'mid')
+    File.write(File.join(@tempdir, 'a', 'b', 'c', 'deep.txt'), 'deep')
+
+    execute('set -o globstar')
+    execute("echo #{@tempdir}/**/*.txt > #{output_file}")
+    result = File.read(output_file).strip
+    execute('set +o globstar')
+
+    # With globstar, should find all .txt files recursively
+    assert_match(/top\.txt/, result)
+    assert_match(/mid\.txt/, result)
+    assert_match(/deep\.txt/, result)
+  end
+
+  def test_globstar_disabled_no_recursive_match
+    # Create nested directory structure
+    subdir = File.join(@tempdir, 'a', 'b', 'c')
+    FileUtils.mkdir_p(subdir)
+    File.write(File.join(@tempdir, 'top.txt'), 'top')
+    File.write(File.join(@tempdir, 'a', 'mid.txt'), 'mid')
+    File.write(File.join(@tempdir, 'a', 'b', 'c', 'deep.txt'), 'deep')
+
+    execute('set +o globstar')  # Ensure disabled
+    execute("echo #{@tempdir}/**/*.txt > #{output_file}")
+    result = File.read(output_file).strip
+
+    # Without globstar, ** acts like * (non-recursive)
+    # Should only match one level down
+    assert_match(/mid\.txt/, result)
+    assert_no_match(/deep\.txt/, result)
+  end
+
+  def test_globstar_matches_directories
+    # Create nested directory structure
+    subdir = File.join(@tempdir, 'a', 'b', 'c')
+    FileUtils.mkdir_p(subdir)
+    File.write(File.join(subdir, 'file.txt'), 'content')
+
+    execute('set -o globstar')
+    # **/ should match any directory path
+    matches = @repl.send(:__glob, "#{@tempdir}/**/file.txt")
+    execute('set +o globstar')
+
+    assert_equal 1, matches.length
+    assert_match(/a\/b\/c\/file\.txt/, matches.first)
+  end
+
+  def test_globstar_double_star_at_end
+    # Create nested directory structure
+    subdir = File.join(@tempdir, 'a', 'b')
+    FileUtils.mkdir_p(subdir)
+    File.write(File.join(@tempdir, 'a', 'file1.txt'), 'a')
+    File.write(File.join(@tempdir, 'a', 'b', 'file2.txt'), 'b')
+
+    execute('set -o globstar')
+    # dir/** should match all files under dir recursively
+    matches = @repl.send(:__glob, "#{@tempdir}/a/**")
+    execute('set +o globstar')
+
+    # Should include both files and directories
+    assert matches.length >= 2
+  end
 end
