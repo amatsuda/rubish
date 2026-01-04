@@ -12,6 +12,7 @@ module Rubish
       @last_line = nil
       @last_status = 0
       @last_bg_pid = nil
+      @command_number = 1
       @script_name = 'rubish'
       @positional_params = []
       @functions = {}
@@ -83,7 +84,158 @@ module Rubish
     end
 
     def prompt
-      "#{Dir.pwd.sub(ENV['HOME'], '~')}$ "
+      ps1 = ENV['PS1']
+      if ps1
+        expand_prompt(ps1)
+      else
+        # Default prompt
+        "#{Dir.pwd.sub(ENV['HOME'], '~')}$ "
+      end
+    end
+
+    def continuation_prompt
+      ps2 = ENV['PS2']
+      if ps2
+        expand_prompt(ps2)
+      else
+        '> '
+      end
+    end
+
+    # Expand PS1/PS2 escape sequences
+    # Supported escapes:
+    #   \a - bell (ASCII 007)
+    #   \d - date in "Weekday Month Date" format
+    #   \D{format} - date formatted with strftime
+    #   \e - escape character (ASCII 033)
+    #   \h - hostname up to first '.'
+    #   \H - full hostname
+    #   \j - number of jobs
+    #   \l - terminal device name
+    #   \n - newline
+    #   \r - carriage return
+    #   \s - shell name
+    #   \t - time in 24-hour HH:MM:SS format
+    #   \T - time in 12-hour HH:MM:SS format
+    #   \@ - time in 12-hour am/pm format
+    #   \A - time in 24-hour HH:MM format
+    #   \u - username
+    #   \v - version
+    #   \V - version with patch level
+    #   \w - current working directory (~ for home)
+    #   \W - basename of current directory
+    #   \! - history number
+    #   \# - command number
+    #   \$ - # for root, $ for regular user
+    #   \nnn - octal ASCII character
+    #   \\ - literal backslash
+    #   \[ - begin non-printing characters (ignored)
+    #   \] - end non-printing characters (ignored)
+    def expand_prompt(ps)
+      result = +''
+      i = 0
+
+      while i < ps.length
+        if ps[i] == '\\'
+          i += 1
+          break if i >= ps.length
+
+          case ps[i]
+          when 'a'
+            result << "\a"
+          when 'd'
+            result << Time.now.strftime('%a %b %d')
+          when 'D'
+            # \D{format} - custom strftime format
+            i += 1
+            if i < ps.length && ps[i] == '{'
+              i += 1
+              fmt_end = ps.index('}', i)
+              if fmt_end
+                fmt = ps[i...fmt_end]
+                result << Time.now.strftime(fmt)
+                i = fmt_end
+              end
+            else
+              i -= 1  # Back up, wasn't \D{...}
+              result << 'D'
+            end
+          when 'e'
+            result << "\e"
+          when 'h'
+            result << Socket.gethostname.split('.').first
+          when 'H'
+            result << Socket.gethostname
+          when 'j'
+            result << JobManager.instance.active.count.to_s
+          when 'l'
+            result << (File.basename(`tty`.strip) rescue 'tty')
+          when 'n'
+            result << "\n"
+          when 'r'
+            result << "\r"
+          when 's'
+            result << 'rubish'
+          when 't'
+            result << Time.now.strftime('%H:%M:%S')
+          when 'T'
+            result << Time.now.strftime('%I:%M:%S')
+          when '@'
+            result << Time.now.strftime('%I:%M %p')
+          when 'A'
+            result << Time.now.strftime('%H:%M')
+          when 'u'
+            result << (ENV['USER'] || Etc.getlogin || 'user')
+          when 'v'
+            result << Rubish::VERSION
+          when 'V'
+            result << Rubish::VERSION
+          when 'w'
+            home = ENV['HOME'] || ''
+            cwd = Dir.pwd
+            result << (home.empty? ? cwd : cwd.sub(/\A#{Regexp.escape(home)}/, '~'))
+          when 'W'
+            cwd = Dir.pwd
+            home = ENV['HOME'] || ''
+            if cwd == home
+              result << '~'
+            else
+              result << File.basename(cwd)
+            end
+          when '!'
+            result << (Reline::HISTORY.length + 1).to_s
+          when '#'
+            result << (@command_number || 1).to_s
+          when '$'
+            result << (Process.uid == 0 ? '#' : '$')
+          when '\\'
+            result << '\\'
+          when '['
+            # Begin non-printing sequence (for terminal escape codes)
+            # We just skip this marker
+          when ']'
+            # End non-printing sequence
+            # We just skip this marker
+          when '0', '1', '2', '3', '4', '5', '6', '7'
+            # Octal character \nnn
+            octal = ps[i]
+            while i + 1 < ps.length && ps[i + 1] =~ /[0-7]/ && octal.length < 3
+              i += 1
+              octal << ps[i]
+            end
+            result << octal.to_i(8).chr
+          else
+            # Unknown escape, keep literal
+            result << '\\' << ps[i]
+          end
+          i += 1
+        else
+          result << ps[i]
+          i += 1
+        end
+      end
+
+      result
     end
 
     def process_line
@@ -209,6 +361,7 @@ module Rubish
       code = @codegen.generate(ast)
       result = eval_in_context(code)
       @last_status = extract_exit_status(result)
+      @command_number += 1
       check_errexit
     rescue NounsetError
       # Unbound variable error when set -u is enabled
