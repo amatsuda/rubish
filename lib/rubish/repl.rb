@@ -3114,9 +3114,26 @@ module Rubish
     end
 
     def complete_file(input)
-      Dir.glob("#{input}*").map do |f|
+      candidates = Dir.glob("#{input}*").map do |f|
         File.directory?(f) ? "#{f}/" : f
       end.sort
+
+      # Apply FIGNORE filtering
+      fignore = ENV['FIGNORE']
+      if fignore && !fignore.empty?
+        suffixes = fignore.split(':').reject(&:empty?)
+        unless suffixes.empty?
+          filtered = candidates.reject do |f|
+            # Don't filter directories
+            next false if f.end_with?('/')
+            suffixes.any? { |suffix| f.end_with?(suffix) }
+          end
+          # Only use filtered list if it's not empty
+          candidates = filtered unless filtered.empty?
+        end
+      end
+
+      candidates
     end
   end
 end
