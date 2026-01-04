@@ -392,4 +392,56 @@ class TestSetOptions < Test::Unit::TestCase
   ensure
     ENV.delete('VERBOSE_TEST')
   end
+
+  # set -a (allexport)
+  def test_set_minus_a_enables_allexport
+    execute('set -a')
+    assert Rubish::Builtins.set_option?('a')
+  end
+
+  def test_set_plus_a_disables_allexport
+    execute('set -a')
+    execute('set +a')
+    assert_false Rubish::Builtins.set_option?('a')
+  end
+
+  def test_set_o_allexport
+    execute('set -o allexport')
+    assert Rubish::Builtins.set_option?('a')
+  end
+
+  def test_allexport_marks_variables_as_exported
+    Rubish::Builtins.clear_var_attributes
+
+    execute('set -a')
+    execute('ALLEXPORT_TEST=hello')
+    execute('set +a')
+
+    assert Rubish::Builtins.has_attribute?('ALLEXPORT_TEST', :export)
+  ensure
+    ENV.delete('ALLEXPORT_TEST')
+  end
+
+  def test_allexport_variable_available_to_child
+    execute('set -a')
+    execute('CHILD_TEST_VAR=test_value')
+    # Run a subshell that echoes the variable
+    execute("sh -c 'echo $CHILD_TEST_VAR' > #{output_file}")
+    execute('set +a')
+
+    assert_equal "test_value\n", File.read(output_file)
+  ensure
+    ENV.delete('CHILD_TEST_VAR')
+  end
+
+  def test_allexport_disabled_does_not_mark_export
+    Rubish::Builtins.clear_var_attributes
+
+    execute('set +a')  # Make sure it's off
+    execute('NO_EXPORT_TEST=value')
+
+    assert_false Rubish::Builtins.has_attribute?('NO_EXPORT_TEST', :export)
+  ensure
+    ENV.delete('NO_EXPORT_TEST')
+  end
 end

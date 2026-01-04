@@ -330,6 +330,8 @@ module Rubish
           value = $2
           expanded_value = expand_assignment_value(value)
           ENV[var_name] = expanded_value
+          # allexport: mark variable as exported when set -a is enabled
+          Builtins.mark_exported(var_name) if Builtins.set_option?('a')
         end
       end
     end

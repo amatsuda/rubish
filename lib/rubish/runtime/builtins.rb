@@ -1008,6 +1008,11 @@ module Rubish
       (@var_attributes[name] || Set.new).include?(attr)
     end
 
+    def self.mark_exported(name)
+      @var_attributes[name] ||= Set.new
+      @var_attributes[name] << :export
+    end
+
     def self.clear_var_attributes
       @var_attributes.clear
     end
