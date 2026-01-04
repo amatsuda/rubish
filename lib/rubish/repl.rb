@@ -53,17 +53,18 @@ module Rubish
     end
 
     def load_config
-      config_file = File.expand_path('~/.rubishrc')
-      return unless File.exist?(config_file)
+      rc_files = [
+        File.expand_path('~/.rubishrc'),
+        File.expand_path('./.rubishrc')
+      ]
 
-      File.readlines(config_file, chomp: true).each do |line|
-        line = line.strip
-        next if line.empty? || line.start_with?('#')
+      rc_files.each do |config_file|
+        next unless File.exist?(config_file)
 
         begin
-          execute(line)
+          Builtins.run_source([config_file])
         rescue => e
-          puts "rubishrc: #{e.message}"
+          $stderr.puts "rubishrc: #{e.message}"
         end
       end
     end
