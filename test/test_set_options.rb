@@ -264,10 +264,75 @@ class TestSetOptions < Test::Unit::TestCase
     assert_equal 'test[123].txt', result
   end
 
-  # Other options (should at least not error)
-
-  def test_set_minus_C_noclobber
+  # set -C (noclobber)
+  def test_set_minus_C_enables_noclobber
     execute('set -C')
     assert Rubish::Builtins.set_option?('C')
+  end
+
+  def test_set_plus_C_disables_noclobber
+    execute('set -C')
+    execute('set +C')
+    assert_false Rubish::Builtins.set_option?('C')
+  end
+
+  def test_set_o_noclobber
+    execute('set -o noclobber')
+    assert Rubish::Builtins.set_option?('C')
+  end
+
+  def test_noclobber_prevents_overwrite
+    # Create a file first
+    File.write(output_file, "original content\n")
+
+    stderr_file = File.join(@tempdir, 'stderr.txt')
+    old_stderr = $stderr
+    $stderr = File.open(stderr_file, 'w')
+
+    execute('set -C')
+    begin
+      execute("echo new content > #{output_file}")
+    ensure
+      $stderr.close
+      $stderr = old_stderr
+    end
+    execute('set +C')
+
+    # File should still have original content
+    assert_equal "original content\n", File.read(output_file)
+    # Should have printed error to stderr
+    stderr_content = File.read(stderr_file)
+    assert_match(/cannot overwrite existing file/, stderr_content)
+  end
+
+  def test_noclobber_allows_new_file
+    new_file = File.join(@tempdir, 'new_file.txt')
+    execute('set -C')
+    execute("echo hello > #{new_file}")
+    execute('set +C')
+
+    assert_equal "hello\n", File.read(new_file)
+  end
+
+  def test_noclobber_allows_append
+    # Create a file first
+    File.write(output_file, "original\n")
+
+    execute('set -C')
+    execute("echo appended >> #{output_file}")
+    execute('set +C')
+
+    assert_equal "original\nappended\n", File.read(output_file)
+  end
+
+  def test_clobber_operator_bypasses_noclobber
+    # Create a file first
+    File.write(output_file, "original\n")
+
+    execute('set -C')
+    execute("echo forced >| #{output_file}")
+    execute('set +C')
+
+    assert_equal "forced\n", File.read(output_file)
   end
 end

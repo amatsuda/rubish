@@ -10,6 +10,7 @@ module Rubish
       ';;' => :DOUBLE_SEMI,  # For case statement pattern terminators
       '&' => :AMPERSAND,
       '>' => :REDIRECT_OUT,
+      '>|' => :REDIRECT_CLOBBER,  # Force overwrite even with noclobber
       '>>' => :REDIRECT_APPEND,
       '<' => :REDIRECT_IN,
       '<<' => :HEREDOC,      # Here document
@@ -88,7 +89,7 @@ module Rubish
       if two_char == '>('
         return read_process_substitution(:PROC_SUB_OUT)
       end
-      if %w[>> 2> && || () ;;].include?(two_char)
+      if %w[>> >| 2> && || () ;;].include?(two_char)
         @pos += 2
         return Token.new(OPERATORS[two_char], two_char)
       end

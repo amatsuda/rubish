@@ -348,6 +348,7 @@ module Rubish
     def generate_redirect(node)
       op_method = case node.operator
                   when '>' then 'redirect_out'
+                  when '>|' then 'redirect_clobber'
                   when '>>' then 'redirect_append'
                   when '<' then 'redirect_in'
                   when '2>' then 'redirect_err'

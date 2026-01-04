@@ -8,6 +8,17 @@ module Rubish
     end
   end
 
+  # Status for noclobber failures
+  class NoclobberStatus
+    def exitstatus
+      1
+    end
+
+    def success?
+      false
+    end
+  end
+
   class Command
     attr_reader :name, :pid, :status
     attr_accessor :stdin, :stdout, :stderr, :block
@@ -54,6 +65,12 @@ module Rubish
       return self if @ran
       @ran = true
 
+      # If noclobber prevented redirection, fail without running
+      if @noclobber_failed
+        @status = NoclobberStatus.new
+        return self
+      end
+
       if @block
         run_with_block
       else
@@ -66,6 +83,18 @@ module Rubish
     end
 
     def redirect_out(file)
+      # Check noclobber: if set and file exists, fail
+      if Builtins.set_option?('C') && File.exist?(file)
+        $stderr.puts "rubish: #{file}: cannot overwrite existing file"
+        @noclobber_failed = true
+        return self
+      end
+      @stdout = File.open(file, 'w')
+      self
+    end
+
+    def redirect_clobber(file)
+      # Force overwrite even with noclobber (>|)
       @stdout = File.open(file, 'w')
       self
     end
@@ -186,6 +215,11 @@ module Rubish
 
     def redirect_out(file)
       @commands.last.redirect_out(file)
+      self
+    end
+
+    def redirect_clobber(file)
+      @commands.last.redirect_clobber(file)
       self
     end
 
@@ -356,6 +390,11 @@ module Rubish
       return self if @ran
       @ran = true
 
+      if @noclobber_failed
+        @status = NoclobberStatus.new
+        return self
+      end
+
       pid = fork do
         $stdin.reopen(@stdin) if @stdin
         $stdout.reopen(@stdout) if @stdout
@@ -386,6 +425,16 @@ module Rubish
     end
 
     def redirect_out(file)
+      if Builtins.set_option?('C') && File.exist?(file)
+        $stderr.puts "rubish: #{file}: cannot overwrite existing file"
+        @noclobber_failed = true
+        return self
+      end
+      @stdout = File.open(file, 'w')
+      self
+    end
+
+    def redirect_clobber(file)
       @stdout = File.open(file, 'w')
       self
     end
@@ -432,6 +481,11 @@ module Rubish
       return self if @ran
       @ran = true
 
+      if @noclobber_failed
+        @status = NoclobberStatus.new
+        return self
+      end
+
       cmd = @block.call
       if cmd.is_a?(Command) || cmd.is_a?(Pipeline)
         # Create a pipe for heredoc content
@@ -458,6 +512,16 @@ module Rubish
     end
 
     def redirect_out(file)
+      if Builtins.set_option?('C') && File.exist?(file)
+        $stderr.puts "rubish: #{file}: cannot overwrite existing file"
+        @noclobber_failed = true
+        return self
+      end
+      @stdout = File.open(file, 'w')
+      self
+    end
+
+    def redirect_clobber(file)
       @stdout = File.open(file, 'w')
       self
     end
