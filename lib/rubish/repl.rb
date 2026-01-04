@@ -150,6 +150,92 @@ module Rubish
       @last_status = saved_status
     end
 
+    # Add command to history based on HISTCONTROL and HISTIGNORE settings
+    # HISTCONTROL values (colon-separated):
+    #   ignorespace  - don't save commands starting with space
+    #   ignoredups   - don't save if same as previous command
+    #   ignoreboth   - ignorespace + ignoredups
+    #   erasedups    - erase all previous duplicates before adding
+    # HISTIGNORE: colon-separated patterns to ignore
+    def add_to_history(line)
+      return if line.empty?
+
+      histcontrol = ENV['HISTCONTROL'] || ''
+      controls = histcontrol.split(':').map(&:strip)
+
+      # Check ignorespace / ignoreboth
+      if controls.include?('ignorespace') || controls.include?('ignoreboth')
+        return if line.start_with?(' ')
+      end
+
+      # Check ignoredups / ignoreboth
+      if controls.include?('ignoredups') || controls.include?('ignoreboth')
+        last_entry = Reline::HISTORY.to_a.last
+        return if last_entry == line
+      end
+
+      # Check HISTIGNORE patterns
+      if should_ignore_for_history?(line)
+        return
+      end
+
+      # Handle erasedups - remove all previous occurrences
+      if controls.include?('erasedups')
+        # Find and remove all duplicates
+        indices_to_remove = []
+        Reline::HISTORY.each_with_index do |entry, i|
+          indices_to_remove << i if entry == line
+        end
+        # Remove in reverse order to maintain correct indices
+        indices_to_remove.reverse_each do |i|
+          Reline::HISTORY.delete_at(i)
+        end
+      end
+
+      # Add to history
+      Reline::HISTORY << line
+    end
+
+    # Check if command matches any HISTIGNORE pattern
+    # HISTIGNORE is colon-separated list of patterns
+    # Patterns support glob-style matching (* and ?)
+    # Exact patterns match the entire command line
+    def should_ignore_for_history?(line)
+      histignore = ENV['HISTIGNORE']
+      return false if histignore.nil? || histignore.empty?
+
+      patterns = histignore.split(':')
+
+      patterns.any? do |pattern|
+        pattern = pattern.strip
+        next false if pattern.empty?
+
+        # Convert pattern to regex for matching
+        # All patterns are treated as glob patterns (even without * or ?)
+        regex = glob_to_regex(pattern)
+        line.match?(regex)
+      end
+    end
+
+    # Convert simple glob pattern to regex for HISTIGNORE
+    def glob_to_regex(pattern)
+      regex_str = +'^'
+      pattern.each_char do |c|
+        case c
+        when '*'
+          regex_str << '.*'
+        when '?'
+          regex_str << '.'
+        when '.', '^', '$', '+', '|', '(', ')', '[', ']', '{', '}', '\\'
+          regex_str << '\\' << c
+        else
+          regex_str << c
+        end
+      end
+      regex_str << '$'
+      Regexp.new(regex_str)
+    end
+
     # Expand PS1/PS2 escape sequences
     # Supported escapes:
     #   \a - bell (ASCII 007)
@@ -293,7 +379,8 @@ module Rubish
       # Execute PROMPT_COMMAND before displaying prompt
       run_prompt_command
 
-      line = Reline.readline(prompt, true)
+      # Don't auto-add to history; we'll do it ourselves after checking HISTCONTROL/HISTIGNORE
+      line = Reline.readline(prompt, false)
       unless line
         # EOF received (Ctrl+D)
         if Builtins.set_option?('ignoreeof')
@@ -306,6 +393,9 @@ module Rubish
 
       line = line.strip
       return if line.empty?
+
+      # Add to history based on HISTCONTROL and HISTIGNORE settings
+      add_to_history(line)
 
       @last_line = line
       execute(line)
