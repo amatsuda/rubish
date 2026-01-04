@@ -561,6 +561,26 @@ module Rubish
     end
 
     def parse_parameter_expansion(content)
+      # Handle ${#arr[@]} or ${#arr[*]} - array length
+      if content =~ /\A#([a-zA-Z_][a-zA-Z0-9_]*)\[[@*]\]\z/
+        var_name = $1
+        return "__array_length(#{var_name.inspect})"
+      end
+
+      # Handle ${arr[@]} or ${arr[*]} - all array elements
+      if content =~ /\A([a-zA-Z_][a-zA-Z0-9_]*)\[([@*])\]\z/
+        var_name = $1
+        mode = $2
+        return "__array_all(#{var_name.inspect}, #{mode.inspect})"
+      end
+
+      # Handle ${arr[n]} - array element access
+      if content =~ /\A([a-zA-Z_][a-zA-Z0-9_]*)\[([^\]]+)\]\z/
+        var_name = $1
+        index = $2
+        return "__array_element(#{var_name.inspect}, #{index.inspect})"
+      end
+
       # Handle ${!var} - indirect expansion
       if content =~ /\A!([a-zA-Z_][a-zA-Z0-9_]*)\z/
         var_name = $1

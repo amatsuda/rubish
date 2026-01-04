@@ -20,6 +20,7 @@ module Rubish
     @current_completion_options = Set.new  # Options for currently executing completion
     @key_bindings = {}  # Hash of keyseq to function/macro/command
     @readline_variables = {}  # Hash of readline variable names to values
+    @arrays = {}  # Hash of array variable names to their values (Array)
     @executor = nil
     @script_name_getter = nil
     @script_name_setter = nil
@@ -31,8 +32,50 @@ module Rubish
     @command_executor = nil  # Executor that bypasses functions/aliases
 
     class << self
-      attr_reader :aliases, :dir_stack, :traps, :local_scope_stack, :readonly_vars, :var_attributes, :command_hash, :shell_options, :disabled_builtins, :call_stack, :completions, :completion_options, :key_bindings, :readline_variables
+      attr_reader :aliases, :dir_stack, :traps, :local_scope_stack, :readonly_vars, :var_attributes, :command_hash, :shell_options, :disabled_builtins, :call_stack, :completions, :completion_options, :key_bindings, :readline_variables, :arrays
       attr_accessor :executor, :script_name_getter, :script_name_setter, :positional_params_getter, :positional_params_setter, :function_checker, :function_remover, :heredoc_content_setter, :command_executor, :current_completion_options
+    end
+
+    # Array variable methods
+    def self.array?(name)
+      @arrays.key?(name)
+    end
+
+    def self.get_array(name)
+      @arrays[name] || []
+    end
+
+    def self.set_array(name, values)
+      @arrays[name] = values.is_a?(Array) ? values : [values]
+    end
+
+    def self.get_array_element(name, index)
+      arr = @arrays[name]
+      return '' unless arr
+      arr[index.to_i] || ''
+    end
+
+    def self.set_array_element(name, index, value)
+      @arrays[name] ||= []
+      @arrays[name][index.to_i] = value
+    end
+
+    def self.array_length(name)
+      (@arrays[name] || []).length
+    end
+
+    def self.array_append(name, values)
+      @arrays[name] ||= []
+      @arrays[name].concat(values.is_a?(Array) ? values : [values])
+    end
+
+    def self.unset_array(name)
+      @arrays.delete(name)
+    end
+
+    def self.unset_array_element(name, index)
+      return unless @arrays[name]
+      @arrays[name][index.to_i] = nil
     end
 
     # Valid shell options with their default values and descriptions

@@ -100,6 +100,14 @@ module Rubish
 
       line = Builtins.expand_alias(line)
       line = expand_tilde(line)
+
+      # Check for array assignment before tokenizing (arr=(a b c) pattern)
+      if (array_assignments = extract_array_assignments(line))
+        handle_bare_assignments(array_assignments)
+        @last_status = 0
+        return
+      end
+
       # Variable expansion now happens at runtime in generated Ruby code
       tokens = @lexer_class.new(line).tokenize
       ast = @parser_class.new(tokens).parse
@@ -195,19 +203,109 @@ module Rubish
     end
 
     def bare_assignment?(str)
-      # Check if string is a bare variable assignment: VAR=value
-      str.is_a?(String) && str =~ /\A[a-zA-Z_][a-zA-Z0-9_]*=/
+      # Check if string is a bare variable assignment: VAR=value, arr=(a b c), or arr[0]=value
+      return false unless str.is_a?(String)
+      str =~ /\A[a-zA-Z_][a-zA-Z0-9_]*(\[[^\]]*\])?\+?=/
+    end
+
+    def extract_array_assignments(line)
+      # Check if line contains array assignment(s): arr=(a b c) or arr+=(d e)
+      # Returns array of full assignment strings, or nil if not array assignment
+      return nil unless line =~ /[a-zA-Z_][a-zA-Z0-9_]*\+?=\(/
+
+      assignments = []
+      remaining = line.strip
+
+      while remaining =~ /\A([a-zA-Z_][a-zA-Z0-9_]*\+?=\()/
+        prefix = $1
+        # Find matching closing paren
+        start_idx = prefix.length - 1  # position of (
+        depth = 1
+        i = prefix.length
+        while i < remaining.length && depth > 0
+          case remaining[i]
+          when '('
+            depth += 1
+          when ')'
+            depth -= 1
+          end
+          i += 1
+        end
+
+        return nil if depth != 0  # Unmatched parens
+
+        assignment = remaining[0...i]
+        assignments << assignment
+        remaining = remaining[i..].strip
+      end
+
+      # If there's remaining content that's not whitespace, this isn't a pure array assignment line
+      return nil unless remaining.empty?
+
+      assignments.empty? ? nil : assignments
     end
 
     def handle_bare_assignments(assignments)
       assignments.each do |assignment|
-        if assignment =~ /\A([a-zA-Z_][a-zA-Z0-9_]*)=(.*)\z/
+        if assignment =~ /\A([a-zA-Z_][a-zA-Z0-9_]*)\+?=\((.*)\)\z/m
+          # Array assignment: arr=(a b c) or arr+=(d e)
+          var_name = $1
+          elements_str = $2
+          is_append = assignment.include?('+=')
+          elements = parse_array_elements(elements_str)
+          if is_append
+            Builtins.array_append(var_name, elements)
+          else
+            Builtins.set_array(var_name, elements)
+          end
+        elsif assignment =~ /\A([a-zA-Z_][a-zA-Z0-9_]*)\[([^\]]+)\]=(.*)\z/
+          # Array element assignment: arr[0]=value
+          var_name = $1
+          index = $2
+          value = $3
+          expanded_index = expand_string_content(index)
+          expanded_value = expand_assignment_value(value)
+          Builtins.set_array_element(var_name, expanded_index, expanded_value)
+        elsif assignment =~ /\A([a-zA-Z_][a-zA-Z0-9_]*)=(.*)\z/
+          # Regular variable assignment
           var_name = $1
           value = $2
           expanded_value = expand_assignment_value(value)
           ENV[var_name] = expanded_value
         end
       end
+    end
+
+    def parse_array_elements(str)
+      # Parse array elements, respecting quotes
+      elements = []
+      current = +''
+      in_single_quote = false
+      in_double_quote = false
+      i = 0
+
+      while i < str.length
+        char = str[i]
+
+        if char == "'" && !in_double_quote
+          in_single_quote = !in_single_quote
+          current << char
+        elsif char == '"' && !in_single_quote
+          in_double_quote = !in_double_quote
+          current << char
+        elsif char =~ /\s/ && !in_single_quote && !in_double_quote
+          unless current.empty?
+            elements << expand_assignment_value(current)
+            current = +''
+          end
+        else
+          current << char
+        end
+        i += 1
+      end
+
+      elements << expand_assignment_value(current) unless current.empty?
+      elements
     end
 
     def expand_assignment_value(value)
@@ -1266,6 +1364,35 @@ module Rubish
       indirect_name = ENV[var_name]
       return '' if indirect_name.nil? || indirect_name.empty?
       ENV[indirect_name] || ''
+    end
+
+    def __array_element(var_name, index)
+      # ${arr[n]} - get array element
+      # First try to evaluate index as arithmetic expression
+      idx = begin
+        eval(expand_string_content(index)).to_i
+      rescue
+        index.to_i
+      end
+      Builtins.get_array_element(var_name, idx)
+    end
+
+    def __array_all(var_name, mode)
+      # ${arr[@]} or ${arr[*]} - get all array elements
+      arr = Builtins.get_array(var_name)
+      if mode == '@'
+        # @ mode: elements as separate words (for iteration)
+        arr.compact.join(' ')
+      else
+        # * mode: elements joined with first char of IFS (default space)
+        ifs = ENV['IFS'] || " \t\n"
+        arr.compact.join(ifs[0] || ' ')
+      end
+    end
+
+    def __array_length(var_name)
+      # ${#arr[@]} - get array length
+      Builtins.array_length(var_name).to_s
     end
 
     def remove_suffix(value, pattern, mode)
