@@ -103,6 +103,9 @@ module Rubish
 
       @last_line = line
       execute(line)
+
+      # onecmd: exit after reading and executing one command
+      throw(:exit, @last_status || 0) if Builtins.set_option?('t')
     rescue Interrupt
       puts
     rescue => e

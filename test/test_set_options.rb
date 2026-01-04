@@ -1937,4 +1937,54 @@ class TestSetOptions < Test::Unit::TestCase
     execute('set +o nocasematch')
     assert_false @repl.send(:__case_match, 'foo', 'FOO')
   end
+
+  # set -t (onecmd)
+  def test_onecmd_disabled_by_default
+    # Onecmd should be disabled by default
+    assert_false Rubish::Builtins.set_option?('t')
+  end
+
+  def test_set_minus_t_enables_onecmd
+    execute('set -t')
+    assert Rubish::Builtins.set_option?('t')
+    execute('set +t')
+  end
+
+  def test_set_plus_t_disables_onecmd
+    execute('set -t')
+    execute('set +t')
+    assert_false Rubish::Builtins.set_option?('t')
+  end
+
+  def test_set_o_onecmd_enables_onecmd
+    execute('set -o onecmd')
+    assert Rubish::Builtins.set_option?('t')
+    execute('set +o onecmd')
+  end
+
+  def test_set_plus_o_onecmd_disables_onecmd
+    execute('set -o onecmd')
+    execute('set +o onecmd')
+    assert_false Rubish::Builtins.set_option?('t')
+  end
+
+  def test_onecmd_listed_in_set_options
+    output = capture_stdout { execute('set -o') }
+    assert_match(/onecmd/, output)
+  end
+
+  def test_onecmd_shows_enabled_state
+    execute('set -o onecmd')
+    output = capture_stdout { execute('set -o') }
+    execute('set +o onecmd')
+
+    assert_match(/set -o onecmd/, output)
+  end
+
+  def test_onecmd_shows_disabled_state
+    execute('set +o onecmd')
+    output = capture_stdout { execute('set -o') }
+
+    assert_match(/set \+o onecmd/, output)
+  end
 end
