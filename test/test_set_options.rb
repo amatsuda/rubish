@@ -1558,4 +1558,174 @@ class TestSetOptions < Test::Unit::TestCase
     assert_equal 3, matches.length
     assert matches.none? { |m| m.end_with?('.txt') }
   end
+
+  # set -P (physical)
+  def test_physical_disabled_by_default
+    # Physical should be disabled by default
+    assert_false Rubish::Builtins.set_option?('P')
+  end
+
+  def test_set_minus_P_enables_physical
+    execute('set -P')
+    assert Rubish::Builtins.set_option?('P')
+    execute('set +P')
+  end
+
+  def test_set_plus_P_disables_physical
+    execute('set -P')
+    execute('set +P')
+    assert_false Rubish::Builtins.set_option?('P')
+  end
+
+  def test_set_o_physical_enables_physical
+    execute('set -o physical')
+    assert Rubish::Builtins.set_option?('P')
+    execute('set +o physical')
+  end
+
+  def test_set_plus_o_physical_disables_physical
+    execute('set -o physical')
+    execute('set +o physical')
+    assert_false Rubish::Builtins.set_option?('P')
+  end
+
+  def test_physical_listed_in_set_options
+    output = capture_stdout { execute('set -o') }
+    assert_match(/physical/, output)
+  end
+
+  def test_physical_shows_enabled_state
+    execute('set -o physical')
+    output = capture_stdout { execute('set -o') }
+    execute('set +o physical')
+
+    assert_match(/set -o physical/, output)
+  end
+
+  def test_physical_shows_disabled_state
+    execute('set +o physical')
+    output = capture_stdout { execute('set -o') }
+
+    assert_match(/set \+o physical/, output)
+  end
+
+  # Physical option functionality tests with symlinks
+  def test_pwd_with_physical_option_resolves_symlinks
+    # Create a symlink in tempdir
+    real_dir = File.join(@tempdir, 'realdir')
+    link_dir = File.join(@tempdir, 'linkdir')
+    FileUtils.mkdir_p(real_dir)
+    File.symlink(real_dir, link_dir)
+
+    # Save original directory
+    original_dir = Dir.pwd
+
+    begin
+      # Change to link directory
+      Dir.chdir(link_dir)
+
+      # pwd -P should show the real path
+      output = capture_stdout { Rubish::Builtins.run('pwd', ['-P']) }
+      assert_match(/realdir/, output)
+      assert_false output.include?('linkdir')
+    ensure
+      Dir.chdir(original_dir)
+    end
+  end
+
+  def test_pwd_without_physical_shows_logical_path
+    # Create a symlink in tempdir
+    real_dir = File.join(@tempdir, 'realdir')
+    link_dir = File.join(@tempdir, 'linkdir')
+    FileUtils.mkdir_p(real_dir)
+    File.symlink(real_dir, link_dir)
+
+    # Save original directory
+    original_dir = Dir.pwd
+
+    begin
+      # Change to link directory and set PWD to the link path
+      Dir.chdir(link_dir)
+      ENV['PWD'] = link_dir
+
+      # pwd -L should show the logical (link) path
+      output = capture_stdout { Rubish::Builtins.run('pwd', ['-L']) }
+      assert_match(/linkdir/, output)
+    ensure
+      Dir.chdir(original_dir)
+    end
+  end
+
+  def test_cd_with_physical_option_resolves_symlinks
+    # Create a symlink in tempdir
+    real_dir = File.join(@tempdir, 'realdir')
+    link_dir = File.join(@tempdir, 'linkdir')
+    FileUtils.mkdir_p(real_dir)
+    File.symlink(real_dir, link_dir)
+
+    # Save original directory
+    original_dir = Dir.pwd
+
+    begin
+      # cd -P should resolve to real path
+      Rubish::Builtins.run('cd', ['-P', link_dir])
+
+      # PWD should be set to the real path
+      assert_match(/realdir/, ENV['PWD'])
+      assert_false ENV['PWD'].include?('linkdir')
+    ensure
+      Dir.chdir(original_dir)
+    end
+  end
+
+  def test_set_P_affects_pwd_globally
+    # Create a symlink in tempdir
+    real_dir = File.join(@tempdir, 'realdir')
+    link_dir = File.join(@tempdir, 'linkdir')
+    FileUtils.mkdir_p(real_dir)
+    File.symlink(real_dir, link_dir)
+
+    # Save original directory
+    original_dir = Dir.pwd
+
+    begin
+      Dir.chdir(link_dir)
+
+      # Enable physical mode globally
+      execute('set -P')
+
+      # pwd should now resolve symlinks by default
+      output = capture_stdout { Rubish::Builtins.run('pwd', []) }
+      execute('set +P')
+
+      assert_match(/realdir/, output)
+    ensure
+      Dir.chdir(original_dir)
+    end
+  end
+
+  def test_set_P_affects_cd_globally
+    # Create nested symlinks in tempdir
+    real_dir = File.join(@tempdir, 'realdir')
+    link_dir = File.join(@tempdir, 'linkdir')
+    FileUtils.mkdir_p(real_dir)
+    File.symlink(real_dir, link_dir)
+
+    # Save original directory
+    original_dir = Dir.pwd
+
+    begin
+      # Enable physical mode globally
+      execute('set -P')
+
+      # cd should resolve symlinks
+      Rubish::Builtins.run('cd', [link_dir])
+      execute('set +P')
+
+      # PWD should be set to the real path
+      assert_match(/realdir/, ENV['PWD'])
+    ensure
+      Dir.chdir(original_dir)
+    end
+  end
 end

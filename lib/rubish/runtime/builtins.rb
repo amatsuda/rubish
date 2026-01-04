@@ -289,8 +289,37 @@ module Rubish
     end
 
     def self.run_cd(args)
-      dir = args.first || ENV['HOME']
-      Dir.chdir(dir)
+      # cd [-L|-P] [dir]
+      # -L: follow symbolic links (default)
+      # -P: use physical directory structure (don't follow symlinks)
+      physical = set_option?('P')
+      remaining_args = []
+
+      args.each do |arg|
+        case arg
+        when '-P'
+          physical = true
+        when '-L'
+          physical = false
+        else
+          remaining_args << arg
+        end
+      end
+
+      dir = remaining_args.first || ENV['HOME']
+
+      # Save OLDPWD before changing
+      ENV['OLDPWD'] = ENV['PWD'] || Dir.pwd
+
+      if physical
+        # Resolve to physical path (no symlinks)
+        target = File.realpath(File.expand_path(dir))
+        Dir.chdir(target)
+        ENV['PWD'] = target
+      else
+        Dir.chdir(dir)
+        ENV['PWD'] = Dir.pwd
+      end
       true
     rescue Errno::ENOENT => e
       puts "cd: #{e.message}"
@@ -1277,8 +1306,32 @@ module Rubish
       true
     end
 
-    def self.run_pwd(_args)
-      puts Dir.pwd
+    def self.run_pwd(args)
+      # pwd [-L|-P]
+      # -L: print logical path (may contain symlinks, default)
+      # -P: print physical path (no symlinks)
+      physical = set_option?('P')
+
+      args.each do |arg|
+        case arg
+        when '-P'
+          physical = true
+        when '-L'
+          physical = false
+        end
+      end
+
+      if physical
+        puts File.realpath(Dir.pwd)
+      else
+        # Use PWD if set and valid, otherwise Dir.pwd
+        pwd = ENV['PWD']
+        if pwd && File.directory?(pwd)
+          puts pwd
+        else
+          puts Dir.pwd
+        end
+      end
       true
     end
 
@@ -1508,6 +1561,7 @@ module Rubish
       'nocaseglob' => false, # nocaseglob: case-insensitive globbing
       'ignoreeof' => false,  # ignoreeof: don't exit on EOF (Ctrl+D)
       'extglob' => false,    # extglob: extended pattern matching operators
+      'P' => false,          # physical: don't follow symlinks for cd/pwd
     }
 
     def self.set_options
@@ -1581,7 +1635,7 @@ module Rubish
         'h' => 'hashall', 'm' => 'monitor', 'pipefail' => 'pipefail',
         'globstar' => 'globstar', 'nullglob' => 'nullglob', 'failglob' => 'failglob',
         'dotglob' => 'dotglob', 'nocaseglob' => 'nocaseglob', 'ignoreeof' => 'ignoreeof',
-        'extglob' => 'extglob'
+        'extglob' => 'extglob', 'P' => 'physical'
       }
       @set_options.each do |flag, value|
         name = long_names[flag] || flag
@@ -1600,7 +1654,7 @@ module Rubish
         'hashall' => 'h', 'monitor' => 'm', 'pipefail' => 'pipefail',
         'globstar' => 'globstar', 'nullglob' => 'nullglob', 'failglob' => 'failglob',
         'dotglob' => 'dotglob', 'nocaseglob' => 'nocaseglob', 'ignoreeof' => 'ignoreeof',
-        'extglob' => 'extglob'
+        'extglob' => 'extglob', 'physical' => 'P'
       }
       flag = mapping[name]
       @set_options[flag] = value if flag
