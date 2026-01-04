@@ -1657,8 +1657,10 @@ module Rubish
 
       # Expand glob pattern, return original if no matches (unless nullglob)
       # Check for extended globs if extglob is enabled
-      # dotglob: include files starting with . (except . and ..)
-      glob_flags = Builtins.set_option?('dotglob') ? File::FNM_DOTMATCH : 0
+      # Build glob flags based on options
+      glob_flags = 0
+      glob_flags |= File::FNM_DOTMATCH if Builtins.set_option?('dotglob')
+      glob_flags |= File::FNM_CASEFOLD if Builtins.set_option?('nocaseglob')
 
       if Builtins.shell_options['extglob'] && has_extglob?(glob_pattern)
         matches = expand_extglob(glob_pattern)
