@@ -1670,7 +1670,7 @@ module Rubish
       glob_flags |= File::FNM_DOTMATCH if Builtins.set_option?('dotglob')
       glob_flags |= File::FNM_CASEFOLD if Builtins.set_option?('nocaseglob')
 
-      if Builtins.shell_options['extglob'] && has_extglob?(glob_pattern)
+      if Builtins.set_option?('extglob') && has_extglob?(glob_pattern)
         matches = expand_extglob(glob_pattern)
       else
         matches = Dir.glob(glob_pattern, glob_flags)

@@ -1418,4 +1418,144 @@ class TestSetOptions < Test::Unit::TestCase
 
     assert_match(/set \+o ignoreeof/, output)
   end
+
+  # set -o extglob
+  def test_extglob_disabled_by_default
+    # Extglob should be disabled by default
+    assert_false Rubish::Builtins.set_option?('extglob')
+  end
+
+  def test_set_o_extglob_enables_extglob
+    execute('set -o extglob')
+    assert Rubish::Builtins.set_option?('extglob')
+    execute('set +o extglob')
+  end
+
+  def test_set_plus_o_extglob_disables_extglob
+    execute('set -o extglob')
+    execute('set +o extglob')
+    assert_false Rubish::Builtins.set_option?('extglob')
+  end
+
+  def test_extglob_listed_in_set_options
+    output = capture_stdout { execute('set -o') }
+    assert_match(/extglob/, output)
+  end
+
+  def test_extglob_shows_enabled_state
+    execute('set -o extglob')
+    output = capture_stdout { execute('set -o') }
+    execute('set +o extglob')
+
+    assert_match(/set -o extglob/, output)
+  end
+
+  def test_extglob_shows_disabled_state
+    execute('set +o extglob')
+    output = capture_stdout { execute('set -o') }
+
+    assert_match(/set \+o extglob/, output)
+  end
+
+  # Extglob pattern matching tests
+  def test_extglob_question_pattern_zero_matches
+    # ?(pattern) - matches zero or one occurrence
+    FileUtils.touch(File.join(@tempdir, 'file.txt'))
+    FileUtils.touch(File.join(@tempdir, 'file1.txt'))
+
+    execute('set -o extglob')
+    matches = @repl.send(:__glob, "#{@tempdir}/file?(1).txt")
+    execute('set +o extglob')
+
+    assert_equal 2, matches.length
+    assert matches.any? { |m| m.end_with?('file.txt') }
+    assert matches.any? { |m| m.end_with?('file1.txt') }
+  end
+
+  def test_extglob_star_pattern_zero_or_more
+    # *(pattern) - matches zero or more occurrences
+    FileUtils.touch(File.join(@tempdir, 'test.txt'))
+    FileUtils.touch(File.join(@tempdir, 'testab.txt'))
+    FileUtils.touch(File.join(@tempdir, 'testabab.txt'))
+
+    execute('set -o extglob')
+    matches = @repl.send(:__glob, "#{@tempdir}/test*(ab).txt")
+    execute('set +o extglob')
+
+    assert_equal 3, matches.length
+  end
+
+  def test_extglob_plus_pattern_one_or_more
+    # +(pattern) - matches one or more occurrences
+    FileUtils.touch(File.join(@tempdir, 'test.txt'))
+    FileUtils.touch(File.join(@tempdir, 'testab.txt'))
+    FileUtils.touch(File.join(@tempdir, 'testabab.txt'))
+
+    execute('set -o extglob')
+    matches = @repl.send(:__glob, "#{@tempdir}/test+(ab).txt")
+    execute('set +o extglob')
+
+    # Should match testab.txt and testabab.txt but NOT test.txt
+    assert_equal 2, matches.length
+    assert matches.none? { |m| m.end_with?('test.txt') }
+  end
+
+  def test_extglob_at_pattern_exactly_one
+    # @(pattern) - matches exactly one occurrence
+    FileUtils.touch(File.join(@tempdir, 'foo.txt'))
+    FileUtils.touch(File.join(@tempdir, 'bar.txt'))
+    FileUtils.touch(File.join(@tempdir, 'baz.txt'))
+
+    execute('set -o extglob')
+    matches = @repl.send(:__glob, "#{@tempdir}/@(foo|bar).txt")
+    execute('set +o extglob')
+
+    assert_equal 2, matches.length
+    assert matches.any? { |m| m.end_with?('foo.txt') }
+    assert matches.any? { |m| m.end_with?('bar.txt') }
+    assert matches.none? { |m| m.end_with?('baz.txt') }
+  end
+
+  def test_extglob_not_pattern_negation
+    # !(pattern) - matches anything except pattern
+    FileUtils.touch(File.join(@tempdir, 'file.txt'))
+    FileUtils.touch(File.join(@tempdir, 'file.log'))
+    FileUtils.touch(File.join(@tempdir, 'file.md'))
+
+    execute('set -o extglob')
+    matches = @repl.send(:__glob, "#{@tempdir}/file.!(txt)")
+    execute('set +o extglob')
+
+    # Should match file.log and file.md but NOT file.txt
+    assert_equal 2, matches.length
+    assert matches.none? { |m| m.end_with?('.txt') }
+  end
+
+  def test_extglob_disabled_treats_pattern_literally
+    # When extglob is disabled, patterns should not be expanded specially
+    FileUtils.touch(File.join(@tempdir, 'file.txt'))
+    FileUtils.touch(File.join(@tempdir, 'file1.txt'))
+
+    # Extglob disabled by default
+    matches = @repl.send(:__glob, "#{@tempdir}/file?(1).txt")
+
+    # Pattern not recognized as extglob, returns original pattern
+    assert_equal 1, matches.length
+    assert matches.first.include?('?(1)')
+  end
+
+  def test_extglob_alternatives_with_pipe
+    # @(a|b|c) pattern with multiple alternatives
+    FileUtils.touch(File.join(@tempdir, 'test.jpg'))
+    FileUtils.touch(File.join(@tempdir, 'test.png'))
+    FileUtils.touch(File.join(@tempdir, 'test.gif'))
+    FileUtils.touch(File.join(@tempdir, 'test.txt'))
+
+    execute('set -o extglob')
+    matches = @repl.send(:__glob, "#{@tempdir}/test.@(jpg|png|gif)")
+    execute('set +o extglob')
+
+    assert_equal 3, matches.length
+    assert matches.none? { |m| m.end_with?('.txt') }
+  end
 end
