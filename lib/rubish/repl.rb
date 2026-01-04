@@ -1200,8 +1200,223 @@ module Rubish
 
     def __glob(pattern)
       # Expand glob pattern, return original if no matches
-      matches = Dir.glob(pattern)
+      # Check for extended globs if extglob is enabled
+      if Builtins.shell_options['extglob'] && has_extglob?(pattern)
+        matches = expand_extglob(pattern)
+      else
+        matches = Dir.glob(pattern)
+      end
       matches.empty? ? [pattern] : matches
+    end
+
+    def has_extglob?(pattern)
+      # Check if pattern contains extended glob operators: ?() *() +() @() !()
+      pattern.match?(/[?*+@!]\([^)]*\)/)
+    end
+
+    def expand_extglob(pattern)
+      # Convert extended glob pattern to regex and match files
+      # First, get the directory to search in
+      dir = File.dirname(pattern)
+      dir = '.' if dir == pattern || dir.empty?
+
+      # Build regex from the pattern
+      regex = extglob_to_regex(File.basename(pattern))
+
+      # Get all files in directory and filter by regex
+      begin
+        entries = if pattern.include?('/')
+                    # For paths with directories, we need to handle differently
+                    base_glob = pattern.gsub(/[?*+@!]\([^)]*\)/, '*')
+                    Dir.glob(base_glob)
+                  else
+                    Dir.entries(dir).reject { |e| e.start_with?('.') }
+                  end
+
+        if pattern.include?('/')
+          # Filter full paths
+          full_regex = extglob_to_regex(pattern)
+          entries.select { |f| f.match?(full_regex) }.sort
+        else
+          entries.select { |f| f.match?(regex) }.map { |f| dir == '.' ? f : File.join(dir, f) }.sort
+        end
+      rescue Errno::ENOENT
+        []
+      end
+    end
+
+    def extglob_to_regex(pattern)
+      # Convert extended glob pattern to Ruby regex
+      result = +''
+      i = 0
+
+      while i < pattern.length
+        char = pattern[i]
+
+        case char
+        when '\\'
+          # Escape next character
+          result << Regexp.escape(pattern[i + 1] || '')
+          i += 2
+        when '?'
+          if pattern[i + 1] == '('
+            # ?(pattern) - zero or one
+            end_idx = find_matching_paren(pattern, i + 1)
+            inner = pattern[i + 2...end_idx]
+            result << "(?:#{extglob_alternatives_to_regex(inner)})?"
+            i = end_idx + 1
+          else
+            # Regular ? glob - match any single character
+            result << '.'
+            i += 1
+          end
+        when '*'
+          if pattern[i + 1] == '('
+            # *(pattern) - zero or more
+            end_idx = find_matching_paren(pattern, i + 1)
+            inner = pattern[i + 2...end_idx]
+            result << "(?:#{extglob_alternatives_to_regex(inner)})*"
+            i = end_idx + 1
+          else
+            # Regular * glob - match any characters
+            result << '.*'
+            i += 1
+          end
+        when '+'
+          if pattern[i + 1] == '('
+            # +(pattern) - one or more
+            end_idx = find_matching_paren(pattern, i + 1)
+            inner = pattern[i + 2...end_idx]
+            result << "(?:#{extglob_alternatives_to_regex(inner)})+"
+            i = end_idx + 1
+          else
+            result << Regexp.escape(char)
+            i += 1
+          end
+        when '@'
+          if pattern[i + 1] == '('
+            # @(pattern) - exactly one
+            end_idx = find_matching_paren(pattern, i + 1)
+            inner = pattern[i + 2...end_idx]
+            result << "(?:#{extglob_alternatives_to_regex(inner)})"
+            i = end_idx + 1
+          else
+            result << Regexp.escape(char)
+            i += 1
+          end
+        when '!'
+          if pattern[i + 1] == '('
+            # !(pattern) - anything except
+            end_idx = find_matching_paren(pattern, i + 1)
+            inner = pattern[i + 2...end_idx]
+            result << "(?!#{extglob_alternatives_to_regex(inner)}).*"
+            i = end_idx + 1
+          else
+            result << Regexp.escape(char)
+            i += 1
+          end
+        when '['
+          # Character class - find the closing ]
+          end_idx = pattern.index(']', i + 1)
+          if end_idx
+            result << pattern[i..end_idx]
+            i = end_idx + 1
+          else
+            result << Regexp.escape(char)
+            i += 1
+          end
+        when '.'
+          result << '\\.'
+          i += 1
+        else
+          result << Regexp.escape(char)
+          i += 1
+        end
+      end
+
+      Regexp.new("\\A#{result}\\z")
+    end
+
+    def extglob_alternatives_to_regex(inner)
+      # Convert pipe-separated alternatives to regex alternatives
+      # Handle nested patterns
+      alternatives = split_extglob_alternatives(inner)
+      alternatives.map { |alt| extglob_simple_to_regex(alt) }.join('|')
+    end
+
+    def split_extglob_alternatives(inner)
+      # Split on | but respect nested parentheses
+      result = []
+      current = +''
+      depth = 0
+
+      inner.each_char do |char|
+        case char
+        when '('
+          depth += 1
+          current << char
+        when ')'
+          depth -= 1
+          current << char
+        when '|'
+          if depth == 0
+            result << current
+            current = +''
+          else
+            current << char
+          end
+        else
+          current << char
+        end
+      end
+      result << current unless current.empty?
+      result
+    end
+
+    def extglob_simple_to_regex(pattern)
+      # Convert simple glob pattern (inside extglob parens) to regex
+      result = +''
+      i = 0
+
+      while i < pattern.length
+        char = pattern[i]
+        case char
+        when '*'
+          result << '.*'
+        when '?'
+          result << '.'
+        when '['
+          end_idx = pattern.index(']', i + 1)
+          if end_idx
+            result << pattern[i..end_idx]
+            i = end_idx
+          else
+            result << Regexp.escape(char)
+          end
+        when '.'
+          result << '\\.'
+        else
+          result << Regexp.escape(char)
+        end
+        i += 1
+      end
+      result
+    end
+
+    def find_matching_paren(str, start_idx)
+      depth = 0
+      i = start_idx
+      while i < str.length
+        case str[i]
+        when '('
+          depth += 1
+        when ')'
+          depth -= 1
+          return i if depth == 0
+        end
+        i += 1
+      end
+      str.length
     end
 
     def __proc_sub(command, direction)
