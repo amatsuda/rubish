@@ -21,6 +21,7 @@ module Rubish
     @key_bindings = {}  # Hash of keyseq to function/macro/command
     @readline_variables = {}  # Hash of readline variable names to values
     @arrays = {}  # Hash of array variable names to their values (Array)
+    @assoc_arrays = {}  # Hash of associative array names to their values (Hash)
     @executor = nil
     @script_name_getter = nil
     @script_name_setter = nil
@@ -32,7 +33,7 @@ module Rubish
     @command_executor = nil  # Executor that bypasses functions/aliases
 
     class << self
-      attr_reader :aliases, :dir_stack, :traps, :local_scope_stack, :readonly_vars, :var_attributes, :command_hash, :shell_options, :disabled_builtins, :call_stack, :completions, :completion_options, :key_bindings, :readline_variables, :arrays
+      attr_reader :aliases, :dir_stack, :traps, :local_scope_stack, :readonly_vars, :var_attributes, :command_hash, :shell_options, :disabled_builtins, :call_stack, :completions, :completion_options, :key_bindings, :readline_variables, :arrays, :assoc_arrays
       attr_accessor :executor, :script_name_getter, :script_name_setter, :positional_params_getter, :positional_params_setter, :function_checker, :function_remover, :heredoc_content_setter, :command_executor, :current_completion_options
     end
 
@@ -76,6 +77,55 @@ module Rubish
     def self.unset_array_element(name, index)
       return unless @arrays[name]
       @arrays[name][index.to_i] = nil
+    end
+
+    # Associative array methods
+    def self.assoc_array?(name)
+      @assoc_arrays.key?(name)
+    end
+
+    def self.declare_assoc_array(name)
+      @assoc_arrays[name] ||= {}
+    end
+
+    def self.get_assoc_array(name)
+      @assoc_arrays[name] || {}
+    end
+
+    def self.set_assoc_array(name, hash)
+      @assoc_arrays[name] = hash.is_a?(Hash) ? hash : {}
+    end
+
+    def self.get_assoc_element(name, key)
+      hash = @assoc_arrays[name]
+      return '' unless hash
+      hash[key] || ''
+    end
+
+    def self.set_assoc_element(name, key, value)
+      @assoc_arrays[name] ||= {}
+      @assoc_arrays[name][key] = value
+    end
+
+    def self.assoc_keys(name)
+      (@assoc_arrays[name] || {}).keys
+    end
+
+    def self.assoc_values(name)
+      (@assoc_arrays[name] || {}).values
+    end
+
+    def self.assoc_length(name)
+      (@assoc_arrays[name] || {}).length
+    end
+
+    def self.unset_assoc_array(name)
+      @assoc_arrays.delete(name)
+    end
+
+    def self.unset_assoc_element(name, key)
+      return unless @assoc_arrays[name]
+      @assoc_arrays[name].delete(key)
     end
 
     # Valid shell options with their default values and descriptions
@@ -743,6 +793,8 @@ module Rubish
 
     def self.run_declare(args)
       # declare [-aAilrux] [-p] [name[=value] ...]
+      # -a: indexed array
+      # -A: associative array
       # -i: integer attribute (arithmetic evaluation)
       # -l: lowercase attribute
       # -u: uppercase attribute
@@ -753,6 +805,7 @@ module Rubish
 
       # Parse options
       print_mode = false
+      array_mode = nil  # :indexed or :associative
       add_attrs = Set.new
       remove_attrs = Set.new
       names = []
@@ -765,6 +818,8 @@ module Rubish
             # Parse attribute flags
             arg[1..].each_char do |c|
               case c
+              when 'a' then array_mode = :indexed
+              when 'A' then array_mode = :associative
               when 'i' then add_attrs << :integer
               when 'l' then add_attrs << :lowercase
               when 'u' then add_attrs << :uppercase
@@ -788,6 +843,19 @@ module Rubish
         else
           names << arg
         end
+      end
+
+      # Handle array declarations
+      if array_mode && !print_mode
+        names.each do |name|
+          var_name = name.split('=').first
+          if array_mode == :associative
+            declare_assoc_array(var_name)
+          else
+            set_array(var_name, []) unless array?(var_name)
+          end
+        end
+        return true if add_attrs.empty? && remove_attrs.empty?
       end
 
       # Print mode with no names: show all declared variables

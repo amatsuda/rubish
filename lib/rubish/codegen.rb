@@ -561,6 +561,12 @@ module Rubish
     end
 
     def parse_parameter_expansion(content)
+      # Handle ${!arr[@]} or ${!arr[*]} - array keys/indices
+      if content =~ /\A!([a-zA-Z_][a-zA-Z0-9_]*)\[[@*]\]\z/
+        var_name = $1
+        return "__array_keys(#{var_name.inspect})"
+      end
+
       # Handle ${#arr[@]} or ${#arr[*]} - array length
       if content =~ /\A#([a-zA-Z_][a-zA-Z0-9_]*)\[[@*]\]\z/
         var_name = $1

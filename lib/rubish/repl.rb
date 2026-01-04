@@ -248,24 +248,44 @@ module Rubish
     def handle_bare_assignments(assignments)
       assignments.each do |assignment|
         if assignment =~ /\A([a-zA-Z_][a-zA-Z0-9_]*)\+?=\((.*)\)\z/m
-          # Array assignment: arr=(a b c) or arr+=(d e)
+          # Array assignment: arr=(a b c) or arr+=(d e) or map=([k]=v ...)
           var_name = $1
           elements_str = $2
           is_append = assignment.include?('+=')
-          elements = parse_array_elements(elements_str)
-          if is_append
-            Builtins.array_append(var_name, elements)
+
+          # Check if this is associative array syntax: ([key]=value ...)
+          if elements_str =~ /\A\s*\[/ || Builtins.assoc_array?(var_name)
+            # Associative array
+            pairs = parse_assoc_array_elements(elements_str)
+            if is_append
+              pairs.each { |k, v| Builtins.set_assoc_element(var_name, k, v) }
+            else
+              Builtins.set_assoc_array(var_name, pairs)
+            end
           else
-            Builtins.set_array(var_name, elements)
+            # Indexed array
+            elements = parse_array_elements(elements_str)
+            if is_append
+              Builtins.array_append(var_name, elements)
+            else
+              Builtins.set_array(var_name, elements)
+            end
           end
         elsif assignment =~ /\A([a-zA-Z_][a-zA-Z0-9_]*)\[([^\]]+)\]=(.*)\z/
-          # Array element assignment: arr[0]=value
+          # Array element assignment: arr[0]=value or map[key]=value
           var_name = $1
-          index = $2
+          key = $2
           value = $3
-          expanded_index = expand_string_content(index)
+          expanded_key = expand_string_content(key)
           expanded_value = expand_assignment_value(value)
-          Builtins.set_array_element(var_name, expanded_index, expanded_value)
+
+          if Builtins.assoc_array?(var_name)
+            # Associative array element
+            Builtins.set_assoc_element(var_name, expanded_key, expanded_value)
+          else
+            # Indexed array element
+            Builtins.set_array_element(var_name, expanded_key, expanded_value)
+          end
         elsif assignment =~ /\A([a-zA-Z_][a-zA-Z0-9_]*)=(.*)\z/
           # Regular variable assignment
           var_name = $1
@@ -274,6 +294,18 @@ module Rubish
           ENV[var_name] = expanded_value
         end
       end
+    end
+
+    def parse_assoc_array_elements(str)
+      # Parse associative array elements: [key1]=value1 [key2]=value2
+      pairs = {}
+      # Match [key]=value patterns
+      str.scan(/\[([^\]]+)\]=(\S+|'[^']*'|"[^"]*")/) do |key, value|
+        expanded_key = expand_string_content(key)
+        expanded_value = expand_assignment_value(value)
+        pairs[expanded_key] = expanded_value
+      end
+      pairs
     end
 
     def parse_array_elements(str)
@@ -1367,32 +1399,56 @@ module Rubish
     end
 
     def __array_element(var_name, index)
-      # ${arr[n]} - get array element
-      # First try to evaluate index as arithmetic expression
-      idx = begin
-        eval(expand_string_content(index)).to_i
-      rescue
-        index.to_i
+      # ${arr[n]} or ${map[key]} - get array/assoc element
+      expanded_index = expand_string_content(index)
+
+      if Builtins.assoc_array?(var_name)
+        # Associative array - use key directly
+        Builtins.get_assoc_element(var_name, expanded_index)
+      else
+        # Indexed array - evaluate as integer
+        idx = begin
+          eval(expanded_index).to_i
+        rescue
+          expanded_index.to_i
+        end
+        Builtins.get_array_element(var_name, idx)
       end
-      Builtins.get_array_element(var_name, idx)
     end
 
     def __array_all(var_name, mode)
-      # ${arr[@]} or ${arr[*]} - get all array elements
-      arr = Builtins.get_array(var_name)
-      if mode == '@'
-        # @ mode: elements as separate words (for iteration)
-        arr.compact.join(' ')
+      # ${arr[@]} or ${arr[*]} - get all array/assoc values
+      if Builtins.assoc_array?(var_name)
+        values = Builtins.assoc_values(var_name)
       else
-        # * mode: elements joined with first char of IFS (default space)
+        values = Builtins.get_array(var_name).compact
+      end
+
+      if mode == '@'
+        values.join(' ')
+      else
         ifs = ENV['IFS'] || " \t\n"
-        arr.compact.join(ifs[0] || ' ')
+        values.join(ifs[0] || ' ')
       end
     end
 
     def __array_length(var_name)
-      # ${#arr[@]} - get array length
-      Builtins.array_length(var_name).to_s
+      # ${#arr[@]} - get array/assoc length
+      if Builtins.assoc_array?(var_name)
+        Builtins.assoc_length(var_name).to_s
+      else
+        Builtins.array_length(var_name).to_s
+      end
+    end
+
+    def __array_keys(var_name)
+      # ${!arr[@]} - get array indices or assoc keys
+      if Builtins.assoc_array?(var_name)
+        Builtins.assoc_keys(var_name).join(' ')
+      else
+        arr = Builtins.get_array(var_name)
+        arr.each_index.select { |i| !arr[i].nil? }.join(' ')
+      end
     end
 
     def remove_suffix(value, pattern, mode)
