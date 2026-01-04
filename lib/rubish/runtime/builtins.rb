@@ -1503,6 +1503,7 @@ module Rubish
       'pipefail' => false,  # pipefail: pipeline fails if any command fails
       'globstar' => false,  # globstar: ** matches directories recursively
       'nullglob' => false,  # nullglob: patterns matching nothing expand to nothing
+      'failglob' => false,  # failglob: patterns matching nothing cause an error
     }
 
     def self.set_options
@@ -1574,7 +1575,7 @@ module Rubish
         'x' => 'xtrace', 'u' => 'nounset', 'n' => 'noexec', 'v' => 'verbose',
         'f' => 'noglob', 'C' => 'noclobber', 'a' => 'allexport', 'b' => 'notify',
         'h' => 'hashall', 'm' => 'monitor', 'pipefail' => 'pipefail',
-        'globstar' => 'globstar', 'nullglob' => 'nullglob'
+        'globstar' => 'globstar', 'nullglob' => 'nullglob', 'failglob' => 'failglob'
       }
       @set_options.each do |flag, value|
         name = long_names[flag] || flag
@@ -1591,7 +1592,7 @@ module Rubish
         'xtrace' => 'x', 'nounset' => 'u', 'noexec' => 'n', 'verbose' => 'v',
         'noglob' => 'f', 'noclobber' => 'C', 'allexport' => 'a', 'notify' => 'b',
         'hashall' => 'h', 'monitor' => 'm', 'pipefail' => 'pipefail',
-        'globstar' => 'globstar', 'nullglob' => 'nullglob'
+        'globstar' => 'globstar', 'nullglob' => 'nullglob', 'failglob' => 'failglob'
       }
       flag = mapping[name]
       @set_options[flag] = value if flag

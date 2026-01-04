@@ -1102,4 +1102,95 @@ class TestSetOptions < Test::Unit::TestCase
     # Without nullglob, echo should output the literal pattern
     assert_equal pattern, result
   end
+
+  # set -o failglob
+  def test_failglob_disabled_by_default
+    # Failglob should be disabled by default
+    assert_false Rubish::Builtins.set_option?('failglob')
+  end
+
+  def test_set_o_failglob_enables_failglob
+    execute('set -o failglob')
+    assert Rubish::Builtins.set_option?('failglob')
+    execute('set +o failglob')
+  end
+
+  def test_set_plus_o_failglob_disables_failglob
+    execute('set -o failglob')
+    execute('set +o failglob')
+    assert_false Rubish::Builtins.set_option?('failglob')
+  end
+
+  def test_failglob_no_match_raises_error
+    execute('set -o failglob')
+
+    stderr_file = File.join(@tempdir, 'stderr.txt')
+    old_stderr = $stderr
+    $stderr = File.open(stderr_file, 'w')
+    begin
+      # Pattern that matches nothing should cause error
+      execute("echo #{@tempdir}/nonexistent_*.xyz")
+    ensure
+      $stderr.close
+      $stderr = old_stderr
+    end
+
+    # Should set last_status to 1
+    last_status = @repl.instance_variable_get(:@last_status)
+    execute('set +o failglob')
+
+    # Should have printed error to stderr
+    stderr_content = File.read(stderr_file)
+    assert_match(/no match/, stderr_content)
+    assert_equal 1, last_status
+  end
+
+  def test_failglob_disabled_no_error
+    execute('set +o failglob')  # Ensure disabled
+
+    # Pattern that matches nothing should NOT cause error
+    pattern = "#{@tempdir}/nonexistent_*.xyz"
+    execute("echo #{pattern} > #{output_file}")
+    result = File.read(output_file).strip
+
+    # Without failglob, should output literal pattern
+    assert_equal pattern, result
+    assert_equal 0, @repl.instance_variable_get(:@last_status)
+  end
+
+  def test_failglob_with_matches_no_error
+    # Create a test file
+    File.write(File.join(@tempdir, 'test.txt'), 'content')
+
+    execute('set -o failglob')
+    execute("echo #{@tempdir}/*.txt > #{output_file}")
+    result = File.read(output_file).strip
+    execute('set +o failglob')
+
+    # With matches, should work normally
+    assert_match(/test\.txt/, result)
+    assert_equal 0, @repl.instance_variable_get(:@last_status)
+  end
+
+  def test_failglob_takes_precedence_over_nullglob
+    # When both are set, failglob should take precedence
+    execute('set -o failglob')
+    execute('set -o nullglob')
+
+    stderr_file = File.join(@tempdir, 'stderr.txt')
+    old_stderr = $stderr
+    $stderr = File.open(stderr_file, 'w')
+    begin
+      execute("echo #{@tempdir}/nonexistent_*.xyz")
+    ensure
+      $stderr.close
+      $stderr = old_stderr
+    end
+    execute('set +o failglob')
+    execute('set +o nullglob')
+
+    # Should have printed error (failglob wins)
+    stderr_content = File.read(stderr_file)
+    assert_match(/no match/, stderr_content)
+  end
 end

@@ -2,6 +2,7 @@
 
 module Rubish
   class NounsetError < StandardError; end
+  class FailglobError < StandardError; end
 
   class REPL
     def initialize
@@ -165,6 +166,8 @@ module Rubish
         rescue NounsetError
           @last_status = 1
           throw(:exit, 1) if Builtins.set_option?('u')
+        rescue FailglobError
+          @last_status = 1
         end
         return
       end
@@ -183,6 +186,8 @@ module Rubish
         rescue NounsetError
           @last_status = 1
           throw(:exit, 1) if Builtins.set_option?('u')
+        rescue FailglobError
+          @last_status = 1
         end
         return
       end
@@ -195,6 +200,9 @@ module Rubish
       # Unbound variable error when set -u is enabled
       @last_status = 1
       throw(:exit, 1) if Builtins.set_option?('u')
+    rescue FailglobError
+      # Glob pattern matched nothing with failglob enabled
+      @last_status = 1
     ensure
       @heredoc_content = nil
     end
@@ -1656,8 +1664,16 @@ module Rubish
       end
 
       if matches.empty?
-        # nullglob: patterns matching nothing expand to nothing
-        Builtins.set_option?('nullglob') ? [] : [pattern]
+        if Builtins.set_option?('failglob')
+          # failglob: patterns matching nothing cause an error
+          $stderr.puts "rubish: no match: #{pattern}"
+          raise FailglobError, "no match: #{pattern}"
+        elsif Builtins.set_option?('nullglob')
+          # nullglob: patterns matching nothing expand to nothing
+          []
+        else
+          [pattern]
+        end
       else
         matches
       end
