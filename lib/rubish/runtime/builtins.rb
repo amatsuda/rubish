@@ -4418,6 +4418,11 @@ module Rubish
     end
 
     def self.run_fg(args)
+      unless set_option?('m')
+        puts 'fg: no job control'
+        return false
+      end
+
       job = find_job(args)
       return false unless job
 
@@ -4447,6 +4452,11 @@ module Rubish
     end
 
     def self.run_bg(args)
+      unless set_option?('m')
+        puts 'bg: no job control'
+        return false
+      end
+
       job = find_job(args)
       return false unless job
 

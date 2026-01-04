@@ -1171,8 +1171,8 @@ module Rubish
         trap('INT', 'DEFAULT')
         trap('TSTP', 'DEFAULT')
 
-        # Create new process group
-        Process.setpgid(0, 0)
+        # Create new process group if job control is enabled
+        Process.setpgid(0, 0) if Builtins.set_option?('m')
 
         # Execute the command
         result = block.call
@@ -1180,15 +1180,20 @@ module Rubish
         exit(0)
       end
 
-      # Parent: create job and return immediately
-      Process.setpgid(pid, pid) rescue nil  # May fail if child already set it
       @last_bg_pid = pid
-      job = JobManager.instance.add(
-        pid: pid,
-        pgid: pid,
-        command: @last_line
-      )
-      puts "[#{job.id}] #{pid}"
+
+      # Only track jobs if monitor mode is enabled
+      if Builtins.set_option?('m')
+        Process.setpgid(pid, pid) rescue nil  # May fail if child already set it
+        job = JobManager.instance.add(
+          pid: pid,
+          pgid: pid,
+          command: @last_line
+        )
+        puts "[#{job.id}] #{pid}"
+      else
+        puts "[1] #{pid}"
+      end
       nil
     end
 

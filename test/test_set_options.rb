@@ -573,4 +573,41 @@ class TestSetOptions < Test::Unit::TestCase
     # ls should NOT be in the hash
     assert_nil Rubish::Builtins.hash_lookup('ls')
   end
+
+  # set -m (monitor)
+  def test_set_minus_m_enables_monitor
+    execute('set -m')
+    assert Rubish::Builtins.set_option?('m')
+  end
+
+  def test_set_plus_m_disables_monitor
+    execute('set -m')
+    execute('set +m')
+    assert_false Rubish::Builtins.set_option?('m')
+  end
+
+  def test_set_o_monitor
+    execute('set -o monitor')
+    assert Rubish::Builtins.set_option?('m')
+  end
+
+  def test_fg_requires_monitor_mode
+    execute('set +m')  # Ensure monitor is disabled
+
+    output = capture_stdout do
+      execute('fg')
+    end
+
+    assert_match(/no job control/, output)
+  end
+
+  def test_bg_requires_monitor_mode
+    execute('set +m')  # Ensure monitor is disabled
+
+    output = capture_stdout do
+      execute('bg')
+    end
+
+    assert_match(/no job control/, output)
+  end
 end
