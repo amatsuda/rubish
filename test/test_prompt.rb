@@ -265,6 +265,38 @@ class TestPrompt < Test::Unit::TestCase
     assert_match(/\e\[34m/, prompt)
   end
 
+  # PS3 tests (select menu prompt)
+  def test_ps3_default
+    ENV.delete('PS3')
+    prompt = @repl.send(:select_prompt)
+    assert_equal '#? ', prompt
+  end
+
+  def test_ps3_custom
+    ENV['PS3'] = 'Choose: '
+    prompt = @repl.send(:select_prompt)
+    assert_equal 'Choose: ', prompt
+  end
+
+  def test_ps3_with_escapes
+    ENV['PS3'] = '[\s] Select: '
+    prompt = @repl.send(:select_prompt)
+    assert_equal '[rubish] Select: ', prompt
+  end
+
+  def test_ps3_with_time
+    ENV['PS3'] = '(\A) #? '
+    prompt = @repl.send(:select_prompt)
+    assert_match(/^\(\d{2}:\d{2}\) #\? $/, prompt)
+  end
+
+  def test_ps3_with_user
+    ENV['PS3'] = '\u> '
+    prompt = @repl.send(:select_prompt)
+    expected_user = ENV['USER'] || Etc.getlogin || 'user'
+    assert_equal "#{expected_user}> ", prompt
+  end
+
   # PS4 tests (xtrace debugging prompt)
   def test_ps4_default
     ENV.delete('PS4')

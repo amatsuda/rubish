@@ -102,6 +102,15 @@ module Rubish
       end
     end
 
+    def select_prompt
+      ps3 = ENV['PS3']
+      if ps3
+        expand_prompt(ps3)
+      else
+        '#? '
+      end
+    end
+
     # Expand PS1/PS2 escape sequences
     # Supported escapes:
     #   \a - bell (ASCII 007)
@@ -1440,8 +1449,10 @@ module Rubish
 
       loop do
         # Get PS3 prompt (default "#? ")
-        prompt = ENV.fetch('PS3', '#? ')
-        print prompt
+        # PS3 supports the same escape sequences as PS1
+        ps3 = ENV['PS3'] || '#? '
+        expanded_prompt = expand_prompt(ps3)
+        print expanded_prompt
 
         # Read user input
         reply = $stdin.gets
