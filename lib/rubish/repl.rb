@@ -30,6 +30,8 @@ module Rubish
       @rubish_argv_stack = []  # For RUBISH_ARGV array variable (all arguments in call stack)
       @subshell_level = 0  # For RUBISH_SUBSHELL variable (nesting level of subshells)
       @eof_count = 0  # For IGNOREEOF variable (consecutive EOF counter)
+      @last_mail_check = Time.now  # For MAIL/MAILCHECK - last time we checked for mail
+      @mail_mtimes = {}  # For MAIL/MAILCHECK - hash of mail file paths to their last known mtime
       # SHLVL - shell nesting level (stored in ENV for inheritance)
       current_shlvl = ENV['SHLVL'].to_i
       ENV['SHLVL'] = (current_shlvl + 1).to_s
@@ -274,6 +276,78 @@ module Rubish
 
       # Restore the exit status (PROMPT_COMMAND shouldn't affect $?)
       @last_status = saved_status
+    end
+
+    # Check for new mail based on MAIL/MAILPATH and MAILCHECK
+    # MAIL: path to mail file to check
+    # MAILPATH: colon-separated list of mail files, each optionally followed by ?message
+    # MAILCHECK: interval in seconds between checks (default 60, 0 means check every prompt)
+    def check_mail
+      mailcheck = ENV['MAILCHECK']
+      # If MAILCHECK is unset or empty, default to 60 seconds
+      # If MAILCHECK is negative, disable checking
+      check_interval = if mailcheck.nil? || mailcheck.empty?
+                         60
+                       else
+                         mailcheck.to_i
+                       end
+      return if check_interval < 0
+
+      # Check if enough time has passed since last check
+      now = Time.now
+      if check_interval > 0 && (now - @last_mail_check) < check_interval
+        return
+      end
+      @last_mail_check = now
+
+      # Get mail files to check
+      mail_entries = parse_mail_paths
+
+      mail_entries.each do |path, message|
+        next unless File.exist?(path)
+        next unless File.file?(path)
+        next if File.size(path) == 0  # Empty mail file
+
+        current_mtime = File.mtime(path)
+        last_mtime = @mail_mtimes[path]
+
+        if last_mtime.nil?
+          # First time seeing this file, just record mtime
+          @mail_mtimes[path] = current_mtime
+        elsif current_mtime > last_mtime
+          # File has been modified - new mail
+          if message
+            # Custom message from MAILPATH
+            puts message
+          else
+            # Default message
+            puts "You have new mail in #{path}"
+          end
+          @mail_mtimes[path] = current_mtime
+        end
+      end
+    end
+
+    # Parse MAILPATH or MAIL into list of [path, message] pairs
+    def parse_mail_paths
+      mailpath = ENV['MAILPATH']
+
+      if mailpath && !mailpath.empty?
+        # MAILPATH format: /path/to/mail?message:/another/path?another message
+        mailpath.split(':').map do |entry|
+          if entry.include?('?')
+            path, message = entry.split('?', 2)
+            [path, message]
+          else
+            [entry, nil]
+          end
+        end
+      elsif ENV['MAIL'] && !ENV['MAIL'].empty?
+        # Fall back to MAIL (single file, no custom message)
+        [[ENV['MAIL'], nil]]
+      else
+        []
+      end
     end
 
     # Add command to history based on HISTCONTROL and HISTIGNORE settings
@@ -540,6 +614,9 @@ module Rubish
     def process_line
       # Check for completed background jobs
       JobManager.instance.check_background_jobs
+
+      # Check for new mail (before prompt)
+      check_mail
 
       # Execute PROMPT_COMMAND before displaying prompt
       run_prompt_command
