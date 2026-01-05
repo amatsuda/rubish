@@ -804,15 +804,15 @@ module Rubish
           var_name = $1
           value = $2
           expanded_value = expand_assignment_value(value)
-          # Special handling for SECONDS, RANDOM, LINENO, and PPID
+          # Special handling for SECONDS, RANDOM, LINENO, PPID, UID, and EUID
           if var_name == 'SECONDS'
             reset_seconds(expanded_value.to_i)
           elsif var_name == 'RANDOM'
             seed_random(expanded_value.to_i)
           elsif var_name == 'LINENO'
             @lineno = expanded_value.to_i
-          elsif var_name == 'PPID'
-            # PPID is read-only, silently ignore assignment
+          elsif var_name == 'PPID' || var_name == 'UID' || var_name == 'EUID'
+            # PPID, UID, EUID are read-only, silently ignore assignment
           else
             ENV[var_name] = expanded_value
           end
@@ -1110,11 +1110,13 @@ module Rubish
     end
 
     def fetch_var_with_nounset(var_name)
-      # Special handling for SECONDS, RANDOM, LINENO, and PPID
+      # Special handling for SECONDS, RANDOM, LINENO, PPID, UID, and EUID
       return seconds.to_s if var_name == 'SECONDS'
       return random.to_s if var_name == 'RANDOM'
       return @lineno.to_s if var_name == 'LINENO'
       return Process.ppid.to_s if var_name == 'PPID'
+      return Process.uid.to_s if var_name == 'UID'
+      return Process.euid.to_s if var_name == 'EUID'
 
       if Builtins.set_option?('u') && !ENV.key?(var_name)
         $stderr.puts "rubish: #{var_name}: unbound variable"
@@ -1775,7 +1777,7 @@ module Rubish
       expanded = expr.gsub(/\$\{([^}]+)\}|\$([a-zA-Z_][a-zA-Z0-9_]*)|([a-zA-Z_][a-zA-Z0-9_]*)/) do |match|
         var_name = $1 || $2 || $3
         if var_name
-          # Special handling for SECONDS, RANDOM, LINENO, and PPID
+          # Special handling for SECONDS, RANDOM, LINENO, PPID, UID, and EUID
           if var_name == 'SECONDS'
             seconds.to_s
           elsif var_name == 'RANDOM'
@@ -1784,6 +1786,10 @@ module Rubish
             @lineno.to_s
           elsif var_name == 'PPID'
             Process.ppid.to_s
+          elsif var_name == 'UID'
+            Process.uid.to_s
+          elsif var_name == 'EUID'
+            Process.euid.to_s
           else
             ENV.fetch(var_name, '0')
           end
@@ -1804,11 +1810,13 @@ module Rubish
     end
 
     def __fetch_var(var_name)
-      # Special handling for SECONDS, RANDOM, LINENO, and PPID
+      # Special handling for SECONDS, RANDOM, LINENO, PPID, UID, and EUID
       return seconds.to_s if var_name == 'SECONDS'
       return random.to_s if var_name == 'RANDOM'
       return @lineno.to_s if var_name == 'LINENO'
       return Process.ppid.to_s if var_name == 'PPID'
+      return Process.uid.to_s if var_name == 'UID'
+      return Process.euid.to_s if var_name == 'EUID'
 
       # Fetch variable with nounset check
       if Builtins.set_option?('u') && !ENV.key?(var_name)
@@ -1820,7 +1828,7 @@ module Rubish
 
     def __param_expand(var_name, operator, operand)
       # Parameter expansion operations
-      # Special handling for SECONDS, RANDOM, LINENO, and PPID
+      # Special handling for SECONDS, RANDOM, LINENO, PPID, UID, and EUID
       if var_name == 'SECONDS'
         value = seconds.to_s
         is_set = true
@@ -1835,6 +1843,14 @@ module Rubish
         is_null = false
       elsif var_name == 'PPID'
         value = Process.ppid.to_s
+        is_set = true
+        is_null = false
+      elsif var_name == 'UID'
+        value = Process.uid.to_s
+        is_set = true
+        is_null = false
+      elsif var_name == 'EUID'
+        value = Process.euid.to_s
         is_set = true
         is_null = false
       else
