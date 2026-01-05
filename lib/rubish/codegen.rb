@@ -284,6 +284,32 @@ module Rubish
         return nil  # Unclosed, treat as literal
       end
 
+      # Check for $"..." locale translation string
+      if str[pos + 1] == '"'
+        j = pos + 2
+        content = +''  # Mutable string
+        while j < str.length && str[j] != '"'
+          if str[j] == '\\'
+            # Handle escape sequences
+            content << str[j, 2]
+            j += 2
+          else
+            content << str[j]
+            j += 1
+          end
+        end
+        if j < str.length && str[j] == '"'
+          # Process any variable expansions in the content first
+          if content.include?('$')
+            expanded = generate_interpolated_string(content)
+            return ["__translate(#{expanded})", j - pos + 1]
+          else
+            return ["__translate(#{content.inspect})", j - pos + 1]
+          end
+        end
+        return nil  # Unclosed, treat as literal
+      end
+
       # Check for special variables first
       two_char = str[pos, 2]
       case two_char

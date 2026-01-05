@@ -2542,6 +2542,31 @@ module Rubish
       RUBY_PLATFORM.split('-').first
     end
 
+    def __translate(string)
+      # $"string" - locale-specific translation using TEXTDOMAIN
+      # Uses gettext if available, otherwise returns original string
+      textdomain = ENV['TEXTDOMAIN']
+      return string if textdomain.nil? || textdomain.empty?
+
+      # Try to use gettext for translation
+      begin
+        require 'gettext'
+        textdomaindir = ENV['TEXTDOMAINDIR']
+        if textdomaindir && !textdomaindir.empty?
+          GetText.bindtextdomain(textdomain, path: textdomaindir)
+        else
+          GetText.bindtextdomain(textdomain)
+        end
+        GetText._(string)
+      rescue LoadError
+        # gettext gem not available, return original string
+        string
+      rescue StandardError
+        # Any other error, return original string
+        string
+      end
+    end
+
     def __array_element(var_name, index)
       # ${arr[n]} or ${map[key]} - get array/assoc element
       expanded_index = expand_string_content(index)
