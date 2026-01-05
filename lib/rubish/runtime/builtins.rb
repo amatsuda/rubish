@@ -141,6 +141,46 @@ module Rubish
     # IFS (Internal Field Separator) methods
     DEFAULT_IFS = " \t\n"
 
+    # COMP_WORDBREAKS - characters that separate words for completion
+    DEFAULT_COMP_WORDBREAKS = " \t\n\"'><=;|&(:"
+
+    def self.comp_wordbreaks
+      ENV['COMP_WORDBREAKS'] || DEFAULT_COMP_WORDBREAKS
+    end
+
+    # Completion context variables (set during programmable completion)
+    @comp_words = []      # COMP_WORDS - array of words on the command line
+    @comp_cword = 0       # COMP_CWORD - index of word containing cursor
+    @comp_line = ''       # COMP_LINE - current command line
+    @comp_point = 0       # COMP_POINT - cursor position in COMP_LINE
+    @comp_type = 0        # COMP_TYPE - type of completion (9=normal, 33=listing, 37=menu, 63=partial, 64=unmodified)
+    @comp_key = 0         # COMP_KEY - key that triggered completion
+    @compreply = []       # COMPREPLY - array of completion results
+
+    class << self
+      attr_accessor :comp_words, :comp_cword, :comp_line, :comp_point, :comp_type, :comp_key, :compreply
+    end
+
+    def self.set_completion_context(line:, point:, words:, cword:, type: 9, key: 9)
+      @comp_line = line
+      @comp_point = point
+      @comp_words = words
+      @comp_cword = cword
+      @comp_type = type
+      @comp_key = key
+      @compreply = []
+    end
+
+    def self.clear_completion_context
+      @comp_words = []
+      @comp_cword = 0
+      @comp_line = ''
+      @comp_point = 0
+      @comp_type = 0
+      @comp_key = 0
+      @compreply = []
+    end
+
     # TMOUT - timeout for read builtin (in seconds)
     def self.tmout
       tmout_val = ENV['TMOUT']

@@ -859,7 +859,14 @@ module Rubish
           else
             # Indexed array
             elements = parse_array_elements(elements_str)
-            if is_append
+            # Special handling for COMPREPLY array
+            if var_name == 'COMPREPLY'
+              if is_append
+                Builtins.compreply.concat(elements)
+              else
+                Builtins.compreply = elements
+              end
+            elsif is_append
               Builtins.array_append(var_name, elements)
             else
               Builtins.set_array(var_name, elements)
@@ -876,6 +883,10 @@ module Rubish
           if Builtins.assoc_array?(var_name)
             # Associative array element
             Builtins.set_assoc_element(var_name, expanded_key, expanded_value)
+          elsif var_name == 'COMPREPLY'
+            # Special handling for COMPREPLY array element
+            idx = expanded_key.to_i
+            Builtins.compreply[idx] = expanded_value
           else
             # Indexed array element
             Builtins.set_array_element(var_name, expanded_key, expanded_value)
@@ -892,8 +903,8 @@ module Rubish
             seed_random(expanded_value.to_i)
           elsif var_name == 'LINENO'
             @lineno = expanded_value.to_i
-          elsif var_name == 'PPID' || var_name == 'UID' || var_name == 'EUID' || var_name == 'GROUPS' || var_name == 'HOSTNAME' || var_name == 'RUBISHPID' || var_name == 'HISTCMD' || var_name == 'EPOCHSECONDS' || var_name == 'EPOCHREALTIME' || var_name == 'SRANDOM' || var_name == 'RUBISH_VERSION' || var_name == 'RUBISH_VERSINFO' || var_name == 'OSTYPE' || var_name == 'HOSTTYPE' || var_name == 'MACHTYPE' || var_name == 'PIPESTATUS' || var_name == 'RUBISH_COMMAND' || var_name == 'FUNCNAME' || var_name == 'RUBISH_LINENO' || var_name == 'RUBISH_SOURCE' || var_name == 'RUBISH_ARGC' || var_name == 'RUBISH_ARGV' || var_name == 'RUBISH_SUBSHELL' || var_name == 'DIRSTACK' || var_name == 'COLUMNS' || var_name == 'LINES' || var_name == 'RUBISH_ALIASES'
-            # PPID, UID, EUID, GROUPS, HOSTNAME, RUBISHPID, HISTCMD, EPOCHSECONDS, EPOCHREALTIME, SRANDOM, RUBISH_VERSION, RUBISH_VERSINFO, OSTYPE, HOSTTYPE, MACHTYPE, PIPESTATUS, RUBISH_COMMAND, FUNCNAME, RUBISH_LINENO, RUBISH_SOURCE, RUBISH_ARGC, RUBISH_ARGV, RUBISH_SUBSHELL, DIRSTACK, COLUMNS, LINES, RUBISH_ALIASES are read-only, silently ignore assignment
+          elsif var_name == 'PPID' || var_name == 'UID' || var_name == 'EUID' || var_name == 'GROUPS' || var_name == 'HOSTNAME' || var_name == 'RUBISHPID' || var_name == 'HISTCMD' || var_name == 'EPOCHSECONDS' || var_name == 'EPOCHREALTIME' || var_name == 'SRANDOM' || var_name == 'RUBISH_VERSION' || var_name == 'RUBISH_VERSINFO' || var_name == 'OSTYPE' || var_name == 'HOSTTYPE' || var_name == 'MACHTYPE' || var_name == 'PIPESTATUS' || var_name == 'RUBISH_COMMAND' || var_name == 'FUNCNAME' || var_name == 'RUBISH_LINENO' || var_name == 'RUBISH_SOURCE' || var_name == 'RUBISH_ARGC' || var_name == 'RUBISH_ARGV' || var_name == 'RUBISH_SUBSHELL' || var_name == 'DIRSTACK' || var_name == 'COLUMNS' || var_name == 'LINES' || var_name == 'RUBISH_ALIASES' || var_name == 'COMP_CWORD' || var_name == 'COMP_LINE' || var_name == 'COMP_POINT' || var_name == 'COMP_TYPE' || var_name == 'COMP_KEY' || var_name == 'COMP_WORDS'
+            # These variables are read-only, silently ignore assignment
           else
             ENV[var_name] = expanded_value
           end
@@ -1213,6 +1224,12 @@ module Rubish
       return @subshell_level.to_s if var_name == 'RUBISH_SUBSHELL'
       return terminal_columns.to_s if var_name == 'COLUMNS'
       return terminal_lines.to_s if var_name == 'LINES'
+      return Builtins.comp_line if var_name == 'COMP_LINE'
+      return Builtins.comp_point.to_s if var_name == 'COMP_POINT'
+      return Builtins.comp_cword.to_s if var_name == 'COMP_CWORD'
+      return Builtins.comp_type.to_s if var_name == 'COMP_TYPE'
+      return Builtins.comp_key.to_s if var_name == 'COMP_KEY'
+      return Builtins.comp_wordbreaks if var_name == 'COMP_WORDBREAKS'
 
       if Builtins.set_option?('u') && !ENV.key?(var_name)
         $stderr.puts "rubish: #{var_name}: unbound variable"
@@ -1934,6 +1951,12 @@ module Rubish
       return @subshell_level.to_s if var_name == 'RUBISH_SUBSHELL'
       return terminal_columns.to_s if var_name == 'COLUMNS'
       return terminal_lines.to_s if var_name == 'LINES'
+      return Builtins.comp_line if var_name == 'COMP_LINE'
+      return Builtins.comp_point.to_s if var_name == 'COMP_POINT'
+      return Builtins.comp_cword.to_s if var_name == 'COMP_CWORD'
+      return Builtins.comp_type.to_s if var_name == 'COMP_TYPE'
+      return Builtins.comp_key.to_s if var_name == 'COMP_KEY'
+      return Builtins.comp_wordbreaks if var_name == 'COMP_WORDBREAKS'
 
       # Fetch variable with nounset check
       if Builtins.set_option?('u') && !ENV.key?(var_name)
@@ -2028,6 +2051,30 @@ module Rubish
         is_null = false
       elsif var_name == 'LINES'
         value = terminal_lines.to_s
+        is_set = true
+        is_null = false
+      elsif var_name == 'COMP_LINE'
+        value = Builtins.comp_line
+        is_set = true
+        is_null = value.empty?
+      elsif var_name == 'COMP_POINT'
+        value = Builtins.comp_point.to_s
+        is_set = true
+        is_null = false
+      elsif var_name == 'COMP_CWORD'
+        value = Builtins.comp_cword.to_s
+        is_set = true
+        is_null = false
+      elsif var_name == 'COMP_TYPE'
+        value = Builtins.comp_type.to_s
+        is_set = true
+        is_null = false
+      elsif var_name == 'COMP_KEY'
+        value = Builtins.comp_key.to_s
+        is_set = true
+        is_null = false
+      elsif var_name == 'COMP_WORDBREAKS'
+        value = Builtins.comp_wordbreaks
         is_set = true
         is_null = false
       else
@@ -2151,6 +2198,12 @@ module Rubish
       when 'RUBISH_SUBSHELL' then @subshell_level.to_s
       when 'COLUMNS' then terminal_columns.to_s
       when 'LINES' then terminal_lines.to_s
+      when 'COMP_LINE' then Builtins.comp_line
+      when 'COMP_POINT' then Builtins.comp_point.to_s
+      when 'COMP_CWORD' then Builtins.comp_cword.to_s
+      when 'COMP_TYPE' then Builtins.comp_type.to_s
+      when 'COMP_KEY' then Builtins.comp_key.to_s
+      when 'COMP_WORDBREAKS' then Builtins.comp_wordbreaks
       end
     end
 
@@ -2363,6 +2416,26 @@ module Rubish
         return (Builtins.aliases[expanded_index] || '').to_s
       end
 
+      # Special handling for COMP_WORDS array
+      if var_name == 'COMP_WORDS'
+        idx = begin
+          eval(expanded_index).to_i
+        rescue
+          expanded_index.to_i
+        end
+        return (Builtins.comp_words[idx] || '').to_s
+      end
+
+      # Special handling for COMPREPLY array
+      if var_name == 'COMPREPLY'
+        idx = begin
+          eval(expanded_index).to_i
+        rescue
+          expanded_index.to_i
+        end
+        return (Builtins.compreply[idx] || '').to_s
+      end
+
       if Builtins.assoc_array?(var_name)
         # Associative array - use key directly
         Builtins.get_assoc_element(var_name, expanded_index)
@@ -2409,6 +2482,12 @@ module Rubish
       # Special handling for RUBISH_ALIASES associative array
       elsif var_name == 'RUBISH_ALIASES'
         values = Builtins.aliases.values
+      # Special handling for COMP_WORDS array
+      elsif var_name == 'COMP_WORDS'
+        values = Builtins.comp_words.dup
+      # Special handling for COMPREPLY array
+      elsif var_name == 'COMPREPLY'
+        values = Builtins.compreply.dup
       elsif Builtins.assoc_array?(var_name)
         values = Builtins.assoc_values(var_name)
       else
@@ -2455,6 +2534,12 @@ module Rubish
       # Special handling for RUBISH_ALIASES associative array
       elsif var_name == 'RUBISH_ALIASES'
         Builtins.aliases.length.to_s
+      # Special handling for COMP_WORDS array
+      elsif var_name == 'COMP_WORDS'
+        Builtins.comp_words.length.to_s
+      # Special handling for COMPREPLY array
+      elsif var_name == 'COMPREPLY'
+        Builtins.compreply.length.to_s
       elsif Builtins.assoc_array?(var_name)
         Builtins.assoc_length(var_name).to_s
       else
@@ -2494,6 +2579,12 @@ module Rubish
       # Special handling for RUBISH_ALIASES associative array
       elsif var_name == 'RUBISH_ALIASES'
         Builtins.aliases.keys.join(' ')
+      # Special handling for COMP_WORDS array
+      elsif var_name == 'COMP_WORDS'
+        (0...Builtins.comp_words.length).to_a.join(' ')
+      # Special handling for COMPREPLY array
+      elsif var_name == 'COMPREPLY'
+        (0...Builtins.compreply.length).to_a.join(' ')
       elsif Builtins.assoc_array?(var_name)
         Builtins.assoc_keys(var_name).join(' ')
       else
@@ -3623,13 +3714,103 @@ module Rubish
 
     def complete(input)
       line = Reline.line_buffer
-      is_first_word = !line.include?(' ') || line.end_with?('| ')
+      point = Reline.point rescue line.length
+
+      # Parse command line into words
+      words = split_completion_words(line)
+      is_first_word = words.length <= 1
 
       if is_first_word
         complete_command(input)
       else
-        complete_file(input)
+        # Check for programmable completion
+        cmd = words.first
+        spec = Builtins.get_completion_spec(cmd)
+
+        if spec && spec[:function]
+          # Calculate COMP_CWORD (index of word containing cursor)
+          cword = calculate_comp_cword(line, point, words)
+
+          # Set up COMP_* variables
+          Builtins.set_completion_context(
+            line: line,
+            point: point,
+            words: words,
+            cword: cword,
+            type: 9,  # TAB = normal completion
+            key: 9    # TAB key
+          )
+
+          begin
+            # Call the completion function
+            call_function(spec[:function], [cmd, input, words[cword - 1] || ''])
+
+            # Get results from COMPREPLY
+            results = Builtins.compreply.dup
+
+            # Apply filter pattern if specified
+            if spec[:filterpat] && !results.empty?
+              pattern = Regexp.new(spec[:filterpat].gsub('*', '.*').gsub('?', '.'))
+              results.reject! { |r| r.match?(pattern) }
+            end
+
+            # Filter results by current input (like readline does)
+            results.select! { |r| r.start_with?(input) } unless input.empty?
+
+            # Add prefix/suffix if specified
+            if spec[:prefix] || spec[:suffix]
+              results.map! { |r| "#{spec[:prefix]}#{r}#{spec[:suffix]}" }
+            end
+
+            return results.uniq.sort
+          ensure
+            Builtins.clear_completion_context
+          end
+        elsif spec
+          # Use spec without function (wordlist, actions, etc.)
+          return Builtins.generate_completions(spec, input)
+        else
+          complete_file(input)
+        end
       end
+    end
+
+    def split_completion_words(line)
+      # Split line into words using COMP_WORDBREAKS
+      wordbreaks = Builtins.comp_wordbreaks
+      words = []
+      current = +''
+      in_quote = nil
+
+      line.each_char do |c|
+        if in_quote
+          current << c
+          in_quote = nil if c == in_quote
+        elsif c == '"' || c == "'"
+          current << c
+          in_quote = c
+        elsif wordbreaks.include?(c)
+          words << current unless current.empty?
+          current = +''
+        else
+          current << c
+        end
+      end
+      words << current unless current.empty?
+      words
+    end
+
+    def calculate_comp_cword(line, point, words)
+      # Find which word the cursor is in
+      pos = 0
+      words.each_with_index do |word, idx|
+        word_start = line.index(word, pos)
+        break idx if word_start.nil?
+        word_end = word_start + word.length
+        return idx if point >= word_start && point <= word_end
+        pos = word_end
+      end
+      words.length
     end
 
     def complete_command(input)
