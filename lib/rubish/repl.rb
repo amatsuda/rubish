@@ -23,6 +23,7 @@ module Rubish
       @pipestatus = [0]  # For PIPESTATUS array variable
       @rubish_command = ''  # For RUBISH_COMMAND variable (current command being executed)
       @funcname_stack = []  # For FUNCNAME array variable (function call stack)
+      @rubish_lineno_stack = []  # For RUBISH_LINENO array variable (line numbers of function calls)
       # SHLVL - shell nesting level (stored in ENV for inheritance)
       current_shlvl = ENV['SHLVL'].to_i
       ENV['SHLVL'] = (current_shlvl + 1).to_s
@@ -682,8 +683,9 @@ module Rubish
       func = @functions[name]
       return false unless func
 
-      # Push function name onto FUNCNAME stack
+      # Push function name onto FUNCNAME stack and line number onto RUBISH_LINENO stack
       @funcname_stack.unshift(name)
+      @rubish_lineno_stack.unshift(@lineno)
 
       # Save current positional params and set new ones
       saved_params = @positional_params
@@ -729,8 +731,9 @@ module Rubish
         Builtins.pop_local_scope
         @positional_params = saved_params
 
-        # Pop function name from FUNCNAME stack
+        # Pop function name from FUNCNAME stack and line number from RUBISH_LINENO stack
         @funcname_stack.shift
+        @rubish_lineno_stack.shift
       end
     end
 
@@ -834,8 +837,8 @@ module Rubish
             seed_random(expanded_value.to_i)
           elsif var_name == 'LINENO'
             @lineno = expanded_value.to_i
-          elsif var_name == 'PPID' || var_name == 'UID' || var_name == 'EUID' || var_name == 'GROUPS' || var_name == 'HOSTNAME' || var_name == 'RUBISHPID' || var_name == 'HISTCMD' || var_name == 'EPOCHSECONDS' || var_name == 'EPOCHREALTIME' || var_name == 'SRANDOM' || var_name == 'RUBISH_VERSION' || var_name == 'RUBISH_VERSINFO' || var_name == 'OSTYPE' || var_name == 'HOSTTYPE' || var_name == 'MACHTYPE' || var_name == 'PIPESTATUS' || var_name == 'RUBISH_COMMAND' || var_name == 'FUNCNAME'
-            # PPID, UID, EUID, GROUPS, HOSTNAME, RUBISHPID, HISTCMD, EPOCHSECONDS, EPOCHREALTIME, SRANDOM, RUBISH_VERSION, RUBISH_VERSINFO, OSTYPE, HOSTTYPE, MACHTYPE, PIPESTATUS, RUBISH_COMMAND, FUNCNAME are read-only, silently ignore assignment
+          elsif var_name == 'PPID' || var_name == 'UID' || var_name == 'EUID' || var_name == 'GROUPS' || var_name == 'HOSTNAME' || var_name == 'RUBISHPID' || var_name == 'HISTCMD' || var_name == 'EPOCHSECONDS' || var_name == 'EPOCHREALTIME' || var_name == 'SRANDOM' || var_name == 'RUBISH_VERSION' || var_name == 'RUBISH_VERSINFO' || var_name == 'OSTYPE' || var_name == 'HOSTTYPE' || var_name == 'MACHTYPE' || var_name == 'PIPESTATUS' || var_name == 'RUBISH_COMMAND' || var_name == 'FUNCNAME' || var_name == 'RUBISH_LINENO'
+            # PPID, UID, EUID, GROUPS, HOSTNAME, RUBISHPID, HISTCMD, EPOCHSECONDS, EPOCHREALTIME, SRANDOM, RUBISH_VERSION, RUBISH_VERSINFO, OSTYPE, HOSTTYPE, MACHTYPE, PIPESTATUS, RUBISH_COMMAND, FUNCNAME, RUBISH_LINENO are read-only, silently ignore assignment
           else
             ENV[var_name] = expanded_value
           end
@@ -2218,6 +2221,16 @@ module Rubish
         return (@funcname_stack[idx] || '').to_s
       end
 
+      # Special handling for RUBISH_LINENO array
+      if var_name == 'RUBISH_LINENO'
+        idx = begin
+          eval(expanded_index).to_i
+        rescue
+          expanded_index.to_i
+        end
+        return (@rubish_lineno_stack[idx] || '').to_s
+      end
+
       if Builtins.assoc_array?(var_name)
         # Associative array - use key directly
         Builtins.get_assoc_element(var_name, expanded_index)
@@ -2246,6 +2259,9 @@ module Rubish
       # Special handling for FUNCNAME array
       elsif var_name == 'FUNCNAME'
         values = @funcname_stack.dup
+      # Special handling for RUBISH_LINENO array
+      elsif var_name == 'RUBISH_LINENO'
+        values = @rubish_lineno_stack.map(&:to_s)
       elsif Builtins.assoc_array?(var_name)
         values = Builtins.assoc_values(var_name)
       else
@@ -2274,6 +2290,9 @@ module Rubish
       # Special handling for FUNCNAME array
       elsif var_name == 'FUNCNAME'
         @funcname_stack.length.to_s
+      # Special handling for RUBISH_LINENO array
+      elsif var_name == 'RUBISH_LINENO'
+        @rubish_lineno_stack.length.to_s
       elsif Builtins.assoc_array?(var_name)
         Builtins.assoc_length(var_name).to_s
       else
@@ -2295,6 +2314,9 @@ module Rubish
       # Special handling for FUNCNAME array
       elsif var_name == 'FUNCNAME'
         (0...@funcname_stack.length).to_a.join(' ')
+      # Special handling for RUBISH_LINENO array
+      elsif var_name == 'RUBISH_LINENO'
+        (0...@rubish_lineno_stack.length).to_a.join(' ')
       elsif Builtins.assoc_array?(var_name)
         Builtins.assoc_keys(var_name).join(' ')
       else
