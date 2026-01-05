@@ -811,8 +811,8 @@ module Rubish
             seed_random(expanded_value.to_i)
           elsif var_name == 'LINENO'
             @lineno = expanded_value.to_i
-          elsif var_name == 'PPID' || var_name == 'UID' || var_name == 'EUID'
-            # PPID, UID, EUID are read-only, silently ignore assignment
+          elsif var_name == 'PPID' || var_name == 'UID' || var_name == 'EUID' || var_name == 'GROUPS'
+            # PPID, UID, EUID, GROUPS are read-only, silently ignore assignment
           else
             ENV[var_name] = expanded_value
           end
@@ -1110,13 +1110,14 @@ module Rubish
     end
 
     def fetch_var_with_nounset(var_name)
-      # Special handling for SECONDS, RANDOM, LINENO, PPID, UID, and EUID
+      # Special handling for SECONDS, RANDOM, LINENO, PPID, UID, EUID, and GROUPS
       return seconds.to_s if var_name == 'SECONDS'
       return random.to_s if var_name == 'RANDOM'
       return @lineno.to_s if var_name == 'LINENO'
       return Process.ppid.to_s if var_name == 'PPID'
       return Process.uid.to_s if var_name == 'UID'
       return Process.euid.to_s if var_name == 'EUID'
+      return (Process.groups.first || '').to_s if var_name == 'GROUPS'
 
       if Builtins.set_option?('u') && !ENV.key?(var_name)
         $stderr.puts "rubish: #{var_name}: unbound variable"
@@ -1810,13 +1811,14 @@ module Rubish
     end
 
     def __fetch_var(var_name)
-      # Special handling for SECONDS, RANDOM, LINENO, PPID, UID, and EUID
+      # Special handling for SECONDS, RANDOM, LINENO, PPID, UID, EUID, and GROUPS
       return seconds.to_s if var_name == 'SECONDS'
       return random.to_s if var_name == 'RANDOM'
       return @lineno.to_s if var_name == 'LINENO'
       return Process.ppid.to_s if var_name == 'PPID'
       return Process.uid.to_s if var_name == 'UID'
       return Process.euid.to_s if var_name == 'EUID'
+      return (Process.groups.first || '').to_s if var_name == 'GROUPS'
 
       # Fetch variable with nounset check
       if Builtins.set_option?('u') && !ENV.key?(var_name)
@@ -1828,7 +1830,7 @@ module Rubish
 
     def __param_expand(var_name, operator, operand)
       # Parameter expansion operations
-      # Special handling for SECONDS, RANDOM, LINENO, PPID, UID, and EUID
+      # Special handling for SECONDS, RANDOM, LINENO, PPID, UID, EUID, and GROUPS
       if var_name == 'SECONDS'
         value = seconds.to_s
         is_set = true
@@ -1853,6 +1855,10 @@ module Rubish
         value = Process.euid.to_s
         is_set = true
         is_null = false
+      elsif var_name == 'GROUPS'
+        value = (Process.groups.first || '').to_s
+        is_set = true
+        is_null = Process.groups.empty?
       else
         value = ENV[var_name]
         is_set = ENV.key?(var_name)
@@ -2035,6 +2041,17 @@ module Rubish
       # ${arr[n]} or ${map[key]} - get array/assoc element
       expanded_index = expand_string_content(index)
 
+      # Special handling for GROUPS array
+      if var_name == 'GROUPS'
+        idx = begin
+          eval(expanded_index).to_i
+        rescue
+          expanded_index.to_i
+        end
+        groups = Process.groups
+        return (groups[idx] || '').to_s
+      end
+
       if Builtins.assoc_array?(var_name)
         # Associative array - use key directly
         Builtins.get_assoc_element(var_name, expanded_index)
@@ -2051,7 +2068,10 @@ module Rubish
 
     def __array_all(var_name, mode)
       # ${arr[@]} or ${arr[*]} - get all array/assoc values
-      if Builtins.assoc_array?(var_name)
+      # Special handling for GROUPS array
+      if var_name == 'GROUPS'
+        values = Process.groups.map(&:to_s)
+      elsif Builtins.assoc_array?(var_name)
         values = Builtins.assoc_values(var_name)
       else
         values = Builtins.get_array(var_name).compact
@@ -2067,7 +2087,10 @@ module Rubish
 
     def __array_length(var_name)
       # ${#arr[@]} - get array/assoc length
-      if Builtins.assoc_array?(var_name)
+      # Special handling for GROUPS array
+      if var_name == 'GROUPS'
+        Process.groups.length.to_s
+      elsif Builtins.assoc_array?(var_name)
         Builtins.assoc_length(var_name).to_s
       else
         Builtins.array_length(var_name).to_s
@@ -2076,7 +2099,10 @@ module Rubish
 
     def __array_keys(var_name)
       # ${!arr[@]} - get array indices or assoc keys
-      if Builtins.assoc_array?(var_name)
+      # Special handling for GROUPS array
+      if var_name == 'GROUPS'
+        (0...Process.groups.length).to_a.join(' ')
+      elsif Builtins.assoc_array?(var_name)
         Builtins.assoc_keys(var_name).join(' ')
       else
         arr = Builtins.get_array(var_name)
