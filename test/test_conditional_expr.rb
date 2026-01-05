@@ -197,14 +197,14 @@ class TestConditionalExpr < Test::Unit::TestCase
     assert_equal 1, last_status
   end
 
-  def test_regex_sets_bash_rematch
+  def test_regex_sets_rubish_rematch
     ENV['STR'] = 'hello123world'
     execute('[[ $STR =~ ([0-9]+) ]]')
     assert_equal 0, last_status
 
-    # Check BASH_REMATCH was set
-    bash_rematch = Rubish::Builtins.get_array('BASH_REMATCH')
-    assert_include bash_rematch, '123'
+    # Check RUBISH_REMATCH was set
+    rubish_rematch = Rubish::Builtins.get_array('RUBISH_REMATCH')
+    assert_include rubish_rematch, '123'
   end
 
   # Integer comparison

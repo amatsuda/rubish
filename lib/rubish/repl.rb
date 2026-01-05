@@ -3373,16 +3373,16 @@ module Rubish
     end
 
     def cond_regex_match?(string, pattern)
-      # =~ does regex matching, sets BASH_REMATCH
+      # =~ does regex matching, sets RUBISH_REMATCH
       flags = Builtins.set_option?('nocasematch') ? Regexp::IGNORECASE : 0
       regex = Regexp.new(pattern, flags)
       match = regex.match(string)
       if match
-        # Set BASH_REMATCH array
-        Builtins.set_array('BASH_REMATCH', match.to_a)
+        # Set RUBISH_REMATCH array
+        Builtins.set_array('RUBISH_REMATCH', match.to_a)
         true
       else
-        Builtins.set_array('BASH_REMATCH', [])
+        Builtins.set_array('RUBISH_REMATCH', [])
         false
       end
     rescue RegexpError
