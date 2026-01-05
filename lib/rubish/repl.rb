@@ -559,6 +559,8 @@ module Rubish
       if ast.is_a?(AST::Command) && bare_assignment?(ast.name) && ast.args.all? { |a| bare_assignment?(a) }
         handle_bare_assignments([ast.name] + ast.args)
         @last_status = 0
+        @command_number += 1
+        # Note: bare assignments don't increment LINENO (bash behavior)
         return
       end
 
@@ -580,6 +582,7 @@ module Rubish
         rescue FailglobError
           @last_status = 1
         ensure
+          @command_number += 1
           @lineno += 1
         end
         return
@@ -602,6 +605,7 @@ module Rubish
         rescue FailglobError
           @last_status = 1
         ensure
+          @command_number += 1
           @lineno += 1
         end
         return
@@ -811,8 +815,8 @@ module Rubish
             seed_random(expanded_value.to_i)
           elsif var_name == 'LINENO'
             @lineno = expanded_value.to_i
-          elsif var_name == 'PPID' || var_name == 'UID' || var_name == 'EUID' || var_name == 'GROUPS' || var_name == 'HOSTNAME' || var_name == 'RUBISHPID'
-            # PPID, UID, EUID, GROUPS, HOSTNAME, RUBISHPID are read-only, silently ignore assignment
+          elsif var_name == 'PPID' || var_name == 'UID' || var_name == 'EUID' || var_name == 'GROUPS' || var_name == 'HOSTNAME' || var_name == 'RUBISHPID' || var_name == 'HISTCMD'
+            # PPID, UID, EUID, GROUPS, HOSTNAME, RUBISHPID, HISTCMD are read-only, silently ignore assignment
           else
             ENV[var_name] = expanded_value
           end
@@ -1110,7 +1114,7 @@ module Rubish
     end
 
     def fetch_var_with_nounset(var_name)
-      # Special handling for SECONDS, RANDOM, LINENO, PPID, UID, EUID, GROUPS, HOSTNAME, and RUBISHPID
+      # Special handling for SECONDS, RANDOM, LINENO, PPID, UID, EUID, GROUPS, HOSTNAME, RUBISHPID, and HISTCMD
       return seconds.to_s if var_name == 'SECONDS'
       return random.to_s if var_name == 'RANDOM'
       return @lineno.to_s if var_name == 'LINENO'
@@ -1120,6 +1124,7 @@ module Rubish
       return (Process.groups.first || '').to_s if var_name == 'GROUPS'
       return Socket.gethostname if var_name == 'HOSTNAME'
       return Process.pid.to_s if var_name == 'RUBISHPID'
+      return @command_number.to_s if var_name == 'HISTCMD'
 
       if Builtins.set_option?('u') && !ENV.key?(var_name)
         $stderr.puts "rubish: #{var_name}: unbound variable"
@@ -1780,22 +1785,8 @@ module Rubish
       expanded = expr.gsub(/\$\{([^}]+)\}|\$([a-zA-Z_][a-zA-Z0-9_]*)|([a-zA-Z_][a-zA-Z0-9_]*)/) do |match|
         var_name = $1 || $2 || $3
         if var_name
-          # Special handling for SECONDS, RANDOM, LINENO, PPID, UID, and EUID
-          if var_name == 'SECONDS'
-            seconds.to_s
-          elsif var_name == 'RANDOM'
-            random.to_s
-          elsif var_name == 'LINENO'
-            @lineno.to_s
-          elsif var_name == 'PPID'
-            Process.ppid.to_s
-          elsif var_name == 'UID'
-            Process.uid.to_s
-          elsif var_name == 'EUID'
-            Process.euid.to_s
-          else
-            ENV.fetch(var_name, '0')
-          end
+          # Use __get_special_var for special variables, fall back to ENV
+          __get_special_var(var_name) || ENV.fetch(var_name, '0')
         else
           match
         end
@@ -1813,7 +1804,7 @@ module Rubish
     end
 
     def __fetch_var(var_name)
-      # Special handling for SECONDS, RANDOM, LINENO, PPID, UID, EUID, GROUPS, HOSTNAME, and RUBISHPID
+      # Special handling for SECONDS, RANDOM, LINENO, PPID, UID, EUID, GROUPS, HOSTNAME, RUBISHPID, and HISTCMD
       return seconds.to_s if var_name == 'SECONDS'
       return random.to_s if var_name == 'RANDOM'
       return @lineno.to_s if var_name == 'LINENO'
@@ -1823,6 +1814,7 @@ module Rubish
       return (Process.groups.first || '').to_s if var_name == 'GROUPS'
       return Socket.gethostname if var_name == 'HOSTNAME'
       return Process.pid.to_s if var_name == 'RUBISHPID'
+      return @command_number.to_s if var_name == 'HISTCMD'
 
       # Fetch variable with nounset check
       if Builtins.set_option?('u') && !ENV.key?(var_name)
@@ -1869,6 +1861,10 @@ module Rubish
         is_null = false
       elsif var_name == 'RUBISHPID'
         value = Process.pid.to_s
+        is_set = true
+        is_null = false
+      elsif var_name == 'HISTCMD'
+        value = @command_number.to_s
         is_set = true
         is_null = false
       else
@@ -1980,6 +1976,7 @@ module Rubish
       when 'GROUPS' then (Process.groups.first || '').to_s
       when 'HOSTNAME' then Socket.gethostname
       when 'RUBISHPID' then Process.pid.to_s
+      when 'HISTCMD' then @command_number.to_s
       end
     end
 
