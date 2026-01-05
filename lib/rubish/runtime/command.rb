@@ -203,12 +203,13 @@ module Rubish
 
       # Check hash first
       cached = Builtins.hash_lookup(cmd)
-      return cached if cached
+      return cached if cached && !Builtins.execignore?(cached)
 
       # Search PATH and cache if found
       path_dirs = (ENV['PATH'] || '').split(File::PATH_SEPARATOR)
       path_dirs.each do |dir|
         full_path = File.join(dir, cmd)
+        next if Builtins.execignore?(full_path)
         if File.executable?(full_path) && !File.directory?(full_path)
           Builtins.hash_store(cmd, full_path)
           return full_path

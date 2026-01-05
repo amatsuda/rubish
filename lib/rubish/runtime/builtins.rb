@@ -2635,9 +2635,24 @@ module Rubish
       all_found
     end
 
+    # Check if a path matches any EXECIGNORE pattern
+    # EXECIGNORE is a colon-separated list of glob patterns
+    def self.execignore?(path)
+      execignore = ENV['EXECIGNORE']
+      return false if execignore.nil? || execignore.empty?
+
+      patterns = execignore.split(':')
+      patterns.any? do |pattern|
+        next false if pattern.empty?
+        File.fnmatch?(pattern, path, File::FNM_PATHNAME) ||
+          File.fnmatch?(pattern, File.basename(path), File::FNM_PATHNAME)
+      end
+    end
+
     def self.find_in_path(name)
       # If name contains a slash, check if it's executable
       if name.include?('/')
+        return nil if execignore?(name)
         return name if File.executable?(name)
         return nil
       end
@@ -2646,6 +2661,7 @@ module Rubish
       path_dirs = (ENV['PATH'] || '').split(File::PATH_SEPARATOR)
       path_dirs.each do |dir|
         full_path = File.join(dir, name)
+        next if execignore?(full_path)
         return full_path if File.executable?(full_path) && !File.directory?(full_path)
       end
 
@@ -2658,7 +2674,7 @@ module Rubish
 
       # If name contains a slash, just check if it's executable
       if name.include?('/')
-        results << name if File.executable?(name)
+        results << name if File.executable?(name) && !execignore?(name)
         return results
       end
 
@@ -2666,6 +2682,7 @@ module Rubish
       path_dirs = (ENV['PATH'] || '').split(File::PATH_SEPARATOR)
       path_dirs.each do |dir|
         full_path = File.join(dir, name)
+        next if execignore?(full_path)
         if File.executable?(full_path) && !File.directory?(full_path)
           results << full_path
         end
