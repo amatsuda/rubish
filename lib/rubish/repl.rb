@@ -848,8 +848,8 @@ module Rubish
             seed_random(expanded_value.to_i)
           elsif var_name == 'LINENO'
             @lineno = expanded_value.to_i
-          elsif var_name == 'PPID' || var_name == 'UID' || var_name == 'EUID' || var_name == 'GROUPS' || var_name == 'HOSTNAME' || var_name == 'RUBISHPID' || var_name == 'HISTCMD' || var_name == 'EPOCHSECONDS' || var_name == 'EPOCHREALTIME' || var_name == 'SRANDOM' || var_name == 'RUBISH_VERSION' || var_name == 'RUBISH_VERSINFO' || var_name == 'OSTYPE' || var_name == 'HOSTTYPE' || var_name == 'MACHTYPE' || var_name == 'PIPESTATUS' || var_name == 'RUBISH_COMMAND' || var_name == 'FUNCNAME' || var_name == 'RUBISH_LINENO' || var_name == 'RUBISH_SOURCE' || var_name == 'RUBISH_SUBSHELL'
-            # PPID, UID, EUID, GROUPS, HOSTNAME, RUBISHPID, HISTCMD, EPOCHSECONDS, EPOCHREALTIME, SRANDOM, RUBISH_VERSION, RUBISH_VERSINFO, OSTYPE, HOSTTYPE, MACHTYPE, PIPESTATUS, RUBISH_COMMAND, FUNCNAME, RUBISH_LINENO, RUBISH_SOURCE, RUBISH_SUBSHELL are read-only, silently ignore assignment
+          elsif var_name == 'PPID' || var_name == 'UID' || var_name == 'EUID' || var_name == 'GROUPS' || var_name == 'HOSTNAME' || var_name == 'RUBISHPID' || var_name == 'HISTCMD' || var_name == 'EPOCHSECONDS' || var_name == 'EPOCHREALTIME' || var_name == 'SRANDOM' || var_name == 'RUBISH_VERSION' || var_name == 'RUBISH_VERSINFO' || var_name == 'OSTYPE' || var_name == 'HOSTTYPE' || var_name == 'MACHTYPE' || var_name == 'PIPESTATUS' || var_name == 'RUBISH_COMMAND' || var_name == 'FUNCNAME' || var_name == 'RUBISH_LINENO' || var_name == 'RUBISH_SOURCE' || var_name == 'RUBISH_SUBSHELL' || var_name == 'DIRSTACK'
+            # PPID, UID, EUID, GROUPS, HOSTNAME, RUBISHPID, HISTCMD, EPOCHSECONDS, EPOCHREALTIME, SRANDOM, RUBISH_VERSION, RUBISH_VERSINFO, OSTYPE, HOSTTYPE, MACHTYPE, PIPESTATUS, RUBISH_COMMAND, FUNCNAME, RUBISH_LINENO, RUBISH_SOURCE, RUBISH_SUBSHELL, DIRSTACK are read-only, silently ignore assignment
           else
             ENV[var_name] = expanded_value
           end
@@ -2259,6 +2259,17 @@ module Rubish
         return (@rubish_source_stack[idx] || '').to_s
       end
 
+      # Special handling for DIRSTACK array
+      if var_name == 'DIRSTACK'
+        idx = begin
+          eval(expanded_index).to_i
+        rescue
+          expanded_index.to_i
+        end
+        dirstack = [Dir.pwd] + Builtins.dir_stack
+        return (dirstack[idx] || '').to_s
+      end
+
       if Builtins.assoc_array?(var_name)
         # Associative array - use key directly
         Builtins.get_assoc_element(var_name, expanded_index)
@@ -2293,6 +2304,9 @@ module Rubish
       # Special handling for RUBISH_SOURCE array
       elsif var_name == 'RUBISH_SOURCE'
         values = @rubish_source_stack.dup
+      # Special handling for DIRSTACK array
+      elsif var_name == 'DIRSTACK'
+        values = [Dir.pwd] + Builtins.dir_stack
       elsif Builtins.assoc_array?(var_name)
         values = Builtins.assoc_values(var_name)
       else
@@ -2327,6 +2341,9 @@ module Rubish
       # Special handling for RUBISH_SOURCE array
       elsif var_name == 'RUBISH_SOURCE'
         @rubish_source_stack.length.to_s
+      # Special handling for DIRSTACK array
+      elsif var_name == 'DIRSTACK'
+        ([Dir.pwd] + Builtins.dir_stack).length.to_s
       elsif Builtins.assoc_array?(var_name)
         Builtins.assoc_length(var_name).to_s
       else
@@ -2354,6 +2371,9 @@ module Rubish
       # Special handling for RUBISH_SOURCE array
       elsif var_name == 'RUBISH_SOURCE'
         (0...@rubish_source_stack.length).to_a.join(' ')
+      # Special handling for DIRSTACK array
+      elsif var_name == 'DIRSTACK'
+        (0...([Dir.pwd] + Builtins.dir_stack).length).to_a.join(' ')
       elsif Builtins.assoc_array?(var_name)
         Builtins.assoc_keys(var_name).join(' ')
       else
