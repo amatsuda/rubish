@@ -241,7 +241,7 @@ module Rubish
   end
 
   class Pipeline
-    attr_reader :commands, :status
+    attr_reader :commands, :status, :statuses
     attr_accessor :block
 
     def initialize(*commands)
@@ -359,6 +359,7 @@ module Rubish
         Process.wait(pid)
         $?
       end
+      @statuses = statuses
       @status = determine_pipeline_status(statuses)
       self
     end
@@ -428,6 +429,7 @@ module Rubish
         Process.wait(pid)
         $?
       end
+      @statuses = statuses
       @status = determine_pipeline_status(statuses)
       self
     end

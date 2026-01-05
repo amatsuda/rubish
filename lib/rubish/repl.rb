@@ -20,6 +20,7 @@ module Rubish
       @seconds_base = Time.now  # For SECONDS variable
       @random_generator = Random.new  # For RANDOM variable
       @lineno = 1  # For LINENO variable
+      @pipestatus = [0]  # For PIPESTATUS array variable
       # SHLVL - shell nesting level (stored in ENV for inheritance)
       current_shlvl = ENV['SHLVL'].to_i
       ENV['SHLVL'] = (current_shlvl + 1).to_s
@@ -559,6 +560,7 @@ module Rubish
       if ast.is_a?(AST::Command) && bare_assignment?(ast.name) && ast.args.all? { |a| bare_assignment?(a) }
         handle_bare_assignments([ast.name] + ast.args)
         @last_status = 0
+        @pipestatus = [0]
         @command_number += 1
         # Note: bare assignments don't increment LINENO (bash behavior)
         return
@@ -574,13 +576,16 @@ module Rubish
           expanded_args = expand_args_for_builtin(ast.args)
           result = Builtins.run(ast.name, expanded_args)
           @last_status = result ? 0 : 1
+          @pipestatus = [@last_status]
           run_err_trap_if_failed
           check_errexit
         rescue NounsetError
           @last_status = 1
+          @pipestatus = [@last_status]
           throw(:exit, 1) if Builtins.set_option?('u')
         rescue FailglobError
           @last_status = 1
+          @pipestatus = [@last_status]
         ensure
           @command_number += 1
           @lineno += 1
@@ -597,13 +602,16 @@ module Rubish
           expanded_args = expand_args_for_builtin(ast.args)
           result = call_function(ast.name, expanded_args)
           @last_status = result ? 0 : 1
+          @pipestatus = [@last_status]
           # Don't run ERR trap here - it was already handled inside the function if errtrace is on
           check_errexit
         rescue NounsetError
           @last_status = 1
+          @pipestatus = [@last_status]
           throw(:exit, 1) if Builtins.set_option?('u')
         rescue FailglobError
           @last_status = 1
+          @pipestatus = [@last_status]
         ensure
           @command_number += 1
           @lineno += 1
@@ -815,8 +823,8 @@ module Rubish
             seed_random(expanded_value.to_i)
           elsif var_name == 'LINENO'
             @lineno = expanded_value.to_i
-          elsif var_name == 'PPID' || var_name == 'UID' || var_name == 'EUID' || var_name == 'GROUPS' || var_name == 'HOSTNAME' || var_name == 'RUBISHPID' || var_name == 'HISTCMD' || var_name == 'EPOCHSECONDS' || var_name == 'EPOCHREALTIME' || var_name == 'SRANDOM' || var_name == 'RUBISH_VERSION' || var_name == 'RUBISH_VERSINFO' || var_name == 'OSTYPE' || var_name == 'HOSTTYPE' || var_name == 'MACHTYPE'
-            # PPID, UID, EUID, GROUPS, HOSTNAME, RUBISHPID, HISTCMD, EPOCHSECONDS, EPOCHREALTIME, SRANDOM, RUBISH_VERSION, RUBISH_VERSINFO, OSTYPE, HOSTTYPE, MACHTYPE are read-only, silently ignore assignment
+          elsif var_name == 'PPID' || var_name == 'UID' || var_name == 'EUID' || var_name == 'GROUPS' || var_name == 'HOSTNAME' || var_name == 'RUBISHPID' || var_name == 'HISTCMD' || var_name == 'EPOCHSECONDS' || var_name == 'EPOCHREALTIME' || var_name == 'SRANDOM' || var_name == 'RUBISH_VERSION' || var_name == 'RUBISH_VERSINFO' || var_name == 'OSTYPE' || var_name == 'HOSTTYPE' || var_name == 'MACHTYPE' || var_name == 'PIPESTATUS'
+            # PPID, UID, EUID, GROUPS, HOSTNAME, RUBISHPID, HISTCMD, EPOCHSECONDS, EPOCHREALTIME, SRANDOM, RUBISH_VERSION, RUBISH_VERSINFO, OSTYPE, HOSTTYPE, MACHTYPE, PIPESTATUS are read-only, silently ignore assignment
           else
             ENV[var_name] = expanded_value
           end
@@ -1627,8 +1635,18 @@ module Rubish
       if result.is_a?(Command) && @functions.key?(result.name)
         # Call user-defined function, handling redirects
         call_function_with_redirects(result)
+        @pipestatus = [@last_status]
       elsif result.is_a?(Command) || result.is_a?(Pipeline) || result.is_a?(Subshell) || result.is_a?(HeredocCommand)
         result.run
+        # Update PIPESTATUS array
+        if result.respond_to?(:status)
+          @last_status = result.status&.exitstatus || 0
+          if result.is_a?(Pipeline) && result.statuses
+            @pipestatus = result.statuses.map { |s| s.exitstatus || 0 }
+          else
+            @pipestatus = [@last_status]
+          end
+        end
       end
       result
     end
@@ -2162,6 +2180,16 @@ module Rubish
         return (__rubish_versinfo[idx] || '').to_s
       end
 
+      # Special handling for PIPESTATUS array
+      if var_name == 'PIPESTATUS'
+        idx = begin
+          eval(expanded_index).to_i
+        rescue
+          expanded_index.to_i
+        end
+        return (@pipestatus[idx] || '').to_s
+      end
+
       if Builtins.assoc_array?(var_name)
         # Associative array - use key directly
         Builtins.get_assoc_element(var_name, expanded_index)
@@ -2184,6 +2212,9 @@ module Rubish
       # Special handling for RUBISH_VERSINFO array
       elsif var_name == 'RUBISH_VERSINFO'
         values = __rubish_versinfo
+      # Special handling for PIPESTATUS array
+      elsif var_name == 'PIPESTATUS'
+        values = @pipestatus.map(&:to_s)
       elsif Builtins.assoc_array?(var_name)
         values = Builtins.assoc_values(var_name)
       else
@@ -2206,6 +2237,9 @@ module Rubish
       # Special handling for RUBISH_VERSINFO array
       elsif var_name == 'RUBISH_VERSINFO'
         __rubish_versinfo.length.to_s
+      # Special handling for PIPESTATUS array
+      elsif var_name == 'PIPESTATUS'
+        @pipestatus.length.to_s
       elsif Builtins.assoc_array?(var_name)
         Builtins.assoc_length(var_name).to_s
       else
@@ -2221,6 +2255,9 @@ module Rubish
       # Special handling for RUBISH_VERSINFO array
       elsif var_name == 'RUBISH_VERSINFO'
         (0...__rubish_versinfo.length).to_a.join(' ')
+      # Special handling for PIPESTATUS array
+      elsif var_name == 'PIPESTATUS'
+        (0...@pipestatus.length).to_a.join(' ')
       elsif Builtins.assoc_array?(var_name)
         Builtins.assoc_keys(var_name).join(' ')
       else
@@ -3328,6 +3365,12 @@ module Rubish
         result.run if result.is_a?(Command) || result.is_a?(Pipeline) || result.is_a?(Subshell)
         if result.respond_to?(:status)
           @last_status = result.status&.exitstatus || 0
+          # Update PIPESTATUS array
+          if result.is_a?(Pipeline) && result.statuses
+            @pipestatus = result.statuses.map { |s| s.exitstatus || 0 }
+          else
+            @pipestatus = [@last_status]
+          end
           run_err_trap_if_failed
         end
         result
