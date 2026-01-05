@@ -74,6 +74,38 @@ module Rubish
 
     def setup_reline
       Reline.completion_proc = ->(input) { complete(input) }
+      # Load inputrc configuration
+      # INPUTRC environment variable specifies the inputrc file location
+      # Falls back to ~/.inputrc, then ~/.config/readline/inputrc
+      load_inputrc
+    end
+
+    # Load readline/Reline configuration from inputrc file
+    # INPUTRC: path to the inputrc file (default: ~/.inputrc)
+    def load_inputrc
+      # Reline automatically checks INPUTRC env var, ~/.inputrc, and XDG paths
+      # We explicitly call read to ensure it's loaded at startup
+      begin
+        Reline.config.read
+      rescue => e
+        # Silently ignore errors reading inputrc (like readline does)
+        $stderr.puts "rubish: warning: #{inputrc_path}: #{e.message}" if ENV['RUBISH_DEBUG']
+      end
+    end
+
+    # Get the inputrc file path that would be used
+    def inputrc_path
+      inputrc = ENV['INPUTRC']
+      return inputrc if inputrc && !inputrc.empty? && File.exist?(inputrc)
+
+      home_inputrc = File.expand_path('~/.inputrc')
+      return home_inputrc if File.exist?(home_inputrc)
+
+      xdg_config = ENV['XDG_CONFIG_HOME'] || File.expand_path('~/.config')
+      xdg_inputrc = File.join(xdg_config, 'readline', 'inputrc')
+      return xdg_inputrc if File.exist?(xdg_inputrc)
+
+      nil
     end
 
     # Get the history file path from HISTFILE or default
