@@ -14,6 +14,8 @@ class TestRubishrc < Test::Unit::TestCase
     FileUtils.rm_rf(@tempdir)
     ENV.clear
     @saved_env.each { |k, v| ENV[k] = v }
+    # Clear any shell options set during the test
+    Rubish::Builtins.shell_options.clear
   end
 
   # Test that config sets variables

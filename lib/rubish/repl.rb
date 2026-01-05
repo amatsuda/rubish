@@ -2132,9 +2132,12 @@ module Rubish
     def __arith(expr)
       # Evaluate arithmetic expression
       # Replace variable references with their values
-      expanded = expr.gsub(/\$\{([^}]+)\}|\$([a-zA-Z_][a-zA-Z0-9_]*)|([a-zA-Z_][a-zA-Z0-9_]*)/) do |match|
-        var_name = $1 || $2 || $3
-        if var_name
+      # Also handle positional parameters like $1, $2, etc.
+      expanded = expr.gsub(/\$\{([^}]+)\}|\$(\d+)|\$([a-zA-Z_][a-zA-Z0-9_]*)|([a-zA-Z_][a-zA-Z0-9_]*)/) do |match|
+        if $2 # Positional parameter like $1, $2
+          n = $2.to_i
+          (@positional_params[n - 1] || '0')
+        elsif (var_name = $1 || $3 || $4)
           # Use __get_special_var for special variables, fall back to ENV
           __get_special_var(var_name) || ENV.fetch(var_name, '0')
         else
@@ -2937,7 +2940,7 @@ module Rubish
 
       # Handle globstar: ** matches directories recursively only when enabled
       # When disabled, treat ** as * (non-recursive)
-      glob_pattern = if pattern.include?('**') && !Builtins.set_option?('globstar')
+      glob_pattern = if pattern.include?('**') && !Builtins.shopt_enabled?('globstar')
                        pattern.gsub('**', '*')
                      else
                        pattern
@@ -2947,17 +2950,17 @@ module Rubish
       # Check for extended globs if extglob is enabled
       # Build glob flags based on options
       glob_flags = 0
-      glob_flags |= File::FNM_DOTMATCH if Builtins.set_option?('dotglob')
-      glob_flags |= File::FNM_CASEFOLD if Builtins.set_option?('nocaseglob')
+      glob_flags |= File::FNM_DOTMATCH if Builtins.shopt_enabled?('dotglob')
+      glob_flags |= File::FNM_CASEFOLD if Builtins.shopt_enabled?('nocaseglob')
 
-      if Builtins.set_option?('extglob') && has_extglob?(glob_pattern)
+      if Builtins.shopt_enabled?('extglob') && has_extglob?(glob_pattern)
         matches = expand_extglob(glob_pattern)
       else
         matches = Dir.glob(glob_pattern, glob_flags)
       end
 
       # Filter out . and .. when dotglob is enabled
-      if Builtins.set_option?('dotglob')
+      if Builtins.shopt_enabled?('dotglob')
         matches = matches.reject { |m| m.end_with?('/.') || m.end_with?('/..') || m == '.' || m == '..' }
       end
 
@@ -2968,11 +2971,11 @@ module Rubish
       matches = apply_globsort(matches)
 
       if matches.empty?
-        if Builtins.set_option?('failglob')
+        if Builtins.shopt_enabled?('failglob')
           # failglob: patterns matching nothing cause an error
           $stderr.puts "rubish: no match: #{pattern}"
           raise FailglobError, "no match: #{pattern}"
-        elsif Builtins.set_option?('nullglob')
+        elsif Builtins.shopt_enabled?('nullglob')
           # nullglob: patterns matching nothing expand to nothing
           []
         else
@@ -3993,7 +3996,7 @@ module Rubish
     end
 
     # Builtins that must run in current process (affect shell state)
-    PROCESS_BUILTINS = %w[cd export set shift source . return exit break continue local unset readonly declare typeset let eval command builtin].freeze
+    PROCESS_BUILTINS = %w[cd export set shift source . return exit break continue local unset readonly declare typeset let eval command builtin shopt alias unalias trap].freeze
 
     def __run_cmd(&block)
       result = block.call

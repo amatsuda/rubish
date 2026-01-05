@@ -35,12 +35,38 @@ while i < ARGV.length
   end
 end
 
+# Helper to source RUBISH_ENV file in non-interactive modes
+def source_rubish_env(repl)
+  rubish_env = ENV['RUBISH_ENV']
+  return unless rubish_env && !rubish_env.empty?
+
+  # Expand the path (handle ~ and variables)
+  expanded_path = File.expand_path(rubish_env)
+  return unless File.exist?(expanded_path)
+
+  begin
+    # Read and execute each line using the repl's execute method
+    # This ensures functions/aliases are defined in the repl's context
+    File.readlines(expanded_path, chomp: true).each do |line|
+      next if line.strip.empty? || line.strip.start_with?('#')
+
+      repl.send(:execute, line)
+    end
+  rescue StandardError => e
+    $stderr.puts "rubish: #{expanded_path}: #{e.message}"
+  end
+end
+
 if command_string
   # -c mode: execute command string
   ENV['RUBISH_EXECUTION_STRING'] = command_string
   repl = Rubish::REPL.new
   repl.script_name = script_args[0] || 'rubish'
   repl.positional_params = script_args[1..] || []
+
+  # Source RUBISH_ENV before executing command
+  source_rubish_env(repl)
+
   repl.send(:execute, command_string)
   # Get last exit status from repl
   last_status = repl.instance_variable_get(:@last_status) || 0
@@ -50,7 +76,18 @@ elsif script_file
   repl = Rubish::REPL.new
   repl.script_name = script_file
   repl.positional_params = script_args
-  exit Rubish::Builtins.run_source([script_file])
+
+  # Source RUBISH_ENV before executing script
+  source_rubish_env(repl)
+
+  # Use the same repl to execute the script
+  File.readlines(script_file, chomp: true).each do |line|
+    next if line.strip.empty? || line.strip.start_with?('#')
+
+    repl.send(:execute, line)
+  end
+  last_status = repl.instance_variable_get(:@last_status) || 0
+  exit(last_status)
 else
   # Interactive mode
   exit Rubish::REPL.new.run

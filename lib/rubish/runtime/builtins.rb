@@ -3138,8 +3138,12 @@ module Rubish
     end
 
     def self.shopt_enabled?(name)
+      # Check @shell_options first (shopt -s)
       if @shell_options.key?(name)
         @shell_options[name]
+      # Also check @set_options for options that can be set via both shopt and set -o
+      elsif @set_options.key?(name) && @set_options[name]
+        true
       elsif SHELL_OPTIONS.key?(name)
         SHELL_OPTIONS[name][0]
       else
