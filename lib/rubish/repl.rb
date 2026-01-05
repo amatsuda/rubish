@@ -18,6 +18,7 @@ module Rubish
       @functions = {}
       @heredoc_content = nil  # Content for current heredoc
       @seconds_base = Time.now  # For SECONDS variable
+      @random_generator = Random.new  # For RANDOM variable
       Builtins.executor = ->(line) { execute(line) }
       Builtins.script_name_getter = -> { @script_name }
       Builtins.script_name_setter = ->(name) { @script_name = name }
@@ -794,9 +795,11 @@ module Rubish
           var_name = $1
           value = $2
           expanded_value = expand_assignment_value(value)
-          # Special handling for SECONDS
+          # Special handling for SECONDS and RANDOM
           if var_name == 'SECONDS'
             reset_seconds(expanded_value.to_i)
+          elsif var_name == 'RANDOM'
+            seed_random(expanded_value.to_i)
           else
             ENV[var_name] = expanded_value
           end
@@ -1094,10 +1097,9 @@ module Rubish
     end
 
     def fetch_var_with_nounset(var_name)
-      # Special handling for SECONDS
-      if var_name == 'SECONDS'
-        return seconds.to_s
-      end
+      # Special handling for SECONDS and RANDOM
+      return seconds.to_s if var_name == 'SECONDS'
+      return random.to_s if var_name == 'RANDOM'
 
       if Builtins.set_option?('u') && !ENV.key?(var_name)
         $stderr.puts "rubish: #{var_name}: unbound variable"
@@ -1114,6 +1116,16 @@ module Rubish
     # Reset SECONDS base time (when SECONDS is assigned)
     def reset_seconds(value = 0)
       @seconds_base = Time.now - value.to_i
+    end
+
+    # RANDOM - returns random number 0-32767
+    def random
+      @random_generator.rand(32768)
+    end
+
+    # Seed RANDOM generator
+    def seed_random(seed)
+      @random_generator = Random.new(seed.to_i)
     end
 
     def extract_exit_status(result)
@@ -1748,9 +1760,11 @@ module Rubish
       expanded = expr.gsub(/\$\{([^}]+)\}|\$([a-zA-Z_][a-zA-Z0-9_]*)|([a-zA-Z_][a-zA-Z0-9_]*)/) do |match|
         var_name = $1 || $2 || $3
         if var_name
-          # Special handling for SECONDS
+          # Special handling for SECONDS and RANDOM
           if var_name == 'SECONDS'
             seconds.to_s
+          elsif var_name == 'RANDOM'
+            random.to_s
           else
             ENV.fetch(var_name, '0')
           end
@@ -1771,8 +1785,9 @@ module Rubish
     end
 
     def __fetch_var(var_name)
-      # Special handling for SECONDS
+      # Special handling for SECONDS and RANDOM
       return seconds.to_s if var_name == 'SECONDS'
+      return random.to_s if var_name == 'RANDOM'
 
       # Fetch variable with nounset check
       if Builtins.set_option?('u') && !ENV.key?(var_name)
@@ -1784,9 +1799,13 @@ module Rubish
 
     def __param_expand(var_name, operator, operand)
       # Parameter expansion operations
-      # Special handling for SECONDS
+      # Special handling for SECONDS and RANDOM
       if var_name == 'SECONDS'
         value = seconds.to_s
+        is_set = true
+        is_null = false
+      elsif var_name == 'RANDOM'
+        value = random.to_s
         is_set = true
         is_null = false
       else
