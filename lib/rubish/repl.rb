@@ -20,6 +20,9 @@ module Rubish
       @seconds_base = Time.now  # For SECONDS variable
       @random_generator = Random.new  # For RANDOM variable
       @lineno = 1  # For LINENO variable
+      # SHLVL - shell nesting level (stored in ENV for inheritance)
+      current_shlvl = ENV['SHLVL'].to_i
+      ENV['SHLVL'] = (current_shlvl + 1).to_s
       Builtins.executor = ->(line) { execute(line) }
       Builtins.script_name_getter = -> { @script_name }
       Builtins.script_name_setter = ->(name) { @script_name = name }
