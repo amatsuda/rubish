@@ -380,6 +380,7 @@ module Rubish
       'dotglob' => [false, 'include dotfiles in pathname expansion'],
       'expand_aliases' => [true, 'expand aliases'],
       'extglob' => [false, 'enable extended pattern matching'],
+      'globasciiranges' => [true, 'use ASCII ordering for range expressions in bracket patterns'],
       'globstar' => [false, 'enable ** for recursive globbing'],
       'histappend' => [false, 'append to history file'],
       'histreedit' => [false, 'allow re-editing of failed history substitution'],

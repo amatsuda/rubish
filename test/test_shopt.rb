@@ -176,4 +176,50 @@ class TestShopt < Test::Unit::TestCase
     execute('shopt -s dotglob')
     assert Rubish::Builtins.shopt_enabled?('dotglob')
   end
+
+  # globasciiranges tests
+
+  def test_globasciiranges_is_valid_option
+    output = capture_output { Rubish::Builtins.run('shopt', ['globasciiranges']) }
+    assert_match(/globasciiranges/, output)
+  end
+
+  def test_globasciiranges_default_is_on
+    # Ruby uses ASCII ordering by default, so globasciiranges defaults to on
+    assert Rubish::Builtins.shopt_enabled?('globasciiranges')
+  end
+
+  def test_globasciiranges_can_be_disabled
+    result = Rubish::Builtins.run('shopt', ['-u', 'globasciiranges'])
+    assert result
+    assert_false Rubish::Builtins.shopt_enabled?('globasciiranges')
+  end
+
+  def test_globasciiranges_can_be_enabled
+    Rubish::Builtins.run('shopt', ['-u', 'globasciiranges'])
+    result = Rubish::Builtins.run('shopt', ['-s', 'globasciiranges'])
+    assert result
+    assert Rubish::Builtins.shopt_enabled?('globasciiranges')
+  end
+
+  def test_globasciiranges_shows_in_list
+    output = capture_output { Rubish::Builtins.run('shopt', []) }
+    assert_match(/globasciiranges/, output)
+  end
+
+  def test_globasciiranges_print_format
+    output = capture_output { Rubish::Builtins.run('shopt', ['-p', 'globasciiranges']) }
+    assert_match(/shopt -s globasciiranges/, output)
+
+    Rubish::Builtins.run('shopt', ['-u', 'globasciiranges'])
+    output = capture_output { Rubish::Builtins.run('shopt', ['-p', 'globasciiranges']) }
+    assert_match(/shopt -u globasciiranges/, output)
+  end
+
+  def test_globasciiranges_via_repl
+    execute('shopt -u globasciiranges')
+    assert_false Rubish::Builtins.shopt_enabled?('globasciiranges')
+    execute('shopt -s globasciiranges')
+    assert Rubish::Builtins.shopt_enabled?('globasciiranges')
+  end
 end
