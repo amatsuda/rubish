@@ -315,11 +315,14 @@ module Rubish
         # Remove in reverse order to maintain correct indices
         indices_to_remove.reverse_each do |i|
           Reline::HISTORY.delete_at(i)
+          Builtins.remove_history_timestamp(i)
         end
       end
 
-      # Add to history
+      # Add to history with timestamp
+      index = Reline::HISTORY.size
       Reline::HISTORY << line
+      Builtins.record_history_timestamp(index)
     end
 
     # Check if command matches any HISTIGNORE pattern

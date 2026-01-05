@@ -9,12 +9,14 @@ class TestHistoryBuiltin < Test::Unit::TestCase
     @tempdir = Dir.mktmpdir('rubish_history_builtin_test')
     Reline::HISTORY.clear
     Rubish::Builtins.last_history_line = 0
+    Rubish::Builtins.clear_history_timestamps
   end
 
   def teardown
     ENV.clear
     @original_env.each { |k, v| ENV[k] = v }
     Reline::HISTORY.clear
+    Rubish::Builtins.clear_history_timestamps
     FileUtils.rm_rf(@tempdir)
   end
 
@@ -292,5 +294,172 @@ class TestHistoryBuiltin < Test::Unit::TestCase
     assert_match(/^\s*98  cmd97$/, output)
     assert_match(/^\s*99  cmd98$/, output)
     assert_match(/^\s*100  cmd99$/, output)
+  end
+
+  # HISTTIMEFORMAT tests
+
+  def test_histtimeformat_not_set
+    Reline::HISTORY << 'cmd1'
+    Rubish::Builtins.record_history_timestamp(0)
+
+    ENV.delete('HISTTIMEFORMAT')
+    output = capture_output { Rubish::Builtins.run_history([]) }
+
+    # Should show just number and command, no timestamp
+    assert_match(/^\s*1  cmd1$/, output)
+  end
+
+  def test_histtimeformat_simple_format
+    Reline::HISTORY << 'cmd1'
+    test_time = Time.new(2024, 6, 15, 10, 30, 45)
+    Rubish::Builtins.record_history_timestamp(0, test_time)
+
+    ENV['HISTTIMEFORMAT'] = '%Y-%m-%d %H:%M:%S '
+    output = capture_output { Rubish::Builtins.run_history([]) }
+
+    assert_match(/^\s*1  2024-06-15 10:30:45 cmd1$/, output)
+  end
+
+  def test_histtimeformat_date_only
+    Reline::HISTORY << 'echo hello'
+    test_time = Time.new(2024, 12, 25, 14, 0, 0)
+    Rubish::Builtins.record_history_timestamp(0, test_time)
+
+    ENV['HISTTIMEFORMAT'] = '%Y/%m/%d '
+    output = capture_output { Rubish::Builtins.run_history([]) }
+
+    assert_match(/^\s*1  2024\/12\/25 echo hello$/, output)
+  end
+
+  def test_histtimeformat_time_only
+    Reline::HISTORY << 'pwd'
+    test_time = Time.new(2024, 1, 1, 8, 15, 30)
+    Rubish::Builtins.record_history_timestamp(0, test_time)
+
+    ENV['HISTTIMEFORMAT'] = '[%H:%M] '
+    output = capture_output { Rubish::Builtins.run_history([]) }
+
+    assert_match(/^\s*1  \[08:15\] pwd$/, output)
+  end
+
+  def test_histtimeformat_multiple_entries
+    Reline::HISTORY << 'first'
+    Reline::HISTORY << 'second'
+    Reline::HISTORY << 'third'
+    Rubish::Builtins.record_history_timestamp(0, Time.new(2024, 1, 1, 10, 0, 0))
+    Rubish::Builtins.record_history_timestamp(1, Time.new(2024, 1, 1, 11, 0, 0))
+    Rubish::Builtins.record_history_timestamp(2, Time.new(2024, 1, 1, 12, 0, 0))
+
+    ENV['HISTTIMEFORMAT'] = '%H:%M '
+    output = capture_output { Rubish::Builtins.run_history([]) }
+
+    assert_match(/^\s*1  10:00 first$/, output)
+    assert_match(/^\s*2  11:00 second$/, output)
+    assert_match(/^\s*3  12:00 third$/, output)
+  end
+
+  def test_histtimeformat_entry_without_timestamp
+    Reline::HISTORY << 'old_command'
+    Reline::HISTORY << 'new_command'
+    # Only record timestamp for second entry
+    Rubish::Builtins.record_history_timestamp(1, Time.new(2024, 6, 1, 9, 0, 0))
+
+    ENV['HISTTIMEFORMAT'] = '%H:%M '
+    output = capture_output { Rubish::Builtins.run_history([]) }
+
+    # First entry has no timestamp, shown without time
+    assert_match(/^\s*1  old_command$/, output)
+    # Second entry has timestamp
+    assert_match(/^\s*2  09:00 new_command$/, output)
+  end
+
+  def test_histtimeformat_empty_string
+    Reline::HISTORY << 'cmd1'
+    Rubish::Builtins.record_history_timestamp(0)
+
+    ENV['HISTTIMEFORMAT'] = ''
+    output = capture_output { Rubish::Builtins.run_history([]) }
+
+    # Empty format should behave like unset
+    assert_match(/^\s*1  cmd1$/, output)
+  end
+
+  def test_histtimeformat_with_history_count
+    5.times do |i|
+      Reline::HISTORY << "cmd#{i}"
+      Rubish::Builtins.record_history_timestamp(i, Time.new(2024, 1, 1, i, 0, 0))
+    end
+
+    ENV['HISTTIMEFORMAT'] = '%H:00 '
+    output = capture_output { Rubish::Builtins.run_history(['2']) }
+
+    # Should only show last 2 entries with timestamps
+    assert_no_match(/cmd0/, output)
+    assert_no_match(/cmd1/, output)
+    assert_no_match(/cmd2/, output)
+    assert_match(/^\s*4  03:00 cmd3$/, output)
+    assert_match(/^\s*5  04:00 cmd4$/, output)
+  end
+
+  def test_history_store_records_timestamp
+    ENV['HISTTIMEFORMAT'] = '%Y-%m-%d '
+
+    before = Time.now
+    Rubish::Builtins.run_history(['-s', 'stored', 'command'])
+    after = Time.now
+
+    output = capture_output { Rubish::Builtins.run_history([]) }
+
+    # Should have today's date
+    expected_date = before.strftime('%Y-%m-%d')
+    assert_match(/#{expected_date}/, output)
+    assert_match(/stored command/, output)
+  end
+
+  def test_history_clear_clears_timestamps
+    Reline::HISTORY << 'cmd1'
+    Rubish::Builtins.record_history_timestamp(0, Time.now)
+
+    Rubish::Builtins.run_history(['-c'])
+
+    # Timestamps should be cleared
+    assert_nil Rubish::Builtins.get_history_timestamp(0)
+  end
+
+  def test_history_delete_removes_timestamp
+    Reline::HISTORY << 'first'
+    Reline::HISTORY << 'second'
+    Reline::HISTORY << 'third'
+    Rubish::Builtins.record_history_timestamp(0, Time.new(2024, 1, 1))
+    Rubish::Builtins.record_history_timestamp(1, Time.new(2024, 2, 1))
+    Rubish::Builtins.record_history_timestamp(2, Time.new(2024, 3, 1))
+
+    Rubish::Builtins.run_history(['-d', '2'])
+
+    # After deleting index 1, the old index 2 should now be at index 1
+    assert_equal Time.new(2024, 1, 1), Rubish::Builtins.get_history_timestamp(0)
+    assert_equal Time.new(2024, 3, 1), Rubish::Builtins.get_history_timestamp(1)
+    assert_nil Rubish::Builtins.get_history_timestamp(2)
+  end
+
+  def test_add_to_history_records_timestamp
+    ENV['HISTTIMEFORMAT'] = '%H:%M '
+
+    @repl.send(:add_to_history, 'test command')
+
+    output = capture_output { Rubish::Builtins.run_history([]) }
+
+    # Should have current time (just check format is present)
+    assert_match(/^\s*1  \d{2}:\d{2} test command$/, output)
+  end
+
+  def test_histtimeformat_via_execute
+    Reline::HISTORY << 'existing'
+    Rubish::Builtins.record_history_timestamp(0, Time.new(2024, 7, 4, 12, 0, 0))
+
+    ENV['HISTTIMEFORMAT'] = '%m/%d '
+    output = capture_output { execute('history') }
+
+    assert_match(/07\/04 existing/, output)
   end
 end

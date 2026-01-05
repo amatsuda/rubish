@@ -37,13 +37,14 @@ module Rubish
     @history_saver = nil  # Saves history to file
     @history_appender = nil  # Appends new entries to file
     @last_history_line = 0  # Track last line read for -n option
+    @history_timestamps = {}  # Timestamps for history entries (index => Time)
     @source_file_getter = nil  # Gets current source file for RUBISH_SOURCE
     @source_file_setter = nil  # Sets current source file for RUBISH_SOURCE
 
     class << self
       attr_reader :aliases, :dir_stack, :traps, :local_scope_stack, :readonly_vars, :var_attributes, :command_hash, :shell_options, :disabled_builtins, :call_stack, :completions, :completion_options, :key_bindings, :readline_variables, :arrays, :assoc_arrays, :coprocs
       attr_accessor :executor, :script_name_getter, :script_name_setter, :positional_params_getter, :positional_params_setter, :function_checker, :function_remover, :heredoc_content_setter, :command_executor, :current_completion_options
-      attr_accessor :history_file_getter, :history_loader, :history_saver, :history_appender, :last_history_line
+      attr_accessor :history_file_getter, :history_loader, :history_saver, :history_appender, :last_history_line, :history_timestamps
       attr_accessor :source_file_getter, :source_file_setter
     end
 
@@ -1661,6 +1662,36 @@ module Rubish
       true
     end
 
+    # Record timestamp for a history entry
+    def self.record_history_timestamp(index, time = Time.now)
+      @history_timestamps[index] = time
+    end
+
+    # Get timestamp for a history entry
+    def self.get_history_timestamp(index)
+      @history_timestamps[index]
+    end
+
+    # Clear all history timestamps
+    def self.clear_history_timestamps
+      @history_timestamps.clear
+    end
+
+    # Remove timestamp for a specific index and reindex remaining
+    def self.remove_history_timestamp(index)
+      @history_timestamps.delete(index)
+      # Reindex: shift all timestamps after deleted index down by 1
+      new_timestamps = {}
+      @history_timestamps.each do |idx, time|
+        if idx > index
+          new_timestamps[idx - 1] = time
+        else
+          new_timestamps[idx] = time
+        end
+      end
+      @history_timestamps = new_timestamps
+    end
+
     def self.run_history(args)
       # Parse options
       clear = false
@@ -1715,6 +1746,7 @@ module Rubish
       # Handle -c: clear history
       if clear
         Reline::HISTORY.clear
+        clear_history_timestamps
         @last_history_line = 0
         return true
       end
@@ -1728,6 +1760,7 @@ module Rubish
           return false
         end
         Reline::HISTORY.delete_at(index)
+        remove_history_timestamp(index)
         return true
       end
 
@@ -1761,6 +1794,7 @@ module Rubish
       # Handle -r: read history file (replace current)
       if read_all
         Reline::HISTORY.clear
+        clear_history_timestamps
         @last_history_line = 0
         @history_loader&.call
         return true
@@ -1782,7 +1816,11 @@ module Rubish
       # Handle -s: store args as single history entry
       if store_args
         line = remaining_args.join(' ')
-        Reline::HISTORY << line unless line.empty?
+        unless line.empty?
+          index = Reline::HISTORY.size
+          Reline::HISTORY << line
+          record_history_timestamp(index)
+        end
         return true
       end
 
@@ -1795,8 +1833,22 @@ module Rubish
       end
 
       start_index = [history.length - count, 0].max
+      histtimeformat = ENV['HISTTIMEFORMAT']
+
       history[start_index..].each_with_index do |line, idx|
-        puts format('%5d  %s', start_index + idx + 1, line)
+        history_num = start_index + idx + 1
+        if histtimeformat && !histtimeformat.empty?
+          timestamp = get_history_timestamp(start_index + idx)
+          if timestamp
+            formatted_time = timestamp.strftime(histtimeformat)
+            puts format('%5d  %s%s', history_num, formatted_time, line)
+          else
+            # No timestamp recorded, show without time
+            puts format('%5d  %s', history_num, line)
+          end
+        else
+          puts format('%5d  %s', history_num, line)
+        end
       end
       true
     end
