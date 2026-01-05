@@ -377,6 +377,7 @@ module Rubish
       'checkhash' => [false, 'check hash table before executing'],
       'checkjobs' => [false, 'check for running jobs before exit'],
       'cmdhist' => [true, 'save multi-line commands as single history entry'],
+      'compat10' => [false, 'compatibility mode for rubish 1.0'],
       'dotglob' => [false, 'include dotfiles in pathname expansion'],
       'expand_aliases' => [true, 'expand aliases'],
       'extglob' => [false, 'enable extended pattern matching'],
@@ -397,6 +398,9 @@ module Rubish
       'sourcepath' => [true, 'use PATH to find sourced files'],
       'xpg_echo' => [false, 'echo expands backslash-escape sequences']
     }.freeze
+
+    # Compatibility level options (like bash's compat31, compat32, etc.)
+    COMPAT_OPTIONS = %w[compat10].freeze
 
     def self.builtin?(name)
       (COMMANDS.include?(name) || @dynamic_commands.include?(name)) && !@disabled_builtins.include?(name)
@@ -3149,6 +3153,60 @@ module Rubish
       else
         false
       end
+    end
+
+    # Get current compatibility level from RUBISH_COMPAT or shopt compat* options
+    # Returns a numeric version (e.g., 10 for 1.0) or nil if not set
+    def self.compat_level
+      # Check RUBISH_COMPAT environment variable first
+      rubish_compat = ENV['RUBISH_COMPAT']
+      if rubish_compat && !rubish_compat.empty?
+        # Convert "1.0" to 10, "1.1" to 11, etc.
+        parts = rubish_compat.split('.')
+        if parts.length == 2
+          return parts[0].to_i * 10 + parts[1].to_i
+        elsif parts.length == 1
+          return parts[0].to_i * 10
+        end
+      end
+
+      # Check shopt compat* options
+      COMPAT_OPTIONS.each do |opt|
+        if shopt_enabled?(opt)
+          # Extract version number from option name (compat10 -> 10)
+          return opt.sub('compat', '').to_i
+        end
+      end
+
+      nil
+    end
+
+    # Check if running in a specific compatibility mode
+    def self.compat_level?(level)
+      current = compat_level
+      current && current <= level
+    end
+
+    # Set compatibility level (used when RUBISH_COMPAT is assigned)
+    def self.set_compat_level(version)
+      return unless version
+
+      # Clear all compat options first
+      COMPAT_OPTIONS.each { |opt| @shell_options[opt] = false }
+
+      # Parse version string
+      parts = version.to_s.split('.')
+      level = if parts.length == 2
+                parts[0].to_i * 10 + parts[1].to_i
+              elsif parts.length == 1
+                parts[0].to_i * 10
+              else
+                return
+              end
+
+      # Enable the appropriate compat option
+      compat_opt = "compat#{level}"
+      @shell_options[compat_opt] = true if SHELL_OPTIONS.key?(compat_opt)
     end
 
     # Track dynamically loaded builtins
