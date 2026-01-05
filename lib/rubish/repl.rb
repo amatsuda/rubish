@@ -27,6 +27,7 @@ module Rubish
       @current_source_file = 'main'  # Current source file being executed (for RUBISH_SOURCE)
       @rubish_source_stack = []  # For RUBISH_SOURCE array variable (source files of function calls)
       @subshell_level = 0  # For RUBISH_SUBSHELL variable (nesting level of subshells)
+      @eof_count = 0  # For IGNOREEOF variable (consecutive EOF counter)
       # SHLVL - shell nesting level (stored in ENV for inheritance)
       current_shlvl = ENV['SHLVL'].to_i
       ENV['SHLVL'] = (current_shlvl + 1).to_s
@@ -496,16 +497,36 @@ module Rubish
       line = Reline.readline(prompt, false)
       unless line
         # EOF received (Ctrl+D)
-        if Builtins.set_option?('ignoreeof')
-          puts "\nUse \"exit\" to leave the shell."
-          return
+        # Check IGNOREEOF variable first, then fall back to set -o ignoreeof
+        ignoreeof_value = ENV['IGNOREEOF']
+        if ignoreeof_value || Builtins.set_option?('ignoreeof')
+          # Parse IGNOREEOF value: if set but empty or non-numeric, default to 10
+          max_eof = if ignoreeof_value
+                      val = ignoreeof_value.to_i
+                      (ignoreeof_value.empty? || val < 0) ? 10 : val
+                    else
+                      10  # Default for set -o ignoreeof
+                    end
+          @eof_count += 1
+          if @eof_count > max_eof
+            puts 'exit'
+            return throw(:exit, 0)
+          else
+            remaining = max_eof - @eof_count + 1
+            puts "\nUse \"exit\" to leave the shell, or press Ctrl+D #{remaining} more time#{'s' if remaining != 1}."
+            return
+          end
         else
+          puts 'exit'
           return throw(:exit, 0)
         end
       end
 
       line = line.strip
       return if line.empty?
+
+      # Reset EOF counter when user types a command
+      @eof_count = 0
 
       # Add to history based on HISTCONTROL and HISTIGNORE settings
       add_to_history(line)
