@@ -135,6 +135,134 @@ module Rubish
       @assoc_arrays[name].delete(key)
     end
 
+    # IFS (Internal Field Separator) methods
+    DEFAULT_IFS = " \t\n"
+
+    def self.ifs
+      ENV['IFS'] || DEFAULT_IFS
+    end
+
+    def self.ifs_whitespace
+      # Returns the whitespace characters in IFS (space, tab, newline)
+      current_ifs = ifs
+      current_ifs.chars.select { |c| c == ' ' || c == "\t" || c == "\n" }.join
+    end
+
+    def self.ifs_non_whitespace
+      # Returns the non-whitespace characters in IFS
+      current_ifs = ifs
+      current_ifs.chars.reject { |c| c == ' ' || c == "\t" || c == "\n" }.join
+    end
+
+    def self.split_by_ifs(str)
+      # Split string according to IFS rules:
+      # 1. Leading/trailing IFS whitespace is ignored
+      # 2. Sequences of IFS whitespace act as single delimiter
+      # 3. Non-whitespace IFS chars are individual delimiters (each one)
+      # 4. IFS whitespace adjacent to non-whitespace IFS is ignored
+      return [] if str.nil? || str.empty?
+
+      current_ifs = ifs
+      return [str] if current_ifs.empty?
+
+      ws_chars = ifs_whitespace
+      non_ws_chars = ifs_non_whitespace
+
+      # If IFS is only whitespace, split on whitespace sequences
+      if non_ws_chars.empty?
+        return str.split(/[#{Regexp.escape(ws_chars)}]+/).reject(&:empty?)
+      end
+
+      # If IFS has no whitespace, split on each non-whitespace char
+      if ws_chars.empty?
+        return str.split(/[#{Regexp.escape(non_ws_chars)}]/, -1)
+      end
+
+      # Mixed: whitespace sequences or non-whitespace chars as delimiters
+      # First strip leading/trailing IFS whitespace
+      str = str.gsub(/\A[#{Regexp.escape(ws_chars)}]+|[#{Regexp.escape(ws_chars)}]+\z/, '')
+
+      # Split on: non-ws-ifs (surrounded by optional ws) or ws sequences
+      ws_pattern = "[#{Regexp.escape(ws_chars)}]*"
+      non_ws_pattern = "[#{Regexp.escape(non_ws_chars)}]"
+      pattern = /#{ws_pattern}#{non_ws_pattern}#{ws_pattern}|[#{Regexp.escape(ws_chars)}]+/
+
+      str.split(pattern).reject(&:empty?)
+    end
+
+    def self.split_by_ifs_n(str, n)
+      # Split string by IFS into at most n parts
+      # The last part contains the remainder (preserving delimiters)
+      return [] if str.nil? || str.empty?
+      return [str] if n <= 1
+
+      current_ifs = ifs
+      return [str] if current_ifs.empty?
+
+      ws_chars = ifs_whitespace
+      non_ws_chars = ifs_non_whitespace
+
+      # Strip leading IFS whitespace
+      str = str.sub(/\A[#{Regexp.escape(ws_chars)}]+/, '') unless ws_chars.empty?
+
+      parts = []
+      remaining = str
+
+      (n - 1).times do
+        break if remaining.empty?
+
+        # Find next delimiter
+        if non_ws_chars.empty?
+          # Only whitespace in IFS
+          ws_regex = /\A(.*?)([#{Regexp.escape(ws_chars)}]+)(.*)$/m
+          if match = remaining.match(ws_regex)
+            parts << match[1]
+            remaining = match[3]
+          else
+            parts << remaining
+            remaining = ''
+          end
+        elsif ws_chars.empty?
+          # Only non-whitespace in IFS
+          non_ws_regex = /\A(.*?)([#{Regexp.escape(non_ws_chars)}])(.*)$/m
+          if match = remaining.match(non_ws_regex)
+            parts << match[1]
+            remaining = match[3]
+          else
+            parts << remaining
+            remaining = ''
+          end
+        else
+          # Has both whitespace and non-whitespace delimiters
+          ws_pattern = "[#{Regexp.escape(ws_chars)}]*"
+          combined_regex = /\A(.*?)(#{ws_pattern}[#{Regexp.escape(non_ws_chars)}]#{ws_pattern}|[#{Regexp.escape(ws_chars)}]+)(.*)$/m
+
+          if match = remaining.match(combined_regex)
+            parts << match[1]
+            remaining = match[3]
+          else
+            parts << remaining
+            remaining = ''
+          end
+        end
+      end
+
+      # Add remaining as last part (strip trailing IFS whitespace)
+      unless remaining.empty?
+        remaining = remaining.sub(/[#{Regexp.escape(ws_chars)}]+\z/, '') unless ws_chars.empty?
+        parts << remaining
+      end
+
+      parts
+    end
+
+    def self.join_by_ifs(words)
+      # Join words using first character of IFS (for $*)
+      current_ifs = ifs
+      separator = current_ifs.empty? ? '' : current_ifs[0]
+      words.join(separator)
+    end
+
     # Coproc methods
     def self.coproc?(name)
       @coprocs.key?(name)
@@ -4834,8 +4962,8 @@ module Rubish
     end
 
     def self.store_read_array(array_name, line)
-      # Split line into words and store as array
-      words = line.split
+      # Split line into words using IFS and store as array
+      words = split_by_ifs(line)
       clear_read_array(array_name)
 
       words.each_with_index do |word, idx|
@@ -4854,15 +4982,17 @@ module Rubish
     end
 
     def self.store_read_variables(vars, line)
-      # If only one variable, assign the whole line (trimmed)
+      # If only one variable, assign the whole line (with IFS whitespace trimmed)
       if vars.length == 1
-        ENV[vars[0]] = line.strip
+        ws_chars = ifs_whitespace
+        trimmed = ws_chars.empty? ? line : line.gsub(/\A[#{Regexp.escape(ws_chars)}]+|[#{Regexp.escape(ws_chars)}]+\z/, '')
+        ENV[vars[0]] = trimmed
         return
       end
 
       # Split into at most N parts where N = number of variables
-      # This preserves whitespace in the last variable
-      words = line.split(/\s+/, vars.length)
+      # This preserves delimiters in the last variable
+      words = split_by_ifs_n(line, vars.length)
 
       vars.each_with_index do |var, idx|
         ENV[var] = words[idx]&.strip || ''

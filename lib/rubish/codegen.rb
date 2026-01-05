@@ -186,8 +186,10 @@ module Rubish
         "(@positional_params[#{$1.to_i - 1}] || '')"
       when '$#'
         '@positional_params.length.to_s'
-      when '$@', '$*'
+      when '$@'
         '@positional_params.join(" ")'
+      when '$*'
+        'Builtins.join_by_ifs(@positional_params)'
       else
         nil
       end
@@ -293,8 +295,10 @@ module Rubish
         return ['@script_name', 2]
       when '$#'
         return ['@positional_params.length.to_s', 2]
-      when '$@', '$*'
+      when '$@'
         return ['@positional_params.join(" ")', 2]
+      when '$*'
+        return ['Builtins.join_by_ifs(@positional_params)', 2]
       when /\$[1-9]/
         n = str[pos + 1].to_i
         return ["(@positional_params[#{n - 1}] || '')", 2]

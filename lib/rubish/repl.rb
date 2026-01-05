@@ -1055,8 +1055,11 @@ module Rubish
         return [@script_name, 2]
       when '$#'
         return [@positional_params.length.to_s, 2]
-      when '$@', '$*'
+      when '$@'
         return [@positional_params.join(' '), 2]
+      when '$*'
+        # $* joins with first character of IFS
+        return [Builtins.join_by_ifs(@positional_params), 2]
       end
 
       if str[pos + 1] =~ /[1-9]/
@@ -1963,8 +1966,8 @@ module Rubish
       if mode == '@'
         values.join(' ')
       else
-        ifs = ENV['IFS'] || " \t\n"
-        values.join(ifs[0] || ' ')
+        # $* joins with first character of IFS
+        Builtins.join_by_ifs(values)
       end
     end
 
