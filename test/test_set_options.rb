@@ -122,6 +122,190 @@ class TestSetOptions < Test::Unit::TestCase
     assert_match(/^>>> echo test/, stderr_content)
   end
 
+  # RUBISH_XTRACEFD tests
+  def test_xtracefd_redirects_to_specified_fd
+    trace_file = File.join(@tempdir, 'trace.txt')
+
+    # Open a file for the trace output
+    trace_io = File.open(trace_file, 'w')
+    ENV['RUBISH_XTRACEFD'] = trace_io.fileno.to_s
+
+    execute('set -x')
+    execute("echo hello > #{output_file}")
+    execute('set +x')
+
+    trace_io.close
+    ENV.delete('RUBISH_XTRACEFD')
+
+    trace_content = File.read(trace_file)
+    assert_match(/\+ echo hello/, trace_content)
+  end
+
+  def test_bash_xtracefd_compatibility
+    trace_file = File.join(@tempdir, 'trace.txt')
+
+    # Test BASH_XTRACEFD (for bash compatibility)
+    trace_io = File.open(trace_file, 'w')
+    ENV['BASH_XTRACEFD'] = trace_io.fileno.to_s
+
+    execute('set -x')
+    execute("echo test > #{output_file}")
+    execute('set +x')
+
+    trace_io.close
+    ENV.delete('BASH_XTRACEFD')
+
+    trace_content = File.read(trace_file)
+    assert_match(/\+ echo test/, trace_content)
+  end
+
+  def test_rubish_xtracefd_takes_precedence_over_bash_xtracefd
+    rubish_file = File.join(@tempdir, 'rubish_trace.txt')
+    bash_file = File.join(@tempdir, 'bash_trace.txt')
+
+    rubish_io = File.open(rubish_file, 'w')
+    bash_io = File.open(bash_file, 'w')
+
+    ENV['RUBISH_XTRACEFD'] = rubish_io.fileno.to_s
+    ENV['BASH_XTRACEFD'] = bash_io.fileno.to_s
+
+    execute('set -x')
+    execute("echo precedence > #{output_file}")
+    execute('set +x')
+
+    rubish_io.close
+    bash_io.close
+    ENV.delete('RUBISH_XTRACEFD')
+    ENV.delete('BASH_XTRACEFD')
+
+    # RUBISH_XTRACEFD should take precedence
+    rubish_content = File.read(rubish_file)
+    bash_content = File.read(bash_file)
+
+    assert_match(/\+ echo precedence/, rubish_content)
+    assert_equal '', bash_content
+  end
+
+  def test_xtracefd_empty_uses_stderr
+    stderr_file = File.join(@tempdir, 'stderr.txt')
+    ENV['RUBISH_XTRACEFD'] = ''
+
+    execute('set -x')
+    old_stderr = $stderr
+    $stderr = File.open(stderr_file, 'w')
+    begin
+      execute("echo empty > #{output_file}")
+    ensure
+      $stderr.close
+      $stderr = old_stderr
+    end
+    execute('set +x')
+    ENV.delete('RUBISH_XTRACEFD')
+
+    stderr_content = File.read(stderr_file)
+    assert_match(/\+ echo empty/, stderr_content)
+  end
+
+  def test_xtracefd_unset_uses_stderr
+    stderr_file = File.join(@tempdir, 'stderr.txt')
+    ENV.delete('RUBISH_XTRACEFD')
+    ENV.delete('BASH_XTRACEFD')
+
+    execute('set -x')
+    old_stderr = $stderr
+    $stderr = File.open(stderr_file, 'w')
+    begin
+      execute("echo unset > #{output_file}")
+    ensure
+      $stderr.close
+      $stderr = old_stderr
+    end
+    execute('set +x')
+
+    stderr_content = File.read(stderr_file)
+    assert_match(/\+ echo unset/, stderr_content)
+  end
+
+  def test_xtracefd_invalid_fd_falls_back_to_stderr
+    stderr_file = File.join(@tempdir, 'stderr.txt')
+    ENV['RUBISH_XTRACEFD'] = '999'  # Invalid FD
+
+    execute('set -x')
+    old_stderr = $stderr
+    $stderr = File.open(stderr_file, 'w')
+    begin
+      execute("echo invalid > #{output_file}")
+    ensure
+      $stderr.close
+      $stderr = old_stderr
+    end
+    execute('set +x')
+    ENV.delete('RUBISH_XTRACEFD')
+
+    stderr_content = File.read(stderr_file)
+    # Should contain both the error message and the trace output
+    assert_match(/Bad file descriptor/, stderr_content)
+    assert_match(/\+ echo invalid/, stderr_content)
+  end
+
+  def test_xtracefd_non_numeric_uses_stderr
+    stderr_file = File.join(@tempdir, 'stderr.txt')
+    ENV['RUBISH_XTRACEFD'] = 'abc'  # Non-numeric
+
+    execute('set -x')
+    old_stderr = $stderr
+    $stderr = File.open(stderr_file, 'w')
+    begin
+      execute("echo nonnumeric > #{output_file}")
+    ensure
+      $stderr.close
+      $stderr = old_stderr
+    end
+    execute('set +x')
+    ENV.delete('RUBISH_XTRACEFD')
+
+    stderr_content = File.read(stderr_file)
+    assert_match(/\+ echo nonnumeric/, stderr_content)
+  end
+
+  def test_xtracefd_negative_uses_stderr
+    stderr_file = File.join(@tempdir, 'stderr.txt')
+    ENV['RUBISH_XTRACEFD'] = '-1'  # Negative
+
+    execute('set -x')
+    old_stderr = $stderr
+    $stderr = File.open(stderr_file, 'w')
+    begin
+      execute("echo negative > #{output_file}")
+    ensure
+      $stderr.close
+      $stderr = old_stderr
+    end
+    execute('set +x')
+    ENV.delete('RUBISH_XTRACEFD')
+
+    stderr_content = File.read(stderr_file)
+    assert_match(/\+ echo negative/, stderr_content)
+  end
+
+  def test_xtracefd_with_ps4
+    trace_file = File.join(@tempdir, 'trace.txt')
+
+    trace_io = File.open(trace_file, 'w')
+    ENV['RUBISH_XTRACEFD'] = trace_io.fileno.to_s
+    ENV['PS4'] = '### '
+
+    execute('set -x')
+    execute("echo withps4 > #{output_file}")
+    execute('set +x')
+
+    trace_io.close
+    ENV.delete('RUBISH_XTRACEFD')
+
+    trace_content = File.read(trace_file)
+    assert_match(/^### echo withps4/, trace_content)
+  end
+
   # set -o (list options)
   def test_set_minus_o_lists_options
     output = capture_stdout { execute('set -o') }

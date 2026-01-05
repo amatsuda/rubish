@@ -727,7 +727,32 @@ module Rubish
       # PS4 supports the same escape sequences as PS1
       ps4 = ENV['PS4'] || '+ '
       expanded_ps4 = expand_prompt(ps4)
-      $stderr.puts "#{expanded_ps4}#{line}"
+      output = "#{expanded_ps4}#{line}"
+
+      # Check RUBISH_XTRACEFD (or BASH_XTRACEFD for compatibility)
+      xtracefd = ENV['RUBISH_XTRACEFD'] || ENV['BASH_XTRACEFD']
+      if xtracefd && !xtracefd.empty?
+        fd_num = xtracefd.to_i
+        if fd_num >= 0 && xtracefd =~ /\A\d+\z/
+          begin
+            # Use IO.for_fd with autoclose: false to avoid closing the fd when done
+            io = IO.for_fd(fd_num, 'w', autoclose: false)
+            io.puts output
+            io.flush
+          rescue Errno::EBADF
+            # Invalid file descriptor, fall back to stderr
+            $stderr.puts "rubish: #{fd_num}: Bad file descriptor"
+            $stderr.puts output
+          rescue => e
+            $stderr.puts output
+          end
+        else
+          # Not a valid number, use stderr
+          $stderr.puts output
+        end
+      else
+        $stderr.puts output
+      end
     end
 
     def check_errexit
