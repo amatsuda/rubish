@@ -763,6 +763,17 @@ module Rubish
       func_info = @functions[name]
       return false unless func_info
 
+      # Check FUNCNEST limit
+      funcnest = ENV['FUNCNEST']
+      if funcnest && !funcnest.empty?
+        max_depth = funcnest.to_i
+        if max_depth > 0 && @funcname_stack.length >= max_depth
+          $stderr.puts "rubish: #{name}: maximum function nesting level exceeded (#{max_depth})"
+          @last_status = 1
+          return false
+        end
+      end
+
       # Extract block and source from function info
       func_block = func_info[:block]
       func_source = func_info[:source]
@@ -1828,23 +1839,19 @@ module Rubish
     end
 
     def __and_cmd(left_proc, right_proc)
-      left = left_proc.call
-      left.run if left.is_a?(Command) || left.is_a?(Pipeline)
-      return left unless left.success?
+      left = __run_cmd(&left_proc)
+      # Use @last_status to check success (handles function calls and builtins)
+      return left unless @last_status == 0
 
-      right = right_proc.call
-      right.run if right.is_a?(Command) || right.is_a?(Pipeline)
-      right
+      __run_cmd(&right_proc)
     end
 
     def __or_cmd(left_proc, right_proc)
-      left = left_proc.call
-      left.run if left.is_a?(Command) || left.is_a?(Pipeline)
-      return left if left.success?
+      left = __run_cmd(&left_proc)
+      # Use @last_status to check success (handles function calls and builtins)
+      return left if @last_status == 0
 
-      right = right_proc.call
-      right.run if right.is_a?(Command) || right.is_a?(Pipeline)
-      right
+      __run_cmd(&right_proc)
     end
 
     def __background(&block)

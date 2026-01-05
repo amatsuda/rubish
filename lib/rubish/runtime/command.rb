@@ -147,8 +147,8 @@ module Rubish
 
         # Check if this is a user-defined function
         if Command.function?(name)
-          Command.call_function(name, cmd_args)
-          exit(0)
+          result = Command.call_function(name, cmd_args)
+          exit(result ? 0 : 1)
         else
           exec(cmd_path, *cmd_args)
         end
@@ -340,8 +340,8 @@ module Rubish
             cmd.run
             exit(cmd.success? ? 0 : 1)
           elsif Command.function?(cmd.name)
-            Command.call_function(cmd.name, cmd.args)
-            exit(0)
+            result = Command.call_function(cmd.name, cmd.args)
+            exit(result ? 0 : 1)
           else
             exec(cmd.name, *cmd.args)
           end
@@ -403,8 +403,8 @@ module Rubish
             cmd.run
             exit(cmd.success? ? 0 : 1)
           elsif Command.function?(cmd.name)
-            Command.call_function(cmd.name, cmd.args)
-            exit(0)
+            result = Command.call_function(cmd.name, cmd.args)
+            exit(result ? 0 : 1)
           else
             exec(cmd.name, *cmd.args)
           end

@@ -6,10 +6,13 @@ class TestFunction < Test::Unit::TestCase
   def setup
     @repl = Rubish::REPL.new
     @tempdir = Dir.mktmpdir('rubish_func_test')
+    @original_env = ENV.to_h.dup
   end
 
   def teardown
     FileUtils.rm_rf(@tempdir)
+    ENV.clear
+    @original_env.each { |k, v| ENV[k] = v }
   end
 
   def output_file
@@ -197,5 +200,124 @@ class TestFunction < Test::Unit::TestCase
     execute('showmsg() { echo $MSG; }')
     execute("showmsg > #{output_file}")
     assert_equal "hello\n", File.read(output_file)
+  end
+
+  # FUNCNEST tests
+
+  def test_funcnest_not_set_allows_nesting
+    ENV.delete('FUNCNEST')
+    # Define nested function calls
+    execute('level3() { echo level3; }')
+    execute('level2() { echo level2; level3; }')
+    execute('level1() { echo level1; level2; }')
+    execute("level1 > #{output_file}")
+    assert_equal "level1\nlevel2\nlevel3\n", File.read(output_file)
+  end
+
+  def test_funcnest_allows_within_limit
+    ENV['FUNCNEST'] = '5'
+    execute('level3() { echo level3; }')
+    execute('level2() { echo level2; level3; }')
+    execute('level1() { echo level1; level2; }')
+    execute("level1 > #{output_file}")
+    assert_equal "level1\nlevel2\nlevel3\n", File.read(output_file)
+  end
+
+  def test_funcnest_blocks_exceeding_limit
+    ENV['FUNCNEST'] = '3'
+    # Recursive function that will exceed limit
+    execute('recurse() { echo $1; recurse next; }')
+    stderr = capture_stderr { execute("recurse 1 > #{output_file}") }
+    output = File.read(output_file)
+    # First 3 calls succeed (depths 1, 2, 3), 4th call is blocked
+    lines = output.strip.split("\n")
+    assert_equal 3, lines.length
+    assert_match(/maximum function nesting level exceeded/, stderr)
+  end
+
+  def test_funcnest_one
+    ENV['FUNCNEST'] = '1'
+    execute('outer() { echo outer; inner; }')
+    execute('inner() { echo inner; }')
+    stderr = capture_stderr { execute("outer > #{output_file}") }
+    # outer runs (depth 1), but inner would be depth 2
+    output = File.read(output_file)
+    assert_equal "outer\n", output
+    assert_match(/maximum function nesting level exceeded/, stderr)
+  end
+
+  def test_funcnest_zero_means_no_limit
+    ENV['FUNCNEST'] = '0'
+    execute('level3() { echo level3; }')
+    execute('level2() { echo level2; level3; }')
+    execute('level1() { echo level1; level2; }')
+    execute("level1 > #{output_file}")
+    # Zero means no limit
+    assert_equal "level1\nlevel2\nlevel3\n", File.read(output_file)
+  end
+
+  def test_funcnest_negative_means_no_limit
+    ENV['FUNCNEST'] = '-1'
+    execute('level3() { echo level3; }')
+    execute('level2() { echo level2; level3; }')
+    execute('level1() { echo level1; level2; }')
+    execute("level1 > #{output_file}")
+    assert_equal "level1\nlevel2\nlevel3\n", File.read(output_file)
+  end
+
+  def test_funcnest_empty_string
+    ENV['FUNCNEST'] = ''
+    execute('level3() { echo level3; }')
+    execute('level2() { echo level2; level3; }')
+    execute('level1() { echo level1; level2; }')
+    execute("level1 > #{output_file}")
+    assert_equal "level1\nlevel2\nlevel3\n", File.read(output_file)
+  end
+
+  def test_funcnest_non_numeric
+    ENV['FUNCNEST'] = 'abc'
+    execute('level3() { echo level3; }')
+    execute('level2() { echo level2; level3; }')
+    execute('level1() { echo level1; level2; }')
+    execute("level1 > #{output_file}")
+    # to_i returns 0 for non-numeric, so no limit
+    assert_equal "level1\nlevel2\nlevel3\n", File.read(output_file)
+  end
+
+  def test_funcnest_mutual_recursion
+    ENV['FUNCNEST'] = '4'
+    execute('ping() { echo ping; pong; }')
+    execute('pong() { echo pong; ping; }')
+    stderr = capture_stderr { execute("ping > #{output_file}") }
+    # ping(1) -> pong(2) -> ping(3) -> pong(4) -> ping would be 5, blocked
+    output = File.read(output_file)
+    assert_equal "ping\npong\nping\npong\n", output
+    assert_match(/maximum function nesting level exceeded/, stderr)
+  end
+
+  def test_funcnest_returns_false_on_exceed
+    ENV['FUNCNEST'] = '1'
+    execute('outer() { inner && echo "inner succeeded" || echo "inner failed"; }')
+    execute('inner() { echo inner; }')
+    capture_stderr { execute("outer > #{output_file}") }
+    output = File.read(output_file)
+    assert_match(/inner failed/, output)
+  end
+
+  def test_funcnest_exact_limit
+    ENV['FUNCNEST'] = '2'
+    execute('level2() { echo level2; }')
+    execute('level1() { echo level1; level2; }')
+    execute("level1 > #{output_file}")
+    # Exactly 2 levels should work
+    assert_equal "level1\nlevel2\n", File.read(output_file)
+  end
+
+  def test_funcnest_error_message_includes_function_name
+    ENV['FUNCNEST'] = '1'
+    execute('myfunc() { myfunc; }')
+    stderr = capture_stderr { execute('myfunc') }
+    assert_match(/myfunc/, stderr)
+    assert_match(/maximum function nesting level exceeded/, stderr)
   end
 end
