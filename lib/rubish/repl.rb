@@ -19,6 +19,7 @@ module Rubish
       @heredoc_content = nil  # Content for current heredoc
       @seconds_base = Time.now  # For SECONDS variable
       @random_generator = Random.new  # For RANDOM variable
+      @lineno = 1  # For LINENO variable
       Builtins.executor = ->(line) { execute(line) }
       Builtins.script_name_getter = -> { @script_name }
       Builtins.script_name_setter = ->(name) { @script_name = name }
@@ -38,7 +39,7 @@ module Rubish
       Command.function_caller = ->(name, args) { call_function(name, args) }
     end
 
-    attr_accessor :script_name, :positional_params, :functions
+    attr_accessor :script_name, :positional_params, :functions, :lineno
 
     def run
       setup_reline
@@ -575,6 +576,8 @@ module Rubish
           throw(:exit, 1) if Builtins.set_option?('u')
         rescue FailglobError
           @last_status = 1
+        ensure
+          @lineno += 1
         end
         return
       end
@@ -595,6 +598,8 @@ module Rubish
           throw(:exit, 1) if Builtins.set_option?('u')
         rescue FailglobError
           @last_status = 1
+        ensure
+          @lineno += 1
         end
         return
       end
@@ -603,6 +608,7 @@ module Rubish
       result = eval_in_context(code)
       @last_status = extract_exit_status(result)
       @command_number += 1
+      @lineno += 1
       check_errexit
     rescue NounsetError
       # Unbound variable error when set -u is enabled
@@ -795,11 +801,13 @@ module Rubish
           var_name = $1
           value = $2
           expanded_value = expand_assignment_value(value)
-          # Special handling for SECONDS and RANDOM
+          # Special handling for SECONDS, RANDOM, and LINENO
           if var_name == 'SECONDS'
             reset_seconds(expanded_value.to_i)
           elsif var_name == 'RANDOM'
             seed_random(expanded_value.to_i)
+          elsif var_name == 'LINENO'
+            @lineno = expanded_value.to_i
           else
             ENV[var_name] = expanded_value
           end
@@ -1097,9 +1105,10 @@ module Rubish
     end
 
     def fetch_var_with_nounset(var_name)
-      # Special handling for SECONDS and RANDOM
+      # Special handling for SECONDS, RANDOM, and LINENO
       return seconds.to_s if var_name == 'SECONDS'
       return random.to_s if var_name == 'RANDOM'
+      return @lineno.to_s if var_name == 'LINENO'
 
       if Builtins.set_option?('u') && !ENV.key?(var_name)
         $stderr.puts "rubish: #{var_name}: unbound variable"
@@ -1760,11 +1769,13 @@ module Rubish
       expanded = expr.gsub(/\$\{([^}]+)\}|\$([a-zA-Z_][a-zA-Z0-9_]*)|([a-zA-Z_][a-zA-Z0-9_]*)/) do |match|
         var_name = $1 || $2 || $3
         if var_name
-          # Special handling for SECONDS and RANDOM
+          # Special handling for SECONDS, RANDOM, and LINENO
           if var_name == 'SECONDS'
             seconds.to_s
           elsif var_name == 'RANDOM'
             random.to_s
+          elsif var_name == 'LINENO'
+            @lineno.to_s
           else
             ENV.fetch(var_name, '0')
           end
@@ -1785,9 +1796,10 @@ module Rubish
     end
 
     def __fetch_var(var_name)
-      # Special handling for SECONDS and RANDOM
+      # Special handling for SECONDS, RANDOM, and LINENO
       return seconds.to_s if var_name == 'SECONDS'
       return random.to_s if var_name == 'RANDOM'
+      return @lineno.to_s if var_name == 'LINENO'
 
       # Fetch variable with nounset check
       if Builtins.set_option?('u') && !ENV.key?(var_name)
@@ -1799,13 +1811,17 @@ module Rubish
 
     def __param_expand(var_name, operator, operand)
       # Parameter expansion operations
-      # Special handling for SECONDS and RANDOM
+      # Special handling for SECONDS, RANDOM, and LINENO
       if var_name == 'SECONDS'
         value = seconds.to_s
         is_set = true
         is_null = false
       elsif var_name == 'RANDOM'
         value = random.to_s
+        is_set = true
+        is_null = false
+      elsif var_name == 'LINENO'
+        value = @lineno.to_s
         is_set = true
         is_null = false
       else
