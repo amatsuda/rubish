@@ -3209,6 +3209,12 @@ module Rubish
       @shell_options[compat_opt] = true if SHELL_OPTIONS.key?(compat_opt)
     end
 
+    # Check if POSIX mode is enabled via POSIXLY_CORRECT environment variable
+    # In bash, POSIX mode is enabled when POSIXLY_CORRECT is set (even to empty string)
+    def self.posix_mode?
+      ENV.key?('POSIXLY_CORRECT')
+    end
+
     # Track dynamically loaded builtins
     @loaded_builtins = {}  # name => { file: path, proc: callable }
 
