@@ -848,8 +848,8 @@ module Rubish
             seed_random(expanded_value.to_i)
           elsif var_name == 'LINENO'
             @lineno = expanded_value.to_i
-          elsif var_name == 'PPID' || var_name == 'UID' || var_name == 'EUID' || var_name == 'GROUPS' || var_name == 'HOSTNAME' || var_name == 'RUBISHPID' || var_name == 'HISTCMD' || var_name == 'EPOCHSECONDS' || var_name == 'EPOCHREALTIME' || var_name == 'SRANDOM' || var_name == 'RUBISH_VERSION' || var_name == 'RUBISH_VERSINFO' || var_name == 'OSTYPE' || var_name == 'HOSTTYPE' || var_name == 'MACHTYPE' || var_name == 'PIPESTATUS' || var_name == 'RUBISH_COMMAND' || var_name == 'FUNCNAME' || var_name == 'RUBISH_LINENO' || var_name == 'RUBISH_SOURCE' || var_name == 'RUBISH_SUBSHELL' || var_name == 'DIRSTACK'
-            # PPID, UID, EUID, GROUPS, HOSTNAME, RUBISHPID, HISTCMD, EPOCHSECONDS, EPOCHREALTIME, SRANDOM, RUBISH_VERSION, RUBISH_VERSINFO, OSTYPE, HOSTTYPE, MACHTYPE, PIPESTATUS, RUBISH_COMMAND, FUNCNAME, RUBISH_LINENO, RUBISH_SOURCE, RUBISH_SUBSHELL, DIRSTACK are read-only, silently ignore assignment
+          elsif var_name == 'PPID' || var_name == 'UID' || var_name == 'EUID' || var_name == 'GROUPS' || var_name == 'HOSTNAME' || var_name == 'RUBISHPID' || var_name == 'HISTCMD' || var_name == 'EPOCHSECONDS' || var_name == 'EPOCHREALTIME' || var_name == 'SRANDOM' || var_name == 'RUBISH_VERSION' || var_name == 'RUBISH_VERSINFO' || var_name == 'OSTYPE' || var_name == 'HOSTTYPE' || var_name == 'MACHTYPE' || var_name == 'PIPESTATUS' || var_name == 'RUBISH_COMMAND' || var_name == 'FUNCNAME' || var_name == 'RUBISH_LINENO' || var_name == 'RUBISH_SOURCE' || var_name == 'RUBISH_SUBSHELL' || var_name == 'DIRSTACK' || var_name == 'COLUMNS' || var_name == 'LINES'
+            # PPID, UID, EUID, GROUPS, HOSTNAME, RUBISHPID, HISTCMD, EPOCHSECONDS, EPOCHREALTIME, SRANDOM, RUBISH_VERSION, RUBISH_VERSINFO, OSTYPE, HOSTTYPE, MACHTYPE, PIPESTATUS, RUBISH_COMMAND, FUNCNAME, RUBISH_LINENO, RUBISH_SOURCE, RUBISH_SUBSHELL, DIRSTACK, COLUMNS, LINES are read-only, silently ignore assignment
           else
             ENV[var_name] = expanded_value
           end
@@ -1167,6 +1167,8 @@ module Rubish
       return RUBY_PLATFORM if var_name == 'MACHTYPE'
       return @rubish_command if var_name == 'RUBISH_COMMAND'
       return @subshell_level.to_s if var_name == 'RUBISH_SUBSHELL'
+      return terminal_columns.to_s if var_name == 'COLUMNS'
+      return terminal_lines.to_s if var_name == 'LINES'
 
       if Builtins.set_option?('u') && !ENV.key?(var_name)
         $stderr.puts "rubish: #{var_name}: unbound variable"
@@ -1193,6 +1195,16 @@ module Rubish
     # Seed RANDOM generator
     def seed_random(seed)
       @random_generator = Random.new(seed.to_i)
+    end
+
+    # COLUMNS - terminal width
+    def terminal_columns
+      IO.console&.winsize&.[](1) || ENV['COLUMNS']&.to_i || 80
+    end
+
+    # LINES - terminal height
+    def terminal_lines
+      IO.console&.winsize&.[](0) || ENV['LINES']&.to_i || 24
     end
 
     def extract_exit_status(result)
@@ -1876,6 +1888,8 @@ module Rubish
       return RUBY_PLATFORM if var_name == 'MACHTYPE'
       return @rubish_command if var_name == 'RUBISH_COMMAND'
       return @subshell_level.to_s if var_name == 'RUBISH_SUBSHELL'
+      return terminal_columns.to_s if var_name == 'COLUMNS'
+      return terminal_lines.to_s if var_name == 'LINES'
 
       # Fetch variable with nounset check
       if Builtins.set_option?('u') && !ENV.key?(var_name)
@@ -1962,6 +1976,14 @@ module Rubish
         is_null = @rubish_command.empty?
       elsif var_name == 'RUBISH_SUBSHELL'
         value = @subshell_level.to_s
+        is_set = true
+        is_null = false
+      elsif var_name == 'COLUMNS'
+        value = terminal_columns.to_s
+        is_set = true
+        is_null = false
+      elsif var_name == 'LINES'
+        value = terminal_lines.to_s
         is_set = true
         is_null = false
       else
@@ -2083,6 +2105,8 @@ module Rubish
       when 'MACHTYPE' then RUBY_PLATFORM
       when 'RUBISH_COMMAND' then @rubish_command
       when 'RUBISH_SUBSHELL' then @subshell_level.to_s
+      when 'COLUMNS' then terminal_columns.to_s
+      when 'LINES' then terminal_lines.to_s
       end
     end
 
