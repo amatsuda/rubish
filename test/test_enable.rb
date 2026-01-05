@@ -96,13 +96,13 @@ class TestEnable < Test::Unit::TestCase
     assert_match(/invalid option/, output)
   end
 
-  # Test enable -f not supported
-  def test_enable_f_not_supported
+  # Test enable -f requires builtin name
+  def test_enable_f_requires_builtin_name
     output = capture_output do
       result = Rubish::Builtins.run('enable', ['-f', 'file'])
       assert_false result
     end
-    assert_match(/not supported/, output)
+    assert_match(/builtin name required/, output)
   end
 
   # Test enable multiple builtins

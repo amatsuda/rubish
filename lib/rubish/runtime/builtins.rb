@@ -14,6 +14,7 @@ module Rubish
     @command_hash = {}  # Hash of command names to their cached paths
     @shell_options = {}  # Hash of shell option names to boolean values
     @disabled_builtins = Set.new  # Set of disabled builtin names
+    @dynamic_commands = []  # Array of dynamically loaded builtin names
     @call_stack = []  # Stack of [line_number, function_name, filename] for caller builtin
     @completions = {}  # Hash of command names to completion specs
     @completion_options = {}  # Hash of command names to Set of completion options
@@ -397,15 +398,19 @@ module Rubish
     }.freeze
 
     def self.builtin?(name)
-      COMMANDS.include?(name) && !@disabled_builtins.include?(name)
+      (COMMANDS.include?(name) || @dynamic_commands.include?(name)) && !@disabled_builtins.include?(name)
     end
 
     def self.builtin_exists?(name)
-      COMMANDS.include?(name)
+      COMMANDS.include?(name) || @dynamic_commands.include?(name)
     end
 
     def self.builtin_enabled?(name)
-      COMMANDS.include?(name) && !@disabled_builtins.include?(name)
+      (COMMANDS.include?(name) || @dynamic_commands.include?(name)) && !@disabled_builtins.include?(name)
+    end
+
+    def self.all_commands
+      COMMANDS + @dynamic_commands
     end
 
     def self.run(name, args)
@@ -525,7 +530,17 @@ module Rubish
       when 'mapfile', 'readarray'
         run_mapfile(args)
       else
-        false
+        # Check for dynamically loaded builtins
+        if @loaded_builtins.key?(name)
+          callable = @loaded_builtins[name][:callable]
+          if callable.respond_to?(:call)
+            callable.call(args)
+          else
+            false
+          end
+        else
+          false
+        end
       end
     end
 
@@ -3131,19 +3146,28 @@ module Rubish
       end
     end
 
+    # Track dynamically loaded builtins
+    @loaded_builtins = {}  # name => { file: path, proc: callable }
+
+    class << self
+      attr_reader :loaded_builtins
+    end
+
     def self.run_enable(args)
       # enable [-a] [-dnps] [-f filename] [name ...]
       # -a: list all builtins (enabled and disabled)
       # -n: disable builtins
       # -p: print in reusable format
       # -s: list only POSIX special builtins
-      # -d: remove a builtin loaded with -f (not implemented)
-      # -f: load builtin from shared object (not implemented)
+      # -d: remove a builtin loaded with -f
+      # -f: load builtin from Ruby file (searches RUBISH_LOADABLES_PATH)
 
       show_all = false
       disable_mode = false
       print_mode = false
       special_only = false
+      delete_mode = false
+      load_file = nil
       names = []
 
       i = 0
@@ -3151,7 +3175,10 @@ module Rubish
         arg = args[i]
 
         if arg.start_with?('-') && names.empty?
-          arg[1..].each_char do |c|
+          chars = arg[1..].chars
+          j = 0
+          while j < chars.length
+            c = chars[j]
             case c
             when 'a'
               show_all = true
@@ -3161,14 +3188,27 @@ module Rubish
               print_mode = true
             when 's'
               special_only = true
-            when 'd', 'f'
-              # -d and -f are for dynamic loading, not implemented
-              puts "enable: -#{c}: not supported"
-              return false
+            when 'd'
+              delete_mode = true
+            when 'f'
+              # -f requires a filename argument
+              if j + 1 < chars.length
+                # Filename is rest of this arg
+                load_file = chars[j + 1..].join
+                break
+              elsif i + 1 < args.length
+                # Filename is next arg
+                i += 1
+                load_file = args[i]
+              else
+                puts 'enable: -f: option requires an argument'
+                return false
+              end
             else
               puts "enable: -#{c}: invalid option"
               return false
             end
+            j += 1
           end
         else
           names << arg
@@ -3178,6 +3218,62 @@ module Rubish
 
       # POSIX special builtins
       special_builtins = %w[. : break continue eval exec exit export readonly return set shift trap unset].freeze
+
+      # Handle -f: load builtins from file
+      if load_file && names.empty?
+        puts 'enable: -f: builtin name required'
+        return false
+      end
+
+      if load_file && !names.empty?
+        file_path = find_loadable_file(load_file)
+        unless file_path
+          puts "enable: #{load_file}: cannot open: No such file or directory"
+          return false
+        end
+
+        begin
+          # Load the Ruby file - it should define methods or Procs
+          content = File.read(file_path)
+          # Evaluate in a module to isolate the definitions
+          mod = Module.new
+          mod.module_eval(content, file_path, 1)
+
+          names.each do |name|
+            # Look for a method or constant with the builtin name
+            method_name = "run_#{name.tr('-', '_')}"
+            if mod.respond_to?(method_name)
+              @loaded_builtins[name] = {file: file_path, callable: mod.method(method_name)}
+              @dynamic_commands << name unless @dynamic_commands.include?(name)
+            elsif mod.const_defined?(name.upcase.tr('-', '_'), false)
+              callable = mod.const_get(name.upcase.tr('-', '_'))
+              @loaded_builtins[name] = {file: file_path, callable: callable}
+              @dynamic_commands << name unless @dynamic_commands.include?(name)
+            else
+              puts "enable: #{name}: not found in #{load_file}"
+              return false
+            end
+          end
+          return true
+        rescue SyntaxError, StandardError => e
+          puts "enable: #{load_file}: #{e.message}"
+          return false
+        end
+      end
+
+      # Handle -d: delete (unload) loaded builtins
+      if delete_mode && !names.empty?
+        names.each do |name|
+          if @loaded_builtins.key?(name)
+            @loaded_builtins.delete(name)
+            @dynamic_commands.delete(name)
+          else
+            puts "enable: #{name}: not a dynamically loaded builtin"
+            return false
+          end
+        end
+        return true
+      end
 
       # Helper to print a builtin
       print_builtin = lambda do |name, enabled|
@@ -3190,10 +3286,10 @@ module Rubish
 
       # No names specified: list builtins
       if names.empty?
-        builtins_to_show = special_only ? special_builtins : COMMANDS
+        builtins_to_show = special_only ? special_builtins : all_commands
 
         builtins_to_show.each do |name|
-          next unless COMMANDS.include?(name)
+          next unless builtin_exists?(name)
 
           enabled = !@disabled_builtins.include?(name)
 
@@ -3212,7 +3308,7 @@ module Rubish
 
       # Enable or disable specified builtins
       names.each do |name|
-        unless COMMANDS.include?(name)
+        unless builtin_exists?(name)
           puts "enable: #{name}: not a shell builtin"
           return false
         end
@@ -3225,6 +3321,34 @@ module Rubish
       end
 
       true
+    end
+
+    def self.find_loadable_file(filename)
+      # If absolute path, use it directly
+      return filename if filename.start_with?('/') && File.file?(filename)
+
+      # If relative path with directory component, use it directly
+      if filename.include?('/') && File.file?(filename)
+        return File.expand_path(filename)
+      end
+
+      # Search in RUBISH_LOADABLES_PATH
+      loadables_path = ENV['RUBISH_LOADABLES_PATH']
+      if loadables_path && !loadables_path.empty?
+        loadables_path.split(':').each do |dir|
+          next if dir.empty?
+
+          candidate = File.join(dir, filename)
+          return candidate if File.file?(candidate)
+
+          # Also try with .rb extension
+          candidate_rb = "#{candidate}.rb"
+          return candidate_rb if File.file?(candidate_rb)
+        end
+      end
+
+      # Not found
+      nil
     end
 
     def self.run_caller(args)
