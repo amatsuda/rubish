@@ -1339,17 +1339,19 @@ module Rubish
     end
 
     def self.run_declare(args)
-      # declare [-aAfFgilnrux] [-p] [name[=value] ...]
+      # declare [-aAfFgIilnrtux] [-p] [name[=value] ...]
       # -a: indexed array
       # -A: associative array
       # -f: restrict to functions (show function definitions)
       # -F: restrict to functions (show function names only)
       # -g: global variable (in functions, declare creates local vars by default)
+      # -I: inherit attributes from variable with same name at previous scope
       # -i: integer attribute (arithmetic evaluation)
       # -l: lowercase attribute
       # -n: nameref attribute (variable is a reference to another variable)
-      # -u: uppercase attribute
       # -r: readonly attribute
+      # -t: trace attribute (DEBUG/RETURN traps inherited by functions)
+      # -u: uppercase attribute
       # -x: export attribute
       # -p: print declarations
       # +attr: remove attribute
@@ -1360,6 +1362,7 @@ module Rubish
       function_mode = false  # -f: show function definitions
       function_names_only = false  # -F: show function names only
       global_mode = false
+      inherit_mode = false  # -I: inherit attributes from previous scope
       nameref_mode = false
       add_attrs = Set.new
       remove_attrs = Set.new
@@ -1378,11 +1381,13 @@ module Rubish
               when 'f' then function_mode = true
               when 'F' then function_names_only = true
               when 'g' then global_mode = true
+              when 'I' then inherit_mode = true
               when 'i' then add_attrs << :integer
               when 'l' then add_attrs << :lowercase
               when 'n' then nameref_mode = true; add_attrs << :nameref
-              when 'u' then add_attrs << :uppercase
               when 'r' then add_attrs << :readonly
+              when 't' then add_attrs << :trace
+              when 'u' then add_attrs << :uppercase
               when 'x' then add_attrs << :export
               when 'p' then print_mode = true
               end
@@ -1395,6 +1400,7 @@ module Rubish
             when 'i' then remove_attrs << :integer
             when 'l' then remove_attrs << :lowercase
             when 'n' then remove_attrs << :nameref
+            when 't' then remove_attrs << :trace
             when 'u' then remove_attrs << :uppercase
             when 'x' then remove_attrs << :export
             # Note: can't remove readonly
@@ -1465,6 +1471,18 @@ module Rubish
           current_scope = @local_scope_stack.last
           unless current_scope.key?(name)
             current_scope[name] = ENV.key?(name) ? ENV[name] : :unset
+          end
+        end
+
+        # Handle -I: inherit attributes and value from previous scope
+        if inherit_mode && in_function?
+          # Copy existing attributes if variable exists
+          if @var_attributes[name]
+            add_attrs = add_attrs | @var_attributes[name]
+          end
+          # Inherit value if not specified and variable exists
+          if value.nil? && ENV.key?(name)
+            value = ENV[name]
           end
         end
 
@@ -1556,8 +1574,9 @@ module Rubish
       flags << 'i' if attrs.include?(:integer)
       flags << 'l' if attrs.include?(:lowercase)
       flags << 'n' if attrs.include?(:nameref)
-      flags << 'u' if attrs.include?(:uppercase)
       flags << 'r' if readonly?(name)
+      flags << 't' if attrs.include?(:trace)
+      flags << 'u' if attrs.include?(:uppercase)
       flags << 'x' if attrs.include?(:export)
 
       # For namerefs, show the target variable name
