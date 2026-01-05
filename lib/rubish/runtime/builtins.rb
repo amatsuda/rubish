@@ -1337,9 +1337,10 @@ module Rubish
     end
 
     def self.run_declare(args)
-      # declare [-aAilnrux] [-p] [name[=value] ...]
+      # declare [-aAgilnrux] [-p] [name[=value] ...]
       # -a: indexed array
       # -A: associative array
+      # -g: global variable (in functions, declare creates local vars by default)
       # -i: integer attribute (arithmetic evaluation)
       # -l: lowercase attribute
       # -n: nameref attribute (variable is a reference to another variable)
@@ -1352,6 +1353,7 @@ module Rubish
       # Parse options
       print_mode = false
       array_mode = nil  # :indexed or :associative
+      global_mode = false
       nameref_mode = false
       add_attrs = Set.new
       remove_attrs = Set.new
@@ -1367,6 +1369,7 @@ module Rubish
               case c
               when 'a' then array_mode = :indexed
               when 'A' then array_mode = :associative
+              when 'g' then global_mode = true
               when 'i' then add_attrs << :integer
               when 'l' then add_attrs << :lowercase
               when 'n' then nameref_mode = true; add_attrs << :nameref
@@ -1441,6 +1444,15 @@ module Rubish
         if readonly?(name) && value
           puts "declare: #{name}: readonly variable"
           next
+        end
+
+        # Track in local scope if inside a function and -g not specified
+        # This makes declare behave like local by default in functions
+        if in_function? && !global_mode
+          current_scope = @local_scope_stack.last
+          unless current_scope.key?(name)
+            current_scope[name] = ENV.key?(name) ? ENV[name] : :unset
+          end
         end
 
         # Initialize attributes set for this variable
