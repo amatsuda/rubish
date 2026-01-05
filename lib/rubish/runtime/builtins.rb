@@ -37,11 +37,14 @@ module Rubish
     @history_saver = nil  # Saves history to file
     @history_appender = nil  # Appends new entries to file
     @last_history_line = 0  # Track last line read for -n option
+    @source_file_getter = nil  # Gets current source file for RUBISH_SOURCE
+    @source_file_setter = nil  # Sets current source file for RUBISH_SOURCE
 
     class << self
       attr_reader :aliases, :dir_stack, :traps, :local_scope_stack, :readonly_vars, :var_attributes, :command_hash, :shell_options, :disabled_builtins, :call_stack, :completions, :completion_options, :key_bindings, :readline_variables, :arrays, :assoc_arrays, :coprocs
       attr_accessor :executor, :script_name_getter, :script_name_setter, :positional_params_getter, :positional_params_setter, :function_checker, :function_remover, :heredoc_content_setter, :command_executor, :current_completion_options
       attr_accessor :history_file_getter, :history_loader, :history_saver, :history_appender, :last_history_line
+      attr_accessor :source_file_getter, :source_file_setter
     end
 
     # Array variable methods
@@ -1831,11 +1834,13 @@ module Rubish
         return false
       end
 
-      # Save and set script name and positional params
+      # Save and set script name, positional params, and source file
       old_script_name = @script_name_getter&.call
       old_positional_params = @positional_params_getter&.call
+      old_source_file = @source_file_getter&.call
       @script_name_setter&.call(file)
       @positional_params_setter&.call(args[1..] || [])
+      @source_file_setter&.call(file)
 
       return_code = catch(:return) do
         buffer = +''
@@ -1920,9 +1925,10 @@ module Rubish
         nil
       end
 
-      # Restore script name and positional params
+      # Restore script name, positional params, and source file
       @script_name_setter&.call(old_script_name) if old_script_name
       @positional_params_setter&.call(old_positional_params) if old_positional_params
+      @source_file_setter&.call(old_source_file) if old_source_file
 
       return_code.nil? || return_code == 0
     end

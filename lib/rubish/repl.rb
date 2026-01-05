@@ -24,6 +24,8 @@ module Rubish
       @rubish_command = ''  # For RUBISH_COMMAND variable (current command being executed)
       @funcname_stack = []  # For FUNCNAME array variable (function call stack)
       @rubish_lineno_stack = []  # For RUBISH_LINENO array variable (line numbers of function calls)
+      @current_source_file = 'main'  # Current source file being executed (for RUBISH_SOURCE)
+      @rubish_source_stack = []  # For RUBISH_SOURCE array variable (source files of function calls)
       # SHLVL - shell nesting level (stored in ENV for inheritance)
       current_shlvl = ENV['SHLVL'].to_i
       ENV['SHLVL'] = (current_shlvl + 1).to_s
@@ -36,6 +38,8 @@ module Rubish
       Builtins.function_remover = ->(name) { @functions.delete(name) }
       Builtins.heredoc_content_setter = ->(content) { @heredoc_content = content }
       Builtins.command_executor = ->(args) { execute_command_directly(args) }
+      Builtins.source_file_getter = -> { @current_source_file }
+      Builtins.source_file_setter = ->(file) { @current_source_file = file }
       # History callbacks
       Builtins.history_file_getter = -> { history_file }
       Builtins.history_loader = -> { load_history }
@@ -680,12 +684,17 @@ module Rubish
     end
 
     def call_function(name, args)
-      func = @functions[name]
-      return false unless func
+      func_info = @functions[name]
+      return false unless func_info
 
-      # Push function name onto FUNCNAME stack and line number onto RUBISH_LINENO stack
+      # Extract block and source from function info
+      func_block = func_info[:block]
+      func_source = func_info[:source]
+
+      # Push function name onto FUNCNAME stack, line number onto RUBISH_LINENO stack, source onto RUBISH_SOURCE stack
       @funcname_stack.unshift(name)
       @rubish_lineno_stack.unshift(@lineno)
+      @rubish_source_stack.unshift(func_source)
 
       # Save current positional params and set new ones
       saved_params = @positional_params
@@ -707,7 +716,7 @@ module Rubish
       end
 
       begin
-        result = func.call
+        result = func_block.call
         # Handle return value
         if result.is_a?(Command) || result.is_a?(Pipeline)
           result.success?
@@ -731,9 +740,10 @@ module Rubish
         Builtins.pop_local_scope
         @positional_params = saved_params
 
-        # Pop function name from FUNCNAME stack and line number from RUBISH_LINENO stack
+        # Pop function name from FUNCNAME stack, line number from RUBISH_LINENO stack, source from RUBISH_SOURCE stack
         @funcname_stack.shift
         @rubish_lineno_stack.shift
+        @rubish_source_stack.shift
       end
     end
 
@@ -837,8 +847,8 @@ module Rubish
             seed_random(expanded_value.to_i)
           elsif var_name == 'LINENO'
             @lineno = expanded_value.to_i
-          elsif var_name == 'PPID' || var_name == 'UID' || var_name == 'EUID' || var_name == 'GROUPS' || var_name == 'HOSTNAME' || var_name == 'RUBISHPID' || var_name == 'HISTCMD' || var_name == 'EPOCHSECONDS' || var_name == 'EPOCHREALTIME' || var_name == 'SRANDOM' || var_name == 'RUBISH_VERSION' || var_name == 'RUBISH_VERSINFO' || var_name == 'OSTYPE' || var_name == 'HOSTTYPE' || var_name == 'MACHTYPE' || var_name == 'PIPESTATUS' || var_name == 'RUBISH_COMMAND' || var_name == 'FUNCNAME' || var_name == 'RUBISH_LINENO'
-            # PPID, UID, EUID, GROUPS, HOSTNAME, RUBISHPID, HISTCMD, EPOCHSECONDS, EPOCHREALTIME, SRANDOM, RUBISH_VERSION, RUBISH_VERSINFO, OSTYPE, HOSTTYPE, MACHTYPE, PIPESTATUS, RUBISH_COMMAND, FUNCNAME, RUBISH_LINENO are read-only, silently ignore assignment
+          elsif var_name == 'PPID' || var_name == 'UID' || var_name == 'EUID' || var_name == 'GROUPS' || var_name == 'HOSTNAME' || var_name == 'RUBISHPID' || var_name == 'HISTCMD' || var_name == 'EPOCHSECONDS' || var_name == 'EPOCHREALTIME' || var_name == 'SRANDOM' || var_name == 'RUBISH_VERSION' || var_name == 'RUBISH_VERSINFO' || var_name == 'OSTYPE' || var_name == 'HOSTTYPE' || var_name == 'MACHTYPE' || var_name == 'PIPESTATUS' || var_name == 'RUBISH_COMMAND' || var_name == 'FUNCNAME' || var_name == 'RUBISH_LINENO' || var_name == 'RUBISH_SOURCE'
+            # PPID, UID, EUID, GROUPS, HOSTNAME, RUBISHPID, HISTCMD, EPOCHSECONDS, EPOCHREALTIME, SRANDOM, RUBISH_VERSION, RUBISH_VERSINFO, OSTYPE, HOSTTYPE, MACHTYPE, PIPESTATUS, RUBISH_COMMAND, FUNCNAME, RUBISH_LINENO, RUBISH_SOURCE are read-only, silently ignore assignment
           else
             ENV[var_name] = expanded_value
           end
@@ -2231,6 +2241,16 @@ module Rubish
         return (@rubish_lineno_stack[idx] || '').to_s
       end
 
+      # Special handling for RUBISH_SOURCE array
+      if var_name == 'RUBISH_SOURCE'
+        idx = begin
+          eval(expanded_index).to_i
+        rescue
+          expanded_index.to_i
+        end
+        return (@rubish_source_stack[idx] || '').to_s
+      end
+
       if Builtins.assoc_array?(var_name)
         # Associative array - use key directly
         Builtins.get_assoc_element(var_name, expanded_index)
@@ -2262,6 +2282,9 @@ module Rubish
       # Special handling for RUBISH_LINENO array
       elsif var_name == 'RUBISH_LINENO'
         values = @rubish_lineno_stack.map(&:to_s)
+      # Special handling for RUBISH_SOURCE array
+      elsif var_name == 'RUBISH_SOURCE'
+        values = @rubish_source_stack.dup
       elsif Builtins.assoc_array?(var_name)
         values = Builtins.assoc_values(var_name)
       else
@@ -2293,6 +2316,9 @@ module Rubish
       # Special handling for RUBISH_LINENO array
       elsif var_name == 'RUBISH_LINENO'
         @rubish_lineno_stack.length.to_s
+      # Special handling for RUBISH_SOURCE array
+      elsif var_name == 'RUBISH_SOURCE'
+        @rubish_source_stack.length.to_s
       elsif Builtins.assoc_array?(var_name)
         Builtins.assoc_length(var_name).to_s
       else
@@ -2317,6 +2343,9 @@ module Rubish
       # Special handling for RUBISH_LINENO array
       elsif var_name == 'RUBISH_LINENO'
         (0...@rubish_lineno_stack.length).to_a.join(' ')
+      # Special handling for RUBISH_SOURCE array
+      elsif var_name == 'RUBISH_SOURCE'
+        (0...@rubish_source_stack.length).to_a.join(' ')
       elsif Builtins.assoc_array?(var_name)
         Builtins.assoc_keys(var_name).join(' ')
       else
@@ -3396,7 +3425,7 @@ module Rubish
     end
 
     def __define_function(name, &block)
-      @functions[name] = block
+      @functions[name] = {block: block, source: @current_source_file}
       nil
     end
 
