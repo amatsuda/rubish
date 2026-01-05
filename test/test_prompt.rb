@@ -443,4 +443,137 @@ class TestPrompt < Test::Unit::TestCase
       assert File.exist?('two.txt')
     end
   end
+
+  # PROMPT_DIRTRIM tests
+
+  def test_prompt_dirtrim_not_set
+    ENV.delete('PROMPT_DIRTRIM')
+    path = '/very/deep/nested/directory/structure'
+    result = @repl.send(:trim_prompt_dir, path)
+    assert_equal path, result
+  end
+
+  def test_prompt_dirtrim_zero
+    ENV['PROMPT_DIRTRIM'] = '0'
+    path = '/very/deep/nested/directory'
+    result = @repl.send(:trim_prompt_dir, path)
+    assert_equal path, result
+  end
+
+  def test_prompt_dirtrim_negative
+    ENV['PROMPT_DIRTRIM'] = '-1'
+    path = '/very/deep/nested/directory'
+    result = @repl.send(:trim_prompt_dir, path)
+    assert_equal path, result
+  end
+
+  def test_prompt_dirtrim_absolute_path
+    ENV['PROMPT_DIRTRIM'] = '2'
+    path = '/home/user/projects/myapp/src/components'
+    result = @repl.send(:trim_prompt_dir, path)
+    assert_equal '.../src/components', result
+  end
+
+  def test_prompt_dirtrim_absolute_path_three
+    ENV['PROMPT_DIRTRIM'] = '3'
+    path = '/home/user/projects/myapp/src/components'
+    result = @repl.send(:trim_prompt_dir, path)
+    assert_equal '.../myapp/src/components', result
+  end
+
+  def test_prompt_dirtrim_home_path
+    ENV['PROMPT_DIRTRIM'] = '2'
+    path = '~/projects/myapp/src/components'
+    result = @repl.send(:trim_prompt_dir, path)
+    assert_equal '~/.../src/components', result
+  end
+
+  def test_prompt_dirtrim_home_path_three
+    ENV['PROMPT_DIRTRIM'] = '3'
+    path = '~/projects/myapp/src/components'
+    result = @repl.send(:trim_prompt_dir, path)
+    assert_equal '~/.../myapp/src/components', result
+  end
+
+  def test_prompt_dirtrim_home_only
+    ENV['PROMPT_DIRTRIM'] = '2'
+    path = '~'
+    result = @repl.send(:trim_prompt_dir, path)
+    assert_equal '~', result
+  end
+
+  def test_prompt_dirtrim_path_shorter_than_trim
+    ENV['PROMPT_DIRTRIM'] = '5'
+    path = '/home/user/projects'
+    result = @repl.send(:trim_prompt_dir, path)
+    assert_equal path, result
+  end
+
+  def test_prompt_dirtrim_path_equal_to_trim
+    ENV['PROMPT_DIRTRIM'] = '3'
+    path = '/home/user/projects'
+    result = @repl.send(:trim_prompt_dir, path)
+    assert_equal path, result
+  end
+
+  def test_prompt_dirtrim_home_shorter_than_trim
+    ENV['PROMPT_DIRTRIM'] = '5'
+    path = '~/projects/app'
+    result = @repl.send(:trim_prompt_dir, path)
+    assert_equal path, result
+  end
+
+  def test_prompt_dirtrim_one
+    ENV['PROMPT_DIRTRIM'] = '1'
+    path = '/home/user/projects/myapp'
+    result = @repl.send(:trim_prompt_dir, path)
+    assert_equal '.../myapp', result
+  end
+
+  def test_prompt_dirtrim_with_ps1
+    ENV['PS1'] = '\w$ '
+    ENV['PROMPT_DIRTRIM'] = '2'
+
+    # Create a deep directory structure
+    deep_dir = File.join(@tempdir, 'a', 'b', 'c', 'd')
+    FileUtils.mkdir_p(deep_dir)
+    Dir.chdir(deep_dir)
+
+    prompt = @repl.send(:prompt)
+    assert_match(/\.\.\.\/c\/d\$ $/, prompt)
+  end
+
+  def test_prompt_dirtrim_with_home_in_ps1
+    ENV['PS1'] = '\w$ '
+    ENV['PROMPT_DIRTRIM'] = '2'
+
+    # Create deep directory under home
+    home = ENV['HOME']
+    if home && File.directory?(home)
+      deep_dir = File.join(home, 'test_prompt_dirtrim_deep', 'level1', 'level2', 'level3')
+      FileUtils.mkdir_p(deep_dir)
+      begin
+        Dir.chdir(deep_dir)
+        prompt = @repl.send(:prompt)
+        assert_match(/~\/\.\.\.\/level2\/level3\$ $/, prompt)
+      ensure
+        FileUtils.rm_rf(File.join(home, 'test_prompt_dirtrim_deep'))
+      end
+    end
+  end
+
+  def test_prompt_dirtrim_empty_string
+    ENV['PROMPT_DIRTRIM'] = ''
+    path = '/very/deep/nested/directory'
+    result = @repl.send(:trim_prompt_dir, path)
+    assert_equal path, result
+  end
+
+  def test_prompt_dirtrim_non_numeric
+    ENV['PROMPT_DIRTRIM'] = 'abc'
+    path = '/very/deep/nested/directory'
+    result = @repl.send(:trim_prompt_dir, path)
+    # to_i returns 0 for non-numeric, so no trimming
+    assert_equal path, result
+  end
 end

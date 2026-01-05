@@ -456,7 +456,8 @@ module Rubish
           when 'w'
             home = ENV['HOME'] || ''
             cwd = Dir.pwd
-            result << (home.empty? ? cwd : cwd.sub(/\A#{Regexp.escape(home)}/, '~'))
+            display_path = home.empty? ? cwd : cwd.sub(/\A#{Regexp.escape(home)}/, '~')
+            result << trim_prompt_dir(display_path)
           when 'W'
             cwd = Dir.pwd
             home = ENV['HOME'] || ''
@@ -499,6 +500,41 @@ module Rubish
       end
 
       result
+    end
+
+    # Trim directory path according to PROMPT_DIRTRIM
+    # When PROMPT_DIRTRIM is set to N, only show last N directory components
+    # with leading "..." to indicate trimming
+    def trim_prompt_dir(path)
+      dirtrim = ENV['PROMPT_DIRTRIM']
+      return path if dirtrim.nil? || dirtrim.empty?
+
+      trim_count = dirtrim.to_i
+      return path if trim_count <= 0
+
+      # Handle ~ prefix specially
+      if path.start_with?('~')
+        if path == '~'
+          return path
+        end
+        # Remove ~ prefix, process the rest
+        rest = path[1..]  # includes leading /
+        rest = rest[1..] if rest.start_with?('/')  # remove leading /
+        components = rest.split('/')
+        if components.length <= trim_count
+          return path
+        end
+        trimmed = components.last(trim_count).join('/')
+        return '~/.../' + trimmed
+      else
+        # Absolute or relative path
+        components = path.split('/').reject(&:empty?)
+        if components.length <= trim_count
+          return path
+        end
+        trimmed = components.last(trim_count).join('/')
+        return '.../' + trimmed
+      end
     end
 
     def process_line
