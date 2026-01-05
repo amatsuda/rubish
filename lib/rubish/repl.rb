@@ -2089,6 +2089,9 @@ module Rubish
         matches = matches.reject { |m| m.end_with?('/.') || m.end_with?('/..') || m == '.' || m == '..' }
       end
 
+      # Apply GLOBIGNORE filtering
+      matches = apply_globignore(matches)
+
       if matches.empty?
         if Builtins.set_option?('failglob')
           # failglob: patterns matching nothing cause an error
@@ -2102,6 +2105,28 @@ module Rubish
         end
       else
         matches
+      end
+    end
+
+    # Apply GLOBIGNORE filtering to glob results
+    # GLOBIGNORE is a colon-separated list of patterns to exclude
+    def apply_globignore(matches)
+      globignore = ENV['GLOBIGNORE']
+      return matches if globignore.nil? || globignore.empty?
+
+      patterns = globignore.split(':').reject(&:empty?)
+      return matches if patterns.empty?
+
+      # Always filter out . and .. when GLOBIGNORE is set
+      matches = matches.reject { |m| m == '.' || m == '..' || m.end_with?('/.') || m.end_with?('/..') }
+
+      # Filter matches against GLOBIGNORE patterns
+      matches.reject do |match|
+        basename = File.basename(match)
+        patterns.any? do |pattern|
+          File.fnmatch?(pattern, basename, File::FNM_DOTMATCH) ||
+            File.fnmatch?(pattern, match, File::FNM_DOTMATCH)
+        end
       end
     end
 
