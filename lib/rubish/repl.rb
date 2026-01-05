@@ -21,6 +21,7 @@ module Rubish
       @random_generator = Random.new  # For RANDOM variable
       @lineno = 1  # For LINENO variable
       @pipestatus = [0]  # For PIPESTATUS array variable
+      @rubish_command = ''  # For RUBISH_COMMAND variable (current command being executed)
       # SHLVL - shell nesting level (stored in ENV for inheritance)
       current_shlvl = ENV['SHLVL'].to_i
       ENV['SHLVL'] = (current_shlvl + 1).to_s
@@ -526,6 +527,9 @@ module Rubish
       line = Builtins.expand_alias(line)
       line = expand_tilde(line)
 
+      # Set RUBISH_COMMAND before execution (contains command being executed)
+      @rubish_command = line
+
       # xtrace: print commands before execution (after expansion)
       xtrace(line) if Builtins.set_option?('x')
 
@@ -823,8 +827,8 @@ module Rubish
             seed_random(expanded_value.to_i)
           elsif var_name == 'LINENO'
             @lineno = expanded_value.to_i
-          elsif var_name == 'PPID' || var_name == 'UID' || var_name == 'EUID' || var_name == 'GROUPS' || var_name == 'HOSTNAME' || var_name == 'RUBISHPID' || var_name == 'HISTCMD' || var_name == 'EPOCHSECONDS' || var_name == 'EPOCHREALTIME' || var_name == 'SRANDOM' || var_name == 'RUBISH_VERSION' || var_name == 'RUBISH_VERSINFO' || var_name == 'OSTYPE' || var_name == 'HOSTTYPE' || var_name == 'MACHTYPE' || var_name == 'PIPESTATUS'
-            # PPID, UID, EUID, GROUPS, HOSTNAME, RUBISHPID, HISTCMD, EPOCHSECONDS, EPOCHREALTIME, SRANDOM, RUBISH_VERSION, RUBISH_VERSINFO, OSTYPE, HOSTTYPE, MACHTYPE, PIPESTATUS are read-only, silently ignore assignment
+          elsif var_name == 'PPID' || var_name == 'UID' || var_name == 'EUID' || var_name == 'GROUPS' || var_name == 'HOSTNAME' || var_name == 'RUBISHPID' || var_name == 'HISTCMD' || var_name == 'EPOCHSECONDS' || var_name == 'EPOCHREALTIME' || var_name == 'SRANDOM' || var_name == 'RUBISH_VERSION' || var_name == 'RUBISH_VERSINFO' || var_name == 'OSTYPE' || var_name == 'HOSTTYPE' || var_name == 'MACHTYPE' || var_name == 'PIPESTATUS' || var_name == 'RUBISH_COMMAND'
+            # PPID, UID, EUID, GROUPS, HOSTNAME, RUBISHPID, HISTCMD, EPOCHSECONDS, EPOCHREALTIME, SRANDOM, RUBISH_VERSION, RUBISH_VERSINFO, OSTYPE, HOSTTYPE, MACHTYPE, PIPESTATUS, RUBISH_COMMAND are read-only, silently ignore assignment
           else
             ENV[var_name] = expanded_value
           end
@@ -1140,6 +1144,7 @@ module Rubish
       return __ostype if var_name == 'OSTYPE'
       return __hosttype if var_name == 'HOSTTYPE'
       return RUBY_PLATFORM if var_name == 'MACHTYPE'
+      return @rubish_command if var_name == 'RUBISH_COMMAND'
 
       if Builtins.set_option?('u') && !ENV.key?(var_name)
         $stderr.puts "rubish: #{var_name}: unbound variable"
@@ -1847,6 +1852,7 @@ module Rubish
       return __ostype if var_name == 'OSTYPE'
       return __hosttype if var_name == 'HOSTTYPE'
       return RUBY_PLATFORM if var_name == 'MACHTYPE'
+      return @rubish_command if var_name == 'RUBISH_COMMAND'
 
       # Fetch variable with nounset check
       if Builtins.set_option?('u') && !ENV.key?(var_name)
@@ -1927,6 +1933,10 @@ module Rubish
         value = RUBY_PLATFORM
         is_set = true
         is_null = false
+      elsif var_name == 'RUBISH_COMMAND'
+        value = @rubish_command
+        is_set = true
+        is_null = @rubish_command.empty?
       else
         value = ENV[var_name]
         is_set = ENV.key?(var_name)
@@ -2044,6 +2054,7 @@ module Rubish
       when 'OSTYPE' then __ostype
       when 'HOSTTYPE' then __hosttype
       when 'MACHTYPE' then RUBY_PLATFORM
+      when 'RUBISH_COMMAND' then @rubish_command
       end
     end
 
