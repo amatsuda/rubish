@@ -966,12 +966,15 @@ module Rubish
       # Check if this is a valid option
       opt_idx = optstring.index(opt_char)
       silent_errors = optstring.start_with?(':')
+      # OPTERR controls whether error messages are printed (default 1 = print errors)
+      # When OPTERR=0, suppress error messages (but silent_errors from ':' prefix still affects OPTARG behavior)
+      opterr = ENV['OPTERR'] != '0'
 
       if opt_idx.nil?
         # Invalid option
         ENV[varname] = '?'
         ENV['OPTARG'] = opt_char if silent_errors
-        unless silent_errors
+        unless silent_errors || !opterr
           puts "getopts: illegal option -- #{opt_char}"
         end
         # Move to next character or next argument
@@ -1006,7 +1009,9 @@ module Rubish
             ENV['OPTARG'] = opt_char
           else
             ENV[varname] = '?'
-            puts "getopts: option requires an argument -- #{opt_char}"
+            if opterr
+              puts "getopts: option requires an argument -- #{opt_char}"
+            end
           end
           ENV['OPTIND'] = (optind + 1).to_s
           ENV['_OPTPOS'] = '1'

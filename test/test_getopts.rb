@@ -147,4 +147,69 @@ class TestGetopts < Test::Unit::TestCase
     Rubish::Builtins.run('getopts', ['a:b', 'opt', '-a', 'value', '-b'])
     assert_nil ENV['OPTARG']
   end
+
+  # OPTERR tests
+
+  def test_opterr_default_shows_errors
+    # OPTERR defaults to showing errors (any value except '0')
+    ENV.delete('OPTERR')
+    output = capture_output do
+      Rubish::Builtins.run('getopts', ['abc', 'opt', '-x'])
+    end
+    assert_match(/illegal option/, output)
+  end
+
+  def test_opterr_1_shows_errors
+    ENV['OPTERR'] = '1'
+    output = capture_output do
+      Rubish::Builtins.run('getopts', ['abc', 'opt', '-x'])
+    end
+    assert_match(/illegal option/, output)
+  end
+
+  def test_opterr_0_suppresses_invalid_option_error
+    ENV['OPTERR'] = '0'
+    output = capture_output do
+      Rubish::Builtins.run('getopts', ['abc', 'opt', '-x'])
+    end
+    assert_equal '?', ENV['opt']
+    assert_equal '', output  # Error suppressed
+  end
+
+  def test_opterr_0_suppresses_missing_argument_error
+    ENV['OPTERR'] = '0'
+    output = capture_output do
+      Rubish::Builtins.run('getopts', ['a:', 'opt', '-a'])
+    end
+    assert_equal '?', ENV['opt']
+    assert_equal '', output  # Error suppressed
+  end
+
+  def test_opterr_0_does_not_set_optarg_for_invalid_option
+    # Unlike silent mode (: prefix), OPTERR=0 doesn't set OPTARG
+    ENV['OPTERR'] = '0'
+    ENV.delete('OPTARG')
+    Rubish::Builtins.run('getopts', ['abc', 'opt', '-x'])
+    assert_equal '?', ENV['opt']
+    assert_nil ENV['OPTARG']  # Not set (unlike silent mode)
+  end
+
+  def test_opterr_0_does_not_affect_missing_arg_behavior
+    # Unlike silent mode (: prefix), OPTERR=0 sets opt to '?' not ':'
+    ENV['OPTERR'] = '0'
+    Rubish::Builtins.run('getopts', ['a:', 'opt', '-a'])
+    assert_equal '?', ENV['opt']  # '?' not ':'
+    assert_nil ENV['OPTARG']  # Not set (unlike silent mode)
+  end
+
+  def test_silent_mode_overrides_opterr
+    # Silent mode from ':' prefix works regardless of OPTERR
+    ENV['OPTERR'] = '1'
+    output = capture_output do
+      Rubish::Builtins.run('getopts', [':abc', 'opt', '-x'])
+    end
+    assert_equal '?', ENV['opt']
+    assert_equal 'x', ENV['OPTARG']  # Silent mode sets OPTARG
+    assert_equal '', output  # Silent mode suppresses errors
+  end
 end
