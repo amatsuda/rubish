@@ -3,4 +3,55 @@
 
 require_relative '../lib/rubish'
 
-exit Rubish::REPL.new.run
+# Parse command line options
+command_string = nil
+script_file = nil
+script_args = []
+
+i = 0
+while i < ARGV.length
+  case ARGV[i]
+  when '-c'
+    # Execute command string
+    command_string = ARGV[i + 1]
+    i += 2
+    # Remaining args become positional parameters
+    script_args = ARGV[i..]
+    break
+  when '--'
+    # End of options
+    i += 1
+    script_file = ARGV[i]
+    script_args = ARGV[i + 1..] if ARGV[i + 1]
+    break
+  when /\A-/
+    # Unknown option - skip for now
+    i += 1
+  else
+    # Script file
+    script_file = ARGV[i]
+    script_args = ARGV[i + 1..] || []
+    break
+  end
+end
+
+if command_string
+  # -c mode: execute command string
+  ENV['RUBISH_EXECUTION_STRING'] = command_string
+  repl = Rubish::REPL.new
+  repl.script_name = script_args[0] || 'rubish'
+  repl.positional_params = script_args[1..] || []
+  repl.send(:execute, command_string)
+  # Get last exit status from repl
+  last_status = repl.instance_variable_get(:@last_status) || 0
+  exit(last_status)
+elsif script_file
+  # Script mode: execute script file
+  repl = Rubish::REPL.new
+  repl.script_name = script_file
+  repl.positional_params = script_args
+  exit Rubish::Builtins.run_source([script_file])
+else
+  # Interactive mode
+  exit Rubish::REPL.new.run
+end
