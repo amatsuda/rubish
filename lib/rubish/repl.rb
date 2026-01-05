@@ -815,8 +815,8 @@ module Rubish
             seed_random(expanded_value.to_i)
           elsif var_name == 'LINENO'
             @lineno = expanded_value.to_i
-          elsif var_name == 'PPID' || var_name == 'UID' || var_name == 'EUID' || var_name == 'GROUPS' || var_name == 'HOSTNAME' || var_name == 'RUBISHPID' || var_name == 'HISTCMD' || var_name == 'EPOCHSECONDS' || var_name == 'EPOCHREALTIME' || var_name == 'SRANDOM' || var_name == 'RUBISH_VERSION' || var_name == 'RUBISH_VERSINFO' || var_name == 'OSTYPE' || var_name == 'HOSTTYPE'
-            # PPID, UID, EUID, GROUPS, HOSTNAME, RUBISHPID, HISTCMD, EPOCHSECONDS, EPOCHREALTIME, SRANDOM, RUBISH_VERSION, RUBISH_VERSINFO, OSTYPE, HOSTTYPE are read-only, silently ignore assignment
+          elsif var_name == 'PPID' || var_name == 'UID' || var_name == 'EUID' || var_name == 'GROUPS' || var_name == 'HOSTNAME' || var_name == 'RUBISHPID' || var_name == 'HISTCMD' || var_name == 'EPOCHSECONDS' || var_name == 'EPOCHREALTIME' || var_name == 'SRANDOM' || var_name == 'RUBISH_VERSION' || var_name == 'RUBISH_VERSINFO' || var_name == 'OSTYPE' || var_name == 'HOSTTYPE' || var_name == 'MACHTYPE'
+            # PPID, UID, EUID, GROUPS, HOSTNAME, RUBISHPID, HISTCMD, EPOCHSECONDS, EPOCHREALTIME, SRANDOM, RUBISH_VERSION, RUBISH_VERSINFO, OSTYPE, HOSTTYPE, MACHTYPE are read-only, silently ignore assignment
           else
             ENV[var_name] = expanded_value
           end
@@ -1131,6 +1131,7 @@ module Rubish
       return Rubish::VERSION if var_name == 'RUBISH_VERSION'
       return __ostype if var_name == 'OSTYPE'
       return __hosttype if var_name == 'HOSTTYPE'
+      return RUBY_PLATFORM if var_name == 'MACHTYPE'
 
       if Builtins.set_option?('u') && !ENV.key?(var_name)
         $stderr.puts "rubish: #{var_name}: unbound variable"
@@ -1827,6 +1828,7 @@ module Rubish
       return Rubish::VERSION if var_name == 'RUBISH_VERSION'
       return __ostype if var_name == 'OSTYPE'
       return __hosttype if var_name == 'HOSTTYPE'
+      return RUBY_PLATFORM if var_name == 'MACHTYPE'
 
       # Fetch variable with nounset check
       if Builtins.set_option?('u') && !ENV.key?(var_name)
@@ -1901,6 +1903,10 @@ module Rubish
         is_null = false
       elsif var_name == 'HOSTTYPE'
         value = __hosttype
+        is_set = true
+        is_null = false
+      elsif var_name == 'MACHTYPE'
+        value = RUBY_PLATFORM
         is_set = true
         is_null = false
       else
@@ -2019,6 +2025,7 @@ module Rubish
       when 'RUBISH_VERSION' then Rubish::VERSION
       when 'OSTYPE' then __ostype
       when 'HOSTTYPE' then __hosttype
+      when 'MACHTYPE' then RUBY_PLATFORM
       end
     end
 
