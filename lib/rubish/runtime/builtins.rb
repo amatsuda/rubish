@@ -2111,6 +2111,37 @@ module Rubish
       true
     end
 
+    # SHELLOPTS: colon-separated list of enabled set -o options
+    def self.shellopts
+      long_names = {
+        'B' => 'braceexpand', 'H' => 'histexpand',
+        'e' => 'errexit', 'E' => 'errtrace', 'T' => 'functrace',
+        'x' => 'xtrace', 'u' => 'nounset', 'n' => 'noexec', 'v' => 'verbose',
+        'f' => 'noglob', 'C' => 'noclobber', 'a' => 'allexport', 'b' => 'notify',
+        'h' => 'hashall', 'm' => 'monitor', 'pipefail' => 'pipefail',
+        'globstar' => 'globstar', 'nullglob' => 'nullglob', 'failglob' => 'failglob',
+        'dotglob' => 'dotglob', 'nocaseglob' => 'nocaseglob', 'ignoreeof' => 'ignoreeof',
+        'extglob' => 'extglob', 'P' => 'physical', 'emacs' => 'emacs', 'vi' => 'vi',
+        'nocasematch' => 'nocasematch', 't' => 'onecmd', 'k' => 'keyword',
+        'p' => 'privileged'
+      }
+      enabled = @set_options.select { |_, v| v }.keys.map { |k| long_names[k] || k }
+      enabled.sort.join(':')
+    end
+
+    # RUBISHOPTS: colon-separated list of enabled shopt options (equivalent to BASHOPTS)
+    def self.rubishopts
+      enabled = []
+      SHELL_OPTIONS.each_key do |name|
+        if @shell_options.key?(name)
+          enabled << name if @shell_options[name]
+        elsif SHELL_OPTIONS[name][0]  # default value is true
+          enabled << name
+        end
+      end
+      enabled.sort.join(':')
+    end
+
     def self.set_long_option(name, value)
       mapping = {
         'braceexpand' => 'B', 'histexpand' => 'H',

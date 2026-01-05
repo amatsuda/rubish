@@ -1230,6 +1230,8 @@ module Rubish
       return Builtins.comp_type.to_s if var_name == 'COMP_TYPE'
       return Builtins.comp_key.to_s if var_name == 'COMP_KEY'
       return Builtins.comp_wordbreaks if var_name == 'COMP_WORDBREAKS'
+      return Builtins.shellopts if var_name == 'SHELLOPTS'
+      return Builtins.rubishopts if var_name == 'RUBISHOPTS'
 
       if Builtins.set_option?('u') && !ENV.key?(var_name)
         $stderr.puts "rubish: #{var_name}: unbound variable"
@@ -2204,6 +2206,8 @@ module Rubish
       when 'COMP_TYPE' then Builtins.comp_type.to_s
       when 'COMP_KEY' then Builtins.comp_key.to_s
       when 'COMP_WORDBREAKS' then Builtins.comp_wordbreaks
+      when 'SHELLOPTS' then Builtins.shellopts
+      when 'RUBISHOPTS' then Builtins.rubishopts
       end
     end
 
