@@ -815,8 +815,8 @@ module Rubish
             seed_random(expanded_value.to_i)
           elsif var_name == 'LINENO'
             @lineno = expanded_value.to_i
-          elsif var_name == 'PPID' || var_name == 'UID' || var_name == 'EUID' || var_name == 'GROUPS' || var_name == 'HOSTNAME' || var_name == 'RUBISHPID' || var_name == 'HISTCMD' || var_name == 'EPOCHSECONDS' || var_name == 'EPOCHREALTIME' || var_name == 'SRANDOM' || var_name == 'RUBISH_VERSION' || var_name == 'RUBISH_VERSINFO'
-            # PPID, UID, EUID, GROUPS, HOSTNAME, RUBISHPID, HISTCMD, EPOCHSECONDS, EPOCHREALTIME, SRANDOM, RUBISH_VERSION, RUBISH_VERSINFO are read-only, silently ignore assignment
+          elsif var_name == 'PPID' || var_name == 'UID' || var_name == 'EUID' || var_name == 'GROUPS' || var_name == 'HOSTNAME' || var_name == 'RUBISHPID' || var_name == 'HISTCMD' || var_name == 'EPOCHSECONDS' || var_name == 'EPOCHREALTIME' || var_name == 'SRANDOM' || var_name == 'RUBISH_VERSION' || var_name == 'RUBISH_VERSINFO' || var_name == 'OSTYPE' || var_name == 'HOSTTYPE'
+            # PPID, UID, EUID, GROUPS, HOSTNAME, RUBISHPID, HISTCMD, EPOCHSECONDS, EPOCHREALTIME, SRANDOM, RUBISH_VERSION, RUBISH_VERSINFO, OSTYPE, HOSTTYPE are read-only, silently ignore assignment
           else
             ENV[var_name] = expanded_value
           end
@@ -1129,6 +1129,8 @@ module Rubish
       return format('%.6f', Time.now.to_f) if var_name == 'EPOCHREALTIME'
       return SecureRandom.random_number(2**32).to_s if var_name == 'SRANDOM'
       return Rubish::VERSION if var_name == 'RUBISH_VERSION'
+      return __ostype if var_name == 'OSTYPE'
+      return __hosttype if var_name == 'HOSTTYPE'
 
       if Builtins.set_option?('u') && !ENV.key?(var_name)
         $stderr.puts "rubish: #{var_name}: unbound variable"
@@ -1823,6 +1825,8 @@ module Rubish
       return format('%.6f', Time.now.to_f) if var_name == 'EPOCHREALTIME'
       return SecureRandom.random_number(2**32).to_s if var_name == 'SRANDOM'
       return Rubish::VERSION if var_name == 'RUBISH_VERSION'
+      return __ostype if var_name == 'OSTYPE'
+      return __hosttype if var_name == 'HOSTTYPE'
 
       # Fetch variable with nounset check
       if Builtins.set_option?('u') && !ENV.key?(var_name)
@@ -1889,6 +1893,14 @@ module Rubish
         is_null = false
       elsif var_name == 'RUBISH_VERSION'
         value = Rubish::VERSION
+        is_set = true
+        is_null = false
+      elsif var_name == 'OSTYPE'
+        value = __ostype
+        is_set = true
+        is_null = false
+      elsif var_name == 'HOSTTYPE'
+        value = __hosttype
         is_set = true
         is_null = false
       else
@@ -2005,6 +2017,8 @@ module Rubish
       when 'EPOCHREALTIME' then format('%.6f', Time.now.to_f)
       when 'SRANDOM' then SecureRandom.random_number(2**32).to_s
       when 'RUBISH_VERSION' then Rubish::VERSION
+      when 'OSTYPE' then __ostype
+      when 'HOSTTYPE' then __hosttype
       end
     end
 
@@ -2102,6 +2116,18 @@ module Rubish
         'release',                 # release status
         RUBY_PLATFORM              # machine type
       ]
+    end
+
+    def __ostype
+      # Returns OS type from RUBY_PLATFORM (e.g., "darwin23", "linux-gnu")
+      # RUBY_PLATFORM format: "arch-os" like "arm64-darwin23" or "x86_64-linux-gnu"
+      parts = RUBY_PLATFORM.split('-', 2)
+      parts[1] || RUBY_PLATFORM
+    end
+
+    def __hosttype
+      # Returns host/machine type from RUBY_PLATFORM (e.g., "arm64", "x86_64")
+      RUBY_PLATFORM.split('-').first
     end
 
     def __array_element(var_name, index)
