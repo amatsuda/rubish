@@ -32,6 +32,8 @@ module Rubish
     @positional_params_setter = nil
     @function_checker = nil
     @function_remover = nil
+    @function_lister = nil  # Returns hash of all functions {name => {source:, file:}}
+    @function_getter = nil  # Returns function info for a specific name
     @heredoc_content_setter = nil
     @command_executor = nil  # Executor that bypasses functions/aliases
     @history_file_getter = nil  # Gets HISTFILE path
@@ -45,7 +47,7 @@ module Rubish
 
     class << self
       attr_reader :aliases, :dir_stack, :traps, :local_scope_stack, :readonly_vars, :var_attributes, :command_hash, :shell_options, :disabled_builtins, :call_stack, :completions, :completion_options, :key_bindings, :readline_variables, :arrays, :assoc_arrays, :namerefs, :coprocs
-      attr_accessor :executor, :script_name_getter, :script_name_setter, :positional_params_getter, :positional_params_setter, :function_checker, :function_remover, :heredoc_content_setter, :command_executor, :current_completion_options
+      attr_accessor :executor, :script_name_getter, :script_name_setter, :positional_params_getter, :positional_params_setter, :function_checker, :function_remover, :function_lister, :function_getter, :heredoc_content_setter, :command_executor, :current_completion_options
       attr_accessor :history_file_getter, :history_loader, :history_saver, :history_appender, :last_history_line, :history_timestamps
       attr_accessor :source_file_getter, :source_file_setter
     end
@@ -1337,9 +1339,11 @@ module Rubish
     end
 
     def self.run_declare(args)
-      # declare [-aAgilnrux] [-p] [name[=value] ...]
+      # declare [-aAfFgilnrux] [-p] [name[=value] ...]
       # -a: indexed array
       # -A: associative array
+      # -f: restrict to functions (show function definitions)
+      # -F: restrict to functions (show function names only)
       # -g: global variable (in functions, declare creates local vars by default)
       # -i: integer attribute (arithmetic evaluation)
       # -l: lowercase attribute
@@ -1353,6 +1357,8 @@ module Rubish
       # Parse options
       print_mode = false
       array_mode = nil  # :indexed or :associative
+      function_mode = false  # -f: show function definitions
+      function_names_only = false  # -F: show function names only
       global_mode = false
       nameref_mode = false
       add_attrs = Set.new
@@ -1369,6 +1375,8 @@ module Rubish
               case c
               when 'a' then array_mode = :indexed
               when 'A' then array_mode = :associative
+              when 'f' then function_mode = true
+              when 'F' then function_names_only = true
               when 'g' then global_mode = true
               when 'i' then add_attrs << :integer
               when 'l' then add_attrs << :lowercase
@@ -1408,6 +1416,11 @@ module Rubish
           end
         end
         return true if add_attrs.empty? && remove_attrs.empty?
+      end
+
+      # Handle function listing (-f or -F)
+      if function_mode || function_names_only
+        return print_functions(names, function_names_only)
       end
 
       # Print mode with no names: show all declared variables
@@ -1599,6 +1612,49 @@ module Rubish
         if filter_attrs.empty? || filter_attrs.subset?(attrs)
           print_declaration(name)
         end
+      end
+    end
+
+    def self.print_functions(names, names_only)
+      # Get all functions via callback
+      functions = @function_lister&.call || {}
+
+      if names.empty?
+        # List all functions
+        functions.each do |name, info|
+          print_function(name, info, names_only)
+        end
+      else
+        # List specific functions
+        names.each do |name|
+          info = @function_getter&.call(name)
+          if info
+            print_function(name, info, names_only)
+          else
+            puts "declare: #{name}: not found"
+            return false
+          end
+        end
+      end
+      true
+    end
+
+    def self.print_function(name, info, names_only)
+      if names_only
+        # -F: just print the name (optionally with file info)
+        if info[:file]
+          puts "declare -f #{name}  # defined in #{info[:file]}"
+        else
+          puts "declare -f #{name}"
+        end
+      else
+        # -f: print full definition
+        source = info[:source] || '# (source not available)'
+        puts "#{name}() {"
+        source.each_line do |line|
+          puts "    #{line}"
+        end
+        puts '}'
       end
     end
 

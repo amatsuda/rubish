@@ -528,7 +528,9 @@ module Rubish
     def generate_function(node)
       # Generate a function definition that stores a lambda
       body_code = generate_loop_body(node.body)
-      "__define_function(#{node.name.inspect}) { #{body_code} }"
+      # Also store shell source for declare -f
+      source_code = to_shell(node.body)
+      "__define_function(#{node.name.inspect}, #{source_code.inspect}) { #{body_code} }"
     end
 
     def generate_case(node)
@@ -757,6 +759,64 @@ module Rubish
 
       # Simple ${VAR}
       "__fetch_var(#{content.inspect})"
+    end
+
+    # Convert AST back to shell source (for declare -f)
+    def to_shell(node, indent = 0)
+      prefix = '    ' * indent
+      case node
+      when AST::Command
+        parts = [node.name] + node.args
+        parts.join(' ')
+      when AST::Pipeline
+        node.commands.map { |c| to_shell(c) }.join(' | ')
+      when AST::List
+        node.commands.map { |c| to_shell(c, indent) }.join('; ')
+      when AST::Redirect
+        cmd = to_shell(node.command)
+        "#{cmd} #{node.operator} #{node.target}"
+      when AST::Background
+        "#{to_shell(node.command)} &"
+      when AST::And
+        "#{to_shell(node.left)} && #{to_shell(node.right)}"
+      when AST::Or
+        "#{to_shell(node.left)} || #{to_shell(node.right)}"
+      when AST::If
+        parts = []
+        node.branches.each_with_index do |(cond, body), i|
+          keyword = i == 0 ? 'if' : 'elif'
+          parts << "#{keyword} #{to_shell(cond)}; then"
+          parts << "    #{to_shell(body, indent + 1)}"
+        end
+        if node.else_body
+          parts << 'else'
+          parts << "    #{to_shell(node.else_body, indent + 1)}"
+        end
+        parts << 'fi'
+        parts.join("\n#{prefix}")
+      when AST::While
+        "while #{to_shell(node.condition)}; do\n#{prefix}    #{to_shell(node.body, indent + 1)}\n#{prefix}done"
+      when AST::Until
+        "until #{to_shell(node.condition)}; do\n#{prefix}    #{to_shell(node.body, indent + 1)}\n#{prefix}done"
+      when AST::For
+        items = node.items ? " in #{node.items.join(' ')}" : ''
+        "for #{node.variable}#{items}; do\n#{prefix}    #{to_shell(node.body, indent + 1)}\n#{prefix}done"
+      when AST::Case
+        parts = ["case #{node.word} in"]
+        node.branches.each do |(patterns, body)|
+          parts << "    #{patterns.join('|')}) #{to_shell(body)} ;;"
+        end
+        parts << 'esac'
+        parts.join("\n#{prefix}")
+      when AST::Subshell
+        "(#{to_shell(node.body)})"
+      when AST::Function
+        "#{node.name}() {\n#{prefix}    #{to_shell(node.body, indent + 1)}\n#{prefix}}"
+      when NilClass
+        ''
+      else
+        node.to_s
+      end
     end
   end
 end

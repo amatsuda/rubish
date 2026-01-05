@@ -73,7 +73,8 @@ class TestFunction < Test::Unit::TestCase
     tokens = Rubish::Lexer.new('greet() { echo hello; }').tokenize
     ast = Rubish::Parser.new(tokens).parse
     code = Rubish::Codegen.new.generate(ast)
-    assert_match(/__define_function\("greet"\)/, code)
+    # Now includes source code as second parameter
+    assert_match(/__define_function\("greet", "echo hello"\)/, code)
   end
 
   # Execution tests
