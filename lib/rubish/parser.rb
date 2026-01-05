@@ -120,7 +120,7 @@ module Rubish
       AST::Time.new(command: timed_cmd, posix_format: posix_format)
     end
 
-    # command : if_statement | while_statement | until_statement | for_statement | case_statement | function_def | subshell | coproc | conditional_expr | WORD arg* block? (redirection)*
+    # command : if_statement | while_statement | until_statement | for_statement | case_statement | function_def | subshell | coproc | conditional_expr | array_assign | WORD arg* block? (redirection)*
     # arg : WORD | ARRAY | REGEXP
     def parse_command
       # Check for control structures
@@ -134,6 +134,9 @@ module Rubish
       return parse_subshell if peek(:LPAREN)
       return parse_coproc if peek(:COPROC)
       return parse_conditional_expr if peek(:DOUBLE_LBRACKET)
+
+      # Check for array assignment: VAR=(a b c) or VAR+=(d e)
+      return parse_array_assign if peek(:ARRAY_ASSIGN)
 
       return nil unless peek(:WORD)
 
@@ -465,6 +468,12 @@ module Rubish
       consume(:DOUBLE_RBRACKET) || raise('Expected "]]" to close conditional expression')
 
       AST::ConditionalExpr.new(expression)
+    end
+
+    # Parse array assignment: VAR=(a b c) or VAR+=(d e)
+    def parse_array_assign
+      token = consume(:ARRAY_ASSIGN)
+      AST::ArrayAssign.new(var: token.value[:var], elements: token.value[:elements])
     end
 
     # Parse body of case branch (stops at ;; or esac)

@@ -44,6 +44,8 @@ module Rubish
         generate_time(node)
       when AST::ConditionalExpr
         generate_conditional_expr(node)
+      when AST::ArrayAssign
+        generate_array_assign(node)
       else
         raise "Unknown AST node: #{node.class}"
       end
@@ -583,6 +585,18 @@ module Rubish
         end
       end
       "__cond_test([#{parts.join(', ')}])"
+    end
+
+    def generate_array_assign(node)
+      # Generate code for array assignment: VAR=(a b c) or VAR+=(d e)
+      var_part = node.var
+      elements = node.elements
+
+      # Generate element expressions
+      elem_code = elements.map { |e| generate_string_arg(e) }.join(', ')
+
+      # Call runtime method to handle the assignment
+      "__array_assign(#{var_part.inspect}, [#{elem_code}])"
     end
 
     def escape_string(str)

@@ -65,7 +65,7 @@ module Rubish
     private
 
     def skip_whitespace
-      @pos += 1 while @pos < @input.length && @input[@pos] =~ /[ \t]/
+      @pos += 1 while @pos < @input.length && @input[@pos] =~ /[ \t\n]/
     end
 
     def read_token
@@ -399,7 +399,7 @@ module Rubish
         end
 
         # General break conditions - exclude { since it's handled above
-        break if char =~ /[ \t]/ || (OPERATORS.key?(char) && char != '{')
+        break if char =~ /[ \t\n]/ || (OPERATORS.key?(char) && char != '{')
         break if @input[@pos, 2] == '>>' || @input[@pos, 2] == '2>' || @input[@pos, 2] == ';;'
         # Stop at Ruby literal starters only at the start of a word
         # In the middle of a word, [ is a glob pattern like file[12].txt
@@ -427,12 +427,60 @@ module Rubish
       value = @input[start...@pos]
       return nil if value.empty?
 
+      # Check for array assignment: VAR=(...) or VAR+=(...)
+      if (value.end_with?('=') || value.end_with?('+=')) && @input[@pos] == '('
+        return read_array_assignment(value)
+      end
+
       # Check if word is a keyword
       if KEYWORDS.key?(value)
         Token.new(KEYWORDS[value], value)
       else
         Token.new(:WORD, value)
       end
+    end
+
+    def read_array_assignment(var_part)
+      # Read array contents: (elem1 elem2 elem3)
+      @pos += 1  # skip opening (
+      elements = []
+
+      while @pos < @input.length
+        skip_whitespace
+        break if @input[@pos] == ')'
+
+        elem = read_array_element
+        elements << elem if elem && !elem.empty?
+      end
+
+      @pos += 1 if @input[@pos] == ')'  # skip closing )
+
+      Token.new(:ARRAY_ASSIGN, {var: var_part, elements: elements})
+    end
+
+    def read_array_element
+      start = @pos
+
+      while @pos < @input.length
+        char = @input[@pos]
+
+        # Stop at whitespace or closing paren
+        break if char =~ /[ \t\n]/ || char == ')'
+
+        if char == '"'
+          read_double_quoted_string
+        elsif char == "'"
+          read_single_quoted_string
+        elsif char == '$' && @input[@pos + 1] == '('
+          read_command_substitution
+        elsif char == '$' && @input[@pos + 1] == '{'
+          read_braced_variable
+        else
+          @pos += 1
+        end
+      end
+
+      @input[start...@pos]
     end
 
     def read_double_quoted_string

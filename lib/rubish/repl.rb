@@ -3414,6 +3414,17 @@ module Rubish
       ExitStatus.new(result ? 0 : 1)
     end
 
+    def __array_assign(var_part, elements)
+      # Handle array assignment: VAR=(a b c) or VAR+=(d e)
+      # var_part includes the = or +=, e.g., "arr=" or "arr+="
+
+      # Build the assignment string and use handle_bare_assignments
+      assignment_str = "#{var_part}(#{elements.join(' ')})"
+      handle_bare_assignments([assignment_str])
+
+      ExitStatus.new(0)
+    end
+
     def eval_cond_expr(parts, start_idx, end_idx)
       # Handle empty expression
       return true if start_idx >= end_idx

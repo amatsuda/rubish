@@ -106,5 +106,10 @@ module Rubish
     # Supports: string comparison (==, !=, <, >), pattern matching, regex (=~),
     #           file tests (-f, -d, -e, etc.), logical operators (&&, ||, !)
     ConditionalExpr = Data.define(:expression)
+
+    # ArrayAssign: VAR=(a b c) or VAR+=(d e) - array assignment
+    # var: the variable name with = or += (e.g., "arr=" or "arr+=")
+    # elements: array of element strings
+    ArrayAssign = Data.define(:var, :elements)
   end
 end
