@@ -815,8 +815,8 @@ module Rubish
             seed_random(expanded_value.to_i)
           elsif var_name == 'LINENO'
             @lineno = expanded_value.to_i
-          elsif var_name == 'PPID' || var_name == 'UID' || var_name == 'EUID' || var_name == 'GROUPS' || var_name == 'HOSTNAME' || var_name == 'RUBISHPID' || var_name == 'HISTCMD' || var_name == 'EPOCHSECONDS' || var_name == 'EPOCHREALTIME' || var_name == 'SRANDOM' || var_name == 'RUBISH_VERSION'
-            # PPID, UID, EUID, GROUPS, HOSTNAME, RUBISHPID, HISTCMD, EPOCHSECONDS, EPOCHREALTIME, SRANDOM, RUBISH_VERSION are read-only, silently ignore assignment
+          elsif var_name == 'PPID' || var_name == 'UID' || var_name == 'EUID' || var_name == 'GROUPS' || var_name == 'HOSTNAME' || var_name == 'RUBISHPID' || var_name == 'HISTCMD' || var_name == 'EPOCHSECONDS' || var_name == 'EPOCHREALTIME' || var_name == 'SRANDOM' || var_name == 'RUBISH_VERSION' || var_name == 'RUBISH_VERSINFO'
+            # PPID, UID, EUID, GROUPS, HOSTNAME, RUBISHPID, HISTCMD, EPOCHSECONDS, EPOCHREALTIME, SRANDOM, RUBISH_VERSION, RUBISH_VERSINFO are read-only, silently ignore assignment
           else
             ENV[var_name] = expanded_value
           end
@@ -2090,6 +2090,20 @@ module Rubish
       ENV[indirect_name] || ''
     end
 
+    def __rubish_versinfo
+      # Returns RUBISH_VERSINFO array similar to BASH_VERSINFO
+      # [0] major, [1] minor, [2] patch, [3] extra, [4] release status, [5] machine type
+      parts = Rubish::VERSION.split('.')
+      [
+        parts[0] || '0',           # major
+        parts[1] || '0',           # minor
+        parts[2] || '0',           # patch
+        '',                        # extra version info
+        'release',                 # release status
+        RUBY_PLATFORM              # machine type
+      ]
+    end
+
     def __array_element(var_name, index)
       # ${arr[n]} or ${map[key]} - get array/assoc element
       expanded_index = expand_string_content(index)
@@ -2103,6 +2117,16 @@ module Rubish
         end
         groups = Process.groups
         return (groups[idx] || '').to_s
+      end
+
+      # Special handling for RUBISH_VERSINFO array
+      if var_name == 'RUBISH_VERSINFO'
+        idx = begin
+          eval(expanded_index).to_i
+        rescue
+          expanded_index.to_i
+        end
+        return (__rubish_versinfo[idx] || '').to_s
       end
 
       if Builtins.assoc_array?(var_name)
@@ -2124,6 +2148,9 @@ module Rubish
       # Special handling for GROUPS array
       if var_name == 'GROUPS'
         values = Process.groups.map(&:to_s)
+      # Special handling for RUBISH_VERSINFO array
+      elsif var_name == 'RUBISH_VERSINFO'
+        values = __rubish_versinfo
       elsif Builtins.assoc_array?(var_name)
         values = Builtins.assoc_values(var_name)
       else
@@ -2143,6 +2170,9 @@ module Rubish
       # Special handling for GROUPS array
       if var_name == 'GROUPS'
         Process.groups.length.to_s
+      # Special handling for RUBISH_VERSINFO array
+      elsif var_name == 'RUBISH_VERSINFO'
+        __rubish_versinfo.length.to_s
       elsif Builtins.assoc_array?(var_name)
         Builtins.assoc_length(var_name).to_s
       else
@@ -2155,6 +2185,9 @@ module Rubish
       # Special handling for GROUPS array
       if var_name == 'GROUPS'
         (0...Process.groups.length).to_a.join(' ')
+      # Special handling for RUBISH_VERSINFO array
+      elsif var_name == 'RUBISH_VERSINFO'
+        (0...__rubish_versinfo.length).to_a.join(' ')
       elsif Builtins.assoc_array?(var_name)
         Builtins.assoc_keys(var_name).join(' ')
       else
