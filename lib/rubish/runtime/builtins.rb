@@ -138,6 +138,13 @@ module Rubish
     # IFS (Internal Field Separator) methods
     DEFAULT_IFS = " \t\n"
 
+    # TMOUT - timeout for read builtin (in seconds)
+    def self.tmout
+      tmout_val = ENV['TMOUT']
+      return nil if tmout_val.nil? || tmout_val.empty?
+      tmout_val.to_f
+    end
+
     def self.ifs
       ENV['IFS'] || DEFAULT_IFS
     end
@@ -4814,8 +4821,10 @@ module Rubish
         return read_silent(input_stream, opts)
       end
 
-      # Handle timeout
-      if opts[:timeout]
+      # Handle timeout (-t option or TMOUT environment variable)
+      timeout = opts[:timeout] || tmout
+      if timeout && timeout > 0
+        opts[:timeout] = timeout
         return read_with_timeout(input_stream, opts)
       end
 
