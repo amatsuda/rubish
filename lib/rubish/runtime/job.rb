@@ -118,5 +118,36 @@ module Rubish
         @next_id = 1
       end
     end
+
+    # Wait until the number of active jobs is below CHILD_MAX
+    # Returns true if we can proceed, false if CHILD_MAX is not set or unlimited
+    def wait_for_child_slot
+      child_max = child_max_limit
+      return true unless child_max
+
+      while active_count >= child_max
+        # Wait for any child to change state
+        begin
+          pid, status = Process.wait2(-1, Process::WUNTRACED)
+          update_status(pid, status) if pid
+        rescue Errno::ECHILD
+          # No more children, we can proceed
+          break
+        end
+      end
+      true
+    end
+
+    def active_count
+      @mutex.synchronize { @jobs.values.count { |j| j.running? || j.stopped? } }
+    end
+
+    def child_max_limit
+      val = ENV['CHILD_MAX']
+      return nil unless val && !val.empty?
+
+      limit = val.to_i
+      limit > 0 ? limit : nil
+    end
   end
 end

@@ -2029,6 +2029,9 @@ module Rubish
     end
 
     def __background(&block)
+      # Wait if CHILD_MAX limit is reached
+      JobManager.instance.wait_for_child_slot if Builtins.set_option?('m')
+
       # Fork and run in background
       pid = fork do
         # Reset signal handlers in child
