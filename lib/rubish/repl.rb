@@ -1125,7 +1125,7 @@ module Rubish
             seed_random(expanded_value.to_i)
           elsif var_name == 'LINENO'
             @lineno = expanded_value.to_i
-          elsif var_name == 'PPID' || var_name == 'UID' || var_name == 'EUID' || var_name == 'GROUPS' || var_name == 'HOSTNAME' || var_name == 'RUBISHPID' || var_name == 'HISTCMD' || var_name == 'EPOCHSECONDS' || var_name == 'EPOCHREALTIME' || var_name == 'SRANDOM' || var_name == 'RUBISH_VERSION' || var_name == 'RUBISH_VERSINFO' || var_name == 'OSTYPE' || var_name == 'HOSTTYPE' || var_name == 'MACHTYPE' || var_name == 'PIPESTATUS' || var_name == 'RUBISH_COMMAND' || var_name == 'FUNCNAME' || var_name == 'RUBISH_LINENO' || var_name == 'RUBISH_SOURCE' || var_name == 'RUBISH_ARGC' || var_name == 'RUBISH_ARGV' || var_name == 'RUBISH_SUBSHELL' || var_name == 'DIRSTACK' || var_name == 'COLUMNS' || var_name == 'LINES' || var_name == 'RUBISH_ALIASES' || var_name == 'COMP_CWORD' || var_name == 'COMP_LINE' || var_name == 'COMP_POINT' || var_name == 'COMP_TYPE' || var_name == 'COMP_KEY' || var_name == 'COMP_WORDS'
+          elsif var_name == 'PPID' || var_name == 'UID' || var_name == 'EUID' || var_name == 'GROUPS' || var_name == 'HOSTNAME' || var_name == 'RUBISHPID' || var_name == 'HISTCMD' || var_name == 'EPOCHSECONDS' || var_name == 'EPOCHREALTIME' || var_name == 'SRANDOM' || var_name == 'RUBISH_VERSION' || var_name == 'RUBISH_VERSINFO' || var_name == 'OSTYPE' || var_name == 'HOSTTYPE' || var_name == 'MACHTYPE' || var_name == 'PIPESTATUS' || var_name == 'RUBISH_COMMAND' || var_name == 'FUNCNAME' || var_name == 'RUBISH_LINENO' || var_name == 'RUBISH_SOURCE' || var_name == 'RUBISH_ARGC' || var_name == 'RUBISH_ARGV' || var_name == 'RUBISH_SUBSHELL' || var_name == 'DIRSTACK' || var_name == 'COLUMNS' || var_name == 'LINES' || var_name == 'RUBISH_ALIASES' || var_name == 'RUBISH_CMDS' || var_name == 'COMP_CWORD' || var_name == 'COMP_LINE' || var_name == 'COMP_POINT' || var_name == 'COMP_TYPE' || var_name == 'COMP_KEY' || var_name == 'COMP_WORDS'
             # These variables are read-only, silently ignore assignment
           else
             ENV[var_name] = expanded_value
@@ -2638,6 +2638,11 @@ module Rubish
         return (Builtins.aliases[expanded_index] || '').to_s
       end
 
+      # Special handling for RUBISH_CMDS associative array (command hash)
+      if var_name == 'RUBISH_CMDS'
+        return (Builtins.command_hash[expanded_index] || '').to_s
+      end
+
       # Special handling for COMP_WORDS array
       if var_name == 'COMP_WORDS'
         idx = begin
@@ -2704,6 +2709,9 @@ module Rubish
       # Special handling for RUBISH_ALIASES associative array
       elsif var_name == 'RUBISH_ALIASES'
         values = Builtins.aliases.values
+      # Special handling for RUBISH_CMDS associative array (command hash)
+      elsif var_name == 'RUBISH_CMDS'
+        values = Builtins.command_hash.values
       # Special handling for COMP_WORDS array
       elsif var_name == 'COMP_WORDS'
         values = Builtins.comp_words.dup
@@ -2756,6 +2764,9 @@ module Rubish
       # Special handling for RUBISH_ALIASES associative array
       elsif var_name == 'RUBISH_ALIASES'
         Builtins.aliases.length.to_s
+      # Special handling for RUBISH_CMDS associative array (command hash)
+      elsif var_name == 'RUBISH_CMDS'
+        Builtins.command_hash.length.to_s
       # Special handling for COMP_WORDS array
       elsif var_name == 'COMP_WORDS'
         Builtins.comp_words.length.to_s
@@ -2801,6 +2812,9 @@ module Rubish
       # Special handling for RUBISH_ALIASES associative array
       elsif var_name == 'RUBISH_ALIASES'
         Builtins.aliases.keys.join(' ')
+      # Special handling for RUBISH_CMDS associative array (command hash)
+      elsif var_name == 'RUBISH_CMDS'
+        Builtins.command_hash.keys.join(' ')
       # Special handling for COMP_WORDS array
       elsif var_name == 'COMP_WORDS'
         (0...Builtins.comp_words.length).to_a.join(' ')
