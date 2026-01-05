@@ -255,6 +255,19 @@ module Rubish
       # privileged mode: don't read startup files
       return if Builtins.set_option?('p')
 
+      # Source ENV file if set (POSIX-style startup file)
+      env_file = ENV['ENV']
+      if env_file && !env_file.empty?
+        expanded_path = File.expand_path(env_file)
+        if File.exist?(expanded_path)
+          begin
+            Builtins.run_source([expanded_path])
+          rescue => e
+            $stderr.puts "rubish: #{expanded_path}: #{e.message}"
+          end
+        end
+      end
+
       rc_files = [
         File.expand_path('~/.rubishrc'),
         File.expand_path('./.rubishrc')
