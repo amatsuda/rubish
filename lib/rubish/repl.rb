@@ -815,8 +815,8 @@ module Rubish
             seed_random(expanded_value.to_i)
           elsif var_name == 'LINENO'
             @lineno = expanded_value.to_i
-          elsif var_name == 'PPID' || var_name == 'UID' || var_name == 'EUID' || var_name == 'GROUPS' || var_name == 'HOSTNAME' || var_name == 'RUBISHPID' || var_name == 'HISTCMD' || var_name == 'EPOCHSECONDS'
-            # PPID, UID, EUID, GROUPS, HOSTNAME, RUBISHPID, HISTCMD, EPOCHSECONDS are read-only, silently ignore assignment
+          elsif var_name == 'PPID' || var_name == 'UID' || var_name == 'EUID' || var_name == 'GROUPS' || var_name == 'HOSTNAME' || var_name == 'RUBISHPID' || var_name == 'HISTCMD' || var_name == 'EPOCHSECONDS' || var_name == 'EPOCHREALTIME'
+            # PPID, UID, EUID, GROUPS, HOSTNAME, RUBISHPID, HISTCMD, EPOCHSECONDS, EPOCHREALTIME are read-only, silently ignore assignment
           else
             ENV[var_name] = expanded_value
           end
@@ -1126,6 +1126,7 @@ module Rubish
       return Process.pid.to_s if var_name == 'RUBISHPID'
       return @command_number.to_s if var_name == 'HISTCMD'
       return Time.now.to_i.to_s if var_name == 'EPOCHSECONDS'
+      return format('%.6f', Time.now.to_f) if var_name == 'EPOCHREALTIME'
 
       if Builtins.set_option?('u') && !ENV.key?(var_name)
         $stderr.puts "rubish: #{var_name}: unbound variable"
@@ -1817,6 +1818,7 @@ module Rubish
       return Process.pid.to_s if var_name == 'RUBISHPID'
       return @command_number.to_s if var_name == 'HISTCMD'
       return Time.now.to_i.to_s if var_name == 'EPOCHSECONDS'
+      return format('%.6f', Time.now.to_f) if var_name == 'EPOCHREALTIME'
 
       # Fetch variable with nounset check
       if Builtins.set_option?('u') && !ENV.key?(var_name)
@@ -1871,6 +1873,10 @@ module Rubish
         is_null = false
       elsif var_name == 'EPOCHSECONDS'
         value = Time.now.to_i.to_s
+        is_set = true
+        is_null = false
+      elsif var_name == 'EPOCHREALTIME'
+        value = format('%.6f', Time.now.to_f)
         is_set = true
         is_null = false
       else
@@ -1984,6 +1990,7 @@ module Rubish
       when 'RUBISHPID' then Process.pid.to_s
       when 'HISTCMD' then @command_number.to_s
       when 'EPOCHSECONDS' then Time.now.to_i.to_s
+      when 'EPOCHREALTIME' then format('%.6f', Time.now.to_f)
       end
     end
 
