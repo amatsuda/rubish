@@ -1388,7 +1388,9 @@ module Rubish
       when '$!'
         return [@last_bg_pid ? @last_bg_pid.to_s : '', 2]
       when '$0'
-        return [@script_name, 2]
+        # RUBISH_ARGV0 overrides $0 if set
+        argv0 = ENV['RUBISH_ARGV0']
+        return [(argv0 && !argv0.empty?) ? argv0 : @script_name, 2]
       when '$#'
         return [@positional_params.length.to_s, 2]
       when '$@'
