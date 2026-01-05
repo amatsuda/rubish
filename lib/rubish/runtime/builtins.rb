@@ -23,6 +23,7 @@ module Rubish
     @readline_variables = {}  # Hash of readline variable names to values
     @arrays = {}  # Hash of array variable names to their values (Array)
     @assoc_arrays = {}  # Hash of associative array names to their values (Hash)
+    @namerefs = {}  # Hash of nameref variable names to their target variable names
     @coprocs = {}  # Hash of coproc names to {pid:, read_fd:, write_fd:, reader:, writer:}
     @executor = nil
     @script_name_getter = nil
@@ -43,7 +44,7 @@ module Rubish
     @source_file_setter = nil  # Sets current source file for RUBISH_SOURCE
 
     class << self
-      attr_reader :aliases, :dir_stack, :traps, :local_scope_stack, :readonly_vars, :var_attributes, :command_hash, :shell_options, :disabled_builtins, :call_stack, :completions, :completion_options, :key_bindings, :readline_variables, :arrays, :assoc_arrays, :coprocs
+      attr_reader :aliases, :dir_stack, :traps, :local_scope_stack, :readonly_vars, :var_attributes, :command_hash, :shell_options, :disabled_builtins, :call_stack, :completions, :completion_options, :key_bindings, :readline_variables, :arrays, :assoc_arrays, :namerefs, :coprocs
       attr_accessor :executor, :script_name_getter, :script_name_setter, :positional_params_getter, :positional_params_setter, :function_checker, :function_remover, :heredoc_content_setter, :command_executor, :current_completion_options
       attr_accessor :history_file_getter, :history_loader, :history_saver, :history_appender, :last_history_line, :history_timestamps
       attr_accessor :source_file_getter, :source_file_setter
@@ -138,6 +139,84 @@ module Rubish
     def self.unset_assoc_element(name, key)
       return unless @assoc_arrays[name]
       @assoc_arrays[name].delete(key)
+    end
+
+    # Nameref (reference variable) methods
+    def self.nameref?(name)
+      (@var_attributes[name] || Set.new).include?(:nameref)
+    end
+
+    def self.resolve_nameref(name, visited = Set.new)
+      # Resolve nameref chain, detecting circular references
+      return name unless @namerefs.key?(name)
+
+      if visited.include?(name)
+        $stderr.puts "rubish: #{name}: circular name reference"
+        return nil
+      end
+
+      visited << name
+      target = @namerefs[name]
+      resolve_nameref(target, visited)
+    end
+
+    def self.get_nameref_target(name)
+      @namerefs[name]
+    end
+
+    def self.set_nameref(name, target)
+      @namerefs[name] = target
+      @var_attributes[name] ||= Set.new
+      @var_attributes[name] << :nameref
+    end
+
+    def self.unset_nameref(name)
+      @namerefs.delete(name)
+      @var_attributes[name]&.delete(:nameref)
+    end
+
+    def self.get_var_through_nameref(name)
+      # If it's a nameref, get the value of the target variable
+      if nameref?(name)
+        target = resolve_nameref(name)
+        return '' if target.nil?
+        # Check if target is an array or assoc array
+        if array?(target)
+          return get_array(target).join(' ')
+        elsif assoc_array?(target)
+          return get_assoc_array(target).values.join(' ')
+        else
+          return ENV[target] || ''
+        end
+      end
+      ENV[name] || ''
+    end
+
+    def self.set_var_through_nameref(name, value)
+      # If it's a nameref, set the value of the target variable
+      if nameref?(name)
+        target = resolve_nameref(name)
+        return false if target.nil?
+        # Check if target is an array
+        if array?(target)
+          set_array_element(target, 0, value)
+        elsif assoc_array?(target)
+          $stderr.puts "rubish: #{name}: cannot assign to associative array through nameref"
+          return false
+        else
+          ENV[target] = value
+        end
+        return true
+      end
+      ENV[name] = value
+      true
+    end
+
+    def self.clear_namerefs
+      @namerefs.each_key do |name|
+        @var_attributes[name]&.delete(:nameref)
+      end
+      @namerefs.clear
     end
 
     # IFS (Internal Field Separator) methods
@@ -1258,11 +1337,12 @@ module Rubish
     end
 
     def self.run_declare(args)
-      # declare [-aAilrux] [-p] [name[=value] ...]
+      # declare [-aAilnrux] [-p] [name[=value] ...]
       # -a: indexed array
       # -A: associative array
       # -i: integer attribute (arithmetic evaluation)
       # -l: lowercase attribute
+      # -n: nameref attribute (variable is a reference to another variable)
       # -u: uppercase attribute
       # -r: readonly attribute
       # -x: export attribute
@@ -1272,6 +1352,7 @@ module Rubish
       # Parse options
       print_mode = false
       array_mode = nil  # :indexed or :associative
+      nameref_mode = false
       add_attrs = Set.new
       remove_attrs = Set.new
       names = []
@@ -1288,6 +1369,7 @@ module Rubish
               when 'A' then array_mode = :associative
               when 'i' then add_attrs << :integer
               when 'l' then add_attrs << :lowercase
+              when 'n' then nameref_mode = true; add_attrs << :nameref
               when 'u' then add_attrs << :uppercase
               when 'r' then add_attrs << :readonly
               when 'x' then add_attrs << :export
@@ -1301,6 +1383,7 @@ module Rubish
             case c
             when 'i' then remove_attrs << :integer
             when 'l' then remove_attrs << :lowercase
+            when 'n' then remove_attrs << :nameref
             when 'u' then remove_attrs << :uppercase
             when 'x' then remove_attrs << :export
             # Note: can't remove readonly
@@ -1369,6 +1452,19 @@ module Rubish
         # Remove attributes (except readonly)
         remove_attrs.each { |attr| @var_attributes[name].delete(attr) }
 
+        # Handle nameref attribute
+        if add_attrs.include?(:nameref)
+          if value
+            # Set the nameref to point to the target variable
+            @namerefs[name] = value
+          end
+        end
+
+        # Handle removing nameref attribute
+        if remove_attrs.include?(:nameref)
+          @namerefs.delete(name)
+        end
+
         # Handle readonly attribute
         if add_attrs.include?(:readonly)
           @readonly_vars[name] = true
@@ -1379,8 +1475,8 @@ module Rubish
           # Variable is marked for export (already in ENV)
         end
 
-        # Set value if provided
-        if value
+        # Set value if provided (but not for namerefs - value is the target name)
+        if value && !nameref_mode
           value = apply_attributes(name, value)
           ENV[name] = value
         end
@@ -1415,6 +1511,13 @@ module Rubish
     end
 
     def self.set_var_with_attributes(name, value)
+      # If it's a nameref, set the target variable instead
+      if nameref?(name)
+        target = resolve_nameref(name)
+        return if target.nil?
+        name = target
+      end
+
       # Apply attributes when setting a variable
       if @var_attributes[name]
         value = apply_attributes(name, value)
@@ -1427,22 +1530,41 @@ module Rubish
       flags = +''
       flags << 'i' if attrs.include?(:integer)
       flags << 'l' if attrs.include?(:lowercase)
+      flags << 'n' if attrs.include?(:nameref)
       flags << 'u' if attrs.include?(:uppercase)
       flags << 'r' if readonly?(name)
       flags << 'x' if attrs.include?(:export)
 
-      value = ENV[name]
-      if flags.empty?
-        if value
-          puts "declare -- #{name}=#{value.inspect}"
+      # For namerefs, show the target variable name
+      if attrs.include?(:nameref)
+        target = @namerefs[name]
+        if flags.empty?
+          if target
+            puts "declare -- #{name}=#{target.inspect}"
+          else
+            puts "declare -- #{name}"
+          end
         else
-          puts "declare -- #{name}"
+          if target
+            puts "declare -#{flags} #{name}=#{target.inspect}"
+          else
+            puts "declare -#{flags} #{name}"
+          end
         end
       else
-        if value
-          puts "declare -#{flags} #{name}=#{value.inspect}"
+        value = ENV[name]
+        if flags.empty?
+          if value
+            puts "declare -- #{name}=#{value.inspect}"
+          else
+            puts "declare -- #{name}"
+          end
         else
-          puts "declare -#{flags} #{name}"
+          if value
+            puts "declare -#{flags} #{name}=#{value.inspect}"
+          else
+            puts "declare -#{flags} #{name}"
+          end
         end
       end
     end
@@ -1453,11 +1575,13 @@ module Rubish
 
       @var_attributes.each_key { |name| vars_to_print << name }
       @readonly_vars.each_key { |name| vars_to_print << name }
+      @namerefs.each_key { |name| vars_to_print << name }
 
       vars_to_print.each do |name|
         attrs = @var_attributes[name] || Set.new
         attrs = attrs.dup
         attrs << :readonly if readonly?(name)
+        attrs << :nameref if nameref?(name)
 
         # Filter by attributes if specified
         if filter_attrs.empty? || filter_attrs.subset?(attrs)
