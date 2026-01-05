@@ -26,6 +26,8 @@ module Rubish
       @rubish_lineno_stack = []  # For RUBISH_LINENO array variable (line numbers of function calls)
       @current_source_file = 'main'  # Current source file being executed (for RUBISH_SOURCE)
       @rubish_source_stack = []  # For RUBISH_SOURCE array variable (source files of function calls)
+      @rubish_argc_stack = []  # For RUBISH_ARGC array variable (argument counts per call frame)
+      @rubish_argv_stack = []  # For RUBISH_ARGV array variable (all arguments in call stack)
       @subshell_level = 0  # For RUBISH_SUBSHELL variable (nesting level of subshells)
       @eof_count = 0  # For IGNOREEOF variable (consecutive EOF counter)
       # SHLVL - shell nesting level (stored in ENV for inheritance)
@@ -730,6 +732,11 @@ module Rubish
       @funcname_stack.unshift(name)
       @rubish_lineno_stack.unshift(@lineno)
       @rubish_source_stack.unshift(func_source)
+      # Push argument count onto RUBISH_ARGC stack, and args onto RUBISH_ARGV stack
+      @rubish_argc_stack.unshift(args.length)
+      # BASH_ARGV stores args with last arg at top of stack (index 0)
+      # Iterating forward and unshifting gives us: args[0], args[1], args[2] -> [args[2], args[1], args[0]]
+      args.each { |arg| @rubish_argv_stack.unshift(arg) }
 
       # Save current positional params and set new ones
       saved_params = @positional_params
@@ -779,6 +786,9 @@ module Rubish
         @funcname_stack.shift
         @rubish_lineno_stack.shift
         @rubish_source_stack.shift
+        # Pop argument count from RUBISH_ARGC stack, and corresponding args from RUBISH_ARGV stack
+        argc = @rubish_argc_stack.shift || 0
+        argc.times { @rubish_argv_stack.shift }
       end
     end
 
@@ -882,8 +892,8 @@ module Rubish
             seed_random(expanded_value.to_i)
           elsif var_name == 'LINENO'
             @lineno = expanded_value.to_i
-          elsif var_name == 'PPID' || var_name == 'UID' || var_name == 'EUID' || var_name == 'GROUPS' || var_name == 'HOSTNAME' || var_name == 'RUBISHPID' || var_name == 'HISTCMD' || var_name == 'EPOCHSECONDS' || var_name == 'EPOCHREALTIME' || var_name == 'SRANDOM' || var_name == 'RUBISH_VERSION' || var_name == 'RUBISH_VERSINFO' || var_name == 'OSTYPE' || var_name == 'HOSTTYPE' || var_name == 'MACHTYPE' || var_name == 'PIPESTATUS' || var_name == 'RUBISH_COMMAND' || var_name == 'FUNCNAME' || var_name == 'RUBISH_LINENO' || var_name == 'RUBISH_SOURCE' || var_name == 'RUBISH_SUBSHELL' || var_name == 'DIRSTACK' || var_name == 'COLUMNS' || var_name == 'LINES' || var_name == 'RUBISH_ALIASES'
-            # PPID, UID, EUID, GROUPS, HOSTNAME, RUBISHPID, HISTCMD, EPOCHSECONDS, EPOCHREALTIME, SRANDOM, RUBISH_VERSION, RUBISH_VERSINFO, OSTYPE, HOSTTYPE, MACHTYPE, PIPESTATUS, RUBISH_COMMAND, FUNCNAME, RUBISH_LINENO, RUBISH_SOURCE, RUBISH_SUBSHELL, DIRSTACK, COLUMNS, LINES, RUBISH_ALIASES are read-only, silently ignore assignment
+          elsif var_name == 'PPID' || var_name == 'UID' || var_name == 'EUID' || var_name == 'GROUPS' || var_name == 'HOSTNAME' || var_name == 'RUBISHPID' || var_name == 'HISTCMD' || var_name == 'EPOCHSECONDS' || var_name == 'EPOCHREALTIME' || var_name == 'SRANDOM' || var_name == 'RUBISH_VERSION' || var_name == 'RUBISH_VERSINFO' || var_name == 'OSTYPE' || var_name == 'HOSTTYPE' || var_name == 'MACHTYPE' || var_name == 'PIPESTATUS' || var_name == 'RUBISH_COMMAND' || var_name == 'FUNCNAME' || var_name == 'RUBISH_LINENO' || var_name == 'RUBISH_SOURCE' || var_name == 'RUBISH_ARGC' || var_name == 'RUBISH_ARGV' || var_name == 'RUBISH_SUBSHELL' || var_name == 'DIRSTACK' || var_name == 'COLUMNS' || var_name == 'LINES' || var_name == 'RUBISH_ALIASES'
+            # PPID, UID, EUID, GROUPS, HOSTNAME, RUBISHPID, HISTCMD, EPOCHSECONDS, EPOCHREALTIME, SRANDOM, RUBISH_VERSION, RUBISH_VERSINFO, OSTYPE, HOSTTYPE, MACHTYPE, PIPESTATUS, RUBISH_COMMAND, FUNCNAME, RUBISH_LINENO, RUBISH_SOURCE, RUBISH_ARGC, RUBISH_ARGV, RUBISH_SUBSHELL, DIRSTACK, COLUMNS, LINES, RUBISH_ALIASES are read-only, silently ignore assignment
           else
             ENV[var_name] = expanded_value
           end
@@ -2317,6 +2327,26 @@ module Rubish
         return (@rubish_source_stack[idx] || '').to_s
       end
 
+      # Special handling for RUBISH_ARGC array
+      if var_name == 'RUBISH_ARGC'
+        idx = begin
+          eval(expanded_index).to_i
+        rescue
+          expanded_index.to_i
+        end
+        return (@rubish_argc_stack[idx] || '').to_s
+      end
+
+      # Special handling for RUBISH_ARGV array
+      if var_name == 'RUBISH_ARGV'
+        idx = begin
+          eval(expanded_index).to_i
+        rescue
+          expanded_index.to_i
+        end
+        return (@rubish_argv_stack[idx] || '').to_s
+      end
+
       # Special handling for DIRSTACK array
       if var_name == 'DIRSTACK'
         idx = begin
@@ -2367,6 +2397,12 @@ module Rubish
       # Special handling for RUBISH_SOURCE array
       elsif var_name == 'RUBISH_SOURCE'
         values = @rubish_source_stack.dup
+      # Special handling for RUBISH_ARGC array
+      elsif var_name == 'RUBISH_ARGC'
+        values = @rubish_argc_stack.map(&:to_s)
+      # Special handling for RUBISH_ARGV array
+      elsif var_name == 'RUBISH_ARGV'
+        values = @rubish_argv_stack.dup
       # Special handling for DIRSTACK array
       elsif var_name == 'DIRSTACK'
         values = [Dir.pwd] + Builtins.dir_stack
@@ -2407,6 +2443,12 @@ module Rubish
       # Special handling for RUBISH_SOURCE array
       elsif var_name == 'RUBISH_SOURCE'
         @rubish_source_stack.length.to_s
+      # Special handling for RUBISH_ARGC array
+      elsif var_name == 'RUBISH_ARGC'
+        @rubish_argc_stack.length.to_s
+      # Special handling for RUBISH_ARGV array
+      elsif var_name == 'RUBISH_ARGV'
+        @rubish_argv_stack.length.to_s
       # Special handling for DIRSTACK array
       elsif var_name == 'DIRSTACK'
         ([Dir.pwd] + Builtins.dir_stack).length.to_s
@@ -2440,6 +2482,12 @@ module Rubish
       # Special handling for RUBISH_SOURCE array
       elsif var_name == 'RUBISH_SOURCE'
         (0...@rubish_source_stack.length).to_a.join(' ')
+      # Special handling for RUBISH_ARGC array
+      elsif var_name == 'RUBISH_ARGC'
+        (0...@rubish_argc_stack.length).to_a.join(' ')
+      # Special handling for RUBISH_ARGV array
+      elsif var_name == 'RUBISH_ARGV'
+        (0...@rubish_argv_stack.length).to_a.join(' ')
       # Special handling for DIRSTACK array
       elsif var_name == 'DIRSTACK'
         (0...([Dir.pwd] + Builtins.dir_stack).length).to_a.join(' ')
