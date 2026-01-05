@@ -225,6 +225,16 @@ module Rubish
       end
     end
 
+    # Print PS0 prompt (displayed after command is read, before execution)
+    # PS0 supports the same escape sequences as PS1
+    def print_ps0
+      ps0 = ENV['PS0']
+      return unless ps0 && !ps0.empty?
+
+      print expand_prompt(ps0)
+      $stdout.flush
+    end
+
     # Execute PROMPT_COMMAND before displaying the prompt
     # PROMPT_COMMAND can be:
     #   - A single command string
@@ -530,6 +540,9 @@ module Rubish
 
       # Add to history based on HISTCONTROL and HISTIGNORE settings
       add_to_history(line)
+
+      # Print PS0 before executing command (bash 4.4+ feature)
+      print_ps0
 
       @last_line = line
       execute(line)
