@@ -17,6 +17,7 @@ module Rubish
       @positional_params = []
       @functions = {}
       @heredoc_content = nil  # Content for current heredoc
+      @seconds_base = Time.now  # For SECONDS variable
       Builtins.executor = ->(line) { execute(line) }
       Builtins.script_name_getter = -> { @script_name }
       Builtins.script_name_setter = ->(name) { @script_name = name }
@@ -793,7 +794,12 @@ module Rubish
           var_name = $1
           value = $2
           expanded_value = expand_assignment_value(value)
-          ENV[var_name] = expanded_value
+          # Special handling for SECONDS
+          if var_name == 'SECONDS'
+            reset_seconds(expanded_value.to_i)
+          else
+            ENV[var_name] = expanded_value
+          end
           # allexport: mark variable as exported when set -a is enabled
           Builtins.mark_exported(var_name) if Builtins.set_option?('a')
         end
@@ -1088,11 +1094,26 @@ module Rubish
     end
 
     def fetch_var_with_nounset(var_name)
+      # Special handling for SECONDS
+      if var_name == 'SECONDS'
+        return seconds.to_s
+      end
+
       if Builtins.set_option?('u') && !ENV.key?(var_name)
         $stderr.puts "rubish: #{var_name}: unbound variable"
         raise NounsetError, "#{var_name}: unbound variable"
       end
       ENV.fetch(var_name, '')
+    end
+
+    # SECONDS - returns elapsed time since shell start (or last reset)
+    def seconds
+      (Time.now - @seconds_base).to_i
+    end
+
+    # Reset SECONDS base time (when SECONDS is assigned)
+    def reset_seconds(value = 0)
+      @seconds_base = Time.now - value.to_i
     end
 
     def extract_exit_status(result)
@@ -1725,15 +1746,14 @@ module Rubish
       # Evaluate arithmetic expression
       # Replace variable references with their values
       expanded = expr.gsub(/\$\{([^}]+)\}|\$([a-zA-Z_][a-zA-Z0-9_]*)|([a-zA-Z_][a-zA-Z0-9_]*)/) do |match|
-        if $1
-          # ${VAR} form
-          ENV.fetch($1, '0')
-        elsif $2
-          # $VAR form
-          ENV.fetch($2, '0')
-        elsif $3
-          # Plain variable name - in arithmetic, unset vars default to 0
-          ENV.fetch($3, '0')
+        var_name = $1 || $2 || $3
+        if var_name
+          # Special handling for SECONDS
+          if var_name == 'SECONDS'
+            seconds.to_s
+          else
+            ENV.fetch(var_name, '0')
+          end
         else
           match
         end
@@ -1751,6 +1771,9 @@ module Rubish
     end
 
     def __fetch_var(var_name)
+      # Special handling for SECONDS
+      return seconds.to_s if var_name == 'SECONDS'
+
       # Fetch variable with nounset check
       if Builtins.set_option?('u') && !ENV.key?(var_name)
         $stderr.puts "rubish: #{var_name}: unbound variable"
@@ -1761,9 +1784,16 @@ module Rubish
 
     def __param_expand(var_name, operator, operand)
       # Parameter expansion operations
-      value = ENV[var_name]
-      is_set = ENV.key?(var_name)
-      is_null = value.nil? || value.empty?
+      # Special handling for SECONDS
+      if var_name == 'SECONDS'
+        value = seconds.to_s
+        is_set = true
+        is_null = false
+      else
+        value = ENV[var_name]
+        is_set = ENV.key?(var_name)
+        is_null = value.nil? || value.empty?
+      end
 
       case operator
       when ':-'
