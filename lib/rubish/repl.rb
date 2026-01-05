@@ -26,6 +26,7 @@ module Rubish
       @rubish_lineno_stack = []  # For RUBISH_LINENO array variable (line numbers of function calls)
       @current_source_file = 'main'  # Current source file being executed (for RUBISH_SOURCE)
       @rubish_source_stack = []  # For RUBISH_SOURCE array variable (source files of function calls)
+      @subshell_level = 0  # For RUBISH_SUBSHELL variable (nesting level of subshells)
       # SHLVL - shell nesting level (stored in ENV for inheritance)
       current_shlvl = ENV['SHLVL'].to_i
       ENV['SHLVL'] = (current_shlvl + 1).to_s
@@ -847,8 +848,8 @@ module Rubish
             seed_random(expanded_value.to_i)
           elsif var_name == 'LINENO'
             @lineno = expanded_value.to_i
-          elsif var_name == 'PPID' || var_name == 'UID' || var_name == 'EUID' || var_name == 'GROUPS' || var_name == 'HOSTNAME' || var_name == 'RUBISHPID' || var_name == 'HISTCMD' || var_name == 'EPOCHSECONDS' || var_name == 'EPOCHREALTIME' || var_name == 'SRANDOM' || var_name == 'RUBISH_VERSION' || var_name == 'RUBISH_VERSINFO' || var_name == 'OSTYPE' || var_name == 'HOSTTYPE' || var_name == 'MACHTYPE' || var_name == 'PIPESTATUS' || var_name == 'RUBISH_COMMAND' || var_name == 'FUNCNAME' || var_name == 'RUBISH_LINENO' || var_name == 'RUBISH_SOURCE'
-            # PPID, UID, EUID, GROUPS, HOSTNAME, RUBISHPID, HISTCMD, EPOCHSECONDS, EPOCHREALTIME, SRANDOM, RUBISH_VERSION, RUBISH_VERSINFO, OSTYPE, HOSTTYPE, MACHTYPE, PIPESTATUS, RUBISH_COMMAND, FUNCNAME, RUBISH_LINENO, RUBISH_SOURCE are read-only, silently ignore assignment
+          elsif var_name == 'PPID' || var_name == 'UID' || var_name == 'EUID' || var_name == 'GROUPS' || var_name == 'HOSTNAME' || var_name == 'RUBISHPID' || var_name == 'HISTCMD' || var_name == 'EPOCHSECONDS' || var_name == 'EPOCHREALTIME' || var_name == 'SRANDOM' || var_name == 'RUBISH_VERSION' || var_name == 'RUBISH_VERSINFO' || var_name == 'OSTYPE' || var_name == 'HOSTTYPE' || var_name == 'MACHTYPE' || var_name == 'PIPESTATUS' || var_name == 'RUBISH_COMMAND' || var_name == 'FUNCNAME' || var_name == 'RUBISH_LINENO' || var_name == 'RUBISH_SOURCE' || var_name == 'RUBISH_SUBSHELL'
+            # PPID, UID, EUID, GROUPS, HOSTNAME, RUBISHPID, HISTCMD, EPOCHSECONDS, EPOCHREALTIME, SRANDOM, RUBISH_VERSION, RUBISH_VERSINFO, OSTYPE, HOSTTYPE, MACHTYPE, PIPESTATUS, RUBISH_COMMAND, FUNCNAME, RUBISH_LINENO, RUBISH_SOURCE, RUBISH_SUBSHELL are read-only, silently ignore assignment
           else
             ENV[var_name] = expanded_value
           end
@@ -1165,6 +1166,7 @@ module Rubish
       return __hosttype if var_name == 'HOSTTYPE'
       return RUBY_PLATFORM if var_name == 'MACHTYPE'
       return @rubish_command if var_name == 'RUBISH_COMMAND'
+      return @subshell_level.to_s if var_name == 'RUBISH_SUBSHELL'
 
       if Builtins.set_option?('u') && !ENV.key?(var_name)
         $stderr.puts "rubish: #{var_name}: unbound variable"
@@ -1873,6 +1875,7 @@ module Rubish
       return __hosttype if var_name == 'HOSTTYPE'
       return RUBY_PLATFORM if var_name == 'MACHTYPE'
       return @rubish_command if var_name == 'RUBISH_COMMAND'
+      return @subshell_level.to_s if var_name == 'RUBISH_SUBSHELL'
 
       # Fetch variable with nounset check
       if Builtins.set_option?('u') && !ENV.key?(var_name)
@@ -1957,6 +1960,10 @@ module Rubish
         value = @rubish_command
         is_set = true
         is_null = @rubish_command.empty?
+      elsif var_name == 'RUBISH_SUBSHELL'
+        value = @subshell_level.to_s
+        is_set = true
+        is_null = false
       else
         value = ENV[var_name]
         is_set = ENV.key?(var_name)
@@ -2075,6 +2082,7 @@ module Rubish
       when 'HOSTTYPE' then __hosttype
       when 'MACHTYPE' then RUBY_PLATFORM
       when 'RUBISH_COMMAND' then @rubish_command
+      when 'RUBISH_SUBSHELL' then @subshell_level.to_s
       end
     end
 
@@ -2932,7 +2940,11 @@ module Rubish
 
     def __subshell(&block)
       # Create a Subshell object that can be run, redirected, or piped
-      Subshell.new(&block)
+      # Wrap the block to increment subshell level before executing (in the forked process)
+      Subshell.new do
+        @subshell_level += 1
+        block.call
+      end
     end
 
     def __heredoc(delimiter, expand, strip_tabs, &block)
