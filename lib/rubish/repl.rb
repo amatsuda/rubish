@@ -35,6 +35,9 @@ module Rubish
       # SHLVL - shell nesting level (stored in ENV for inheritance)
       current_shlvl = ENV['SHLVL'].to_i
       ENV['SHLVL'] = (current_shlvl + 1).to_s
+      # SHELL - full pathname of the shell
+      # Set to the rubish binary path if not already set or if running rubish
+      set_shell_variable
       Builtins.executor = ->(line) { execute(line) }
       Builtins.script_name_getter = -> { @script_name }
       Builtins.script_name_setter = ->(name) { @script_name = name }
@@ -104,6 +107,41 @@ module Rubish
       xdg_config = ENV['XDG_CONFIG_HOME'] || File.expand_path('~/.config')
       xdg_inputrc = File.join(xdg_config, 'readline', 'inputrc')
       return xdg_inputrc if File.exist?(xdg_inputrc)
+
+      nil
+    end
+
+    # Set the SHELL environment variable to the rubish binary path
+    # SHELL: full pathname of the shell (used by subprocesses to spawn shells)
+    def set_shell_variable
+      # Try to find the rubish binary
+      rubish_path = find_rubish_path
+      return unless rubish_path
+
+      # Set SHELL to rubish path
+      ENV['SHELL'] = rubish_path
+    end
+
+    # Find the full path to the rubish binary
+    def find_rubish_path
+      # First, check if $0 points to rubish
+      if $0 && File.basename($0) == 'rubish'
+        path = File.expand_path($0)
+        return path if File.executable?(path)
+      end
+
+      # Check if there's a rubish in the project's bin directory
+      # __FILE__ is .../lib/rubish/repl.rb, go up 3 levels to project root
+      project_root = File.dirname(File.dirname(File.dirname(__FILE__)))
+      bin_rubish = File.join(project_root, 'bin', 'rubish')
+      return bin_rubish if File.executable?(bin_rubish)
+
+      # Search in PATH
+      path_dirs = (ENV['PATH'] || '').split(File::PATH_SEPARATOR)
+      path_dirs.each do |dir|
+        rubish = File.join(dir, 'rubish')
+        return rubish if File.executable?(rubish)
+      end
 
       nil
     end
