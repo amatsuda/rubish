@@ -811,8 +811,8 @@ module Rubish
             seed_random(expanded_value.to_i)
           elsif var_name == 'LINENO'
             @lineno = expanded_value.to_i
-          elsif var_name == 'PPID' || var_name == 'UID' || var_name == 'EUID' || var_name == 'GROUPS' || var_name == 'HOSTNAME'
-            # PPID, UID, EUID, GROUPS, HOSTNAME are read-only, silently ignore assignment
+          elsif var_name == 'PPID' || var_name == 'UID' || var_name == 'EUID' || var_name == 'GROUPS' || var_name == 'HOSTNAME' || var_name == 'RUBISHPID'
+            # PPID, UID, EUID, GROUPS, HOSTNAME, RUBISHPID are read-only, silently ignore assignment
           else
             ENV[var_name] = expanded_value
           end
@@ -1110,7 +1110,7 @@ module Rubish
     end
 
     def fetch_var_with_nounset(var_name)
-      # Special handling for SECONDS, RANDOM, LINENO, PPID, UID, EUID, GROUPS, and HOSTNAME
+      # Special handling for SECONDS, RANDOM, LINENO, PPID, UID, EUID, GROUPS, HOSTNAME, and RUBISHPID
       return seconds.to_s if var_name == 'SECONDS'
       return random.to_s if var_name == 'RANDOM'
       return @lineno.to_s if var_name == 'LINENO'
@@ -1119,6 +1119,7 @@ module Rubish
       return Process.euid.to_s if var_name == 'EUID'
       return (Process.groups.first || '').to_s if var_name == 'GROUPS'
       return Socket.gethostname if var_name == 'HOSTNAME'
+      return Process.pid.to_s if var_name == 'RUBISHPID'
 
       if Builtins.set_option?('u') && !ENV.key?(var_name)
         $stderr.puts "rubish: #{var_name}: unbound variable"
@@ -1812,7 +1813,7 @@ module Rubish
     end
 
     def __fetch_var(var_name)
-      # Special handling for SECONDS, RANDOM, LINENO, PPID, UID, EUID, GROUPS, and HOSTNAME
+      # Special handling for SECONDS, RANDOM, LINENO, PPID, UID, EUID, GROUPS, HOSTNAME, and RUBISHPID
       return seconds.to_s if var_name == 'SECONDS'
       return random.to_s if var_name == 'RANDOM'
       return @lineno.to_s if var_name == 'LINENO'
@@ -1821,6 +1822,7 @@ module Rubish
       return Process.euid.to_s if var_name == 'EUID'
       return (Process.groups.first || '').to_s if var_name == 'GROUPS'
       return Socket.gethostname if var_name == 'HOSTNAME'
+      return Process.pid.to_s if var_name == 'RUBISHPID'
 
       # Fetch variable with nounset check
       if Builtins.set_option?('u') && !ENV.key?(var_name)
@@ -1863,6 +1865,10 @@ module Rubish
         is_null = Process.groups.empty?
       elsif var_name == 'HOSTNAME'
         value = Socket.gethostname
+        is_set = true
+        is_null = false
+      elsif var_name == 'RUBISHPID'
+        value = Process.pid.to_s
         is_set = true
         is_null = false
       else
@@ -1973,6 +1979,7 @@ module Rubish
       when 'EUID' then Process.euid.to_s
       when 'GROUPS' then (Process.groups.first || '').to_s
       when 'HOSTNAME' then Socket.gethostname
+      when 'RUBISHPID' then Process.pid.to_s
       end
     end
 
