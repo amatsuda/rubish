@@ -2773,6 +2773,9 @@ module Rubish
       # Apply GLOBIGNORE filtering
       matches = apply_globignore(matches)
 
+      # Apply GLOBSORT sorting
+      matches = apply_globsort(matches)
+
       if matches.empty?
         if Builtins.set_option?('failglob')
           # failglob: patterns matching nothing cause an error
@@ -2809,6 +2812,46 @@ module Rubish
             File.fnmatch?(pattern, match, File::FNM_DOTMATCH)
         end
       end
+    end
+
+    # Apply GLOBSORT sorting to glob results
+    # GLOBSORT controls the sort order of glob expansion results
+    # Values: name (default), size, mtime, atime, ctime, blocks, extension, nosort
+    # Prefix with - for reverse order (e.g., -size for largest first)
+    def apply_globsort(matches)
+      return matches if matches.empty?
+
+      globsort = ENV['GLOBSORT']
+      # Default is alphabetical sort by name
+      return matches.sort if globsort.nil? || globsort.empty? || globsort == 'name'
+
+      # Check for reverse flag
+      reverse = globsort.start_with?('-')
+      sort_type = reverse ? globsort[1..] : globsort
+
+      sorted = case sort_type
+               when 'name'
+                 matches.sort
+               when 'nosort'
+                 matches  # No sorting, return as-is from readdir
+               when 'size'
+                 matches.sort_by { |f| File.exist?(f) ? File.size(f) : 0 }
+               when 'mtime'
+                 matches.sort_by { |f| File.exist?(f) ? File.mtime(f) : Time.at(0) }
+               when 'atime'
+                 matches.sort_by { |f| File.exist?(f) ? File.atime(f) : Time.at(0) }
+               when 'ctime'
+                 matches.sort_by { |f| File.exist?(f) ? File.ctime(f) : Time.at(0) }
+               when 'blocks'
+                 matches.sort_by { |f| File.exist?(f) ? (File.stat(f).blocks rescue 0) : 0 }
+               when 'extension'
+                 matches.sort_by { |f| [File.extname(f).downcase, f.downcase] }
+               else
+                 # Unknown sort type, fall back to name sort
+                 matches.sort
+               end
+
+      reverse ? sorted.reverse : sorted
     end
 
     def has_extglob?(pattern)
