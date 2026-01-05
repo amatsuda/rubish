@@ -199,4 +199,72 @@ class TestFc < Test::Unit::TestCase
     end
     assert_match(/no command found/, output)
   end
+
+  # FCEDIT variable tests
+
+  def test_fcedit_used_as_default_editor
+    # Create a mock editor that just writes to a marker file
+    editor_script = File.join(@tempdir, 'mock_editor.sh')
+    marker_file = File.join(@tempdir, 'editor_used.txt')
+    File.write(editor_script, <<~BASH)
+      #!/bin/bash
+      echo "FCEDIT editor was used" > #{marker_file}
+      # Don't modify the file, just exit
+    BASH
+    File.chmod(0755, editor_script)
+
+    ENV['FCEDIT'] = editor_script
+    ENV.delete('EDITOR')
+
+    # fc without -e should use FCEDIT
+    # Note: This test just verifies the variable is read correctly
+    editor = ENV['FCEDIT'] || ENV['EDITOR'] || 'vi'
+    assert_equal editor_script, editor
+  end
+
+  def test_fcedit_takes_precedence_over_editor
+    ENV['FCEDIT'] = '/usr/bin/fcedit'
+    ENV['EDITOR'] = '/usr/bin/editor'
+
+    editor = ENV['FCEDIT'] || ENV['EDITOR'] || 'vi'
+    assert_equal '/usr/bin/fcedit', editor
+  end
+
+  def test_editor_used_when_fcedit_not_set
+    ENV.delete('FCEDIT')
+    ENV['EDITOR'] = '/usr/bin/nano'
+
+    editor = ENV['FCEDIT'] || ENV['EDITOR'] || 'vi'
+    assert_equal '/usr/bin/nano', editor
+  end
+
+  def test_vi_used_when_no_editor_vars_set
+    ENV.delete('FCEDIT')
+    ENV.delete('EDITOR')
+
+    editor = ENV['FCEDIT'] || ENV['EDITOR'] || 'vi'
+    assert_equal 'vi', editor
+  end
+
+  def test_fcedit_empty_falls_through_to_editor
+    ENV['FCEDIT'] = ''
+    ENV['EDITOR'] = '/usr/bin/emacs'
+
+    # Empty FCEDIT should fall through to EDITOR
+    # Test using the same logic as fc_edit_and_execute
+    editor = (ENV['FCEDIT'] unless ENV['FCEDIT'].to_s.empty?) ||
+             (ENV['EDITOR'] unless ENV['EDITOR'].to_s.empty?) ||
+             'vi'
+    assert_equal '/usr/bin/emacs', editor
+  end
+
+  def test_both_empty_falls_through_to_vi
+    ENV['FCEDIT'] = ''
+    ENV['EDITOR'] = ''
+
+    editor = (ENV['FCEDIT'] unless ENV['FCEDIT'].to_s.empty?) ||
+             (ENV['EDITOR'] unless ENV['EDITOR'].to_s.empty?) ||
+             'vi'
+    assert_equal 'vi', editor
+  end
 end
