@@ -453,6 +453,7 @@ module Rubish
 
     # Valid shell options with their default values and descriptions
     SHELL_OPTIONS = {
+      'assoc_expand_once' => [false, 'only expand associative array subscripts once'],
       'autocd' => [false, 'cd to a directory when typed as command'],
       'cdable_vars' => [false, 'cd argument can be a variable containing a directory name'],
       'cdspell' => [false, 'correct minor spelling errors in cd'],
@@ -461,12 +462,20 @@ module Rubish
       'checkwinsize' => [false, 'check window size after each command and update LINES and COLUMNS'],
       'cmdhist' => [true, 'save multi-line commands as single history entry'],
       'compat10' => [false, 'compatibility mode for rubish 1.0'],
+      'compat31' => [false, 'compatibility mode for bash 3.1'],
+      'compat32' => [false, 'compatibility mode for bash 3.2'],
+      'compat40' => [false, 'compatibility mode for bash 4.0'],
+      'compat41' => [false, 'compatibility mode for bash 4.1'],
+      'compat42' => [false, 'compatibility mode for bash 4.2'],
+      'compat43' => [false, 'compatibility mode for bash 4.3'],
+      'compat44' => [false, 'compatibility mode for bash 4.4'],
       'complete_fullquote' => [true, 'quote all metacharacters in filename completion'],
       'direxpand' => [false, 'expand directory names during word completion'],
       'dirspell' => [false, 'correct minor spelling errors in directory names during completion'],
       'dotglob' => [false, 'include dotfiles in pathname expansion'],
       'execfail' => [false, 'do not exit non-interactive shell if exec fails'],
       'expand_aliases' => [true, 'expand aliases'],
+      'extdebug' => [false, 'enable extended debugging mode'],
       'extglob' => [false, 'enable extended pattern matching'],
       'extquote' => [true, 'enable $\'...\' and $"..." quoting within ${...}'],
       'failglob' => [false, 'patterns which fail to match produce an error'],
@@ -491,18 +500,21 @@ module Rubish
       'no_empty_cmd_completion' => [false, 'do not complete on empty command line'],
       'nocaseglob' => [false, 'case-insensitive pathname expansion'],
       'nocasematch' => [false, 'case-insensitive pattern matching'],
+      'noexpand_translation' => [false, 'do not expand $"..." strings for translation'],
       'nullglob' => [false, 'patterns matching nothing expand to null'],
       'patsub_replacement' => [true, 'enable & replacement in pattern substitution'],
       'progcomp' => [true, 'enable programmable completion'],
       'progcomp_alias' => [false, 'allow programmable completion for aliases'],
       'promptvars' => [true, 'expand variables in prompt strings'],
+      'restricted_shell' => [false, 'shell is restricted (read-only)'],
       'shift_verbose' => [false, 'print error if shift count exceeds positional parameters'],
       'sourcepath' => [true, 'use PATH to find sourced files'],
+      'varredir_close' => [false, 'close file descriptors opened by {varname} redirection'],
       'xpg_echo' => [false, 'echo expands backslash-escape sequences']
     }.freeze
 
     # Compatibility level options (like bash's compat31, compat32, etc.)
-    COMPAT_OPTIONS = %w[compat10].freeze
+    COMPAT_OPTIONS = %w[compat10 compat31 compat32 compat40 compat41 compat42 compat43 compat44].freeze
 
     def self.builtin?(name)
       (COMMANDS.include?(name) || @dynamic_commands.include?(name)) && !@disabled_builtins.include?(name)
@@ -3374,9 +3386,14 @@ module Rubish
         end
 
         # Check for read-only options
-        if name == 'login_shell'
+        if name == 'login_shell' || name == 'restricted_shell'
           puts "shopt: #{name}: cannot set option"
           return false
+        end
+
+        # Compat options are mutually exclusive - enabling one disables others
+        if set_mode && COMPAT_OPTIONS.include?(name)
+          COMPAT_OPTIONS.each { |opt| @shell_options[opt] = false }
         end
 
         @shell_options[name] = set_mode
