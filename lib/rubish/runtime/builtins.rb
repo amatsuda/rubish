@@ -457,18 +457,28 @@ module Rubish
       'cdspell' => [false, 'correct minor spelling errors in cd'],
       'checkhash' => [false, 'check hash table before executing'],
       'checkjobs' => [false, 'check for running jobs before exit'],
+      'checkwinsize' => [false, 'check window size after each command and update LINES and COLUMNS'],
       'cmdhist' => [true, 'save multi-line commands as single history entry'],
       'compat10' => [false, 'compatibility mode for rubish 1.0'],
+      'direxpand' => [false, 'expand directory names during word completion'],
+      'dirspell' => [false, 'correct minor spelling errors in directory names during completion'],
       'dotglob' => [false, 'include dotfiles in pathname expansion'],
+      'execfail' => [false, 'do not exit non-interactive shell if exec fails'],
       'expand_aliases' => [true, 'expand aliases'],
       'extglob' => [false, 'enable extended pattern matching'],
+      'extquote' => [true, 'enable $\'...\' and $"..." quoting within ${...}'],
+      'failglob' => [false, 'patterns which fail to match produce an error'],
       'globasciiranges' => [true, 'use ASCII ordering for range expressions in bracket patterns'],
+      'globskipdots' => [false, 'skip . and .. in pathname expansion'],
       'globstar' => [false, 'enable ** for recursive globbing'],
       'histappend' => [false, 'append to history file'],
       'histreedit' => [false, 'allow re-editing of failed history substitution'],
       'histverify' => [false, 'verify history substitution before executing'],
       'hostcomplete' => [true, 'attempt hostname completion'],
+      'huponexit' => [false, 'send SIGHUP to all jobs when an interactive login shell exits'],
+      'inherit_errexit' => [false, 'command substitution inherits the errexit option'],
       'interactive_comments' => [true, 'allow comments in interactive shell'],
+      'lastpipe' => [false, 'run last command of pipeline in current shell'],
       'lithist' => [false, 'preserve newlines in multi-line history'],
       'login_shell' => [false, 'shell is a login shell (read-only)'],
       'nocaseglob' => [false, 'case-insensitive pathname expansion'],
@@ -476,6 +486,7 @@ module Rubish
       'nullglob' => [false, 'patterns matching nothing expand to null'],
       'progcomp' => [true, 'enable programmable completion'],
       'promptvars' => [true, 'expand variables in prompt strings'],
+      'shift_verbose' => [false, 'print error if shift count exceeds positional parameters'],
       'sourcepath' => [true, 'use PATH to find sourced files'],
       'xpg_echo' => [false, 'echo expands backslash-escape sequences']
     }.freeze
@@ -2269,7 +2280,10 @@ module Rubish
       params = @positional_params_getter&.call || []
 
       if n > params.length
-        puts 'shift: shift count out of range'
+        # shift_verbose: print error if shift count exceeds positional parameters
+        if shopt_enabled?('shift_verbose')
+          $stderr.puts 'rubish: shift: shift count out of range'
+        end
         return false
       end
 

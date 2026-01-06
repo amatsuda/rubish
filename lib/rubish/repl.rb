@@ -2974,8 +2974,8 @@ module Rubish
         matches = Dir.glob(glob_pattern, glob_flags)
       end
 
-      # Filter out . and .. when dotglob is enabled
-      if Builtins.shopt_enabled?('dotglob')
+      # Filter out . and .. when dotglob is enabled or globskipdots is set
+      if Builtins.shopt_enabled?('dotglob') || Builtins.shopt_enabled?('globskipdots')
         matches = matches.reject { |m| m.end_with?('/.') || m.end_with?('/..') || m == '.' || m == '..' }
       end
 

@@ -49,7 +49,9 @@ class TestShift < Test::Unit::TestCase
 
   def test_shift_out_of_range
     @repl.positional_params = %w[a b]
-    output = capture_output { execute('shift 5') }
+    # Enable shift_verbose to get error message
+    execute('shopt -s shift_verbose')
+    output = capture_stderr { execute('shift 5') }
     assert_match(/out of range/, output)
     # Params should be unchanged
     assert_equal %w[a b], @repl.positional_params
