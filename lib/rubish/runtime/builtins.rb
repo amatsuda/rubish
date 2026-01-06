@@ -454,12 +454,14 @@ module Rubish
     # Valid shell options with their default values and descriptions
     SHELL_OPTIONS = {
       'autocd' => [false, 'cd to a directory when typed as command'],
+      'cdable_vars' => [false, 'cd argument can be a variable containing a directory name'],
       'cdspell' => [false, 'correct minor spelling errors in cd'],
       'checkhash' => [false, 'check hash table before executing'],
       'checkjobs' => [false, 'check for running jobs before exit'],
       'checkwinsize' => [false, 'check window size after each command and update LINES and COLUMNS'],
       'cmdhist' => [true, 'save multi-line commands as single history entry'],
       'compat10' => [false, 'compatibility mode for rubish 1.0'],
+      'complete_fullquote' => [true, 'quote all metacharacters in filename completion'],
       'direxpand' => [false, 'expand directory names during word completion'],
       'dirspell' => [false, 'correct minor spelling errors in directory names during completion'],
       'dotglob' => [false, 'include dotfiles in pathname expansion'],
@@ -468,9 +470,11 @@ module Rubish
       'extglob' => [false, 'enable extended pattern matching'],
       'extquote' => [true, 'enable $\'...\' and $"..." quoting within ${...}'],
       'failglob' => [false, 'patterns which fail to match produce an error'],
+      'force_fignore' => [true, 'apply FIGNORE to word completion'],
       'globasciiranges' => [true, 'use ASCII ordering for range expressions in bracket patterns'],
       'globskipdots' => [false, 'skip . and .. in pathname expansion'],
       'globstar' => [false, 'enable ** for recursive globbing'],
+      'gnu_errfmt' => [false, 'print error messages in GNU format'],
       'histappend' => [false, 'append to history file'],
       'histreedit' => [false, 'allow re-editing of failed history substitution'],
       'histverify' => [false, 'verify history substitution before executing'],
@@ -480,11 +484,17 @@ module Rubish
       'interactive_comments' => [true, 'allow comments in interactive shell'],
       'lastpipe' => [false, 'run last command of pipeline in current shell'],
       'lithist' => [false, 'preserve newlines in multi-line history'],
+      'localvar_inherit' => [false, 'local variables inherit value from previous scope'],
+      'localvar_unset' => [false, 'calling unset on local variable removes it from scope'],
       'login_shell' => [false, 'shell is a login shell (read-only)'],
+      'mailwarn' => [false, 'warn if mail file has been accessed since last check'],
+      'no_empty_cmd_completion' => [false, 'do not complete on empty command line'],
       'nocaseglob' => [false, 'case-insensitive pathname expansion'],
       'nocasematch' => [false, 'case-insensitive pattern matching'],
       'nullglob' => [false, 'patterns matching nothing expand to null'],
+      'patsub_replacement' => [true, 'enable & replacement in pattern substitution'],
       'progcomp' => [true, 'enable programmable completion'],
+      'progcomp_alias' => [false, 'allow programmable completion for aliases'],
       'promptvars' => [true, 'expand variables in prompt strings'],
       'shift_verbose' => [false, 'print error if shift count exceeds positional parameters'],
       'sourcepath' => [true, 'use PATH to find sourced files'],
@@ -661,6 +671,15 @@ module Rubish
 
       dir = remaining_args.first || ENV['HOME']
       found_via_cdpath = false
+
+      # Handle cdable_vars: if directory doesn't exist and cdable_vars is set,
+      # try treating the argument as a variable name
+      if dir && shopt_enabled?('cdable_vars') && !File.directory?(dir)
+        var_value = ENV[dir]
+        if var_value && File.directory?(var_value)
+          dir = var_value
+        end
+      end
 
       # Handle CDPATH for relative directories (not starting with / or . or ..)
       if dir && !dir.start_with?('/') && !dir.start_with?('./') && !dir.start_with?('../') && dir != '.' && dir != '..'
