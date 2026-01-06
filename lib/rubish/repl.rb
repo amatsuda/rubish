@@ -4200,6 +4200,16 @@ module Rubish
         File.directory?(f) ? "#{f}/" : f
       end.sort
 
+      # dirspell: if no matches and dirspell is enabled, try to correct directory spelling
+      if candidates.empty? && Builtins.shopt_enabled?('dirspell')
+        corrected = correct_completion_path(input)
+        if corrected && corrected != input
+          candidates = Dir.glob("#{corrected}*").map do |f|
+            File.directory?(f) ? "#{f}/" : f
+          end.sort
+        end
+      end
+
       # Apply FIGNORE filtering
       fignore = ENV['FIGNORE']
       if fignore && !fignore.empty?
@@ -4216,6 +4226,25 @@ module Rubish
       end
 
       candidates
+    end
+
+    # Correct directory spelling errors in a completion path
+    def correct_completion_path(input)
+      # Split into directory part and filename part
+      if input.include?('/')
+        dir_part = File.dirname(input)
+        file_part = File.basename(input)
+      else
+        # No directory part, nothing to correct
+        return nil
+      end
+
+      # Try to correct the directory part
+      corrected_dir = Builtins.correct_directory_spelling(dir_part)
+      return nil unless corrected_dir
+
+      # Return corrected path with original file part
+      File.join(corrected_dir, file_part)
     end
   end
 end
