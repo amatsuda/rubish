@@ -693,6 +693,15 @@ module Rubish
         end
       end
 
+      # Handle cdspell: correct minor spelling errors in directory names
+      if dir && shopt_enabled?('cdspell') && !File.directory?(dir)
+        corrected = correct_directory_spelling(dir)
+        if corrected && corrected != dir
+          $stderr.puts corrected
+          dir = corrected
+        end
+      end
+
       # Handle CDPATH for relative directories (not starting with / or . or ..)
       if dir && !dir.start_with?('/') && !dir.start_with?('./') && !dir.start_with?('../') && dir != '.' && dir != '..'
         # First check if directory exists relative to current directory
@@ -732,6 +741,121 @@ module Rubish
       true
     rescue Errno::ENOENT => e
       $stderr.puts "cd: #{e.message}"
+      false
+    end
+
+    # Correct minor spelling errors in directory path for cdspell
+    def self.correct_directory_spelling(path)
+      # Split path into components
+      components = path.split('/')
+      return nil if components.empty?
+
+      # Handle absolute vs relative paths
+      if path.start_with?('/')
+        current = '/'
+        components.shift  # Remove empty first element from absolute path
+      else
+        current = '.'
+      end
+
+      corrected_components = []
+
+      components.each do |component|
+        next if component.empty?
+
+        target = File.join(current, component)
+        if File.directory?(target)
+          corrected_components << component
+          current = target
+        else
+          # Try to find a similar directory name
+          correction = find_similar_directory(current, component)
+          if correction
+            corrected_components << correction
+            current = File.join(current, correction)
+          else
+            # No correction found, return nil
+            return nil
+          end
+        end
+      end
+
+      return nil if corrected_components.empty?
+
+      if path.start_with?('/')
+        '/' + corrected_components.join('/')
+      else
+        corrected_components.join('/')
+      end
+    end
+
+    # Find a directory similar to the given name (within edit distance 1)
+    def self.find_similar_directory(parent, name)
+      return nil unless File.directory?(parent)
+
+      begin
+        entries = Dir.entries(parent).select { |e| e != '.' && e != '..' && File.directory?(File.join(parent, e)) }
+      rescue Errno::EACCES
+        return nil
+      end
+
+      # Check for exact case-insensitive match first
+      entries.each do |entry|
+        return entry if entry.downcase == name.downcase
+      end
+
+      # Check for edit distance 1 (transposition, deletion, insertion, substitution)
+      entries.each do |entry|
+        return entry if edit_distance_one?(name, entry)
+      end
+
+      nil
+    end
+
+    # Check if two strings have edit distance of 1
+    def self.edit_distance_one?(s1, s2)
+      len1 = s1.length
+      len2 = s2.length
+
+      # Transposition (same length, two adjacent chars swapped)
+      if len1 == len2
+        diffs = 0
+        transposed = false
+        (0...len1).each do |i|
+          if s1[i] != s2[i]
+            diffs += 1
+            # Check for transposition
+            if i + 1 < len1 && s1[i] == s2[i + 1] && s1[i + 1] == s2[i]
+              transposed = true
+            end
+          end
+        end
+        return true if diffs == 1  # Single substitution
+        return true if diffs == 2 && transposed  # Transposition
+      end
+
+      # Deletion (s1 is one char shorter than s2)
+      if len1 == len2 - 1
+        j = 0
+        (0...len1).each do |i|
+          j += 1 if s1[i] != s2[j]
+          return false if j > i + 1
+          j += 1
+        end
+        return true
+      end
+
+      # Insertion (s1 is one char longer than s2)
+      if len1 == len2 + 1
+        j = 0
+        (0...len2).each do |i|
+          j += 1 if s1[j] != s2[i]
+          return false if j > i + 1
+          j += 1
+        end
+        return true
+      end
+
       false
     end
 
