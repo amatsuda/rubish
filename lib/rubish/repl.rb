@@ -750,6 +750,9 @@ module Rubish
       @last_line = line
       execute(line)
 
+      # checkwinsize: update LINES and COLUMNS after each command
+      check_window_size if Builtins.shopt_enabled?('checkwinsize')
+
       # onecmd: exit after reading and executing one command
       throw(:exit, @last_status || 0) if Builtins.set_option?('t')
     rescue Interrupt
@@ -1520,6 +1523,16 @@ module Rubish
     # LINES - terminal height
     def terminal_lines
       IO.console&.winsize&.[](0) || ENV['LINES']&.to_i || 24
+    end
+
+    # checkwinsize: check window size after each command and update LINES/COLUMNS
+    def check_window_size
+      winsize = IO.console&.winsize
+      return unless winsize
+
+      lines, columns = winsize
+      ENV['LINES'] = lines.to_s if lines && lines > 0
+      ENV['COLUMNS'] = columns.to_s if columns && columns > 0
     end
 
     def extract_exit_status(result)
