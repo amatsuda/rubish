@@ -867,6 +867,19 @@ module Rubish
         return
       end
 
+      # autocd: if command is a directory and autocd is enabled, cd to it
+      if ast.is_a?(AST::Command) && ast.args.empty? && Builtins.shopt_enabled?('autocd')
+        dir = expand_single_arg(ast.name)
+        if File.directory?(dir)
+          result = Builtins.run('cd', [dir])
+          @last_status = result ? 0 : 1
+          @pipestatus = [@last_status]
+          @command_number += 1
+          @lineno += 1
+          return
+        end
+      end
+
       code = @codegen.generate(ast)
       result = eval_in_context(code)
       @last_status = extract_exit_status(result)
