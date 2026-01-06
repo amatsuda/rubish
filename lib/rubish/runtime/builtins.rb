@@ -2355,6 +2355,7 @@ module Rubish
       'k' => false,          # keyword: all assignment args placed in environment
       'p' => false,          # privileged: don't read startup files, ignore some env vars
       'history' => true,     # history: enable command history (enabled by default)
+      'nolog' => false,      # nolog: obsolete, has no effect
     }
 
     def self.set_options
@@ -2430,7 +2431,7 @@ module Rubish
         'dotglob' => 'dotglob', 'nocaseglob' => 'nocaseglob', 'ignoreeof' => 'ignoreeof',
         'extglob' => 'extglob', 'P' => 'physical', 'emacs' => 'emacs', 'vi' => 'vi',
         'nocasematch' => 'nocasematch', 't' => 'onecmd', 'k' => 'keyword',
-        'p' => 'privileged', 'history' => 'history'
+        'p' => 'privileged', 'history' => 'history', 'nolog' => 'nolog'
       }
       @set_options.each do |flag, value|
         name = long_names[flag] || flag
@@ -2452,7 +2453,7 @@ module Rubish
         'dotglob' => 'dotglob', 'nocaseglob' => 'nocaseglob', 'ignoreeof' => 'ignoreeof',
         'extglob' => 'extglob', 'P' => 'physical', 'emacs' => 'emacs', 'vi' => 'vi',
         'nocasematch' => 'nocasematch', 't' => 'onecmd', 'k' => 'keyword',
-        'p' => 'privileged', 'history' => 'history'
+        'p' => 'privileged', 'history' => 'history', 'nolog' => 'nolog'
       }
       enabled = @set_options.select { |_, v| v }.keys.map { |k| long_names[k] || k }
       enabled.sort.join(':')
@@ -2482,7 +2483,7 @@ module Rubish
         'dotglob' => 'dotglob', 'nocaseglob' => 'nocaseglob', 'ignoreeof' => 'ignoreeof',
         'extglob' => 'extglob', 'physical' => 'P', 'emacs' => 'emacs', 'vi' => 'vi',
         'nocasematch' => 'nocasematch', 'onecmd' => 't', 'keyword' => 'k',
-        'privileged' => 'p', 'history' => 'history'
+        'privileged' => 'p', 'history' => 'history', 'nolog' => 'nolog'
       }
       flag = mapping[name]
       return unless flag
