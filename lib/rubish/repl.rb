@@ -3573,7 +3573,7 @@ module Rubish
       # Shell pattern matching using fnmatch
       # Supports *, ?, [...] patterns
       flags = File::FNM_EXTGLOB
-      flags |= File::FNM_CASEFOLD if Builtins.set_option?('nocasematch')
+      flags |= File::FNM_CASEFOLD if Builtins.shopt_enabled?('nocasematch')
       File.fnmatch(pattern, word, flags)
     end
 
@@ -3997,25 +3997,25 @@ module Rubish
     def cond_pattern_match?(string, pattern)
       # In [[ ]], == does glob pattern matching (not literal)
       # Convert glob pattern to regex
-      flags = Builtins.set_option?('nocasematch') ? File::FNM_CASEFOLD : 0
+      flags = Builtins.shopt_enabled?('nocasematch') ? File::FNM_CASEFOLD : 0
       File.fnmatch(pattern, string, File::FNM_EXTGLOB | flags)
     end
 
     def reconstruct_regex_pattern(parts)
       # Reconstruct regex pattern from tokenized parts
-      # Parentheses should be directly attached (no spaces)
+      # Parentheses and regex anchors should be directly attached (no spaces)
       result = +''
+      regex_special = %w[( ) ^ $ * + ? | [ ] { }]
       parts.each_with_index do |part, i|
-        if part == '('
-          result << part
-        elsif part == ')'
+        if regex_special.include?(part)
+          # Special regex characters don't get spaces around them
           result << part
         else
-          # Add space before if previous wasn't '(' and result doesn't end with '('
-          if i > 0 && parts[i - 1] != '(' && !result.end_with?('(')
-            # But don't add space if current is ')' or previous ended with '('
-            result << ' ' unless result.empty? || result.end_with?('(')
-          end
+          # Add space before if previous wasn't a special char and result doesn't end with one
+          prev_part = i > 0 ? parts[i - 1] : nil
+          needs_space = i > 0 && !result.empty? && !regex_special.include?(prev_part) &&
+                        !regex_special.any? { |s| result.end_with?(s) }
+          result << ' ' if needs_space
           result << part
         end
       end
@@ -4024,7 +4024,7 @@ module Rubish
 
     def cond_regex_match?(string, pattern)
       # =~ does regex matching, sets RUBISH_REMATCH
-      flags = Builtins.set_option?('nocasematch') ? Regexp::IGNORECASE : 0
+      flags = Builtins.shopt_enabled?('nocasematch') ? Regexp::IGNORECASE : 0
       regex = Regexp.new(pattern, flags)
       match = regex.match(string)
       if match
@@ -4121,6 +4121,11 @@ module Rubish
           else
             @pipestatus = [@last_status]
           end
+          run_err_trap_if_failed
+        elsif result.respond_to?(:exitstatus)
+          # Handle ExitStatus objects (from __cond_test, etc.)
+          @last_status = result.exitstatus || 0
+          @pipestatus = [@last_status]
           run_err_trap_if_failed
         end
         result
