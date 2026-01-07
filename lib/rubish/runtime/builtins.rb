@@ -4981,8 +4981,10 @@ module Rubish
         if path
           command = path
         else
-          puts "exec: #{cmd_args.first}: not found"
-          return false
+          $stderr.puts "exec: #{cmd_args.first}: not found"
+          # execfail: if enabled, don't exit on exec failure
+          return false if shopt_enabled?('execfail')
+          throw :exit, 127  # Command not found
         end
       end
 
@@ -5007,14 +5009,20 @@ module Rubish
           exec([command, exec_argv0], *command_args)
         end
       rescue Errno::ENOENT
-        puts "exec: #{cmd_args.first}: not found"
-        false
+        $stderr.puts "exec: #{cmd_args.first}: not found"
+        # execfail: if enabled, don't exit on exec failure
+        return false if shopt_enabled?('execfail')
+        throw :exit, 127  # Command not found
       rescue Errno::EACCES
-        puts "exec: #{cmd_args.first}: permission denied"
-        false
+        $stderr.puts "exec: #{cmd_args.first}: permission denied"
+        # execfail: if enabled, don't exit on exec failure
+        return false if shopt_enabled?('execfail')
+        throw :exit, 126  # Permission denied
       rescue => e
-        puts "exec: #{e.message}"
-        false
+        $stderr.puts "exec: #{e.message}"
+        # execfail: if enabled, don't exit on exec failure
+        return false if shopt_enabled?('execfail')
+        throw :exit, 126  # General exec failure
       end
     end
 

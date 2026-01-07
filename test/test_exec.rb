@@ -26,13 +26,17 @@ class TestExec < Test::Unit::TestCase
     assert result
   end
 
-  # Test exec with nonexistent command
+  # Test exec with nonexistent command exits shell (without execfail)
   def test_exec_not_found
-    output = capture_output do
-      result = Rubish::Builtins.run('exec', ['nonexistent_command_xyz'])
-      assert_false result
+    stderr_output = capture_stderr do
+      exit_code = catch(:exit) do
+        Rubish::Builtins.run('exec', ['nonexistent_command_xyz'])
+        :no_exit
+      end
+      # Without execfail, should exit with 127 (command not found)
+      assert_equal 127, exit_code
     end
-    assert_match(/not found/, output)
+    assert_match(/not found/, stderr_output)
   end
 
   # Test exec invalid option
