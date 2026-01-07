@@ -2316,10 +2316,30 @@ module Rubish
       end
 
       file = args.first
-      file = File.expand_path(file)
+      original_file = file
+
+      # If file contains a slash, use it directly (absolute or relative path)
+      if file.include?('/')
+        file = File.expand_path(file)
+      else
+        # No slash - check current directory first, then PATH if sourcepath enabled
+        if File.exist?(file)
+          file = File.expand_path(file)
+        elsif shopt_enabled?('sourcepath')
+          # Search in PATH
+          found = find_file_in_path(file)
+          if found
+            file = found
+          else
+            file = File.expand_path(file)  # Will fail below with proper error
+          end
+        else
+          file = File.expand_path(file)
+        end
+      end
 
       unless File.exist?(file)
-        puts "source: #{file}: No such file or directory"
+        puts "source: #{original_file}: No such file or directory"
         return false
       end
 
@@ -3142,6 +3162,17 @@ module Rubish
         return full_path if File.executable?(full_path) && !File.directory?(full_path)
       end
 
+      nil
+    end
+
+    # Find a file in PATH (for source builtin with sourcepath)
+    # Unlike find_in_path, this doesn't require the file to be executable
+    def self.find_file_in_path(name)
+      path_dirs = (ENV['PATH'] || '').split(File::PATH_SEPARATOR)
+      path_dirs.each do |dir|
+        full_path = File.join(dir, name)
+        return full_path if File.file?(full_path) && File.readable?(full_path)
+      end
       nil
     end
 
