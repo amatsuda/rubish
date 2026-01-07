@@ -774,6 +774,19 @@ module Rubish
       # Add to history based on HISTCONTROL and HISTIGNORE settings
       add_to_history(line)
 
+      # histverify: check for history expansion and let user verify before executing
+      if Builtins.shopt_enabled?('histverify')
+        expanded_line, was_expanded = expand_history_only(line)
+        if was_expanded && expanded_line
+          # Pre-fill the expanded command for user to verify/edit
+          Reline.pre_input_hook = -> {
+            Reline.insert_text(expanded_line)
+            Reline.pre_input_hook = nil  # Clear after use
+          }
+          return  # Don't execute, let user verify on next prompt
+        end
+      end
+
       # Print PS0 before executing command (bash 4.4+ feature)
       print_ps0
 
@@ -1650,6 +1663,18 @@ module Rubish
       end
 
       result
+    end
+
+    # Check for history expansion without side effects (for histverify)
+    def expand_history_only(line)
+      # Capture any output to suppress it during verification check
+      original_stdout = $stdout
+      $stdout = StringIO.new
+      begin
+        expand_history(line)
+      ensure
+        $stdout = original_stdout
+      end
     end
 
     def expand_history(line)
