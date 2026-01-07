@@ -44,6 +44,7 @@ module Rubish
     @history_timestamps = {}  # Timestamps for history entries (index => Time)
     @source_file_getter = nil  # Gets current source file for RUBISH_SOURCE
     @source_file_setter = nil  # Sets current source file for RUBISH_SOURCE
+    @lineno_getter = nil  # Gets current line number for LINENO
     @exit_blocked_by_jobs = false  # Track if exit was blocked due to running jobs (for checkjobs)
 
     class << self
@@ -51,7 +52,27 @@ module Rubish
       attr_accessor :executor, :script_name_getter, :script_name_setter, :positional_params_getter, :positional_params_setter, :function_checker, :function_remover, :function_lister, :function_getter, :heredoc_content_setter, :command_executor, :current_completion_options
       attr_accessor :history_file_getter, :history_loader, :history_saver, :history_appender, :last_history_line, :history_timestamps
       attr_accessor :source_file_getter, :source_file_setter
+      attr_accessor :lineno_getter
       attr_accessor :exit_blocked_by_jobs
+    end
+
+    # Format error message based on gnu_errfmt setting
+    # Standard format: "rubish: message"
+    # GNU format: "rubish:source:lineno: message"
+    def self.format_error(message, command: nil)
+      prefix = if command
+                 "rubish: #{command}: "
+               else
+                 'rubish: '
+               end
+
+      if shopt_enabled?('gnu_errfmt')
+        source = @source_file_getter&.call || 'rubish'
+        lineno = @lineno_getter&.call || 0
+        "#{source}:#{lineno}: #{prefix.sub(/\Arubish: /, '')}#{message}"
+      else
+        "#{prefix}#{message}"
+      end
     end
 
     # Array variable methods
@@ -155,7 +176,7 @@ module Rubish
       return name unless @namerefs.key?(name)
 
       if visited.include?(name)
-        $stderr.puts "rubish: #{name}: circular name reference"
+        $stderr.puts format_error('circular name reference', command: name)
         return nil
       end
 
@@ -205,7 +226,7 @@ module Rubish
         if array?(target)
           set_array_element(target, 0, value)
         elsif assoc_array?(target)
-          $stderr.puts "rubish: #{name}: cannot assign to associative array through nameref"
+          $stderr.puts format_error('cannot assign to associative array through nameref', command: name)
           return false
         else
           ENV[target] = value
@@ -2459,7 +2480,7 @@ module Rubish
       if n > params.length
         # shift_verbose: print error if shift count exceeds positional parameters
         if shopt_enabled?('shift_verbose')
-          $stderr.puts 'rubish: shift: shift count out of range'
+          $stderr.puts format_error('shift count out of range', command: 'shift')
         end
         return false
       end

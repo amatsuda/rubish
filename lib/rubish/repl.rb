@@ -51,6 +51,7 @@ module Rubish
       Builtins.command_executor = ->(args) { execute_command_directly(args) }
       Builtins.source_file_getter = -> { @current_source_file }
       Builtins.source_file_setter = ->(file) { @current_source_file = file }
+      Builtins.lineno_getter = -> { @lineno }
       # History callbacks
       Builtins.history_file_getter = -> { history_file }
       Builtins.history_loader = -> { load_history }
@@ -1028,7 +1029,7 @@ module Rubish
       if funcnest && !funcnest.empty?
         max_depth = funcnest.to_i
         if max_depth > 0 && @funcname_stack.length >= max_depth
-          $stderr.puts "rubish: #{name}: maximum function nesting level exceeded (#{max_depth})"
+          $stderr.puts Builtins.format_error("maximum function nesting level exceeded (#{max_depth})", command: name)
           @last_status = 1
           return false
         end
@@ -1546,7 +1547,7 @@ module Rubish
       return Builtins.rubishopts if var_name == 'RUBISHOPTS'
 
       if Builtins.set_option?('u') && !ENV.key?(var_name)
-        $stderr.puts "rubish: #{var_name}: unbound variable"
+        $stderr.puts Builtins.format_error('unbound variable', command: var_name)
         raise NounsetError, "#{var_name}: unbound variable"
       end
       ENV.fetch(var_name, '')
@@ -2355,7 +2356,7 @@ module Rubish
 
       # Fetch variable with nounset check
       if Builtins.set_option?('u') && !ENV.key?(var_name)
-        $stderr.puts "rubish: #{var_name}: unbound variable"
+        $stderr.puts Builtins.format_error('unbound variable', command: var_name)
         raise NounsetError, "#{var_name}: unbound variable"
       end
       ENV.fetch(var_name, '')
@@ -3140,7 +3141,7 @@ module Rubish
       if matches.empty?
         if Builtins.shopt_enabled?('failglob')
           # failglob: patterns matching nothing cause an error
-          $stderr.puts "rubish: no match: #{pattern}"
+          $stderr.puts Builtins.format_error("no match: #{pattern}")
           raise FailglobError, "no match: #{pattern}"
         elsif Builtins.shopt_enabled?('nullglob')
           # nullglob: patterns matching nothing expand to nothing
