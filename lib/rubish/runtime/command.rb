@@ -203,7 +203,17 @@ module Rubish
 
       # Check hash first
       cached = Builtins.hash_lookup(cmd)
-      return cached if cached && !Builtins.execignore?(cached)
+      if cached && !Builtins.execignore?(cached)
+        # checkhash: verify the cached path is still valid
+        if Builtins.shopt_enabled?('checkhash')
+          unless File.executable?(cached) && !File.directory?(cached)
+            # Cached path is no longer valid, remove from hash and re-search
+            Builtins.hash_delete(cmd)
+            cached = nil
+          end
+        end
+        return cached if cached
+      end
 
       # Search PATH and cache if found
       path_dirs = (ENV['PATH'] || '').split(File::PATH_SEPARATOR)

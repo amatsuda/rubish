@@ -4929,6 +4929,10 @@ module Rubish
       @command_hash[name] = path
     end
 
+    def self.hash_delete(name)
+      @command_hash.delete(name)
+    end
+
     def self.clear_hash
       @command_hash.clear
     end
