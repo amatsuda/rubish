@@ -833,6 +833,7 @@ module Rubish
       if (array_assignments = extract_array_assignments(line))
         handle_bare_assignments(array_assignments)
         @last_status = 0
+        Builtins.clear_exit_blocked  # checkjobs: non-exit command resets flag
         return
       end
 
@@ -863,18 +864,20 @@ module Rubish
         @pipestatus = [0]
         @command_number += 1
         # Note: bare assignments don't increment LINENO (bash behavior)
+        Builtins.clear_exit_blocked  # checkjobs: non-exit command resets flag
         return
       end
 
       # Check for builtins (simple command only)
       if ast.is_a?(AST::Command) && Builtins.builtin?(ast.name)
+        builtin_name = ast.name
         begin
           # Run DEBUG trap before command
           Builtins.run_debug_trap
 
           # Expand variables in args for builtins
           expanded_args = expand_args_for_builtin(ast.args)
-          result = Builtins.run(ast.name, expanded_args)
+          result = Builtins.run(builtin_name, expanded_args)
           @last_status = result ? 0 : 1
           @pipestatus = [@last_status]
           run_err_trap_if_failed
@@ -889,6 +892,8 @@ module Rubish
         ensure
           @command_number += 1
           @lineno += 1
+          # checkjobs: non-exit/logout commands reset the flag
+          Builtins.clear_exit_blocked unless %w[exit logout].include?(builtin_name)
         end
         return
       end
@@ -915,6 +920,7 @@ module Rubish
         ensure
           @command_number += 1
           @lineno += 1
+          Builtins.clear_exit_blocked  # checkjobs: non-exit command resets flag
         end
         return
       end
@@ -928,6 +934,7 @@ module Rubish
           @pipestatus = [@last_status]
           @command_number += 1
           @lineno += 1
+          Builtins.clear_exit_blocked  # checkjobs: non-exit command resets flag
           return
         end
       end
@@ -937,6 +944,7 @@ module Rubish
       @last_status = extract_exit_status(result)
       @command_number += 1
       @lineno += 1
+      Builtins.clear_exit_blocked  # checkjobs: non-exit command resets flag
       check_errexit
     rescue NounsetError
       # Unbound variable error when set -u is enabled

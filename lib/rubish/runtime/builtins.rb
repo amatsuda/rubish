@@ -44,12 +44,14 @@ module Rubish
     @history_timestamps = {}  # Timestamps for history entries (index => Time)
     @source_file_getter = nil  # Gets current source file for RUBISH_SOURCE
     @source_file_setter = nil  # Sets current source file for RUBISH_SOURCE
+    @exit_blocked_by_jobs = false  # Track if exit was blocked due to running jobs (for checkjobs)
 
     class << self
       attr_reader :aliases, :dir_stack, :traps, :local_scope_stack, :readonly_vars, :var_attributes, :command_hash, :shell_options, :disabled_builtins, :call_stack, :completions, :completion_options, :key_bindings, :readline_variables, :arrays, :assoc_arrays, :namerefs, :coprocs
       attr_accessor :executor, :script_name_getter, :script_name_setter, :positional_params_getter, :positional_params_setter, :function_checker, :function_remover, :function_lister, :function_getter, :heredoc_content_setter, :command_executor, :current_completion_options
       attr_accessor :history_file_getter, :history_loader, :history_saver, :history_appender, :last_history_line, :history_timestamps
       attr_accessor :source_file_getter, :source_file_setter
+      attr_accessor :exit_blocked_by_jobs
     end
 
     # Array variable methods
@@ -5855,8 +5857,37 @@ module Rubish
 
     def self.run_exit(args)
       code = args.first&.to_i || 0
+
+      # Check for active jobs if checkjobs is enabled
+      if shopt_enabled?('checkjobs')
+        active_jobs = JobManager.instance.active
+        if active_jobs.any?
+          if @exit_blocked_by_jobs
+            # Second exit attempt - proceed with exit
+            @exit_blocked_by_jobs = false
+          else
+            # First exit attempt - warn and block
+            @exit_blocked_by_jobs = true
+            running = active_jobs.count(&:running?)
+            stopped = active_jobs.count(&:stopped?)
+            parts = []
+            parts << "#{running} running" if running > 0
+            parts << "#{stopped} stopped" if stopped > 0
+            $stderr.puts "rubish: there are #{parts.join(' and ')} jobs."
+            return false
+          end
+        else
+          @exit_blocked_by_jobs = false
+        end
+      end
+
       run_exit_traps
       throw :exit, code
+    end
+
+    # Reset the exit blocked flag (call after any non-exit command)
+    def self.clear_exit_blocked
+      @exit_blocked_by_jobs = false
     end
 
     def self.run_logout(args)
