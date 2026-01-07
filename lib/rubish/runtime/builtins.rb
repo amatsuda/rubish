@@ -5881,6 +5881,12 @@ module Rubish
         end
       end
 
+      # huponexit: send SIGHUP to all jobs when an interactive login shell exits
+      # Note: In bash, this only applies to login shells, but we apply it to interactive shells too
+      if shopt_enabled?('huponexit')
+        send_hup_to_active_jobs
+      end
+
       run_exit_traps
       throw :exit, code
     end
@@ -5888,6 +5894,26 @@ module Rubish
     # Reset the exit blocked flag (call after any non-exit command)
     def self.clear_exit_blocked
       @exit_blocked_by_jobs = false
+    end
+
+    # Send SIGHUP to all active jobs (for huponexit)
+    def self.send_hup_to_active_jobs
+      active_jobs = JobManager.instance.active
+      active_jobs.each do |job|
+        begin
+          # Send SIGHUP to the process group
+          Process.kill('HUP', -job.pgid)
+        rescue Errno::ESRCH
+          # Process already gone, ignore
+        rescue Errno::EPERM
+          # Permission denied, try sending to the process directly
+          begin
+            Process.kill('HUP', job.pid)
+          rescue Errno::ESRCH, Errno::EPERM
+            # Process gone or no permission, ignore
+          end
+        end
+      end
     end
 
     def self.run_logout(args)
