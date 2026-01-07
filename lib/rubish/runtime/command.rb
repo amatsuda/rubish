@@ -303,14 +303,20 @@ module Rubish
     private
 
     def run_simple
+      # Check if lastpipe is enabled - run last command in current shell
+      use_lastpipe = Builtins.shopt_enabled?('lastpipe') && @commands.length > 1
+
       # Set up pipes between commands
       pipes = (@commands.length - 1).times.map { IO.pipe }
 
-      pids = @commands.each_with_index.map do |cmd, i|
+      # Determine which commands to fork (all except last if lastpipe)
+      fork_count = use_lastpipe ? @commands.length - 1 : @commands.length
+
+      pids = @commands[0...fork_count].each_with_index.map do |cmd, i|
         # Set stdin from previous pipe (except first command)
         cmd.stdin ||= pipes[i - 1][0] if i > 0
 
-        # Set stdout to next pipe (except last command)
+        # Set stdout to next pipe (except last command, but we're not forking last with lastpipe)
         cmd.stdout ||= pipes[i][1] if i < @commands.length - 1
 
         fork do
@@ -349,17 +355,65 @@ module Rubish
         end
       end
 
-      # Parent closes all pipe ends
-      pipes.each do |reader, writer|
-        reader.close
-        writer.close
+      # Handle lastpipe: run last command in current shell
+      last_status = nil
+      if use_lastpipe
+        last_cmd = @commands.last
+        last_pipe_reader = pipes.last[0]
+
+        # Close write ends of all pipes in parent
+        pipes.each { |_, writer| writer.close }
+
+        # Close read ends of pipes except the last one (which we'll use for stdin)
+        pipes[0...-1].each { |reader, _| reader.close }
+
+        # Save original stdin
+        original_stdin = $stdin.dup
+
+        begin
+          # Redirect stdin to read from the pipe
+          $stdin.reopen(last_pipe_reader)
+
+          # Run the last command in current shell
+          if last_cmd.is_a?(Command) && Builtins.builtin?(last_cmd.name)
+            success = Builtins.run(last_cmd.name, last_cmd.args)
+            last_status = ExitStatus.new(success ? 0 : 1)
+          elsif last_cmd.is_a?(Command) && Command.function?(last_cmd.name)
+            result = Command.call_function(last_cmd.name, last_cmd.args)
+            last_status = ExitStatus.new(result ? 0 : 1)
+          else
+            # External command - must fork
+            pid = fork do
+              $stdout.reopen(last_cmd.stdout) if last_cmd.stdout
+              $stderr.reopen(last_cmd.stderr) if last_cmd.stderr
+              exec(last_cmd.name, *last_cmd.args)
+            end
+            Process.wait(pid)
+            last_status = $?
+          end
+        ensure
+          # Restore original stdin
+          $stdin.reopen(original_stdin)
+          original_stdin.close
+          last_pipe_reader.close
+        end
+      else
+        # Parent closes all pipe ends
+        pipes.each do |reader, writer|
+          reader.close
+          writer.close
+        end
       end
 
-      # Wait for all children and collect statuses
+      # Wait for all forked children and collect statuses
       statuses = pids.map do |pid|
         Process.wait(pid)
         $?
       end
+
+      # Add last command status if using lastpipe
+      statuses << last_status if use_lastpipe && last_status
+
       @statuses = statuses
       @status = determine_pipeline_status(statuses)
       self
