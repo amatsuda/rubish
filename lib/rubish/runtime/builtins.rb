@@ -2704,14 +2704,38 @@ module Rubish
 
     def self.run_echo(args)
       newline = true
+      # xpg_echo: expand backslash escapes by default when enabled
+      interpret_escapes = shopt_enabled?('xpg_echo')
       start_idx = 0
 
-      if args.first == '-n'
-        newline = false
-        start_idx = 1
+      # Parse options: -n (no newline), -e (enable escapes), -E (disable escapes)
+      # Options can be combined like -ne, -en, -neE, etc.
+      while start_idx < args.length && args[start_idx]&.start_with?('-') && args[start_idx] != '-'
+        opt = args[start_idx]
+        # Check if it's a valid option string (only contains n, e, E after -)
+        break unless opt[1..].chars.all? { |c| 'neE'.include?(c) }
+
+        opt[1..].each_char do |c|
+          case c
+          when 'n' then newline = false
+          when 'e' then interpret_escapes = true
+          when 'E' then interpret_escapes = false
+          end
+        end
+        start_idx += 1
       end
 
       output = args[start_idx..].join(' ')
+
+      # Process escape sequences if enabled
+      if interpret_escapes
+        output = process_echo_escapes(output)
+        # Check for \c which stops output
+        if output.include?("\x00STOP_OUTPUT\x00")
+          output = output.split("\x00STOP_OUTPUT\x00").first || ''
+          newline = false
+        end
+      end
 
       if newline
         puts output
@@ -2720,6 +2744,57 @@ module Rubish
       end
 
       true
+    end
+
+    # Process escape sequences for echo (slightly different from printf)
+    def self.process_echo_escapes(str)
+      result = +''
+      i = 0
+      while i < str.length
+        if str[i] == '\\' && i + 1 < str.length
+          case str[i + 1]
+          when 'n' then result << "\n"; i += 2
+          when 't' then result << "\t"; i += 2
+          when 'r' then result << "\r"; i += 2
+          when 'a' then result << "\a"; i += 2
+          when 'b' then result << "\b"; i += 2
+          when 'f' then result << "\f"; i += 2
+          when 'v' then result << "\v"; i += 2
+          when '\\' then result << '\\'; i += 2
+          when 'e', 'E' then result << "\e"; i += 2  # escape character
+          when 'c'
+            # \c stops output (no further characters printed, no newline)
+            result << "\x00STOP_OUTPUT\x00"
+            break
+          when '0'
+            # Octal escape \0nnn (up to 3 octal digits)
+            i += 2
+            octal = +''
+            while octal.length < 3 && i < str.length && str[i] >= '0' && str[i] <= '7'
+              octal << str[i]
+              i += 1
+            end
+            result << (octal.empty? ? "\0" : octal.to_i(8).chr)
+          when 'x'
+            # Hex escape \xHH (1 or 2 hex digits)
+            i += 2
+            hex = +''
+            while hex.length < 2 && i < str.length && str[i] =~ /[0-9a-fA-F]/
+              hex << str[i]
+              i += 1
+            end
+            result << (hex.empty? ? '\\x' : hex.to_i(16).chr)
+          else
+            # Unknown escape, keep as-is
+            result << str[i]
+            i += 1
+          end
+        else
+          result << str[i]
+          i += 1
+        end
+      end
+      result
     end
 
     def self.run_printf(args)
