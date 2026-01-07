@@ -1483,7 +1483,24 @@ module Rubish
             puts "unset: #{name}: readonly variable"
             next
           end
-          # Remove environment variable
+
+          # localvar_unset: when unsetting a local variable, remove it from local scope
+          # and restore the outer scope's value
+          if shopt_enabled?('localvar_unset') && !@local_scope_stack.empty?
+            current_scope = @local_scope_stack.last
+            if current_scope.key?(name)
+              # Remove from local scope and restore original value
+              original_value = current_scope.delete(name)
+              if original_value == :unset
+                ENV.delete(name)
+              else
+                ENV[name] = original_value
+              end
+              next
+            end
+          end
+
+          # Standard behavior: just remove from environment
           ENV.delete(name)
         end
       end
