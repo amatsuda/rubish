@@ -279,7 +279,7 @@ module Rubish
         end
         if depth == 0
           cmd = str[pos + 2...j - 1]
-          return ["`#{cmd}`.chomp", j - pos]
+          return ["__run_subst(#{cmd.inspect})", j - pos]
         end
         return nil  # Unclosed, treat as literal
       end
@@ -365,7 +365,7 @@ module Rubish
         elsif str[j] == '`'
           # Found closing backtick
           cmd = str[pos + 1...j]
-          return ["`#{cmd}`.chomp", j - pos + 1]
+          return ["__run_subst(#{cmd.inspect})", j - pos + 1]
         else
           j += 1
         end

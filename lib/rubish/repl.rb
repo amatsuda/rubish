@@ -1418,7 +1418,7 @@ module Rubish
         elsif str[j] == '`'
           # Found closing backtick
           cmd = str[pos + 1...j]
-          output = `#{cmd}`.chomp
+          output = __run_subst(cmd)
           return [output, j - pos + 1]
         else
           j += 1
@@ -1462,7 +1462,7 @@ module Rubish
         end
         if depth == 0
           cmd = str[pos + 2...j]
-          return [`#{cmd}`.chomp, j - pos + 1]
+          return [__run_subst(cmd), j - pos + 1]
         end
         return ['', 0]
       end
@@ -2360,6 +2360,21 @@ module Rubish
         raise NounsetError, "#{var_name}: unbound variable"
       end
       ENV.fetch(var_name, '')
+    end
+
+    def __run_subst(cmd)
+      # Run command substitution with proper inherit_errexit handling
+      # If inherit_errexit is enabled and errexit (set -e) is active,
+      # run the command with errexit enabled in the subshell
+      if Builtins.shopt_enabled?('inherit_errexit') && Builtins.set_option?('e')
+        # Prefix with set -e so the subshell inherits errexit
+        output = `set -e; #{cmd}`.chomp
+      else
+        output = `#{cmd}`.chomp
+      end
+      # Update @last_status with the command substitution's exit status
+      @last_status = $?.exitstatus || 0
+      output
     end
 
     def __param_expand(var_name, operator, operand)
