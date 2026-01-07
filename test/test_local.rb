@@ -73,11 +73,27 @@ class TestLocal < Test::Unit::TestCase
     ENV['x'] = 'global'
     Rubish::Builtins.push_local_scope
     Rubish::Builtins.run('local', ['x'])
-    assert_equal 'global', ENV['x']  # Still has global value
+    # Without localvar_inherit, local x unsets the variable (bash standard behavior)
+    assert_nil ENV['x']
     ENV['x'] = 'modified'
     assert_equal 'modified', ENV['x']
     Rubish::Builtins.pop_local_scope
     assert_equal 'global', ENV['x']  # Restored
+  end
+
+  def test_local_without_value_with_localvar_inherit
+    Rubish::Builtins.shell_options['localvar_inherit'] = true
+    ENV['x'] = 'global'
+    Rubish::Builtins.push_local_scope
+    Rubish::Builtins.run('local', ['x'])
+    # With localvar_inherit, local x inherits the value
+    assert_equal 'global', ENV['x']
+    ENV['x'] = 'modified'
+    assert_equal 'modified', ENV['x']
+    Rubish::Builtins.pop_local_scope
+    assert_equal 'global', ENV['x']  # Restored
+  ensure
+    Rubish::Builtins.shell_options.delete('localvar_inherit')
   end
 
   # Test multiple local variables

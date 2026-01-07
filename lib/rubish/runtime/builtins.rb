@@ -1395,10 +1395,21 @@ module Rubish
           ENV[name] = value
         else
           # Just declare as local without value
-          unless current_scope.key?(arg)
-            current_scope[arg] = ENV.key?(arg) ? ENV[arg] : :unset
+          name = arg
+          unless current_scope.key?(name)
+            current_scope[name] = ENV.key?(name) ? ENV[name] : :unset
           end
-          # Don't change the value, just mark it as local
+
+          # localvar_inherit: inherit value and attributes from outer scope
+          if shopt_enabled?('localvar_inherit')
+            # Keep the inherited value (already in ENV if it exists)
+            # Also inherit variable attributes if present
+            # (attributes are already global, so nothing more to do for value)
+          else
+            # Without localvar_inherit, local var without value creates unset variable
+            # This is standard bash behavior
+            ENV.delete(name)
+          end
         end
       end
 
