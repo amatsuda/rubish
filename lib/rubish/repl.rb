@@ -197,19 +197,49 @@ module Rubish
       return if max_lines <= 0
 
       begin
-        history = Reline::HISTORY.to_a
-        # Only keep the last HISTFILESIZE entries
-        history = history.last(max_lines) if history.size > max_lines
-
         # Create directory if needed
         dir = File.dirname(file)
         FileUtils.mkdir_p(dir) unless File.directory?(dir)
 
-        File.open(file, 'w') do |f|
-          history.each { |line| f.puts(line) }
+        if Builtins.shopt_enabled?('histappend')
+          # histappend: append new entries to history file
+          history = Reline::HISTORY.to_a
+          last_line = Builtins.last_history_line
+          new_entries = history[last_line..]
+
+          if new_entries && !new_entries.empty?
+            File.open(file, 'a') do |f|
+              new_entries.each { |line| f.puts(line) }
+            end
+          end
+
+          # Truncate file if it exceeds HISTFILESIZE
+          truncate_history_file(file, max_lines)
+        else
+          # Default: overwrite history file
+          history = Reline::HISTORY.to_a
+          # Only keep the last HISTFILESIZE entries
+          history = history.last(max_lines) if history.size > max_lines
+
+          File.open(file, 'w') do |f|
+            history.each { |line| f.puts(line) }
+          end
         end
       rescue => e
         $stderr.puts "rubish: cannot write history file: #{e.message}"
+      end
+    end
+
+    # Truncate history file to max_lines if needed
+    def truncate_history_file(file, max_lines)
+      return unless File.exist?(file)
+
+      lines = File.readlines(file)
+      return if lines.size <= max_lines
+
+      # Keep only the last max_lines
+      File.open(file, 'w') do |f|
+        lines.last(max_lines).each { |line| f.print(line) }
       end
     end
 
