@@ -817,6 +817,12 @@ module Rubish
       line = Builtins.expand_alias(line)
       line = expand_tilde(line)
 
+      # interactive_comments: strip comments (text after unquoted #)
+      if Builtins.shopt_enabled?('interactive_comments')
+        line = strip_comment(line)
+        return if line.empty?
+      end
+
       # Set RUBISH_COMMAND before execution (contains command being executed)
       @rubish_command = line
 
@@ -1589,6 +1595,63 @@ module Rubish
       else
         0
       end
+    end
+
+    # Strip comments from line (text after unquoted #)
+    # Comments only start at # that's preceded by whitespace or at start of line
+    def strip_comment(line)
+      result = +''
+      i = 0
+      in_single_quotes = false
+      in_double_quotes = false
+      brace_depth = 0
+
+      while i < line.length
+        char = line[i]
+
+        if char == '\\' && !in_single_quotes && i + 1 < line.length
+          # Escaped character - keep both
+          result << char << line[i + 1]
+          i += 2
+        elsif char == "'" && !in_double_quotes && brace_depth == 0
+          in_single_quotes = !in_single_quotes
+          result << char
+          i += 1
+        elsif char == '"' && !in_single_quotes && brace_depth == 0
+          in_double_quotes = !in_double_quotes
+          result << char
+          i += 1
+        elsif char == '$' && line[i + 1] == '{' && !in_single_quotes
+          # Start of ${...} parameter expansion - track brace depth
+          result << char << '{'
+          brace_depth += 1
+          i += 2
+        elsif char == '{' && brace_depth > 0
+          brace_depth += 1
+          result << char
+          i += 1
+        elsif char == '}' && brace_depth > 0
+          brace_depth -= 1
+          result << char
+          i += 1
+        elsif char == '#' && !in_single_quotes && !in_double_quotes && brace_depth == 0
+          # Comment starts at # preceded by whitespace or at start
+          prev_char = i > 0 ? result[-1] : nil
+          if prev_char.nil? || prev_char =~ /\s/
+            # This is a comment - stop here
+            break
+          else
+            # # is part of a word (like foo#bar), keep it
+            result << char
+            i += 1
+          end
+        else
+          result << char
+          i += 1
+        end
+      end
+
+      result.rstrip
     end
 
     def expand_tilde(line)
