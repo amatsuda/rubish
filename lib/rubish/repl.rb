@@ -484,6 +484,31 @@ module Rubish
     #   ignoreboth   - ignorespace + ignoredups
     #   erasedups    - erase all previous duplicates before adding
     # HISTIGNORE: colon-separated patterns to ignore
+    # Update the last history entry to include heredoc content
+    # This is called after heredoc content is collected
+    # cmdhist: save multi-line commands as single history entry (default on)
+    # lithist: preserve newlines in multi-line history (default off)
+    def update_history_with_heredoc(command_line, delimiter, heredoc_content)
+      return unless Builtins.shopt_enabled?('cmdhist')
+      return if Reline::HISTORY.empty?
+
+      # Build the full command with heredoc
+      full_command = if Builtins.shopt_enabled?('lithist')
+                       # Preserve newlines: command\nheredoc_content\ndelimiter
+                       "#{command_line}\n#{heredoc_content}#{delimiter}"
+                     else
+                       # Replace newlines with semicolons for the heredoc content
+                       # But format it as a single line: cat <<EOF; content; EOF
+                       content_lines = heredoc_content.chomp.split("\n")
+                       "#{command_line} #{content_lines.join('; ')}; #{delimiter}"
+                     end
+
+      # Replace the last history entry with the full command
+      last_idx = Reline::HISTORY.size - 1
+      Reline::HISTORY.delete_at(last_idx)
+      Reline::HISTORY << full_command
+    end
+
     def add_to_history(line)
       return if line.empty?
 
@@ -878,6 +903,8 @@ module Rubish
       # Skip if content was already set (e.g., by source command)
       if (heredoc = find_heredoc(ast)) && @heredoc_content.nil?
         @heredoc_content = collect_heredoc_content(heredoc.delimiter, heredoc.strip_tabs)
+        # Update history with full heredoc command if cmdhist is enabled
+        update_history_with_heredoc(line, heredoc.delimiter, @heredoc_content)
       end
 
       # Check for bare variable assignment (VAR=value or VAR=value VAR2=value2 ...)
