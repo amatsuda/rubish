@@ -4022,8 +4022,8 @@ module Rubish
         return File.expand_path(filename)
       end
 
-      # Search in RUBISH_LOADABLES_PATH
-      loadables_path = ENV['RUBISH_LOADABLES_PATH']
+      # Search in RUBISH_LOADABLES_PATH (or BASH_LOADABLES_PATH for bash compatibility)
+      loadables_path = ENV['RUBISH_LOADABLES_PATH'] || ENV['BASH_LOADABLES_PATH']
       if loadables_path && !loadables_path.empty?
         loadables_path.split(':').each do |dir|
           next if dir.empty?
