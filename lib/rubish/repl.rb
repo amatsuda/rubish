@@ -1280,7 +1280,7 @@ module Rubish
             seed_random(expanded_value.to_i)
           elsif var_name == 'LINENO'
             @lineno = expanded_value.to_i
-          elsif var_name == 'PPID' || var_name == 'UID' || var_name == 'EUID' || var_name == 'GROUPS' || var_name == 'HOSTNAME' || var_name == 'RUBISHPID' || var_name == 'HISTCMD' || var_name == 'EPOCHSECONDS' || var_name == 'EPOCHREALTIME' || var_name == 'SRANDOM' || var_name == 'RUBISH_VERSION' || var_name == 'RUBISH_VERSINFO' || var_name == 'OSTYPE' || var_name == 'HOSTTYPE' || var_name == 'MACHTYPE' || var_name == 'PIPESTATUS' || var_name == 'RUBISH_COMMAND' || var_name == 'FUNCNAME' || var_name == 'RUBISH_LINENO' || var_name == 'RUBISH_SOURCE' || var_name == 'RUBISH_ARGC' || var_name == 'RUBISH_ARGV' || var_name == 'RUBISH_SUBSHELL' || var_name == 'DIRSTACK' || var_name == 'COLUMNS' || var_name == 'LINES' || var_name == 'RUBISH_ALIASES' || var_name == 'RUBISH_CMDS' || var_name == 'COMP_CWORD' || var_name == 'COMP_LINE' || var_name == 'COMP_POINT' || var_name == 'COMP_TYPE' || var_name == 'COMP_KEY' || var_name == 'COMP_WORDS'
+          elsif var_name == 'PPID' || var_name == 'UID' || var_name == 'EUID' || var_name == 'GROUPS' || var_name == 'HOSTNAME' || var_name == 'RUBISHPID' || var_name == 'HISTCMD' || var_name == 'EPOCHSECONDS' || var_name == 'EPOCHREALTIME' || var_name == 'SRANDOM' || var_name == 'BASH_MONOSECONDS' || var_name == 'RUBISH_VERSION' || var_name == 'RUBISH_VERSINFO' || var_name == 'OSTYPE' || var_name == 'HOSTTYPE' || var_name == 'MACHTYPE' || var_name == 'PIPESTATUS' || var_name == 'RUBISH_COMMAND' || var_name == 'FUNCNAME' || var_name == 'RUBISH_LINENO' || var_name == 'RUBISH_SOURCE' || var_name == 'RUBISH_ARGC' || var_name == 'RUBISH_ARGV' || var_name == 'RUBISH_SUBSHELL' || var_name == 'DIRSTACK' || var_name == 'COLUMNS' || var_name == 'LINES' || var_name == 'RUBISH_ALIASES' || var_name == 'RUBISH_CMDS' || var_name == 'COMP_CWORD' || var_name == 'COMP_LINE' || var_name == 'COMP_POINT' || var_name == 'COMP_TYPE' || var_name == 'COMP_KEY' || var_name == 'COMP_WORDS'
             # These variables are read-only, silently ignore assignment
           else
             ENV[var_name] = expanded_value
@@ -1652,6 +1652,7 @@ module Rubish
       return Time.now.to_i.to_s if var_name == 'EPOCHSECONDS'
       return format('%.6f', Time.now.to_f) if var_name == 'EPOCHREALTIME'
       return SecureRandom.random_number(2**32).to_s if var_name == 'SRANDOM'
+      return __bash_monoseconds.to_s if var_name == 'BASH_MONOSECONDS'
       return Rubish::VERSION if var_name == 'RUBISH_VERSION'
       return __ostype if var_name == 'OSTYPE'
       return __hosttype if var_name == 'HOSTTYPE'
@@ -2559,6 +2560,7 @@ module Rubish
       return Time.now.to_i.to_s if var_name == 'EPOCHSECONDS'
       return format('%.6f', Time.now.to_f) if var_name == 'EPOCHREALTIME'
       return SecureRandom.random_number(2**32).to_s if var_name == 'SRANDOM'
+      return __bash_monoseconds.to_s if var_name == 'BASH_MONOSECONDS'
       return Rubish::VERSION if var_name == 'RUBISH_VERSION'
       return __ostype if var_name == 'OSTYPE'
       return __hosttype if var_name == 'HOSTTYPE'
@@ -2655,6 +2657,10 @@ module Rubish
         is_null = false
       elsif var_name == 'SRANDOM'
         value = SecureRandom.random_number(2**32).to_s
+        is_set = true
+        is_null = false
+      elsif var_name == 'BASH_MONOSECONDS'
+        value = __bash_monoseconds.to_s
         is_set = true
         is_null = false
       elsif var_name == 'RUBISH_VERSION'
@@ -2826,6 +2832,7 @@ module Rubish
       when 'EPOCHSECONDS' then Time.now.to_i.to_s
       when 'EPOCHREALTIME' then format('%.6f', Time.now.to_f)
       when 'SRANDOM' then SecureRandom.random_number(2**32).to_s
+      when 'BASH_MONOSECONDS' then __bash_monoseconds.to_s
       when 'RUBISH_VERSION' then Rubish::VERSION
       when 'OSTYPE' then __ostype
       when 'HOSTTYPE' then __hosttype
@@ -2986,6 +2993,17 @@ module Rubish
     def __hosttype
       # Returns host/machine type from RUBY_PLATFORM (e.g., "arm64", "x86_64")
       RUBY_PLATFORM.split('-').first
+    end
+
+    def __bash_monoseconds
+      # Returns the value from the system's monotonic clock in seconds
+      # The monotonic clock is not affected by system time changes
+      # Falls back to EPOCHSECONDS equivalent if monotonic clock unavailable
+      if defined?(Process::CLOCK_MONOTONIC)
+        Process.clock_gettime(Process::CLOCK_MONOTONIC).to_i
+      else
+        Time.now.to_i
+      end
     end
 
     def __translate(string)
