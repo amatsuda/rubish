@@ -3300,6 +3300,12 @@ module Rubish
                        pattern
                      end
 
+      # globasciiranges: when disabled, expand letter ranges to include both cases
+      # (approximates locale-aware collation where a-z might include A-Z)
+      unless Builtins.shopt_enabled?('globasciiranges')
+        glob_pattern = expand_locale_ranges(glob_pattern)
+      end
+
       # Expand glob pattern, return original if no matches (unless nullglob)
       # Check for extended globs if extglob is enabled
       # Build glob flags based on options
@@ -3400,6 +3406,84 @@ module Rubish
                end
 
       reverse ? sorted.reverse : sorted
+    end
+
+    def expand_locale_ranges(pattern)
+      # When globasciiranges is disabled, expand letter ranges to include both cases
+      # This approximates locale-aware collation where [a-z] might match A-Z too
+      # Transform [a-z] to [a-zA-Z], [A-Z] to [A-Za-z], etc.
+      result = +''
+      i = 0
+      while i < pattern.length
+        if pattern[i] == '['
+          # Find the end of the bracket expression
+          j = i + 1
+          j += 1 if j < pattern.length && (pattern[j] == '!' || pattern[j] == '^')  # negation
+          j += 1 if j < pattern.length && pattern[j] == ']'  # literal ] at start
+          while j < pattern.length && pattern[j] != ']'
+            j += 1
+          end
+          if j < pattern.length
+            # Extract bracket contents and expand ranges
+            bracket_content = pattern[i + 1...j]
+            expanded = expand_bracket_ranges(bracket_content)
+            result << '[' << expanded << ']'
+            i = j + 1
+          else
+            result << pattern[i]
+            i += 1
+          end
+        else
+          result << pattern[i]
+          i += 1
+        end
+      end
+      result
+    end
+
+    def expand_bracket_ranges(content)
+      # Expand letter ranges in bracket expression to include both cases
+      # e.g., "a-z" becomes "a-zA-Z", "A-M" becomes "A-Ma-m"
+      result = +''
+      i = 0
+
+      # Handle negation prefix
+      if i < content.length && (content[i] == '!' || content[i] == '^')
+        result << content[i]
+        i += 1
+      end
+
+      while i < content.length
+        # Check for a range pattern: char-char
+        if i + 2 < content.length && content[i + 1] == '-' && content[i + 2] != ']'
+          start_char = content[i]
+          end_char = content[i + 2]
+
+          # Check if this is a letter range
+          if start_char =~ /[a-zA-Z]/ && end_char =~ /[a-zA-Z]/
+            # Add the original range
+            result << start_char << '-' << end_char
+            # Add the opposite case range if it's a single-case range
+            if start_char =~ /[a-z]/ && end_char =~ /[a-z]/
+              # Lowercase range - add uppercase equivalent
+              result << start_char.upcase << '-' << end_char.upcase
+            elsif start_char =~ /[A-Z]/ && end_char =~ /[A-Z]/
+              # Uppercase range - add lowercase equivalent
+              result << start_char.downcase << '-' << end_char.downcase
+            end
+            i += 3
+          else
+            # Not a letter range, keep as-is
+            result << content[i]
+            i += 1
+          end
+        else
+          result << content[i]
+          i += 1
+        end
+      end
+
+      result
     end
 
     def has_extglob?(pattern)
