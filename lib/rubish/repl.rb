@@ -1467,6 +1467,63 @@ module Rubish
       result
     end
 
+    def expand_extquote(str)
+      # Process $'...' (ANSI-C quoting) and $"..." (locale translation) in a string
+      # Used by extquote shopt option for parameter expansion operands
+      result = +''
+      i = 0
+
+      while i < str.length
+        if str[i] == '$' && i + 1 < str.length
+          if str[i + 1] == "'"
+            # $'...' - ANSI-C quoting
+            j = i + 2
+            content = +''
+            while j < str.length && str[j] != "'"
+              if str[j] == '\\' && j + 1 < str.length
+                # Handle escape sequences
+                content << str[j, 2]
+                j += 2
+              else
+                content << str[j]
+                j += 1
+              end
+            end
+            if j < str.length && str[j] == "'"
+              # Process escape sequences
+              result << Builtins.process_escape_sequences(content)
+              i = j + 1
+              next
+            end
+          elsif str[i + 1] == '"'
+            # $"..." - locale translation
+            j = i + 2
+            content = +''
+            while j < str.length && str[j] != '"'
+              if str[j] == '\\' && j + 1 < str.length
+                content << str[j, 2]
+                j += 2
+              else
+                content << str[j]
+                j += 1
+              end
+            end
+            if j < str.length && str[j] == '"'
+              # Expand variables in content first, then translate
+              expanded_content = expand_string_content(content)
+              result << __translate(expanded_content)
+              i = j + 1
+              next
+            end
+          end
+        end
+        result << str[i]
+        i += 1
+      end
+
+      result
+    end
+
     def expand_backtick_at(str, pos)
       return ['', 0] unless str[pos] == '`'
 
@@ -2439,6 +2496,11 @@ module Rubish
     end
 
     def __param_expand(var_name, operator, operand)
+      # extquote: when enabled, process $'...' and $"..." quoting in the operand
+      if Builtins.shopt_enabled?('extquote')
+        operand = expand_extquote(operand)
+      end
+
       # Parameter expansion operations
       # Special handling for SECONDS, RANDOM, LINENO, PPID, UID, EUID, and GROUPS
       if var_name == 'SECONDS'
