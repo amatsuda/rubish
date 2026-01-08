@@ -1294,7 +1294,7 @@ module Rubish
             # BASH_COMPAT: Set shell compatibility level
             # Accepts "5.1", "51", or empty to clear
             Builtins.set_bash_compat(expanded_value)
-          elsif var_name == 'PPID' || var_name == 'UID' || var_name == 'EUID' || var_name == 'GROUPS' || var_name == 'HOSTNAME' || var_name == 'RUBISHPID' || var_name == 'BASHPID' || var_name == 'HISTCMD' || var_name == 'EPOCHSECONDS' || var_name == 'EPOCHREALTIME' || var_name == 'SRANDOM' || var_name == 'BASH_MONOSECONDS' || var_name == 'RUBISH_VERSION' || var_name == 'BASH_VERSION' || var_name == 'RUBISH_VERSINFO' || var_name == 'BASH_VERSINFO' || var_name == 'OSTYPE' || var_name == 'HOSTTYPE' || var_name == 'MACHTYPE' || var_name == 'PIPESTATUS' || var_name == 'RUBISH_COMMAND' || var_name == 'FUNCNAME' || var_name == 'RUBISH_LINENO' || var_name == 'RUBISH_SOURCE' || var_name == 'RUBISH_ARGC' || var_name == 'RUBISH_ARGV' || var_name == 'RUBISH_SUBSHELL' || var_name == 'BASH_SUBSHELL' || var_name == 'DIRSTACK' || var_name == 'COLUMNS' || var_name == 'LINES' || var_name == 'RUBISH_ALIASES' || var_name == 'RUBISH_CMDS' || var_name == 'COMP_CWORD' || var_name == 'COMP_LINE' || var_name == 'COMP_POINT' || var_name == 'COMP_TYPE' || var_name == 'COMP_KEY' || var_name == 'COMP_WORDS'
+          elsif var_name == 'PPID' || var_name == 'UID' || var_name == 'EUID' || var_name == 'GROUPS' || var_name == 'HOSTNAME' || var_name == 'RUBISHPID' || var_name == 'BASHPID' || var_name == 'HISTCMD' || var_name == 'EPOCHSECONDS' || var_name == 'EPOCHREALTIME' || var_name == 'SRANDOM' || var_name == 'BASH_MONOSECONDS' || var_name == 'RUBISH_VERSION' || var_name == 'BASH_VERSION' || var_name == 'RUBISH_VERSINFO' || var_name == 'BASH_VERSINFO' || var_name == 'OSTYPE' || var_name == 'HOSTTYPE' || var_name == 'MACHTYPE' || var_name == 'PIPESTATUS' || var_name == 'RUBISH_COMMAND' || var_name == 'BASH_COMMAND' || var_name == 'FUNCNAME' || var_name == 'RUBISH_LINENO' || var_name == 'BASH_LINENO' || var_name == 'RUBISH_SOURCE' || var_name == 'BASH_SOURCE' || var_name == 'RUBISH_ARGC' || var_name == 'RUBISH_ARGV' || var_name == 'RUBISH_SUBSHELL' || var_name == 'BASH_SUBSHELL' || var_name == 'DIRSTACK' || var_name == 'COLUMNS' || var_name == 'LINES' || var_name == 'RUBISH_ALIASES' || var_name == 'RUBISH_CMDS' || var_name == 'COMP_CWORD' || var_name == 'COMP_LINE' || var_name == 'COMP_POINT' || var_name == 'COMP_TYPE' || var_name == 'COMP_KEY' || var_name == 'COMP_WORDS'
             # These variables are read-only, silently ignore assignment
           else
             ENV[var_name] = expanded_value
@@ -1674,6 +1674,7 @@ module Rubish
       return __hosttype if var_name == 'HOSTTYPE'
       return RUBY_PLATFORM if var_name == 'MACHTYPE'
       return @rubish_command if var_name == 'RUBISH_COMMAND'
+      return @rubish_command if var_name == 'BASH_COMMAND'
       return @subshell_level.to_s if var_name == 'RUBISH_SUBSHELL'
       return @subshell_level.to_s if var_name == 'BASH_SUBSHELL'
       return terminal_columns.to_s if var_name == 'COLUMNS'
@@ -2588,6 +2589,7 @@ module Rubish
       return __hosttype if var_name == 'HOSTTYPE'
       return RUBY_PLATFORM if var_name == 'MACHTYPE'
       return @rubish_command if var_name == 'RUBISH_COMMAND'
+      return @rubish_command if var_name == 'BASH_COMMAND'
       return @subshell_level.to_s if var_name == 'RUBISH_SUBSHELL'
       return @subshell_level.to_s if var_name == 'BASH_SUBSHELL'
       return terminal_columns.to_s if var_name == 'COLUMNS'
@@ -2723,7 +2725,7 @@ module Rubish
         value = RUBY_PLATFORM
         is_set = true
         is_null = false
-      elsif var_name == 'RUBISH_COMMAND'
+      elsif var_name == 'RUBISH_COMMAND' || var_name == 'BASH_COMMAND'
         value = @rubish_command
         is_set = true
         is_null = @rubish_command.empty?
@@ -2889,7 +2891,7 @@ module Rubish
       when 'OSTYPE' then __ostype
       when 'HOSTTYPE' then __hosttype
       when 'MACHTYPE' then RUBY_PLATFORM
-      when 'RUBISH_COMMAND' then @rubish_command
+      when 'RUBISH_COMMAND', 'BASH_COMMAND' then @rubish_command
       when 'RUBISH_SUBSHELL', 'BASH_SUBSHELL' then @subshell_level.to_s
       when 'COLUMNS' then terminal_columns.to_s
       when 'LINES' then terminal_lines.to_s
@@ -3154,8 +3156,8 @@ module Rubish
         return (@funcname_stack[idx] || '').to_s
       end
 
-      # Special handling for RUBISH_LINENO array
-      if var_name == 'RUBISH_LINENO'
+      # Special handling for RUBISH_LINENO and BASH_LINENO arrays
+      if var_name == 'RUBISH_LINENO' || var_name == 'BASH_LINENO'
         idx = begin
           eval(expanded_index).to_i
         rescue
@@ -3164,8 +3166,8 @@ module Rubish
         return (@rubish_lineno_stack[idx] || '').to_s
       end
 
-      # Special handling for RUBISH_SOURCE array
-      if var_name == 'RUBISH_SOURCE'
+      # Special handling for RUBISH_SOURCE and BASH_SOURCE arrays
+      if var_name == 'RUBISH_SOURCE' || var_name == 'BASH_SOURCE'
         idx = begin
           eval(expanded_index).to_i
         rescue
@@ -3263,11 +3265,11 @@ module Rubish
       # Special handling for FUNCNAME array
       elsif var_name == 'FUNCNAME'
         values = @funcname_stack.dup
-      # Special handling for RUBISH_LINENO array
-      elsif var_name == 'RUBISH_LINENO'
+      # Special handling for RUBISH_LINENO and BASH_LINENO arrays
+      elsif var_name == 'RUBISH_LINENO' || var_name == 'BASH_LINENO'
         values = @rubish_lineno_stack.map(&:to_s)
-      # Special handling for RUBISH_SOURCE array
-      elsif var_name == 'RUBISH_SOURCE'
+      # Special handling for RUBISH_SOURCE and BASH_SOURCE arrays
+      elsif var_name == 'RUBISH_SOURCE' || var_name == 'BASH_SOURCE'
         values = @rubish_source_stack.dup
       # Special handling for RUBISH_ARGC array
       elsif var_name == 'RUBISH_ARGC'
@@ -3318,11 +3320,11 @@ module Rubish
       # Special handling for FUNCNAME array
       elsif var_name == 'FUNCNAME'
         @funcname_stack.length.to_s
-      # Special handling for RUBISH_LINENO array
-      elsif var_name == 'RUBISH_LINENO'
+      # Special handling for RUBISH_LINENO and BASH_LINENO arrays
+      elsif var_name == 'RUBISH_LINENO' || var_name == 'BASH_LINENO'
         @rubish_lineno_stack.length.to_s
-      # Special handling for RUBISH_SOURCE array
-      elsif var_name == 'RUBISH_SOURCE'
+      # Special handling for RUBISH_SOURCE and BASH_SOURCE arrays
+      elsif var_name == 'RUBISH_SOURCE' || var_name == 'BASH_SOURCE'
         @rubish_source_stack.length.to_s
       # Special handling for RUBISH_ARGC array
       elsif var_name == 'RUBISH_ARGC'
@@ -3366,11 +3368,11 @@ module Rubish
       # Special handling for FUNCNAME array
       elsif var_name == 'FUNCNAME'
         (0...@funcname_stack.length).to_a.join(' ')
-      # Special handling for RUBISH_LINENO array
-      elsif var_name == 'RUBISH_LINENO'
+      # Special handling for RUBISH_LINENO and BASH_LINENO arrays
+      elsif var_name == 'RUBISH_LINENO' || var_name == 'BASH_LINENO'
         (0...@rubish_lineno_stack.length).to_a.join(' ')
-      # Special handling for RUBISH_SOURCE array
-      elsif var_name == 'RUBISH_SOURCE'
+      # Special handling for RUBISH_SOURCE and BASH_SOURCE arrays
+      elsif var_name == 'RUBISH_SOURCE' || var_name == 'BASH_SOURCE'
         (0...@rubish_source_stack.length).to_a.join(' ')
       # Special handling for RUBISH_ARGC array
       elsif var_name == 'RUBISH_ARGC'
