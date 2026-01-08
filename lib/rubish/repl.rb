@@ -2684,13 +2684,48 @@ module Rubish
       # Convert shell pattern to regex
       regex = pattern_to_regex(pattern, :any, :longest)
 
+      # Process replacement string for & substitution when patsub_replacement is enabled
+      replacement_proc = if Builtins.shopt_enabled?('patsub_replacement') && replacement.include?('&')
+                           proc do |match|
+                             # Replace unescaped & with the matched text
+                             # \& is a literal &
+                             result = +''
+                             i = 0
+                             while i < replacement.length
+                               if replacement[i] == '\\' && i + 1 < replacement.length && replacement[i + 1] == '&'
+                                 # Escaped &, output literal &
+                                 result << '&'
+                                 i += 2
+                               elsif replacement[i] == '&'
+                                 # Unescaped &, replace with match
+                                 result << match
+                                 i += 1
+                               else
+                                 result << replacement[i]
+                                 i += 1
+                               end
+                             end
+                             result
+                           end
+                         else
+                           nil
+                         end
+
       case operator
       when '//'
         # Replace all occurrences
-        value.gsub(regex, replacement)
+        if replacement_proc
+          value.gsub(regex, &replacement_proc)
+        else
+          value.gsub(regex, replacement)
+        end
       when '/'
         # Replace first occurrence only
-        value.sub(regex, replacement)
+        if replacement_proc
+          value.sub(regex, &replacement_proc)
+        else
+          value.sub(regex, replacement)
+        end
       else
         value
       end
