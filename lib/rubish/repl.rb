@@ -4253,6 +4253,11 @@ module Rubish
       line = Reline.line_buffer
       point = Reline.point rescue line.length
 
+      # no_empty_cmd_completion: do not complete on empty command line
+      if Builtins.shopt_enabled?('no_empty_cmd_completion') && line.strip.empty?
+        return []
+      end
+
       # Parse command line into words
       words = split_completion_words(line)
       is_first_word = words.length <= 1
