@@ -8,6 +8,7 @@ module Rubish
     @dir_stack = []
     @traps = {}
     @original_traps = {}
+    @current_trapsig = ''  # Signal name when trap handler is executing (for RUBISH_TRAPSIG/BASH_TRAPSIG)
     @local_scope_stack = []  # Stack of hashes for local variable scopes
     @readonly_vars = {}  # Hash of readonly variable names to their values
     @var_attributes = {}  # Hash of variable names to Set of attributes (:integer, :lowercase, :uppercase, :export)
@@ -49,6 +50,7 @@ module Rubish
 
     class << self
       attr_reader :aliases, :dir_stack, :traps, :local_scope_stack, :readonly_vars, :var_attributes, :command_hash, :shell_options, :disabled_builtins, :call_stack, :completions, :completion_options, :key_bindings, :readline_variables, :arrays, :assoc_arrays, :namerefs, :coprocs
+      attr_accessor :current_trapsig
       attr_accessor :executor, :script_name_getter, :script_name_setter, :positional_params_getter, :positional_params_setter, :function_checker, :function_remover, :function_lister, :function_getter, :heredoc_content_setter, :command_executor, :current_completion_options
       attr_accessor :history_file_getter, :history_loader, :history_saver, :history_appender, :last_history_line, :history_timestamps
       attr_accessor :source_file_getter, :source_file_setter
@@ -1133,8 +1135,15 @@ module Rubish
         Signal.trap(sig, 'IGNORE')
       else
         # Set up the handler
+        # Capture signal name for RUBISH_TRAPSIG/BASH_TRAPSIG
+        sig_name = sig.is_a?(Integer) ? Signal.signame(sig) : sig.to_s.sub(/^SIG/, '')
         Signal.trap(sig) do
-          @executor&.call(command) if @executor
+          @current_trapsig = sig_name
+          begin
+            @executor&.call(command) if @executor
+          ensure
+            @current_trapsig = ''
+          end
         end
       end
       true
@@ -1162,7 +1171,12 @@ module Rubish
     def self.run_exit_traps
       return unless @traps.key?(0)
 
-      @executor&.call(@traps[0]) if @executor
+      @current_trapsig = 'EXIT'
+      begin
+        @executor&.call(@traps[0]) if @executor
+      ensure
+        @current_trapsig = ''
+      end
     end
 
     @in_err_trap = false
@@ -1172,10 +1186,12 @@ module Rubish
       return if @in_err_trap  # Prevent recursion
 
       @in_err_trap = true
+      @current_trapsig = 'ERR'
       begin
         @executor&.call(@traps['ERR']) if @executor
       ensure
         @in_err_trap = false
+        @current_trapsig = ''
       end
     end
 
@@ -1203,10 +1219,12 @@ module Rubish
       return if @in_debug_trap  # Prevent recursion
 
       @in_debug_trap = true
+      @current_trapsig = 'DEBUG'
       begin
         @executor&.call(@traps['DEBUG']) if @executor
       ensure
         @in_debug_trap = false
+        @current_trapsig = ''
       end
     end
 
@@ -1221,10 +1239,12 @@ module Rubish
       return if @in_return_trap  # Prevent recursion
 
       @in_return_trap = true
+      @current_trapsig = 'RETURN'
       begin
         @executor&.call(@traps['RETURN']) if @executor
       ensure
         @in_return_trap = false
+        @current_trapsig = ''
       end
     end
 
