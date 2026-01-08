@@ -53,6 +53,7 @@ module Rubish
       attr_accessor :history_file_getter, :history_loader, :history_saver, :history_appender, :last_history_line, :history_timestamps
       attr_accessor :source_file_getter, :source_file_setter
       attr_accessor :lineno_getter
+      attr_accessor :bash_argv0_unsetter
       attr_accessor :exit_blocked_by_jobs
     end
 
@@ -1508,6 +1509,11 @@ module Rubish
               end
               next
             end
+          end
+
+          # Special handling for BASH_ARGV0: loses special properties when unset
+          if name == 'BASH_ARGV0'
+            @bash_argv0_unsetter&.call
           end
 
           # Standard behavior: just remove from environment

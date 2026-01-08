@@ -35,6 +35,7 @@ module Rubish
       @mail_atimes = {}  # For mailwarn - hash of mail file paths to their last known atime
       @varname_fds = {}  # For {varname} redirection - maps varname to allocated FD
       @next_varname_fd = 10  # Next FD to allocate for {varname} redirections
+      @bash_argv0_unset = false  # Track if BASH_ARGV0 has been unset (loses special properties)
       # SHLVL - shell nesting level (stored in ENV for inheritance)
       current_shlvl = ENV['SHLVL'].to_i
       ENV['SHLVL'] = (current_shlvl + 1).to_s
@@ -55,6 +56,7 @@ module Rubish
       Builtins.source_file_getter = -> { @current_source_file }
       Builtins.source_file_setter = ->(file) { @current_source_file = file }
       Builtins.lineno_getter = -> { @lineno }
+      Builtins.bash_argv0_unsetter = -> { @bash_argv0_unset = true }
       # History callbacks
       Builtins.history_file_getter = -> { history_file }
       Builtins.history_loader = -> { load_history }
@@ -1280,6 +1282,14 @@ module Rubish
             seed_random(expanded_value.to_i)
           elsif var_name == 'LINENO'
             @lineno = expanded_value.to_i
+          elsif var_name == 'BASH_ARGV0'
+            # BASH_ARGV0: Assigning a value also sets $0 to the same value
+            # Unless it has been unset, in which case it loses special properties
+            unless @bash_argv0_unset
+              ENV['RUBISH_ARGV0'] = expanded_value
+            else
+              ENV[var_name] = expanded_value
+            end
           elsif var_name == 'PPID' || var_name == 'UID' || var_name == 'EUID' || var_name == 'GROUPS' || var_name == 'HOSTNAME' || var_name == 'RUBISHPID' || var_name == 'HISTCMD' || var_name == 'EPOCHSECONDS' || var_name == 'EPOCHREALTIME' || var_name == 'SRANDOM' || var_name == 'BASH_MONOSECONDS' || var_name == 'RUBISH_VERSION' || var_name == 'RUBISH_VERSINFO' || var_name == 'OSTYPE' || var_name == 'HOSTTYPE' || var_name == 'MACHTYPE' || var_name == 'PIPESTATUS' || var_name == 'RUBISH_COMMAND' || var_name == 'FUNCNAME' || var_name == 'RUBISH_LINENO' || var_name == 'RUBISH_SOURCE' || var_name == 'RUBISH_ARGC' || var_name == 'RUBISH_ARGV' || var_name == 'RUBISH_SUBSHELL' || var_name == 'DIRSTACK' || var_name == 'COLUMNS' || var_name == 'LINES' || var_name == 'RUBISH_ALIASES' || var_name == 'RUBISH_CMDS' || var_name == 'COMP_CWORD' || var_name == 'COMP_LINE' || var_name == 'COMP_POINT' || var_name == 'COMP_TYPE' || var_name == 'COMP_KEY' || var_name == 'COMP_WORDS'
             # These variables are read-only, silently ignore assignment
           else
@@ -1600,9 +1610,8 @@ module Rubish
       when '$!'
         return [@last_bg_pid ? @last_bg_pid.to_s : '', 2]
       when '$0'
-        # RUBISH_ARGV0 overrides $0 if set
-        argv0 = ENV['RUBISH_ARGV0']
-        return [(argv0 && !argv0.empty?) ? argv0 : @script_name, 2]
+        # RUBISH_ARGV0 overrides $0 if set (even if empty)
+        return [__bash_argv0, 2]
       when '$#'
         return [@positional_params.length.to_s, 2]
       when '$@'
@@ -1653,6 +1662,7 @@ module Rubish
       return format('%.6f', Time.now.to_f) if var_name == 'EPOCHREALTIME'
       return SecureRandom.random_number(2**32).to_s if var_name == 'SRANDOM'
       return __bash_monoseconds.to_s if var_name == 'BASH_MONOSECONDS'
+      return __bash_argv0 if var_name == 'BASH_ARGV0' && !@bash_argv0_unset
       return Rubish::VERSION if var_name == 'RUBISH_VERSION'
       return __ostype if var_name == 'OSTYPE'
       return __hosttype if var_name == 'HOSTTYPE'
@@ -2561,6 +2571,7 @@ module Rubish
       return format('%.6f', Time.now.to_f) if var_name == 'EPOCHREALTIME'
       return SecureRandom.random_number(2**32).to_s if var_name == 'SRANDOM'
       return __bash_monoseconds.to_s if var_name == 'BASH_MONOSECONDS'
+      return __bash_argv0 if var_name == 'BASH_ARGV0' && !@bash_argv0_unset
       return Rubish::VERSION if var_name == 'RUBISH_VERSION'
       return __ostype if var_name == 'OSTYPE'
       return __hosttype if var_name == 'HOSTTYPE'
@@ -2663,6 +2674,17 @@ module Rubish
         value = __bash_monoseconds.to_s
         is_set = true
         is_null = false
+      elsif var_name == 'BASH_ARGV0'
+        if @bash_argv0_unset
+          # After unset, BASH_ARGV0 is a regular variable
+          value = ENV[var_name]
+          is_set = ENV.key?(var_name)
+          is_null = value.nil? || value.empty?
+        else
+          value = __bash_argv0
+          is_set = true
+          is_null = value.empty?
+        end
       elsif var_name == 'RUBISH_VERSION'
         value = Rubish::VERSION
         is_set = true
@@ -3004,6 +3026,13 @@ module Rubish
       else
         Time.now.to_i
       end
+    end
+
+    def __bash_argv0
+      # Returns the same value as $0 (the shell or script name)
+      # BASH_ARGV0 expands to the name of the shell or shell script
+      # RUBISH_ARGV0 overrides @script_name if set (even if empty)
+      ENV.key?('RUBISH_ARGV0') ? ENV['RUBISH_ARGV0'] : @script_name
     end
 
     def __translate(string)
