@@ -1294,7 +1294,7 @@ module Rubish
             # BASH_COMPAT: Set shell compatibility level
             # Accepts "5.1", "51", or empty to clear
             Builtins.set_bash_compat(expanded_value)
-          elsif var_name == 'PPID' || var_name == 'UID' || var_name == 'EUID' || var_name == 'GROUPS' || var_name == 'HOSTNAME' || var_name == 'RUBISHPID' || var_name == 'BASHPID' || var_name == 'HISTCMD' || var_name == 'EPOCHSECONDS' || var_name == 'EPOCHREALTIME' || var_name == 'SRANDOM' || var_name == 'BASH_MONOSECONDS' || var_name == 'RUBISH_VERSION' || var_name == 'RUBISH_VERSINFO' || var_name == 'OSTYPE' || var_name == 'HOSTTYPE' || var_name == 'MACHTYPE' || var_name == 'PIPESTATUS' || var_name == 'RUBISH_COMMAND' || var_name == 'FUNCNAME' || var_name == 'RUBISH_LINENO' || var_name == 'RUBISH_SOURCE' || var_name == 'RUBISH_ARGC' || var_name == 'RUBISH_ARGV' || var_name == 'RUBISH_SUBSHELL' || var_name == 'BASH_SUBSHELL' || var_name == 'DIRSTACK' || var_name == 'COLUMNS' || var_name == 'LINES' || var_name == 'RUBISH_ALIASES' || var_name == 'RUBISH_CMDS' || var_name == 'COMP_CWORD' || var_name == 'COMP_LINE' || var_name == 'COMP_POINT' || var_name == 'COMP_TYPE' || var_name == 'COMP_KEY' || var_name == 'COMP_WORDS'
+          elsif var_name == 'PPID' || var_name == 'UID' || var_name == 'EUID' || var_name == 'GROUPS' || var_name == 'HOSTNAME' || var_name == 'RUBISHPID' || var_name == 'BASHPID' || var_name == 'HISTCMD' || var_name == 'EPOCHSECONDS' || var_name == 'EPOCHREALTIME' || var_name == 'SRANDOM' || var_name == 'BASH_MONOSECONDS' || var_name == 'RUBISH_VERSION' || var_name == 'BASH_VERSION' || var_name == 'RUBISH_VERSINFO' || var_name == 'BASH_VERSINFO' || var_name == 'OSTYPE' || var_name == 'HOSTTYPE' || var_name == 'MACHTYPE' || var_name == 'PIPESTATUS' || var_name == 'RUBISH_COMMAND' || var_name == 'FUNCNAME' || var_name == 'RUBISH_LINENO' || var_name == 'RUBISH_SOURCE' || var_name == 'RUBISH_ARGC' || var_name == 'RUBISH_ARGV' || var_name == 'RUBISH_SUBSHELL' || var_name == 'BASH_SUBSHELL' || var_name == 'DIRSTACK' || var_name == 'COLUMNS' || var_name == 'LINES' || var_name == 'RUBISH_ALIASES' || var_name == 'RUBISH_CMDS' || var_name == 'COMP_CWORD' || var_name == 'COMP_LINE' || var_name == 'COMP_POINT' || var_name == 'COMP_TYPE' || var_name == 'COMP_KEY' || var_name == 'COMP_WORDS'
             # These variables are read-only, silently ignore assignment
           else
             ENV[var_name] = expanded_value
@@ -1669,6 +1669,7 @@ module Rubish
       return __bash_monoseconds.to_s if var_name == 'BASH_MONOSECONDS'
       return __bash_argv0 if var_name == 'BASH_ARGV0' && !@bash_argv0_unset
       return Rubish::VERSION if var_name == 'RUBISH_VERSION'
+      return Rubish::VERSION if var_name == 'BASH_VERSION'
       return __ostype if var_name == 'OSTYPE'
       return __hosttype if var_name == 'HOSTTYPE'
       return RUBY_PLATFORM if var_name == 'MACHTYPE'
@@ -2582,6 +2583,7 @@ module Rubish
       return __bash_monoseconds.to_s if var_name == 'BASH_MONOSECONDS'
       return __bash_argv0 if var_name == 'BASH_ARGV0' && !@bash_argv0_unset
       return Rubish::VERSION if var_name == 'RUBISH_VERSION'
+      return Rubish::VERSION if var_name == 'BASH_VERSION'
       return __ostype if var_name == 'OSTYPE'
       return __hosttype if var_name == 'HOSTTYPE'
       return RUBY_PLATFORM if var_name == 'MACHTYPE'
@@ -2702,6 +2704,10 @@ module Rubish
           is_null = value.empty?
         end
       elsif var_name == 'RUBISH_VERSION'
+        value = Rubish::VERSION
+        is_set = true
+        is_null = false
+      elsif var_name == 'BASH_VERSION'
         value = Rubish::VERSION
         is_set = true
         is_null = false
@@ -2879,7 +2885,7 @@ module Rubish
       when 'EPOCHREALTIME' then format('%.6f', Time.now.to_f)
       when 'SRANDOM' then SecureRandom.random_number(2**32).to_s
       when 'BASH_MONOSECONDS' then __bash_monoseconds.to_s
-      when 'RUBISH_VERSION' then Rubish::VERSION
+      when 'RUBISH_VERSION', 'BASH_VERSION' then Rubish::VERSION
       when 'OSTYPE' then __ostype
       when 'HOSTTYPE' then __hosttype
       when 'MACHTYPE' then RUBY_PLATFORM
@@ -3118,8 +3124,8 @@ module Rubish
         return (groups[idx] || '').to_s
       end
 
-      # Special handling for RUBISH_VERSINFO array
-      if var_name == 'RUBISH_VERSINFO'
+      # Special handling for RUBISH_VERSINFO and BASH_VERSINFO arrays
+      if var_name == 'RUBISH_VERSINFO' || var_name == 'BASH_VERSINFO'
         idx = begin
           eval(expanded_index).to_i
         rescue
@@ -3248,8 +3254,8 @@ module Rubish
       # Special handling for GROUPS array
       if var_name == 'GROUPS'
         values = Process.groups.map(&:to_s)
-      # Special handling for RUBISH_VERSINFO array
-      elsif var_name == 'RUBISH_VERSINFO'
+      # Special handling for RUBISH_VERSINFO and BASH_VERSINFO arrays
+      elsif var_name == 'RUBISH_VERSINFO' || var_name == 'BASH_VERSINFO'
         values = __rubish_versinfo
       # Special handling for PIPESTATUS array
       elsif var_name == 'PIPESTATUS'
@@ -3303,8 +3309,8 @@ module Rubish
       # Special handling for GROUPS array
       if var_name == 'GROUPS'
         Process.groups.length.to_s
-      # Special handling for RUBISH_VERSINFO array
-      elsif var_name == 'RUBISH_VERSINFO'
+      # Special handling for RUBISH_VERSINFO and BASH_VERSINFO arrays
+      elsif var_name == 'RUBISH_VERSINFO' || var_name == 'BASH_VERSINFO'
         __rubish_versinfo.length.to_s
       # Special handling for PIPESTATUS array
       elsif var_name == 'PIPESTATUS'
@@ -3351,8 +3357,8 @@ module Rubish
       # Special handling for GROUPS array
       if var_name == 'GROUPS'
         (0...Process.groups.length).to_a.join(' ')
-      # Special handling for RUBISH_VERSINFO array
-      elsif var_name == 'RUBISH_VERSINFO'
+      # Special handling for RUBISH_VERSINFO and BASH_VERSINFO arrays
+      elsif var_name == 'RUBISH_VERSINFO' || var_name == 'BASH_VERSINFO'
         (0...__rubish_versinfo.length).to_a.join(' ')
       # Special handling for PIPESTATUS array
       elsif var_name == 'PIPESTATUS'
