@@ -2693,6 +2693,12 @@ module Rubish
       enabled.sort.join(':')
     end
 
+    # BASHOPTS: colon-separated list of enabled shopt options (read-only)
+    # This is the bash-standard name; RUBISHOPTS is the rubish-specific equivalent
+    def self.bashopts
+      rubishopts
+    end
+
     def self.set_long_option(name, value)
       mapping = {
         'braceexpand' => 'B', 'histexpand' => 'H',

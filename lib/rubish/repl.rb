@@ -1683,6 +1683,7 @@ module Rubish
       return Builtins.comp_wordbreaks if var_name == 'COMP_WORDBREAKS'
       return Builtins.shellopts if var_name == 'SHELLOPTS'
       return Builtins.rubishopts if var_name == 'RUBISHOPTS'
+      return Builtins.bashopts if var_name == 'BASHOPTS'
       return Builtins.bash_compat if var_name == 'BASH_COMPAT'
 
       if Builtins.set_option?('u') && !ENV.key?(var_name)
@@ -2591,6 +2592,7 @@ module Rubish
       return Builtins.comp_type.to_s if var_name == 'COMP_TYPE'
       return Builtins.comp_key.to_s if var_name == 'COMP_KEY'
       return Builtins.comp_wordbreaks if var_name == 'COMP_WORDBREAKS'
+      return Builtins.bashopts if var_name == 'BASHOPTS'
       return Builtins.bash_compat if var_name == 'BASH_COMPAT'
 
       # Fetch variable with nounset check
@@ -2751,6 +2753,10 @@ module Rubish
         value = Builtins.bash_compat
         is_set = true
         is_null = value.empty?
+      elsif var_name == 'BASHOPTS'
+        value = Builtins.bashopts
+        is_set = true
+        is_null = value.empty?
       else
         value = ENV[var_name]
         is_set = ENV.key?(var_name)
@@ -2881,6 +2887,9 @@ module Rubish
       when 'COMP_WORDBREAKS' then Builtins.comp_wordbreaks
       when 'SHELLOPTS' then Builtins.shellopts
       when 'RUBISHOPTS' then Builtins.rubishopts
+      when 'BASHOPTS' then Builtins.bashopts
+      when 'BASH_COMPAT' then Builtins.bash_compat
+      when 'BASH_ARGV0' then @bash_argv0_unset ? nil : __bash_argv0
       end
     end
 
