@@ -4355,9 +4355,9 @@ module Rubish
       if is_first_word
         complete_command(input)
       else
-        # Check for programmable completion
+        # Check for programmable completion (only if progcomp is enabled)
         cmd = words.first
-        spec = Builtins.get_completion_spec(cmd)
+        spec = Builtins.shopt_enabled?('progcomp') ? Builtins.get_completion_spec(cmd) : nil
 
         if spec && spec[:function]
           # Calculate COMP_CWORD (index of word containing cursor)
