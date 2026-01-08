@@ -1240,6 +1240,13 @@ module Rubish
           expanded_key = expand_string_content(key)
           expanded_value = expand_assignment_value(value)
 
+          # assoc_expand_once: when disabled, subscripts may be expanded again
+          if Builtins.assoc_array?(var_name) && !Builtins.shopt_enabled?('assoc_expand_once')
+            if expanded_key.include?('$')
+              expanded_key = expand_string_content(expanded_key)
+            end
+          end
+
           if Builtins.assoc_array?(var_name)
             # Associative array element
             Builtins.set_assoc_element(var_name, expanded_key, expanded_value)
@@ -2809,6 +2816,15 @@ module Rubish
     def __array_element(var_name, index)
       # ${arr[n]} or ${map[key]} - get array/assoc element
       expanded_index = expand_string_content(index)
+
+      # assoc_expand_once: when disabled (default), subscripts may be expanded again
+      # This allows double expansion of variables in subscripts
+      if Builtins.assoc_array?(var_name) && !Builtins.shopt_enabled?('assoc_expand_once')
+        # Without assoc_expand_once, perform a second expansion if the result contains $
+        if expanded_index.include?('$')
+          expanded_index = expand_string_content(expanded_index)
+        end
+      end
 
       # Special handling for GROUPS array
       if var_name == 'GROUPS'
