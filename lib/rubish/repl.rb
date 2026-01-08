@@ -2731,6 +2731,10 @@ module Rubish
     def __translate(string)
       # $"string" - locale-specific translation using TEXTDOMAIN
       # Uses gettext if available, otherwise returns original string
+
+      # noexpand_translation: do not expand $"..." strings for translation
+      return string if Builtins.shopt_enabled?('noexpand_translation')
+
       textdomain = ENV['TEXTDOMAIN']
       return string if textdomain.nil? || textdomain.empty?
 
