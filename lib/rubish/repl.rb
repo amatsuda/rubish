@@ -4507,6 +4507,8 @@ module Rubish
       end
 
       # Apply FIGNORE filtering
+      # force_fignore: when enabled (default), FIGNORE is always applied
+      # when disabled, if only one completion remains, don't filter it out
       fignore = ENV['FIGNORE']
       if fignore && !fignore.empty?
         suffixes = fignore.split(':').reject(&:empty?)
@@ -4516,8 +4518,19 @@ module Rubish
             next false if f.end_with?('/')
             suffixes.any? { |suffix| f.end_with?(suffix) }
           end
-          # Only use filtered list if it's not empty
-          candidates = filtered unless filtered.empty?
+
+          if Builtins.shopt_enabled?('force_fignore')
+            # Always apply FIGNORE, even if it filters out the only match
+            candidates = filtered unless filtered.empty?
+          else
+            # Without force_fignore, don't filter if only one candidate would remain
+            # and it would be filtered out
+            if filtered.empty? && candidates.length == 1
+              # Keep the single candidate even though it matches FIGNORE
+            else
+              candidates = filtered unless filtered.empty?
+            end
+          end
         end
       end
 
