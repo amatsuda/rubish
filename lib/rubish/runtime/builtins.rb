@@ -3757,6 +3757,51 @@ module Rubish
       current && current <= level
     end
 
+    # Get BASH_COMPAT value as a string (e.g., "5.1" or "51")
+    # Returns empty string if no compat level is set (default mode)
+    def self.bash_compat
+      level = compat_level
+      return '' unless level
+
+      # Convert level to bash-style format (e.g., 51 -> "5.1" or "51")
+      major = level / 10
+      minor = level % 10
+      "#{major}.#{minor}"
+    end
+
+    # Set compatibility level from BASH_COMPAT value
+    # Accepts: "5.1", "51", 5.1, 51
+    def self.set_bash_compat(value)
+      return clear_compat_level if value.nil? || value.to_s.empty?
+
+      str = value.to_s.strip
+      level = if str.include?('.')
+                # Format: "5.1" -> 51
+                parts = str.split('.')
+                return clear_compat_level unless parts.length == 2
+                parts[0].to_i * 10 + parts[1].to_i
+              else
+                # Format: "51" -> 51
+                str.to_i
+              end
+
+      # Validate the level corresponds to a valid compat option
+      compat_opt = "compat#{level}"
+      unless SHELL_OPTIONS.key?(compat_opt)
+        $stderr.puts "BASH_COMPAT: #{value}: invalid value"
+        return clear_compat_level
+      end
+
+      # Clear all compat options and enable the specified one
+      COMPAT_OPTIONS.each { |opt| @shell_options[opt] = false }
+      @shell_options[compat_opt] = true
+    end
+
+    # Clear all compat levels (return to default)
+    def self.clear_compat_level
+      COMPAT_OPTIONS.each { |opt| @shell_options[opt] = false }
+    end
+
     # Set compatibility level (used when RUBISH_COMPAT is assigned)
     def self.set_compat_level(version)
       return unless version
