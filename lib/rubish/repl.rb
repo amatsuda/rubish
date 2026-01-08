@@ -4387,7 +4387,13 @@ module Rubish
     end
 
     def complete_file(input)
-      candidates = Dir.glob("#{input}*").map do |f|
+      # direxpand: expand directory names during word completion
+      expanded_input = input
+      if Builtins.shopt_enabled?('direxpand')
+        expanded_input = expand_for_completion(input)
+      end
+
+      candidates = Dir.glob("#{expanded_input}*").map do |f|
         File.directory?(f) ? "#{f}/" : f
       end.sort
 
@@ -4417,6 +4423,37 @@ module Rubish
       end
 
       candidates
+    end
+
+    # Expand tilde and variables for completion (direxpand)
+    def expand_for_completion(input)
+      result = input
+
+      # Expand ~ at the beginning
+      if result.start_with?('~')
+        if result == '~' || result.start_with?('~/')
+          # ~/... -> /home/user/...
+          result = result.sub(/^~/, Dir.home)
+        elsif result =~ /^~([^\/]+)(.*)/
+          # ~username/... -> /home/username/...
+          username = $1
+          rest = $2
+          begin
+            user_home = Dir.home(username)
+            result = "#{user_home}#{rest}"
+          rescue ArgumentError
+            # Unknown user, leave as is
+          end
+        end
+      end
+
+      # Expand environment variables $VAR or ${VAR}
+      result = result.gsub(/\$\{([^}]+)\}|\$([A-Za-z_][A-Za-z0-9_]*)/) do
+        var_name = $1 || $2
+        ENV[var_name] || $&
+      end
+
+      result
     end
 
     # Correct directory spelling errors in a completion path
