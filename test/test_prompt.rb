@@ -175,9 +175,14 @@ class TestPrompt < Test::Unit::TestCase
 
   # Test \\ - literal backslash
   def test_ps1_backslash
+    # Disable promptvars to test bash escape processing only
+    # With promptvars enabled, \$ would be further processed as escaped $
+    Rubish::Builtins.shell_options['promptvars'] = false
     ENV['PS1'] = '\\\\$ '
     prompt = @repl.send(:prompt)
     assert_equal '\\$ ', prompt
+  ensure
+    Rubish::Builtins.shell_options['promptvars'] = true
   end
 
   # Test \[ and \] - non-printing markers (ignored)

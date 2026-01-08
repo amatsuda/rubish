@@ -725,6 +725,11 @@ module Rubish
         end
       end
 
+      # promptvars: if enabled, perform variable and command substitution on the result
+      if Builtins.shopt_enabled?('promptvars')
+        result = expand_string_content(result)
+      end
+
       result
     end
 
