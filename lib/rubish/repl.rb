@@ -1294,7 +1294,7 @@ module Rubish
             # BASH_COMPAT: Set shell compatibility level
             # Accepts "5.1", "51", or empty to clear
             Builtins.set_bash_compat(expanded_value)
-          elsif var_name == 'PPID' || var_name == 'UID' || var_name == 'EUID' || var_name == 'GROUPS' || var_name == 'HOSTNAME' || var_name == 'RUBISHPID' || var_name == 'HISTCMD' || var_name == 'EPOCHSECONDS' || var_name == 'EPOCHREALTIME' || var_name == 'SRANDOM' || var_name == 'BASH_MONOSECONDS' || var_name == 'RUBISH_VERSION' || var_name == 'RUBISH_VERSINFO' || var_name == 'OSTYPE' || var_name == 'HOSTTYPE' || var_name == 'MACHTYPE' || var_name == 'PIPESTATUS' || var_name == 'RUBISH_COMMAND' || var_name == 'FUNCNAME' || var_name == 'RUBISH_LINENO' || var_name == 'RUBISH_SOURCE' || var_name == 'RUBISH_ARGC' || var_name == 'RUBISH_ARGV' || var_name == 'RUBISH_SUBSHELL' || var_name == 'BASH_SUBSHELL' || var_name == 'DIRSTACK' || var_name == 'COLUMNS' || var_name == 'LINES' || var_name == 'RUBISH_ALIASES' || var_name == 'RUBISH_CMDS' || var_name == 'COMP_CWORD' || var_name == 'COMP_LINE' || var_name == 'COMP_POINT' || var_name == 'COMP_TYPE' || var_name == 'COMP_KEY' || var_name == 'COMP_WORDS'
+          elsif var_name == 'PPID' || var_name == 'UID' || var_name == 'EUID' || var_name == 'GROUPS' || var_name == 'HOSTNAME' || var_name == 'RUBISHPID' || var_name == 'BASHPID' || var_name == 'HISTCMD' || var_name == 'EPOCHSECONDS' || var_name == 'EPOCHREALTIME' || var_name == 'SRANDOM' || var_name == 'BASH_MONOSECONDS' || var_name == 'RUBISH_VERSION' || var_name == 'RUBISH_VERSINFO' || var_name == 'OSTYPE' || var_name == 'HOSTTYPE' || var_name == 'MACHTYPE' || var_name == 'PIPESTATUS' || var_name == 'RUBISH_COMMAND' || var_name == 'FUNCNAME' || var_name == 'RUBISH_LINENO' || var_name == 'RUBISH_SOURCE' || var_name == 'RUBISH_ARGC' || var_name == 'RUBISH_ARGV' || var_name == 'RUBISH_SUBSHELL' || var_name == 'BASH_SUBSHELL' || var_name == 'DIRSTACK' || var_name == 'COLUMNS' || var_name == 'LINES' || var_name == 'RUBISH_ALIASES' || var_name == 'RUBISH_CMDS' || var_name == 'COMP_CWORD' || var_name == 'COMP_LINE' || var_name == 'COMP_POINT' || var_name == 'COMP_TYPE' || var_name == 'COMP_KEY' || var_name == 'COMP_WORDS'
             # These variables are read-only, silently ignore assignment
           else
             ENV[var_name] = expanded_value
@@ -1651,7 +1651,7 @@ module Rubish
     end
 
     def fetch_var_with_nounset(var_name)
-      # Special handling for SECONDS, RANDOM, LINENO, PPID, UID, EUID, GROUPS, HOSTNAME, RUBISHPID, HISTCMD, and EPOCHSECONDS
+      # Special handling for SECONDS, RANDOM, LINENO, PPID, UID, EUID, GROUPS, HOSTNAME, RUBISHPID, BASHPID, HISTCMD, and EPOCHSECONDS
       return seconds.to_s if var_name == 'SECONDS'
       return random.to_s if var_name == 'RANDOM'
       return @lineno.to_s if var_name == 'LINENO'
@@ -1661,6 +1661,7 @@ module Rubish
       return (Process.groups.first || '').to_s if var_name == 'GROUPS'
       return Socket.gethostname if var_name == 'HOSTNAME'
       return Process.pid.to_s if var_name == 'RUBISHPID'
+      return Process.pid.to_s if var_name == 'BASHPID'
       return @command_number.to_s if var_name == 'HISTCMD'
       return Time.now.to_i.to_s if var_name == 'EPOCHSECONDS'
       return format('%.6f', Time.now.to_f) if var_name == 'EPOCHREALTIME'
@@ -2563,7 +2564,7 @@ module Rubish
     end
 
     def __fetch_var(var_name)
-      # Special handling for SECONDS, RANDOM, LINENO, PPID, UID, EUID, GROUPS, HOSTNAME, RUBISHPID, HISTCMD, and EPOCHSECONDS
+      # Special handling for SECONDS, RANDOM, LINENO, PPID, UID, EUID, GROUPS, HOSTNAME, RUBISHPID, BASHPID, HISTCMD, and EPOCHSECONDS
       return seconds.to_s if var_name == 'SECONDS'
       return random.to_s if var_name == 'RANDOM'
       return @lineno.to_s if var_name == 'LINENO'
@@ -2573,6 +2574,7 @@ module Rubish
       return (Process.groups.first || '').to_s if var_name == 'GROUPS'
       return Socket.gethostname if var_name == 'HOSTNAME'
       return Process.pid.to_s if var_name == 'RUBISHPID'
+      return Process.pid.to_s if var_name == 'BASHPID'
       return @command_number.to_s if var_name == 'HISTCMD'
       return Time.now.to_i.to_s if var_name == 'EPOCHSECONDS'
       return format('%.6f', Time.now.to_f) if var_name == 'EPOCHREALTIME'
@@ -2661,6 +2663,10 @@ module Rubish
         is_set = true
         is_null = false
       elsif var_name == 'RUBISHPID'
+        value = Process.pid.to_s
+        is_set = true
+        is_null = false
+      elsif var_name == 'BASHPID'
         value = Process.pid.to_s
         is_set = true
         is_null = false
@@ -2867,7 +2873,7 @@ module Rubish
       when 'EUID' then Process.euid.to_s
       when 'GROUPS' then (Process.groups.first || '').to_s
       when 'HOSTNAME' then Socket.gethostname
-      when 'RUBISHPID' then Process.pid.to_s
+      when 'RUBISHPID', 'BASHPID' then Process.pid.to_s
       when 'HISTCMD' then @command_number.to_s
       when 'EPOCHSECONDS' then Time.now.to_i.to_s
       when 'EPOCHREALTIME' then format('%.6f', Time.now.to_f)
