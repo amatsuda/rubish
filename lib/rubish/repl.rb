@@ -1247,8 +1247,11 @@ module Rubish
           expanded_key = expand_string_content(key)
           expanded_value = expand_assignment_value(value)
 
-          # assoc_expand_once: when disabled, subscripts may be expanded again
-          if Builtins.assoc_array?(var_name) && !Builtins.shopt_enabled?('assoc_expand_once')
+          # array_expand_once (bash 5.2+): when disabled, subscripts may be expanded again
+          # assoc_expand_once (deprecated): same but only for associative arrays
+          expand_once = Builtins.shopt_enabled?('array_expand_once') ||
+                        (Builtins.assoc_array?(var_name) && Builtins.shopt_enabled?('assoc_expand_once'))
+          if (Builtins.assoc_array?(var_name) || Builtins.indexed_array?(var_name)) && !expand_once
             if expanded_key.include?('$')
               expanded_key = expand_string_content(expanded_key)
             end
@@ -3018,10 +3021,13 @@ module Rubish
       # ${arr[n]} or ${map[key]} - get array/assoc element
       expanded_index = expand_string_content(index)
 
-      # assoc_expand_once: when disabled (default), subscripts may be expanded again
+      # array_expand_once (bash 5.2+): when disabled (default), subscripts may be expanded again
+      # assoc_expand_once (deprecated): same but only for associative arrays
       # This allows double expansion of variables in subscripts
-      if Builtins.assoc_array?(var_name) && !Builtins.shopt_enabled?('assoc_expand_once')
-        # Without assoc_expand_once, perform a second expansion if the result contains $
+      expand_once = Builtins.shopt_enabled?('array_expand_once') ||
+                    (Builtins.assoc_array?(var_name) && Builtins.shopt_enabled?('assoc_expand_once'))
+      if (Builtins.assoc_array?(var_name) || Builtins.indexed_array?(var_name)) && !expand_once
+        # Without array_expand_once, perform a second expansion if the result contains $
         if expanded_index.include?('$')
           expanded_index = expand_string_content(expanded_index)
         end

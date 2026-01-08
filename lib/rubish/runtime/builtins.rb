@@ -99,6 +99,10 @@ module Rubish
       @arrays[name][index.to_i] = value
     end
 
+    def self.indexed_array?(name)
+      @arrays.key?(name)
+    end
+
     def self.array_length(name)
       (@arrays[name] || []).length
     end
@@ -476,7 +480,8 @@ module Rubish
 
     # Valid shell options with their default values and descriptions
     SHELL_OPTIONS = {
-      'assoc_expand_once' => [false, 'only expand associative array subscripts once'],
+      'array_expand_once' => [false, 'only expand array subscripts once (bash 5.2+)'],
+      'assoc_expand_once' => [false, 'only expand associative array subscripts once (deprecated, use array_expand_once)'],
       'autocd' => [false, 'cd to a directory when typed as command'],
       'cdable_vars' => [false, 'cd argument can be a variable containing a directory name'],
       'cdspell' => [false, 'correct minor spelling errors in cd'],
@@ -492,6 +497,8 @@ module Rubish
       'compat42' => [false, 'compatibility mode for bash 4.2'],
       'compat43' => [false, 'compatibility mode for bash 4.3'],
       'compat44' => [false, 'compatibility mode for bash 4.4'],
+      'compat50' => [false, 'compatibility mode for bash 5.0'],
+      'compat51' => [false, 'compatibility mode for bash 5.1'],
       'complete_fullquote' => [true, 'quote all metacharacters in filename completion'],
       'direxpand' => [false, 'expand directory names during word completion'],
       'dirspell' => [false, 'correct minor spelling errors in directory names during completion'],
@@ -537,7 +544,7 @@ module Rubish
     }.freeze
 
     # Compatibility level options (like bash's compat31, compat32, etc.)
-    COMPAT_OPTIONS = %w[compat10 compat31 compat32 compat40 compat41 compat42 compat43 compat44].freeze
+    COMPAT_OPTIONS = %w[compat10 compat31 compat32 compat40 compat41 compat42 compat43 compat44 compat50 compat51].freeze
 
     def self.builtin?(name)
       (COMMANDS.include?(name) || @dynamic_commands.include?(name)) && !@disabled_builtins.include?(name)
