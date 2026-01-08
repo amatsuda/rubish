@@ -32,6 +32,7 @@ module Rubish
       @eof_count = 0  # For IGNOREEOF variable (consecutive EOF counter)
       @last_mail_check = Time.now  # For MAIL/MAILCHECK - last time we checked for mail
       @mail_mtimes = {}  # For MAIL/MAILCHECK - hash of mail file paths to their last known mtime
+      @mail_atimes = {}  # For mailwarn - hash of mail file paths to their last known atime
       # SHLVL - shell nesting level (stored in ENV for inheritance)
       current_shlvl = ENV['SHLVL'].to_i
       ENV['SHLVL'] = (current_shlvl + 1).to_s
@@ -425,11 +426,14 @@ module Rubish
         next if File.size(path) == 0  # Empty mail file
 
         current_mtime = File.mtime(path)
+        current_atime = File.atime(path)
         last_mtime = @mail_mtimes[path]
+        last_atime = @mail_atimes[path]
 
         if last_mtime.nil?
-          # First time seeing this file, just record mtime
+          # First time seeing this file, just record times
           @mail_mtimes[path] = current_mtime
+          @mail_atimes[path] = current_atime
         elsif current_mtime > last_mtime
           # File has been modified - new mail
           if message
@@ -440,6 +444,13 @@ module Rubish
             puts "You have new mail in #{path}"
           end
           @mail_mtimes[path] = current_mtime
+          @mail_atimes[path] = current_atime
+        elsif Builtins.shopt_enabled?('mailwarn')
+          # mailwarn: check if mail has been read (atime > mtime and atime changed)
+          if current_atime > current_mtime && (last_atime.nil? || current_atime > last_atime)
+            puts "The mail in #{path} has been read"
+            @mail_atimes[path] = current_atime
+          end
         end
       end
     end
