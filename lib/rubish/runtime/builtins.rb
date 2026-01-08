@@ -2344,6 +2344,9 @@ module Rubish
     def self.expand_alias(line)
       return line if line.empty?
 
+      # expand_aliases: when disabled, don't expand aliases
+      return line unless shopt_enabled?('expand_aliases')
+
       # Extract the first word
       first_word = line.split(/\s/, 2).first
       return line unless first_word
