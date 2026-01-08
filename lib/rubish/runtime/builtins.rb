@@ -3734,8 +3734,9 @@ module Rubish
     # Get current compatibility level from RUBISH_COMPAT or shopt compat* options
     # Returns a numeric version (e.g., 10 for 1.0) or nil if not set
     def self.compat_level
-      # Check RUBISH_COMPAT environment variable first
+      # Check RUBISH_COMPAT environment variable first, then BASH_COMPAT as fallback
       rubish_compat = ENV['RUBISH_COMPAT']
+      rubish_compat = ENV['BASH_COMPAT'] if rubish_compat.nil? || rubish_compat.empty?
       if rubish_compat && !rubish_compat.empty?
         # Convert "1.0" to 10, "1.1" to 11, etc.
         parts = rubish_compat.split('.')
