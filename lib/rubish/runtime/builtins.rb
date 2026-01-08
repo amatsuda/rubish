@@ -483,6 +483,7 @@ module Rubish
       'array_expand_once' => [false, 'only expand array subscripts once (bash 5.2+)'],
       'assoc_expand_once' => [false, 'only expand associative array subscripts once (deprecated, use array_expand_once)'],
       'autocd' => [false, 'cd to a directory when typed as command'],
+      'bash_source_fullpath' => [false, 'store full pathnames in BASH_SOURCE array'],
       'cdable_vars' => [false, 'cd argument can be a variable containing a directory name'],
       'cdspell' => [false, 'correct minor spelling errors in cd'],
       'checkhash' => [false, 'check hash table before executing'],
@@ -499,6 +500,7 @@ module Rubish
       'compat44' => [false, 'compatibility mode for bash 4.4'],
       'compat50' => [false, 'compatibility mode for bash 5.0'],
       'compat51' => [false, 'compatibility mode for bash 5.1'],
+      'compat52' => [false, 'compatibility mode for bash 5.2'],
       'complete_fullquote' => [true, 'quote all metacharacters in filename completion'],
       'direxpand' => [false, 'expand directory names during word completion'],
       'dirspell' => [false, 'correct minor spelling errors in directory names during completion'],
@@ -544,7 +546,7 @@ module Rubish
     }.freeze
 
     # Compatibility level options (like bash's compat31, compat32, etc.)
-    COMPAT_OPTIONS = %w[compat10 compat31 compat32 compat40 compat41 compat42 compat43 compat44 compat50 compat51].freeze
+    COMPAT_OPTIONS = %w[compat10 compat31 compat32 compat40 compat41 compat42 compat43 compat44 compat50 compat51 compat52].freeze
 
     def self.builtin?(name)
       (COMMANDS.include?(name) || @dynamic_commands.include?(name)) && !@disabled_builtins.include?(name)
@@ -2420,7 +2422,9 @@ module Rubish
       old_source_file = @source_file_getter&.call
       @script_name_setter&.call(file)
       @positional_params_setter&.call(args[1..] || [])
-      @source_file_setter&.call(file)
+      # bash_source_fullpath: when enabled, store full path; when disabled, use filename as specified
+      source_file_value = shopt_enabled?('bash_source_fullpath') ? file : original_file
+      @source_file_setter&.call(source_file_value)
 
       return_code = catch(:return) do
         buffer = +''
