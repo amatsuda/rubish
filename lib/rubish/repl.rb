@@ -788,7 +788,7 @@ module Rubish
 
       # histverify: check for history expansion and let user verify before executing
       if Builtins.shopt_enabled?('histverify')
-        expanded_line, was_expanded = expand_history_only(line)
+        expanded_line, was_expanded, _failed = expand_history_only(line)
         if was_expanded && expanded_line
           # Pre-fill the expanded command for user to verify/edit
           Reline.pre_input_hook = -> {
@@ -820,7 +820,18 @@ module Rubish
       # verbose: print input lines as read (before any processing)
       $stderr.puts line if Builtins.set_option?('v')
 
-      line, expanded = expand_history(line)
+      original_line = line
+      line, expanded, failed = expand_history(line)
+
+      # histreedit: if history expansion failed, reload line for editing
+      if failed && Builtins.shopt_enabled?('histreedit')
+        Reline.pre_input_hook = -> {
+          Reline.insert_text(original_line)
+          Reline.pre_input_hook = nil  # Clear after use
+        }
+        return
+      end
+
       return unless line
 
       # Print expanded command if history expansion occurred
@@ -1763,13 +1774,13 @@ module Rubish
     def expand_history(line)
       # History expansion with word designators and modifiers
       # Format: !event[:word][:modifier...]
-      # Returns [expanded_line, was_expanded]
+      # Returns [expanded_line, was_expanded, failed]
       # If histexpand (set -H) is disabled, don't expand history
-      return [line, false] unless Builtins.set_option?('H')
-      return [line, false] unless line.include?('!') || line.start_with?('^')
+      return [line, false, false] unless Builtins.set_option?('H')
+      return [line, false, false] unless line.include?('!') || line.start_with?('^')
 
       history = Reline::HISTORY.to_a
-      return [line, false] if history.empty?
+      return [line, false, false] if history.empty?
 
       result = +''
       i = 0
@@ -1801,10 +1812,10 @@ module Rubish
             new_str = $2
             last_cmd = history[-1]
             if last_cmd&.include?(old_str)
-              return [last_cmd.sub(old_str, new_str), true]
+              return [last_cmd.sub(old_str, new_str), true, false]
             else
               puts 'rubish: substitution failed'
-              return [nil, false]
+              return [nil, false, true]
             end
           end
         end
@@ -1813,7 +1824,7 @@ module Rubish
           expansion, consumed, error, is_print_only = parse_history_expansion(line, i, history)
           if error
             puts error
-            return [nil, false]
+            return [nil, false, true]
           end
           if expansion
             result << expansion
@@ -1833,10 +1844,10 @@ module Rubish
       # If :p modifier was used, print but don't execute
       if print_only
         puts result
-        return [nil, false]
+        return [nil, false, false]
       end
 
-      [result, expanded]
+      [result, expanded, false]
     end
 
     def parse_history_expansion(line, pos, history)
