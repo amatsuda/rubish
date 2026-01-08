@@ -4521,7 +4521,28 @@ module Rubish
         end
       end
 
+      # complete_fullquote: quote shell metacharacters in completion results
+      if Builtins.shopt_enabled?('complete_fullquote')
+        candidates = candidates.map { |c| quote_completion_metacharacters(c) }
+      end
+
       candidates
+    end
+
+    # Quote shell metacharacters in completion results
+    # These characters need escaping to prevent shell interpretation
+    SHELL_METACHARACTERS = " \t\n|&;()<>!{}$`\\\"'*?[]#~=%".chars.to_set.freeze
+
+    def quote_completion_metacharacters(str)
+      result = +''
+      str.each_char do |c|
+        if SHELL_METACHARACTERS.include?(c)
+          result << '\\' << c
+        else
+          result << c
+        end
+      end
+      result
     end
 
     # Expand tilde and variables for completion (direxpand)
