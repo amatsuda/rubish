@@ -4301,6 +4301,13 @@ module Rubish
         return []
       end
 
+      # hostcomplete: attempt hostname completion when input starts with @
+      if Builtins.shopt_enabled?('hostcomplete') && input.start_with?('@')
+        hostname_prefix = input[1..]  # Remove the @ prefix
+        hostnames = complete_hostname(hostname_prefix)
+        return hostnames.map { |h| "@#{h}" } unless hostnames.empty?
+      end
+
       # Parse command line into words
       words = split_completion_words(line)
       is_first_word = words.length <= 1
@@ -4396,6 +4403,55 @@ module Rubish
         pos = word_end
       end
       words.length
+    end
+
+    # Complete hostnames from /etc/hosts and HOSTFILE
+    def complete_hostname(prefix)
+      hostnames = Set.new
+
+      # Read from /etc/hosts
+      if File.exist?('/etc/hosts')
+        begin
+          File.readlines('/etc/hosts').each do |line|
+            # Skip comments and empty lines
+            line = line.split('#').first&.strip
+            next if line.nil? || line.empty?
+
+            # Parse: IP hostname [aliases...]
+            parts = line.split(/\s+/)
+            next if parts.length < 2
+
+            # Skip the IP address, collect hostnames
+            parts[1..].each do |hostname|
+              hostnames << hostname if hostname.start_with?(prefix)
+            end
+          end
+        rescue Errno::EACCES, Errno::ENOENT
+          # Can't read file, skip
+        end
+      end
+
+      # Also read from HOSTFILE if set
+      hostfile = ENV['HOSTFILE']
+      if hostfile && File.exist?(hostfile)
+        begin
+          File.readlines(hostfile).each do |line|
+            line = line.split('#').first&.strip
+            next if line.nil? || line.empty?
+
+            parts = line.split(/\s+/)
+            next if parts.length < 2
+
+            parts[1..].each do |hostname|
+              hostnames << hostname if hostname.start_with?(prefix)
+            end
+          end
+        rescue Errno::EACCES, Errno::ENOENT
+          # Can't read file, skip
+        end
+      end
+
+      hostnames.to_a.sort
     end
 
     def complete_command(input)
