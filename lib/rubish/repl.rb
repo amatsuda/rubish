@@ -1294,7 +1294,7 @@ module Rubish
             # BASH_COMPAT: Set shell compatibility level
             # Accepts "5.1", "51", or empty to clear
             Builtins.set_bash_compat(expanded_value)
-          elsif var_name == 'PPID' || var_name == 'UID' || var_name == 'EUID' || var_name == 'GROUPS' || var_name == 'HOSTNAME' || var_name == 'RUBISHPID' || var_name == 'BASHPID' || var_name == 'HISTCMD' || var_name == 'EPOCHSECONDS' || var_name == 'EPOCHREALTIME' || var_name == 'SRANDOM' || var_name == 'BASH_MONOSECONDS' || var_name == 'RUBISH_VERSION' || var_name == 'BASH_VERSION' || var_name == 'RUBISH_VERSINFO' || var_name == 'BASH_VERSINFO' || var_name == 'OSTYPE' || var_name == 'HOSTTYPE' || var_name == 'MACHTYPE' || var_name == 'PIPESTATUS' || var_name == 'RUBISH_COMMAND' || var_name == 'BASH_COMMAND' || var_name == 'FUNCNAME' || var_name == 'RUBISH_LINENO' || var_name == 'BASH_LINENO' || var_name == 'RUBISH_SOURCE' || var_name == 'BASH_SOURCE' || var_name == 'RUBISH_ARGC' || var_name == 'BASH_ARGC' || var_name == 'RUBISH_ARGV' || var_name == 'BASH_ARGV' || var_name == 'RUBISH_SUBSHELL' || var_name == 'BASH_SUBSHELL' || var_name == 'DIRSTACK' || var_name == 'COLUMNS' || var_name == 'LINES' || var_name == 'RUBISH_ALIASES' || var_name == 'BASH_ALIASES' || var_name == 'RUBISH_CMDS' || var_name == 'BASH_CMDS' || var_name == 'COMP_CWORD' || var_name == 'COMP_LINE' || var_name == 'COMP_POINT' || var_name == 'COMP_TYPE' || var_name == 'COMP_KEY' || var_name == 'COMP_WORDS'
+          elsif var_name == 'PPID' || var_name == 'UID' || var_name == 'EUID' || var_name == 'GROUPS' || var_name == 'HOSTNAME' || var_name == 'RUBISHPID' || var_name == 'BASHPID' || var_name == 'HISTCMD' || var_name == 'EPOCHSECONDS' || var_name == 'EPOCHREALTIME' || var_name == 'SRANDOM' || var_name == 'BASH_MONOSECONDS' || var_name == 'RUBISH_VERSION' || var_name == 'BASH_VERSION' || var_name == 'RUBISH_VERSINFO' || var_name == 'BASH_VERSINFO' || var_name == 'OSTYPE' || var_name == 'HOSTTYPE' || var_name == 'MACHTYPE' || var_name == 'PIPESTATUS' || var_name == 'RUBISH_COMMAND' || var_name == 'BASH_COMMAND' || var_name == 'FUNCNAME' || var_name == 'RUBISH_LINENO' || var_name == 'BASH_LINENO' || var_name == 'RUBISH_SOURCE' || var_name == 'BASH_SOURCE' || var_name == 'RUBISH_ARGC' || var_name == 'BASH_ARGC' || var_name == 'RUBISH_ARGV' || var_name == 'BASH_ARGV' || var_name == 'RUBISH_SUBSHELL' || var_name == 'BASH_SUBSHELL' || var_name == 'DIRSTACK' || var_name == 'COLUMNS' || var_name == 'LINES' || var_name == 'RUBISH_ALIASES' || var_name == 'BASH_ALIASES' || var_name == 'RUBISH_CMDS' || var_name == 'BASH_CMDS' || var_name == 'COMP_CWORD' || var_name == 'COMP_LINE' || var_name == 'COMP_POINT' || var_name == 'COMP_TYPE' || var_name == 'COMP_KEY' || var_name == 'COMP_WORDS' || var_name == 'RUBISH_EXECUTION_STRING' || var_name == 'BASH_EXECUTION_STRING'
             # These variables are read-only, silently ignore assignment
           else
             ENV[var_name] = expanded_value
@@ -1689,6 +1689,7 @@ module Rubish
       return Builtins.rubishopts if var_name == 'RUBISHOPTS'
       return Builtins.bashopts if var_name == 'BASHOPTS'
       return Builtins.bash_compat if var_name == 'BASH_COMPAT'
+      return ENV['RUBISH_EXECUTION_STRING'] || '' if var_name == 'RUBISH_EXECUTION_STRING' || var_name == 'BASH_EXECUTION_STRING'
 
       if Builtins.set_option?('u') && !ENV.key?(var_name)
         $stderr.puts Builtins.format_error('unbound variable', command: var_name)
@@ -2602,6 +2603,7 @@ module Rubish
       return Builtins.comp_wordbreaks if var_name == 'COMP_WORDBREAKS'
       return Builtins.bashopts if var_name == 'BASHOPTS'
       return Builtins.bash_compat if var_name == 'BASH_COMPAT'
+      return ENV['RUBISH_EXECUTION_STRING'] || '' if var_name == 'RUBISH_EXECUTION_STRING' || var_name == 'BASH_EXECUTION_STRING'
 
       # Fetch variable with nounset check
       if Builtins.set_option?('u') && !ENV.key?(var_name)
@@ -2773,6 +2775,10 @@ module Rubish
         value = Builtins.bashopts
         is_set = true
         is_null = value.empty?
+      elsif var_name == 'RUBISH_EXECUTION_STRING' || var_name == 'BASH_EXECUTION_STRING'
+        value = ENV['RUBISH_EXECUTION_STRING'] || ''
+        is_set = ENV.key?('RUBISH_EXECUTION_STRING')
+        is_null = value.empty?
       else
         value = ENV[var_name]
         is_set = ENV.key?(var_name)
@@ -2906,6 +2912,7 @@ module Rubish
       when 'BASHOPTS' then Builtins.bashopts
       when 'BASH_COMPAT' then Builtins.bash_compat
       when 'BASH_ARGV0' then @bash_argv0_unset ? nil : __bash_argv0
+      when 'RUBISH_EXECUTION_STRING', 'BASH_EXECUTION_STRING' then ENV['RUBISH_EXECUTION_STRING'] || ''
       end
     end
 
