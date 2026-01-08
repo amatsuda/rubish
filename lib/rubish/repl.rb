@@ -1294,7 +1294,7 @@ module Rubish
             # BASH_COMPAT: Set shell compatibility level
             # Accepts "5.1", "51", or empty to clear
             Builtins.set_bash_compat(expanded_value)
-          elsif var_name == 'PPID' || var_name == 'UID' || var_name == 'EUID' || var_name == 'GROUPS' || var_name == 'HOSTNAME' || var_name == 'RUBISHPID' || var_name == 'BASHPID' || var_name == 'HISTCMD' || var_name == 'EPOCHSECONDS' || var_name == 'EPOCHREALTIME' || var_name == 'SRANDOM' || var_name == 'BASH_MONOSECONDS' || var_name == 'RUBISH_VERSION' || var_name == 'BASH_VERSION' || var_name == 'RUBISH_VERSINFO' || var_name == 'BASH_VERSINFO' || var_name == 'OSTYPE' || var_name == 'HOSTTYPE' || var_name == 'MACHTYPE' || var_name == 'PIPESTATUS' || var_name == 'RUBISH_COMMAND' || var_name == 'BASH_COMMAND' || var_name == 'FUNCNAME' || var_name == 'RUBISH_LINENO' || var_name == 'BASH_LINENO' || var_name == 'RUBISH_SOURCE' || var_name == 'BASH_SOURCE' || var_name == 'RUBISH_ARGC' || var_name == 'RUBISH_ARGV' || var_name == 'RUBISH_SUBSHELL' || var_name == 'BASH_SUBSHELL' || var_name == 'DIRSTACK' || var_name == 'COLUMNS' || var_name == 'LINES' || var_name == 'RUBISH_ALIASES' || var_name == 'RUBISH_CMDS' || var_name == 'COMP_CWORD' || var_name == 'COMP_LINE' || var_name == 'COMP_POINT' || var_name == 'COMP_TYPE' || var_name == 'COMP_KEY' || var_name == 'COMP_WORDS'
+          elsif var_name == 'PPID' || var_name == 'UID' || var_name == 'EUID' || var_name == 'GROUPS' || var_name == 'HOSTNAME' || var_name == 'RUBISHPID' || var_name == 'BASHPID' || var_name == 'HISTCMD' || var_name == 'EPOCHSECONDS' || var_name == 'EPOCHREALTIME' || var_name == 'SRANDOM' || var_name == 'BASH_MONOSECONDS' || var_name == 'RUBISH_VERSION' || var_name == 'BASH_VERSION' || var_name == 'RUBISH_VERSINFO' || var_name == 'BASH_VERSINFO' || var_name == 'OSTYPE' || var_name == 'HOSTTYPE' || var_name == 'MACHTYPE' || var_name == 'PIPESTATUS' || var_name == 'RUBISH_COMMAND' || var_name == 'BASH_COMMAND' || var_name == 'FUNCNAME' || var_name == 'RUBISH_LINENO' || var_name == 'BASH_LINENO' || var_name == 'RUBISH_SOURCE' || var_name == 'BASH_SOURCE' || var_name == 'RUBISH_ARGC' || var_name == 'BASH_ARGC' || var_name == 'RUBISH_ARGV' || var_name == 'BASH_ARGV' || var_name == 'RUBISH_SUBSHELL' || var_name == 'BASH_SUBSHELL' || var_name == 'DIRSTACK' || var_name == 'COLUMNS' || var_name == 'LINES' || var_name == 'RUBISH_ALIASES' || var_name == 'BASH_ALIASES' || var_name == 'RUBISH_CMDS' || var_name == 'BASH_CMDS' || var_name == 'COMP_CWORD' || var_name == 'COMP_LINE' || var_name == 'COMP_POINT' || var_name == 'COMP_TYPE' || var_name == 'COMP_KEY' || var_name == 'COMP_WORDS'
             # These variables are read-only, silently ignore assignment
           else
             ENV[var_name] = expanded_value
@@ -3176,8 +3176,8 @@ module Rubish
         return (@rubish_source_stack[idx] || '').to_s
       end
 
-      # Special handling for RUBISH_ARGC array
-      if var_name == 'RUBISH_ARGC'
+      # Special handling for RUBISH_ARGC and BASH_ARGC arrays
+      if var_name == 'RUBISH_ARGC' || var_name == 'BASH_ARGC'
         idx = begin
           eval(expanded_index).to_i
         rescue
@@ -3186,8 +3186,8 @@ module Rubish
         return (@rubish_argc_stack[idx] || '').to_s
       end
 
-      # Special handling for RUBISH_ARGV array
-      if var_name == 'RUBISH_ARGV'
+      # Special handling for RUBISH_ARGV and BASH_ARGV arrays
+      if var_name == 'RUBISH_ARGV' || var_name == 'BASH_ARGV'
         idx = begin
           eval(expanded_index).to_i
         rescue
@@ -3271,20 +3271,20 @@ module Rubish
       # Special handling for RUBISH_SOURCE and BASH_SOURCE arrays
       elsif var_name == 'RUBISH_SOURCE' || var_name == 'BASH_SOURCE'
         values = @rubish_source_stack.dup
-      # Special handling for RUBISH_ARGC array
-      elsif var_name == 'RUBISH_ARGC'
+      # Special handling for RUBISH_ARGC and BASH_ARGC arrays
+      elsif var_name == 'RUBISH_ARGC' || var_name == 'BASH_ARGC'
         values = @rubish_argc_stack.map(&:to_s)
-      # Special handling for RUBISH_ARGV array
-      elsif var_name == 'RUBISH_ARGV'
+      # Special handling for RUBISH_ARGV and BASH_ARGV arrays
+      elsif var_name == 'RUBISH_ARGV' || var_name == 'BASH_ARGV'
         values = @rubish_argv_stack.dup
       # Special handling for DIRSTACK array
       elsif var_name == 'DIRSTACK'
         values = [Dir.pwd] + Builtins.dir_stack
-      # Special handling for RUBISH_ALIASES associative array
-      elsif var_name == 'RUBISH_ALIASES'
+      # Special handling for RUBISH_ALIASES and BASH_ALIASES associative arrays
+      elsif var_name == 'RUBISH_ALIASES' || var_name == 'BASH_ALIASES'
         values = Builtins.aliases.values
-      # Special handling for RUBISH_CMDS associative array (command hash)
-      elsif var_name == 'RUBISH_CMDS'
+      # Special handling for RUBISH_CMDS and BASH_CMDS associative arrays (command hash)
+      elsif var_name == 'RUBISH_CMDS' || var_name == 'BASH_CMDS'
         values = Builtins.command_hash.values
       # Special handling for COMP_WORDS array
       elsif var_name == 'COMP_WORDS'
@@ -3326,20 +3326,20 @@ module Rubish
       # Special handling for RUBISH_SOURCE and BASH_SOURCE arrays
       elsif var_name == 'RUBISH_SOURCE' || var_name == 'BASH_SOURCE'
         @rubish_source_stack.length.to_s
-      # Special handling for RUBISH_ARGC array
-      elsif var_name == 'RUBISH_ARGC'
+      # Special handling for RUBISH_ARGC and BASH_ARGC arrays
+      elsif var_name == 'RUBISH_ARGC' || var_name == 'BASH_ARGC'
         @rubish_argc_stack.length.to_s
-      # Special handling for RUBISH_ARGV array
-      elsif var_name == 'RUBISH_ARGV'
+      # Special handling for RUBISH_ARGV and BASH_ARGV arrays
+      elsif var_name == 'RUBISH_ARGV' || var_name == 'BASH_ARGV'
         @rubish_argv_stack.length.to_s
       # Special handling for DIRSTACK array
       elsif var_name == 'DIRSTACK'
         ([Dir.pwd] + Builtins.dir_stack).length.to_s
-      # Special handling for RUBISH_ALIASES associative array
-      elsif var_name == 'RUBISH_ALIASES'
+      # Special handling for RUBISH_ALIASES and BASH_ALIASES associative arrays
+      elsif var_name == 'RUBISH_ALIASES' || var_name == 'BASH_ALIASES'
         Builtins.aliases.length.to_s
-      # Special handling for RUBISH_CMDS associative array (command hash)
-      elsif var_name == 'RUBISH_CMDS'
+      # Special handling for RUBISH_CMDS and BASH_CMDS associative arrays (command hash)
+      elsif var_name == 'RUBISH_CMDS' || var_name == 'BASH_CMDS'
         Builtins.command_hash.length.to_s
       # Special handling for COMP_WORDS array
       elsif var_name == 'COMP_WORDS'
@@ -3374,20 +3374,20 @@ module Rubish
       # Special handling for RUBISH_SOURCE and BASH_SOURCE arrays
       elsif var_name == 'RUBISH_SOURCE' || var_name == 'BASH_SOURCE'
         (0...@rubish_source_stack.length).to_a.join(' ')
-      # Special handling for RUBISH_ARGC array
-      elsif var_name == 'RUBISH_ARGC'
+      # Special handling for RUBISH_ARGC and BASH_ARGC arrays
+      elsif var_name == 'RUBISH_ARGC' || var_name == 'BASH_ARGC'
         (0...@rubish_argc_stack.length).to_a.join(' ')
-      # Special handling for RUBISH_ARGV array
-      elsif var_name == 'RUBISH_ARGV'
+      # Special handling for RUBISH_ARGV and BASH_ARGV arrays
+      elsif var_name == 'RUBISH_ARGV' || var_name == 'BASH_ARGV'
         (0...@rubish_argv_stack.length).to_a.join(' ')
       # Special handling for DIRSTACK array
       elsif var_name == 'DIRSTACK'
         (0...([Dir.pwd] + Builtins.dir_stack).length).to_a.join(' ')
-      # Special handling for RUBISH_ALIASES associative array
-      elsif var_name == 'RUBISH_ALIASES'
+      # Special handling for RUBISH_ALIASES and BASH_ALIASES associative arrays
+      elsif var_name == 'RUBISH_ALIASES' || var_name == 'BASH_ALIASES'
         Builtins.aliases.keys.join(' ')
-      # Special handling for RUBISH_CMDS associative array (command hash)
-      elsif var_name == 'RUBISH_CMDS'
+      # Special handling for RUBISH_CMDS and BASH_CMDS associative arrays (command hash)
+      elsif var_name == 'RUBISH_CMDS' || var_name == 'BASH_CMDS'
         Builtins.command_hash.keys.join(' ')
       # Special handling for COMP_WORDS array
       elsif var_name == 'COMP_WORDS'
