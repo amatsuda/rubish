@@ -18,6 +18,12 @@ module Rubish
     # Redirect: cmd > file
     Redirect = Data.define(:command, :operator, :target)
 
+    # VarnameRedirect: cmd {fd}>file - allocates FD to variable
+    # varname: the variable name to store the allocated FD
+    # operator: the redirection operator (>, >>, <, >&, <&)
+    # target: the file or FD number
+    VarnameRedirect = Data.define(:command, :varname, :operator, :target)
+
     # Background: cmd &
     Background = Data.define(:command)
 

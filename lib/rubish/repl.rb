@@ -33,6 +33,8 @@ module Rubish
       @last_mail_check = Time.now  # For MAIL/MAILCHECK - last time we checked for mail
       @mail_mtimes = {}  # For MAIL/MAILCHECK - hash of mail file paths to their last known mtime
       @mail_atimes = {}  # For mailwarn - hash of mail file paths to their last known atime
+      @varname_fds = {}  # For {varname} redirection - maps varname to allocated FD
+      @next_varname_fd = 10  # Next FD to allocate for {varname} redirections
       # SHLVL - shell nesting level (stored in ENV for inheritance)
       current_shlvl = ENV['SHLVL'].to_i
       ENV['SHLVL'] = (current_shlvl + 1).to_s
@@ -2348,6 +2350,103 @@ module Rubish
         puts "[1] #{pid}"
       end
       nil
+    end
+
+    # Handle {varname} redirection syntax: exec {fd}>file
+    # Allocates a file descriptor >= 10 and stores it in the named variable
+    def __varname_redirect(varname, operator, target, &block)
+      # Allocate a new FD number (>= 10, avoiding conflicts)
+      fd_num = allocate_varname_fd
+
+      # Store the FD number in the variable
+      ENV[varname] = fd_num.to_s
+
+      # Track this FD for potential auto-closing
+      @varname_fds[varname] = {fd: fd_num, target: target, operator: operator}
+
+      # Now perform the actual redirection
+      case operator
+      when '>'
+        # Open file for writing, associate with fd_num
+        io = File.open(expand_single_arg(target), 'w')
+        perform_varname_redirect(fd_num, io, &block)
+      when '>>'
+        # Open file for appending
+        io = File.open(expand_single_arg(target), 'a')
+        perform_varname_redirect(fd_num, io, &block)
+      when '<'
+        # Open file for reading
+        io = File.open(expand_single_arg(target), 'r')
+        perform_varname_redirect(fd_num, io, &block)
+      when '>&'
+        # Duplicate output FD
+        src_fd = target.to_i
+        perform_fd_dup(fd_num, src_fd, &block)
+      when '<&'
+        # Duplicate input FD
+        src_fd = target.to_i
+        perform_fd_dup(fd_num, src_fd, &block)
+      else
+        block.call
+      end
+    ensure
+      # If varredir_close is enabled, close the FD after command completes
+      if Builtins.shopt_enabled?('varredir_close') && @varname_fds[varname]
+        close_varname_fd(varname)
+      end
+    end
+
+    # Allocate a new FD number for {varname} redirection
+    def allocate_varname_fd
+      fd = @next_varname_fd
+      @next_varname_fd += 1
+      # Skip over any FDs that are already in use
+      while @varname_fds.values.any? { |info| info[:fd] == @next_varname_fd }
+        @next_varname_fd += 1
+      end
+      fd
+    end
+
+    # Perform redirection with allocated FD
+    def perform_varname_redirect(fd_num, io, &block)
+      result = block.call
+      # Store the IO object for later use
+      @varname_fds.each do |name, info|
+        if info[:fd] == fd_num
+          info[:io] = io
+          break
+        end
+      end
+      result
+    ensure
+      # Don't close here - the FD should remain open for use
+      # It will be closed by varredir_close or explicit close
+    end
+
+    # Perform FD duplication
+    def perform_fd_dup(fd_num, src_fd, &block)
+      block.call
+    end
+
+    # Close a varname-allocated FD
+    def close_varname_fd(varname)
+      info = @varname_fds.delete(varname)
+      return unless info
+
+      if info[:io] && !info[:io].closed?
+        info[:io].close
+      end
+      ENV.delete(varname)
+    end
+
+    # Close a specific FD by number (for explicit close like exec {fd}>&-)
+    def close_fd_by_number(fd_num)
+      @varname_fds.each do |name, info|
+        if info[:fd] == fd_num
+          close_varname_fd(name)
+          break
+        end
+      end
     end
 
     def __condition(&block)

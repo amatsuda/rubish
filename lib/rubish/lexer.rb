@@ -17,6 +17,8 @@ module Rubish
       '<<-' => :HEREDOC_INDENT,  # Here document with indented delimiter
       '<<<' => :HERESTRING,  # Here string
       '2>' => :REDIRECT_ERR,
+      '>&' => :DUP_OUT,       # Duplicate output FD
+      '<&' => :DUP_IN,        # Duplicate input FD
       '&&' => :AND,
       '||' => :OR,
       '(' => :LPAREN,
@@ -79,6 +81,11 @@ module Rubish
         return read_heredoc_delimiter(:HEREDOC_INDENT)
       end
 
+      # Check for {varname} redirection pattern: {fd}>file, {fd}<file, etc.
+      if @input[@pos] == '{' && looks_like_varname_redirect?
+        return read_varname_redirect
+      end
+
       two_char = @input[@pos, 2]
       if two_char == '<<'
         @pos += 2
@@ -106,7 +113,7 @@ module Rubish
       if two_char == '>('
         return read_process_substitution(:PROC_SUB_OUT)
       end
-      if %w[>> >| 2> && || () ;;].include?(two_char)
+      if %w[>> >| 2> >& <& && || () ;;].include?(two_char)
         @pos += 2
         return Token.new(OPERATORS[two_char], two_char)
       end
@@ -637,6 +644,59 @@ module Rubish
       end
 
       Token.new(:HERESTRING, value)
+    end
+
+    # Check if current position is a {varname} redirection pattern
+    # Pattern: {identifier} followed by >, >>, <, >&, <&
+    def looks_like_varname_redirect?
+      return false unless @input[@pos] == '{'
+
+      # Look for closing } followed by redirection operator
+      lookahead = @pos + 1
+      # Identifier must start with letter or underscore
+      return false unless lookahead < @input.length && @input[lookahead] =~ /[a-zA-Z_]/
+
+      # Find the closing brace
+      lookahead += 1
+      lookahead += 1 while lookahead < @input.length && @input[lookahead] =~ /[a-zA-Z0-9_]/
+
+      # Must be followed by }
+      return false unless lookahead < @input.length && @input[lookahead] == '}'
+
+      # Must be followed by a redirection operator
+      after_brace = lookahead + 1
+      return false unless after_brace < @input.length
+
+      next_two = @input[after_brace, 2]
+      next_one = @input[after_brace]
+
+      # Check for valid redirection operators
+      %w[>> >| >& <& < >].any? { |op| @input[after_brace, op.length] == op }
+    end
+
+    # Read a {varname} redirection: {fd}>file or {fd}<file
+    def read_varname_redirect
+      @pos += 1  # skip opening {
+
+      # Read variable name
+      start = @pos
+      @pos += 1 while @pos < @input.length && @input[@pos] =~ /[a-zA-Z0-9_]/
+      varname = @input[start...@pos]
+
+      @pos += 1  # skip closing }
+
+      # Read the redirection operator
+      two_char = @input[@pos, 2]
+      if %w[>> >| >& <&].include?(two_char)
+        op = two_char
+        @pos += 2
+      else
+        op = @input[@pos]  # Single char: > or <
+        @pos += 1
+      end
+
+      # Return token with varname and operator info
+      Token.new(:VARNAME_REDIRECT, {varname: varname, operator: op})
     end
   end
 end

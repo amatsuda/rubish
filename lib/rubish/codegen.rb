@@ -12,6 +12,8 @@ module Rubish
         generate_list(node)
       when AST::Redirect
         generate_redirect(node)
+      when AST::VarnameRedirect
+        generate_varname_redirect(node)
       when AST::Background
         generate_background(node)
       when AST::And
@@ -390,9 +392,19 @@ module Rubish
                   when '>>' then 'redirect_append'
                   when '<' then 'redirect_in'
                   when '2>' then 'redirect_err'
+                  when '>&' then 'dup_out'
+                  when '<&' then 'dup_in'
                   end
       target = generate_string_arg(node.target)
       "#{generate(node.command)}.#{op_method}(#{target})"
+    end
+
+    def generate_varname_redirect(node)
+      # Generate code to allocate FD and redirect
+      varname = node.varname.inspect
+      operator = node.operator.inspect
+      target = generate_string_arg(node.target)
+      "__varname_redirect(#{varname}, #{operator}, #{target}) { #{generate(node.command)} }"
     end
 
     def generate_background(node)

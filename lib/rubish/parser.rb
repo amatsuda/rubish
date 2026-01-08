@@ -520,8 +520,9 @@ module Rubish
 
     def parse_redirections(cmd)
       while peek(:REDIRECT_OUT) || peek(:REDIRECT_CLOBBER) || peek(:REDIRECT_APPEND) ||
-            peek(:REDIRECT_IN) || peek(:REDIRECT_ERR) ||
-            peek(:HEREDOC) || peek(:HEREDOC_INDENT) || peek(:HERESTRING)
+            peek(:REDIRECT_IN) || peek(:REDIRECT_ERR) || peek(:DUP_OUT) || peek(:DUP_IN) ||
+            peek(:HEREDOC) || peek(:HEREDOC_INDENT) || peek(:HERESTRING) ||
+            peek(:VARNAME_REDIRECT)
         op = consume
 
         case op.type
@@ -541,8 +542,14 @@ module Rubish
         when :HERESTRING
           # The token value contains the string
           cmd = AST::Herestring.new(cmd, op.value)
+        when :VARNAME_REDIRECT
+          # {varname}>file or {varname}<file - allocates FD to variable
+          varname = op.value[:varname]
+          redirect_op = op.value[:operator]
+          target = consume(:WORD)&.value
+          cmd = AST::VarnameRedirect.new(cmd, varname, redirect_op, target) if target
         else
-          # Regular redirections
+          # Regular redirections (>, >>, <, 2>, >&, <&)
           target = consume(:WORD)&.value
           cmd = AST::Redirect.new(cmd, op.value, target) if target
         end
