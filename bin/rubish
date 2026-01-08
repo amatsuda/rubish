@@ -35,9 +35,10 @@ while i < ARGV.length
   end
 end
 
-# Helper to source RUBISH_ENV file in non-interactive modes
+# Helper to source RUBISH_ENV/BASH_ENV file in non-interactive modes
 def source_rubish_env(repl)
-  rubish_env = ENV['RUBISH_ENV']
+  # Check RUBISH_ENV first, then BASH_ENV as fallback (bash compatibility)
+  rubish_env = ENV['RUBISH_ENV'] || ENV['BASH_ENV']
   return unless rubish_env && !rubish_env.empty?
 
   # Expand the path (handle ~ and variables)
