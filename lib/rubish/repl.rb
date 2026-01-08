@@ -46,8 +46,8 @@ module Rubish
       Builtins.positional_params_setter = ->(params) { @positional_params = params }
       Builtins.function_checker = ->(name) { @functions.key?(name) }
       Builtins.function_remover = ->(name) { @functions.delete(name) }
-      Builtins.function_lister = -> { @functions.transform_values { |v| {source: v[:source_code], file: v[:source]} } }
-      Builtins.function_getter = ->(name) { f = @functions[name]; f ? {source: f[:source_code], file: f[:source]} : nil }
+      Builtins.function_lister = -> { @functions.transform_values { |v| {source: v[:source_code], file: v[:source], lineno: v[:lineno]} } }
+      Builtins.function_getter = ->(name) { f = @functions[name]; f ? {source: f[:source_code], file: f[:source], lineno: f[:lineno]} : nil }
       Builtins.heredoc_content_setter = ->(content) { @heredoc_content = content }
       Builtins.command_executor = ->(args) { execute_command_directly(args) }
       Builtins.source_file_getter = -> { @current_source_file }
@@ -4282,8 +4282,8 @@ module Rubish
       lines.join("\n") + (lines.empty? ? '' : "\n")
     end
 
-    def __define_function(name, source_code = nil, &block)
-      @functions[name] = {block: block, source: @current_source_file, source_code: source_code}
+    def __define_function(name, source_code = nil, lineno = nil, &block)
+      @functions[name] = {block: block, source: @current_source_file, source_code: source_code, lineno: lineno || @lineno}
       nil
     end
 

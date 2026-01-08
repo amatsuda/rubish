@@ -1878,7 +1878,12 @@ module Rubish
     def self.print_function(name, info, names_only)
       if names_only
         # -F: just print the name (optionally with file info)
-        if info[:file]
+        # extdebug: when enabled, output in bash format "funcname lineno filename"
+        if shopt_enabled?('extdebug') && info[:file]
+          # Use line number if available, otherwise 0 as placeholder
+          lineno = info[:lineno] || 0
+          puts "#{name} #{lineno} #{info[:file]}"
+        elsif info[:file]
           puts "declare -f #{name}  # defined in #{info[:file]}"
         else
           puts "declare -f #{name}"
