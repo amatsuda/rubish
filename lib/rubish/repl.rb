@@ -3491,7 +3491,7 @@ module Rubish
       sorted = case sort_type
                when 'name'
                  matches.sort
-               when 'nosort'
+               when 'nosort', 'none'
                  matches  # No sorting, return as-is from readdir
                when 'size'
                  matches.sort_by { |f| File.exist?(f) ? File.size(f) : 0 }
@@ -3505,12 +3505,32 @@ module Rubish
                  matches.sort_by { |f| File.exist?(f) ? (File.stat(f).blocks rescue 0) : 0 }
                when 'extension'
                  matches.sort_by { |f| [File.extname(f).downcase, f.downcase] }
+               when 'numeric'
+                 # Numeric sort: extract numbers from filenames and sort numerically
+                 # file1.txt < file2.txt < file10.txt (not file1 < file10 < file2)
+                 matches.sort_by { |f| numeric_sort_key(f) }
                else
                  # Unknown sort type, fall back to name sort
                  matches.sort
                end
 
       reverse ? sorted.reverse : sorted
+    end
+
+    # Generate a sort key for numeric sorting
+    # Splits filename into alternating text/number parts for natural sorting
+    # "file10.txt" -> ["file", 10, ".txt"] so file2 < file10
+    def numeric_sort_key(filename)
+      # Split into alternating non-digit and digit parts
+      parts = filename.scan(/\D+|\d+/)
+      parts.map do |part|
+        if part =~ /^\d+$/
+          # Pad numbers to ensure proper numeric comparison
+          part.to_i
+        else
+          part.downcase
+        end
+      end
     end
 
     def expand_locale_ranges(pattern)

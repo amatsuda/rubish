@@ -246,6 +246,115 @@ class TestGLOBSORT < Test::Unit::TestCase
     assert_equal ['gamma.txt', 'beta.txt', 'alpha.txt'], results
   end
 
+  # numeric sort (bash 5.3)
+
+  def test_globsort_numeric_sorts_naturally
+    FileUtils.touch('file1.txt')
+    FileUtils.touch('file2.txt')
+    FileUtils.touch('file10.txt')
+    FileUtils.touch('file20.txt')
+    ENV['GLOBSORT'] = 'numeric'
+
+    results = glob('*.txt')
+
+    # Numeric sort: file1 < file2 < file10 < file20
+    assert_equal ['file1.txt', 'file2.txt', 'file10.txt', 'file20.txt'], results
+  end
+
+  def test_globsort_numeric_vs_name_sort
+    FileUtils.touch('file1.txt')
+    FileUtils.touch('file10.txt')
+    FileUtils.touch('file2.txt')
+
+    # Name sort would give: file1, file10, file2
+    ENV['GLOBSORT'] = 'name'
+    name_results = glob('*.txt')
+    assert_equal ['file1.txt', 'file10.txt', 'file2.txt'], name_results
+
+    # Numeric sort should give: file1, file2, file10
+    ENV['GLOBSORT'] = 'numeric'
+    numeric_results = glob('*.txt')
+    assert_equal ['file1.txt', 'file2.txt', 'file10.txt'], numeric_results
+  end
+
+  def test_globsort_numeric_with_mixed_content
+    FileUtils.touch('img001.jpg')
+    FileUtils.touch('img2.jpg')
+    FileUtils.touch('img10.jpg')
+    FileUtils.touch('photo1.jpg')
+    ENV['GLOBSORT'] = 'numeric'
+
+    results = glob('*.jpg')
+
+    # Should sort by prefix first, then numerically within same prefix
+    assert_equal ['img001.jpg', 'img2.jpg', 'img10.jpg', 'photo1.jpg'], results
+  end
+
+  def test_globsort_numeric_reverse
+    FileUtils.touch('file1.txt')
+    FileUtils.touch('file2.txt')
+    FileUtils.touch('file10.txt')
+    ENV['GLOBSORT'] = '-numeric'
+
+    results = glob('*.txt')
+
+    assert_equal ['file10.txt', 'file2.txt', 'file1.txt'], results
+  end
+
+  def test_globsort_numeric_no_numbers
+    FileUtils.touch('alpha.txt')
+    FileUtils.touch('beta.txt')
+    FileUtils.touch('gamma.txt')
+    ENV['GLOBSORT'] = 'numeric'
+
+    results = glob('*.txt')
+
+    # Files without numbers should sort alphabetically
+    assert_equal ['alpha.txt', 'beta.txt', 'gamma.txt'], results
+  end
+
+  def test_globsort_numeric_case_insensitive
+    FileUtils.touch('File1.txt')
+    FileUtils.touch('file2.txt')
+    FileUtils.touch('FILE10.txt')
+    ENV['GLOBSORT'] = 'numeric'
+
+    results = glob('*.txt')
+
+    # Case insensitive, so File1 < file2 < FILE10
+    assert_equal ['File1.txt', 'file2.txt', 'FILE10.txt'], results
+  end
+
+  # none sort (bash 5.3 alias for nosort)
+
+  def test_globsort_none_is_alias_for_nosort
+    FileUtils.touch('file3.txt')
+    FileUtils.touch('file1.txt')
+    FileUtils.touch('file2.txt')
+    ENV['GLOBSORT'] = 'none'
+
+    results = glob('*.txt')
+
+    # With none, just verify all files are present (order depends on filesystem)
+    assert_equal 3, results.length
+    assert_includes results, 'file1.txt'
+    assert_includes results, 'file2.txt'
+    assert_includes results, 'file3.txt'
+  end
+
+  def test_globsort_none_reverse_still_works
+    FileUtils.touch('alpha.txt')
+    FileUtils.touch('beta.txt')
+    ENV['GLOBSORT'] = '-none'
+
+    results = glob('*.txt')
+
+    # -none should still return unsorted (reverse of unsorted is still unsorted order, just reversed)
+    assert_equal 2, results.length
+    assert_includes results, 'alpha.txt'
+    assert_includes results, 'beta.txt'
+  end
+
   # Unknown sort type
 
   def test_globsort_unknown_falls_back_to_name
