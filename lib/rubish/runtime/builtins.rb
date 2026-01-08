@@ -4365,7 +4365,20 @@ module Rubish
     end
 
     def self.get_completion_spec(name)
-      @completions[name]
+      spec = @completions[name]
+      return spec if spec
+
+      # progcomp_alias: if name is an alias, use completion spec for the aliased command
+      if shopt_enabled?('progcomp_alias') && @aliases.key?(name)
+        # Get the first word of the alias expansion
+        alias_value = @aliases[name]
+        first_word = alias_value.split(/\s+/).first
+        # Avoid infinite loop if alias points to itself
+        return nil if first_word == name
+        return @completions[first_word]
+      end
+
+      nil
     end
 
     def self.clear_completions
