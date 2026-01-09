@@ -190,7 +190,7 @@ class TestPrintf < Test::Unit::TestCase
 
   # Test usage error
   def test_printf_no_args
-    output = capture_output { Rubish::Builtins.run('printf', []) }
+    output = capture_stderr { Rubish::Builtins.run('printf', []) }
     assert_match(/usage/, output)
   end
 
@@ -215,5 +215,86 @@ class TestPrintf < Test::Unit::TestCase
   def test_printf_g_specifier
     output = capture_output { Rubish::Builtins.run('printf', ['%g', '0.000123']) }
     assert_match(/0\.000123|1\.23.*e-0?4/, output)
+  end
+
+  # Test -v option (variable assignment)
+  def test_printf_v_option_basic
+    output = capture_output { Rubish::Builtins.run('printf', ['-v', 'myvar', '%s', 'hello']) }
+    assert_equal '', output  # No output to stdout
+    assert_equal 'hello', ENV['myvar']
+  end
+
+  def test_printf_v_option_formatted
+    output = capture_output { Rubish::Builtins.run('printf', ['-v', 'result', '%05d', '42']) }
+    assert_equal '', output
+    assert_equal '00042', ENV['result']
+  end
+
+  def test_printf_v_option_multiple_args
+    output = capture_output { Rubish::Builtins.run('printf', ['-v', 'msg', '%s %s!', 'hello', 'world']) }
+    assert_equal '', output
+    assert_equal 'hello world!', ENV['msg']
+  end
+
+  def test_printf_v_option_with_newline
+    output = capture_output { Rubish::Builtins.run('printf', ['-v', 'lines', 'line1\\nline2']) }
+    assert_equal '', output
+    assert_equal "line1\nline2", ENV['lines']
+  end
+
+  def test_printf_v_option_missing_varname
+    output = capture_stderr { Rubish::Builtins.run('printf', ['-v']) }
+    assert_match(/option requires an argument/, output)
+  end
+
+  def test_printf_v_option_invalid_varname
+    output = capture_stderr { Rubish::Builtins.run('printf', ['-v', '123invalid', '%s', 'test']) }
+    assert_match(/not a valid identifier/, output)
+  end
+
+  def test_printf_v_option_invalid_varname_with_dash
+    output = capture_stderr { Rubish::Builtins.run('printf', ['-v', 'my-var', '%s', 'test']) }
+    assert_match(/not a valid identifier/, output)
+  end
+
+  def test_printf_v_returns_true_on_success
+    capture_output do
+      result = Rubish::Builtins.run('printf', ['-v', 'x', '%s', 'test'])
+      assert result
+    end
+  end
+
+  def test_printf_v_returns_false_on_error
+    capture_stderr do
+      result = Rubish::Builtins.run('printf', ['-v'])
+      assert_false result
+    end
+  end
+
+  def test_printf_v_via_repl
+    execute("printf -v greeting '%s %s' hello world")
+    assert_equal 'hello world', ENV['greeting']
+  end
+
+  def test_printf_v_overwrites_existing
+    ENV['existing'] = 'old value'
+    capture_output { Rubish::Builtins.run('printf', ['-v', 'existing', '%s', 'new value']) }
+    assert_equal 'new value', ENV['existing']
+  end
+
+  def test_printf_v_underscore_varname
+    capture_output { Rubish::Builtins.run('printf', ['-v', '_private', '%d', '99']) }
+    assert_equal '99', ENV['_private']
+  end
+
+  def test_printf_v_with_double_dash
+    output = capture_output { Rubish::Builtins.run('printf', ['-v', 'var', '--', '%s', 'test']) }
+    assert_equal '', output
+    assert_equal 'test', ENV['var']
+  end
+
+  def test_printf_invalid_option
+    output = capture_stderr { Rubish::Builtins.run('printf', ['-x', '%s', 'test']) }
+    assert_match(/invalid option/, output)
   end
 end

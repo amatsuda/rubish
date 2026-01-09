@@ -3151,12 +3151,39 @@ module Rubish
     end
 
     def self.run_printf(args)
-      # printf format [arguments...]
+      # printf [-v var] format [arguments...]
       # Supports: %s, %d, %i, %f, %e, %g, %x, %X, %o, %c, %b, %%
       # Also supports width, precision, and flags: %-10s, %05d, %.2f, etc.
+      # -v var: assign output to shell variable var instead of printing
+
+      var_name = nil
+
+      # Parse -v option
+      while args.first&.start_with?('-')
+        break if args.first == '--'
+        if args.first == '-v'
+          args.shift
+          var_name = args.shift
+          unless var_name
+            $stderr.puts 'printf: -v: option requires an argument'
+            return false
+          end
+          # Validate variable name
+          unless var_name =~ /\A[a-zA-Z_][a-zA-Z0-9_]*\z/
+            $stderr.puts "printf: `#{var_name}': not a valid identifier"
+            return false
+          end
+        else
+          $stderr.puts "printf: #{args.first}: invalid option"
+          return false
+        end
+      end
+
+      # Consume -- if present
+      args.shift if args.first == '--'
 
       if args.empty?
-        puts 'printf: usage: printf format [arguments]'
+        $stderr.puts 'printf: usage: printf [-v var] format [arguments]'
         return false
       end
 
@@ -3230,7 +3257,12 @@ module Rubish
         end
       end
 
-      print output
+      if var_name
+        # Assign to variable instead of printing
+        ENV[var_name] = output
+      else
+        print output
+      end
       true
     end
 
@@ -6920,8 +6952,11 @@ module Rubish
         description: 'Evaluate arithmetic expressions. Each arg is an arithmetic expression.'
       },
       'printf' => {
-        synopsis: 'printf format [arguments]',
-        description: 'Write formatted output. Format specifiers: %s (string), %d (integer), %f (float), etc.'
+        synopsis: 'printf [-v var] format [arguments]',
+        description: 'Write formatted output. Format specifiers: %s (string), %d (integer), %f (float), etc.',
+        options: {
+          '-v var' => 'assign the output to shell variable var instead of printing to stdout'
+        }
       },
       'type' => {
         synopsis: 'type [-t|-p|-a] name [name ...]',
