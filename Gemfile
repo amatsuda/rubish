@@ -6,3 +6,4 @@ gem 'rake'
 gem 'test-unit'
 
 gem 'reline'
+gem 'syslog'

@@ -2,7 +2,7 @@
 
 module Rubish
   module Builtins
-    COMMANDS = %w(cd exit logout jobs fg bg export pwd history alias unalias source . shift set return read echo test [ break continue pushd popd dirs trap getopts local unset readonly declare typeset let printf type which true false : eval command builtin wait kill umask exec times hash disown ulimit suspend shopt enable caller complete compgen compopt bind help fc mapfile readarray).freeze
+    COMMANDS = %w(cd exit logout jobs fg bg export pwd history alias unalias source . shift set return read echo test [ break continue pushd popd dirs trap getopts local unset readonly declare typeset let printf type which true false : eval command builtin wait kill umask exec times hash disown ulimit suspend shopt enable caller complete compgen compopt bind help fc mapfile readarray basename dirname realpath).freeze
 
     @aliases = {}
     @dir_stack = []
@@ -689,6 +689,12 @@ module Rubish
         run_fc(args)
       when 'mapfile', 'readarray'
         run_mapfile(args)
+      when 'basename'
+        run_basename(args)
+      when 'dirname'
+        run_dirname(args)
+      when 'realpath'
+        run_realpath(args)
       else
         # Check for dynamically loaded builtins
         if @loaded_builtins.key?(name)
@@ -7176,6 +7182,33 @@ module Rubish
       'readarray' => {
         synopsis: 'readarray [-d delim] [-n count] [-O origin] [-s count] [-t] [-u fd] [-C callback] [-c quantum] [array]',
         description: 'Read lines from standard input into an indexed array variable. Synonym for mapfile.'
+      },
+      'basename' => {
+        synopsis: 'basename NAME [SUFFIX]',
+        description: 'Strip directory and suffix from filenames. Print NAME with any leading directory components removed. If SUFFIX is specified, also remove a trailing SUFFIX.',
+        options: {
+          '-a, --multiple' => 'support multiple arguments and treat each as a NAME',
+          '-s, --suffix=SUFFIX' => 'remove a trailing SUFFIX; implies -a',
+          '-z, --zero' => 'end each output line with NUL, not newline'
+        }
+      },
+      'dirname' => {
+        synopsis: 'dirname NAME...',
+        description: 'Strip last component from file name. Output each NAME with its last non-slash component and trailing slashes removed; if NAME contains no slashes, output "." (meaning the current directory).',
+        options: {
+          '-z, --zero' => 'end each output line with NUL, not newline'
+        }
+      },
+      'realpath' => {
+        synopsis: 'realpath [OPTION]... FILE...',
+        description: 'Print the resolved absolute file name. All but the last component must exist.',
+        options: {
+          '-e, --canonicalize-existing' => 'all components of the path must exist',
+          '-m, --canonicalize-missing' => 'no path components need exist or be a directory',
+          '-q, --quiet' => 'suppress most error messages',
+          '-s, --strip, --no-symlinks' => 'don\'t expand symlinks',
+          '-z, --zero' => 'end each output line with NUL, not newline'
+        }
       }
     }.freeze
 
@@ -7704,6 +7737,183 @@ module Rubish
     # Helper to clear mapfile array
     def self.clear_mapfile_array(name = 'MAPFILE')
       ENV.keys.select { |k| k.start_with?("#{name}_") }.each { |k| ENV.delete(k) }
+    end
+
+    def self.run_basename(args)
+      # basename NAME [SUFFIX]
+      # basename -a [-s SUFFIX] NAME...
+      # basename -s SUFFIX NAME...
+      # -a: support multiple arguments
+      # -s SUFFIX: remove trailing SUFFIX
+      # -z: end each line with NUL instead of newline
+      suffix = nil
+      multiple = false
+      null_terminated = false
+
+      while args.first&.start_with?('-')
+        break if args.first == '--'
+        opt = args.shift
+        case opt
+        when '-a', '--multiple'
+          multiple = true
+        when '-s', '--suffix'
+          suffix = args.shift
+          unless suffix
+            $stderr.puts 'basename: option requires an argument -- s'
+            return false
+          end
+          multiple = true  # -s implies -a
+        when '-z', '--zero'
+          null_terminated = true
+        else
+          $stderr.puts "basename: invalid option -- '#{opt.sub(/^-+/, '')}'"
+          $stderr.puts "Try 'basename --help' for more information."
+          return false
+        end
+      end
+
+      # Consume -- if present
+      args.shift if args.first == '--'
+
+      if args.empty?
+        $stderr.puts 'basename: missing operand'
+        $stderr.puts "Try 'basename --help' for more information."
+        return false
+      end
+
+      # Traditional basename: basename NAME [SUFFIX]
+      if !multiple && args.length == 2 && suffix.nil?
+        suffix = args.pop
+      end
+
+      terminator = null_terminated ? "\0" : "\n"
+
+      args.each do |name|
+        result = File.basename(name)
+        # Remove suffix if specified and matches
+        if suffix && result.end_with?(suffix) && result != suffix
+          result = result[0..-(suffix.length + 1)]
+        end
+        print "#{result}#{terminator}"
+      end
+
+      true
+    end
+
+    def self.run_dirname(args)
+      # dirname NAME...
+      # -z: end each line with NUL instead of newline
+      null_terminated = false
+
+      while args.first&.start_with?('-')
+        break if args.first == '--'
+        opt = args.shift
+        case opt
+        when '-z', '--zero'
+          null_terminated = true
+        else
+          $stderr.puts "dirname: invalid option -- '#{opt.sub(/^-+/, '')}'"
+          $stderr.puts "Try 'dirname --help' for more information."
+          return false
+        end
+      end
+
+      # Consume -- if present
+      args.shift if args.first == '--'
+
+      if args.empty?
+        $stderr.puts 'dirname: missing operand'
+        $stderr.puts "Try 'dirname --help' for more information."
+        return false
+      end
+
+      terminator = null_terminated ? "\0" : "\n"
+
+      args.each do |name|
+        result = File.dirname(name)
+        print "#{result}#{terminator}"
+      end
+
+      true
+    end
+
+    def self.run_realpath(args)
+      # realpath [OPTION]... FILE...
+      # -e, --canonicalize-existing: all components must exist
+      # -m, --canonicalize-missing: no components need exist
+      # -q, --quiet: suppress error messages
+      # -s, --strip, --no-symlinks: don't expand symlinks
+      # -z, --zero: end each line with NUL instead of newline
+      canonicalize_mode = :existing  # default: all components must exist
+      quiet = false
+      no_symlinks = false
+      null_terminated = false
+
+      while args.first&.start_with?('-')
+        break if args.first == '--'
+        opt = args.shift
+        case opt
+        when '-e', '--canonicalize-existing'
+          canonicalize_mode = :existing
+        when '-m', '--canonicalize-missing'
+          canonicalize_mode = :missing
+        when '-q', '--quiet'
+          quiet = true
+        when '-s', '--strip', '--no-symlinks'
+          no_symlinks = true
+        when '-z', '--zero'
+          null_terminated = true
+        else
+          $stderr.puts "realpath: invalid option -- '#{opt.sub(/^-+/, '')}'"
+          $stderr.puts "Try 'realpath --help' for more information."
+          return false
+        end
+      end
+
+      # Consume -- if present
+      args.shift if args.first == '--'
+
+      if args.empty?
+        $stderr.puts 'realpath: missing operand'
+        $stderr.puts "Try 'realpath --help' for more information."
+        return false
+      end
+
+      terminator = null_terminated ? "\0" : "\n"
+      success = true
+
+      args.each do |name|
+        begin
+          result = if no_symlinks
+                     # Don't resolve symlinks, just normalize path
+                     File.expand_path(name)
+                   elsif canonicalize_mode == :missing
+                     # Allow non-existent components
+                     File.expand_path(name)
+                   else
+                     # Default: resolve symlinks, all must exist
+                     File.realpath(name)
+                   end
+          print "#{result}#{terminator}"
+        rescue Errno::ENOENT => e
+          unless quiet
+            $stderr.puts "realpath: #{name}: No such file or directory"
+          end
+          success = false
+        rescue Errno::EACCES => e
+          unless quiet
+            $stderr.puts "realpath: #{name}: Permission denied"
+          end
+          success = false
+        rescue => e
+          unless quiet
+            $stderr.puts "realpath: #{name}: #{e.message}"
+          end
+          success = false
+        end
+      end
+
+      success
     end
 
     def self.detect_heredoc(line)
