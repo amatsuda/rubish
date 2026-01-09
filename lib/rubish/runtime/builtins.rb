@@ -1548,48 +1548,98 @@ module Rubish
     end
 
     def self.run_local(args)
-      # local var=value or local var
+      # local [-n] var=value or local var
+      # -n: create a nameref (reference to another variable)
       # Only valid inside a function (when scope stack is not empty)
       if @local_scope_stack.empty?
-        puts 'local: can only be used in a function'
+        $stderr.puts 'local: can only be used in a function'
         return false
       end
 
       current_scope = @local_scope_stack.last
+      nameref_mode = false
+      remaining_args = []
 
+      # Parse options
       args.each do |arg|
+        if arg == '-n'
+          nameref_mode = true
+        elsif arg == '--'
+          # End of options, rest are variable names
+          next
+        elsif arg.start_with?('-') && !arg.include?('=')
+          # Unknown option
+          $stderr.puts "local: #{arg}: invalid option"
+          return false
+        else
+          remaining_args << arg
+        end
+      end
+
+      remaining_args.each do |arg|
         if arg.include?('=')
           name, value = arg.split('=', 2)
           # Check if readonly
           if readonly?(name)
-            puts "local: #{name}: readonly variable"
+            $stderr.puts "local: #{name}: readonly variable"
             next
           end
-          # Save original value if not already in this scope
-          unless current_scope.key?(name)
-            # Warn if shadowing a variable from outer scope
-            warn_shadow(name) if shopt_enabled?('localvar_warning') && ENV.key?(name)
-            current_scope[name] = ENV.key?(name) ? ENV[name] : :unset
+
+          if nameref_mode
+            # Create a local nameref
+            # Save original nameref state if not already in this scope
+            unless current_scope.key?(name)
+              warn_shadow(name) if shopt_enabled?('localvar_warning') && (ENV.key?(name) || nameref?(name))
+              # Store both the original ENV value and nameref state
+              current_scope[name] = {
+                env_value: ENV.key?(name) ? ENV[name] : :unset,
+                nameref_target: nameref?(name) ? get_nameref_target(name) : nil
+              }
+            end
+            # Set up the nameref
+            set_nameref(name, value)
+            # Don't set ENV for nameref - the nameref points to target
+          else
+            # Save original value if not already in this scope
+            unless current_scope.key?(name)
+              # Warn if shadowing a variable from outer scope
+              warn_shadow(name) if shopt_enabled?('localvar_warning') && ENV.key?(name)
+              current_scope[name] = ENV.key?(name) ? ENV[name] : :unset
+            end
+            ENV[name] = value
           end
-          ENV[name] = value
         else
           # Just declare as local without value
           name = arg
           unless current_scope.key?(name)
             # Warn if shadowing a variable from outer scope
-            warn_shadow(name) if shopt_enabled?('localvar_warning') && ENV.key?(name)
-            current_scope[name] = ENV.key?(name) ? ENV[name] : :unset
+            warn_shadow(name) if shopt_enabled?('localvar_warning') && (ENV.key?(name) || (nameref_mode && nameref?(name)))
+            if nameref_mode
+              current_scope[name] = {
+                env_value: ENV.key?(name) ? ENV[name] : :unset,
+                nameref_target: nameref?(name) ? get_nameref_target(name) : nil
+              }
+            else
+              current_scope[name] = ENV.key?(name) ? ENV[name] : :unset
+            end
           end
 
-          # localvar_inherit: inherit value and attributes from outer scope
-          if shopt_enabled?('localvar_inherit')
-            # Keep the inherited value (already in ENV if it exists)
-            # Also inherit variable attributes if present
-            # (attributes are already global, so nothing more to do for value)
+          if nameref_mode
+            # Create nameref without target (will be set later via assignment)
+            # For now, just mark it as a nameref with nil target
+            @var_attributes[name] ||= Set.new
+            @var_attributes[name] << :nameref
           else
-            # Without localvar_inherit, local var without value creates unset variable
-            # This is standard bash behavior
-            ENV.delete(name)
+            # localvar_inherit: inherit value and attributes from outer scope
+            if shopt_enabled?('localvar_inherit')
+              # Keep the inherited value (already in ENV if it exists)
+              # Also inherit variable attributes if present
+              # (attributes are already global, so nothing more to do for value)
+            else
+              # Without localvar_inherit, local var without value creates unset variable
+              # This is standard bash behavior
+              ENV.delete(name)
+            end
           end
         end
       end
@@ -1607,7 +1657,26 @@ module Rubish
       scope = @local_scope_stack.pop
       # Restore original values
       scope.each do |name, original_value|
-        if original_value == :unset
+        if original_value.is_a?(Hash)
+          # This was a local nameref - restore both ENV and nameref state
+          env_val = original_value[:env_value]
+          nameref_target = original_value[:nameref_target]
+
+          # First, remove the current nameref
+          unset_nameref(name)
+
+          # Restore original ENV value
+          if env_val == :unset
+            ENV.delete(name)
+          else
+            ENV[name] = env_val
+          end
+
+          # Restore original nameref if there was one
+          if nameref_target
+            set_nameref(name, nameref_target)
+          end
+        elsif original_value == :unset
           ENV.delete(name)
         else
           ENV[name] = original_value
@@ -7032,8 +7101,11 @@ module Rubish
         description: 'Parse positional parameters as options. Sets OPTIND and OPTARG.'
       },
       'local' => {
-        synopsis: 'local [name[=value] ...]',
-        description: 'Create local variables within a function. Only valid inside a function.'
+        synopsis: 'local [-n] [name[=value] ...]',
+        description: 'Create local variables within a function. Only valid inside a function.',
+        options: {
+          '-n' => 'make each name a nameref (reference to another variable)'
+        }
       },
       'unset' => {
         synopsis: 'unset [-v] [-f] [name ...]',

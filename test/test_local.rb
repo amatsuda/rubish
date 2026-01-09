@@ -26,7 +26,7 @@ class TestLocal < Test::Unit::TestCase
 
   # Test local outside function
   def test_local_outside_function
-    output = capture_output { Rubish::Builtins.run('local', ['x=1']) }
+    output = capture_stderr { Rubish::Builtins.run('local', ['x=1']) }
     assert_match(/can only be used in a function/, output)
   end
 
@@ -156,5 +156,149 @@ class TestLocal < Test::Unit::TestCase
     output = File.read(output_file)
     assert_match(/inner:inner_val/, output)
     assert_match(/outer:outer_val/, output)
+  end
+
+  # Test local -n (nameref)
+  def test_local_n_creates_nameref
+    ENV['target'] = 'target_value'
+    Rubish::Builtins.push_local_scope
+    Rubish::Builtins.run('local', ['-n', 'ref=target'])
+    assert Rubish::Builtins.nameref?('ref')
+    assert_equal 'target', Rubish::Builtins.get_nameref_target('ref')
+    Rubish::Builtins.pop_local_scope
+    assert_false Rubish::Builtins.nameref?('ref')
+  ensure
+    ENV.delete('target')
+    Rubish::Builtins.unset_nameref('ref')
+  end
+
+  def test_local_n_reads_through_ref
+    ENV['target'] = 'hello'
+    Rubish::Builtins.push_local_scope
+    Rubish::Builtins.run('local', ['-n', 'ref=target'])
+    # Reading through nameref should return target's value
+    assert_equal 'hello', Rubish::Builtins.get_var_through_nameref('ref')
+    Rubish::Builtins.pop_local_scope
+  ensure
+    ENV.delete('target')
+    Rubish::Builtins.unset_nameref('ref')
+  end
+
+  def test_local_n_writes_through_ref
+    ENV['target'] = 'original'
+    Rubish::Builtins.push_local_scope
+    Rubish::Builtins.run('local', ['-n', 'ref=target'])
+    # Writing through nameref should modify target
+    Rubish::Builtins.set_var_through_nameref('ref', 'modified')
+    assert_equal 'modified', ENV['target']
+    Rubish::Builtins.pop_local_scope
+    # Target should still be modified (nameref was local, not the target)
+    assert_equal 'modified', ENV['target']
+  ensure
+    ENV.delete('target')
+    Rubish::Builtins.unset_nameref('ref')
+  end
+
+  def test_local_n_restores_after_scope
+    ENV['target'] = 'value'
+    Rubish::Builtins.push_local_scope
+    Rubish::Builtins.run('local', ['-n', 'ref=target'])
+    assert Rubish::Builtins.nameref?('ref')
+    Rubish::Builtins.pop_local_scope
+    # After scope ends, ref should no longer be a nameref
+    assert_false Rubish::Builtins.nameref?('ref')
+  ensure
+    ENV.delete('target')
+  end
+
+  def test_local_n_without_value
+    Rubish::Builtins.push_local_scope
+    Rubish::Builtins.run('local', ['-n', 'ref'])
+    # Should have nameref attribute but no target yet
+    assert Rubish::Builtins.nameref?('ref')
+    assert_nil Rubish::Builtins.get_nameref_target('ref')
+    Rubish::Builtins.pop_local_scope
+    assert_false Rubish::Builtins.nameref?('ref')
+  end
+
+  def test_local_n_nested_scopes
+    ENV['target'] = 'global_target'
+
+    Rubish::Builtins.push_local_scope
+    Rubish::Builtins.run('local', ['-n', 'ref=target'])
+    assert_equal 'target', Rubish::Builtins.get_nameref_target('ref')
+
+    # Nested scope with different nameref target
+    Rubish::Builtins.push_local_scope
+    ENV['other'] = 'other_value'
+    Rubish::Builtins.run('local', ['-n', 'ref=other'])
+    assert_equal 'other', Rubish::Builtins.get_nameref_target('ref')
+
+    Rubish::Builtins.pop_local_scope
+    # Should restore to outer scope's nameref target
+    assert_equal 'target', Rubish::Builtins.get_nameref_target('ref')
+
+    Rubish::Builtins.pop_local_scope
+    # Should no longer be a nameref
+    assert_false Rubish::Builtins.nameref?('ref')
+  ensure
+    ENV.delete('target')
+    ENV.delete('other')
+    Rubish::Builtins.unset_nameref('ref')
+  end
+
+  def test_local_n_shadows_regular_var
+    ENV['ref'] = 'regular_value'
+    Rubish::Builtins.push_local_scope
+    ENV['target'] = 'target_value'
+    Rubish::Builtins.run('local', ['-n', 'ref=target'])
+    assert Rubish::Builtins.nameref?('ref')
+    Rubish::Builtins.pop_local_scope
+    # Should restore to regular variable
+    assert_false Rubish::Builtins.nameref?('ref')
+    assert_equal 'regular_value', ENV['ref']
+  ensure
+    ENV.delete('ref')
+    ENV.delete('target')
+  end
+
+  def test_local_n_invalid_option
+    Rubish::Builtins.push_local_scope
+    output = capture_stderr { Rubish::Builtins.run('local', ['-x', 'var']) }
+    assert_match(/invalid option/, output)
+    Rubish::Builtins.pop_local_scope
+  end
+
+  def test_local_n_multiple_namerefs
+    ENV['a'] = 'val_a'
+    ENV['b'] = 'val_b'
+    Rubish::Builtins.push_local_scope
+    Rubish::Builtins.run('local', ['-n', 'ref1=a', 'ref2=b'])
+    assert Rubish::Builtins.nameref?('ref1')
+    assert Rubish::Builtins.nameref?('ref2')
+    assert_equal 'a', Rubish::Builtins.get_nameref_target('ref1')
+    assert_equal 'b', Rubish::Builtins.get_nameref_target('ref2')
+    Rubish::Builtins.pop_local_scope
+    assert_false Rubish::Builtins.nameref?('ref1')
+    assert_false Rubish::Builtins.nameref?('ref2')
+  ensure
+    ENV.delete('a')
+    ENV.delete('b')
+    Rubish::Builtins.unset_nameref('ref1')
+    Rubish::Builtins.unset_nameref('ref2')
+  end
+
+  def test_local_n_combined_with_test_R
+    ENV['target'] = 'value'
+    Rubish::Builtins.push_local_scope
+    Rubish::Builtins.run('local', ['-n', 'ref=target'])
+    # test -R should return true for nameref
+    assert Rubish::Builtins.run('test', ['-R', 'ref'])
+    # test -R should return false for regular var
+    assert_false Rubish::Builtins.run('test', ['-R', 'target'])
+    Rubish::Builtins.pop_local_scope
+  ensure
+    ENV.delete('target')
+    Rubish::Builtins.unset_nameref('ref')
   end
 end
