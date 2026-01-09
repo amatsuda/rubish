@@ -12,6 +12,7 @@ require 'securerandom'
 require 'etc'
 require 'shellwords'
 require 'io/console'
+require 'syslog'
 require 'reline'
 
 require_relative 'rubish/lexer'

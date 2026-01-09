@@ -545,6 +545,7 @@ module Rubish
       'restricted_shell' => [false, 'shell is restricted (read-only)'],
       'shift_verbose' => [false, 'print error if shift count exceeds positional parameters'],
       'sourcepath' => [true, 'use PATH to find sourced files'],
+      'syslog_history' => [false, 'send history to syslog'],
       'varredir_close' => [false, 'close file descriptors opened by {varname} redirection'],
       'xpg_echo' => [false, 'echo expands backslash-escape sequences']
     }.freeze

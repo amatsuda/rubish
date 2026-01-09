@@ -553,6 +553,18 @@ module Rubish
       index = Reline::HISTORY.size
       Reline::HISTORY << line
       Builtins.record_history_timestamp(index)
+
+      # Send to syslog if syslog_history is enabled
+      log_to_syslog(line) if Builtins.shopt_enabled?('syslog_history')
+    end
+
+    # Log command to syslog (for syslog_history shopt)
+    def log_to_syslog(command)
+      Syslog.open('rubish', Syslog::LOG_PID, Syslog::LOG_USER) do |s|
+        s.info('HISTORY: PID=%d UID=%d %s', Process.pid, Process.uid, command)
+      end
+    rescue StandardError
+      # Silently ignore syslog errors
     end
 
     # Check if command matches any HISTIGNORE pattern
