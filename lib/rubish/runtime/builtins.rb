@@ -506,6 +506,7 @@ module Rubish
       'compat52' => [false, 'compatibility mode for bash 5.2'],
       'compat53' => [false, 'compatibility mode for bash 5.3'],
       'compat54' => [false, 'compatibility mode for bash 5.4'],
+      'compat55' => [false, 'compatibility mode for bash 5.5'],
       'complete_fullquote' => [true, 'quote all metacharacters in filename completion'],
       'direxpand' => [false, 'expand directory names during word completion'],
       'dirspell' => [false, 'correct minor spelling errors in directory names during completion'],
@@ -553,7 +554,7 @@ module Rubish
     }.freeze
 
     # Compatibility level options (like bash's compat31, compat32, etc.)
-    COMPAT_OPTIONS = %w[compat10 compat31 compat32 compat40 compat41 compat42 compat43 compat44 compat50 compat51 compat52 compat53 compat54].freeze
+    COMPAT_OPTIONS = %w[compat10 compat31 compat32 compat40 compat41 compat42 compat43 compat44 compat50 compat51 compat52 compat53 compat54 compat55].freeze
 
     def self.builtin?(name)
       (COMMANDS.include?(name) || @dynamic_commands.include?(name)) && !@disabled_builtins.include?(name)
