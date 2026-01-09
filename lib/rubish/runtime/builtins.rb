@@ -2968,6 +2968,8 @@ module Rubish
         # String tests
         when '-z' then return arg.empty?
         when '-n' then return !arg.empty?
+        # Variable test
+        when '-v' then return ENV.key?(arg)
         # File existence and type tests
         when '-e' then return File.exist?(arg)
         when '-f' then return File.file?(arg)
@@ -6956,6 +6958,7 @@ module Rubish
           '-x file' => 'true if file is executable',
           '-z string' => 'true if string length is zero',
           '-n string' => 'true if string length is non-zero',
+          '-v varname' => 'true if shell variable varname is set',
           's1 = s2' => 'true if strings are equal',
           's1 != s2' => 'true if strings are not equal',
           's1 < s2' => 'true if s1 sorts before s2 lexicographically',

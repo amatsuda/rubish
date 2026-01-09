@@ -404,6 +404,77 @@ class TestTest < Test::Unit::TestCase
     assert_equal true, Rubish::Builtins.run('test', ['!', '-d', @test_file, '-a', '-f', @test_file])
   end
 
+  # Variable set tests (-v)
+  def test_v_set_variable
+    ENV['TEST_VAR'] = 'value'
+    assert_equal true, Rubish::Builtins.run('test', ['-v', 'TEST_VAR'])
+  ensure
+    ENV.delete('TEST_VAR')
+  end
+
+  def test_v_unset_variable
+    ENV.delete('NONEXISTENT_VAR')
+    assert_equal false, Rubish::Builtins.run('test', ['-v', 'NONEXISTENT_VAR'])
+  end
+
+  def test_v_empty_variable
+    # Variable set to empty string should still return true
+    ENV['EMPTY_VAR'] = ''
+    assert_equal true, Rubish::Builtins.run('test', ['-v', 'EMPTY_VAR'])
+  ensure
+    ENV.delete('EMPTY_VAR')
+  end
+
+  def test_v_with_bracket_syntax
+    ENV['BRACKET_VAR'] = 'test'
+    assert_equal true, Rubish::Builtins.run('[', ['-v', 'BRACKET_VAR', ']'])
+  ensure
+    ENV.delete('BRACKET_VAR')
+  end
+
+  def test_v_with_negation
+    ENV.delete('MISSING_VAR')
+    assert_equal true, Rubish::Builtins.run('test', ['!', '-v', 'MISSING_VAR'])
+  end
+
+  def test_v_negation_set_var
+    ENV['PRESENT_VAR'] = 'exists'
+    assert_equal false, Rubish::Builtins.run('test', ['!', '-v', 'PRESENT_VAR'])
+  ensure
+    ENV.delete('PRESENT_VAR')
+  end
+
+  def test_v_with_and
+    ENV['VAR1'] = 'a'
+    ENV['VAR2'] = 'b'
+    assert_equal true, Rubish::Builtins.run('test', ['-v', 'VAR1', '-a', '-v', 'VAR2'])
+  ensure
+    ENV.delete('VAR1')
+    ENV.delete('VAR2')
+  end
+
+  def test_v_with_and_one_unset
+    ENV['VAR_SET'] = 'value'
+    ENV.delete('VAR_UNSET')
+    assert_equal false, Rubish::Builtins.run('test', ['-v', 'VAR_SET', '-a', '-v', 'VAR_UNSET'])
+  ensure
+    ENV.delete('VAR_SET')
+  end
+
+  def test_v_with_or
+    ENV['VAR_PRESENT'] = 'value'
+    ENV.delete('VAR_ABSENT')
+    assert_equal true, Rubish::Builtins.run('test', ['-v', 'VAR_PRESENT', '-o', '-v', 'VAR_ABSENT'])
+  ensure
+    ENV.delete('VAR_PRESENT')
+  end
+
+  def test_v_both_unset_or
+    ENV.delete('UNSET1')
+    ENV.delete('UNSET2')
+    assert_equal false, Rubish::Builtins.run('test', ['-v', 'UNSET1', '-o', '-v', 'UNSET2'])
+  end
+
   # Help documentation test
   def test_help_has_new_options
     help = Rubish::Builtins::BUILTIN_HELP['test']
@@ -413,5 +484,11 @@ class TestTest < Test::Unit::TestCase
     assert help[:options].key?('-S file')
     assert help[:options].key?('f1 -nt f2')
     assert help[:options].key?('e1 -a e2')
+  end
+
+  def test_help_has_v_option
+    help = Rubish::Builtins::BUILTIN_HELP['test']
+    assert_not_nil help
+    assert help[:options].key?('-v varname')
   end
 end
