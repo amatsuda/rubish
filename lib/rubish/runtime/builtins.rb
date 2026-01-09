@@ -532,6 +532,7 @@ module Rubish
       'lithist' => [false, 'preserve newlines in multi-line history'],
       'localvar_inherit' => [false, 'local variables inherit value from previous scope'],
       'localvar_unset' => [false, 'calling unset on local variable removes it from scope'],
+      'localvar_warning' => [false, 'warn when local variable shadows variable from outer scope'],
       'login_shell' => [false, 'shell is a login shell (read-only)'],
       'mailwarn' => [false, 'warn if mail file has been accessed since last check'],
       'no_empty_cmd_completion' => [false, 'do not complete on empty command line'],
@@ -1423,6 +1424,8 @@ module Rubish
           end
           # Save original value if not already in this scope
           unless current_scope.key?(name)
+            # Warn if shadowing a variable from outer scope
+            warn_shadow(name) if shopt_enabled?('localvar_warning') && ENV.key?(name)
             current_scope[name] = ENV.key?(name) ? ENV[name] : :unset
           end
           ENV[name] = value
@@ -1430,6 +1433,8 @@ module Rubish
           # Just declare as local without value
           name = arg
           unless current_scope.key?(name)
+            # Warn if shadowing a variable from outer scope
+            warn_shadow(name) if shopt_enabled?('localvar_warning') && ENV.key?(name)
             current_scope[name] = ENV.key?(name) ? ENV[name] : :unset
           end
 
@@ -1473,6 +1478,11 @@ module Rubish
 
     def self.clear_local_scopes
       @local_scope_stack.clear
+    end
+
+    def self.warn_shadow(name)
+      # Print warning to stderr when local variable shadows outer scope variable
+      $stderr.puts "local: warning: #{name}: shadows variable in outer scope"
     end
 
     def self.run_unset(args)
