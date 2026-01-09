@@ -3608,6 +3608,9 @@ module Rubish
         glob_pattern = expand_locale_ranges(glob_pattern)
       end
 
+      # Expand POSIX character classes (e.g., [[:digit:]] -> [0-9])
+      glob_pattern = expand_posix_classes(glob_pattern)
+
       # Expand glob pattern, return original if no matches (unless nullglob)
       # Check for extended globs if extglob is enabled
       # Build glob flags based on options
@@ -3728,6 +3731,112 @@ module Rubish
           part.downcase
         end
       end
+    end
+
+    # POSIX character class mappings for glob patterns
+    # These map [:classname:] to equivalent character sets
+    POSIX_CHAR_CLASSES = {
+      'alnum' => 'a-zA-Z0-9',
+      'alpha' => 'a-zA-Z',
+      'ascii' => '\x00-\x7F',
+      'blank' => ' \t',
+      'cntrl' => '\x00-\x1F\x7F',
+      'digit' => '0-9',
+      'graph' => '!-~',           # printable chars except space (ASCII 33-126)
+      'lower' => 'a-z',
+      'print' => ' -~',           # printable chars including space (ASCII 32-126)
+      'punct' => '!-/:-@\\[-`{-~', # punctuation characters
+      'space' => ' \t\n\r\f\v',
+      'upper' => 'A-Z',
+      'word' => 'a-zA-Z0-9_',
+      'xdigit' => '0-9A-Fa-f'
+    }.freeze
+
+    def expand_posix_classes(pattern)
+      # Expand POSIX character classes in bracket expressions
+      # e.g., [[:digit:]] -> [0-9], [[:alpha:][:digit:]] -> [a-zA-Z0-9]
+      return pattern unless pattern.include?('[:')
+
+      result = +''
+      i = 0
+      while i < pattern.length
+        if pattern[i] == '['
+          # Find the end of this bracket expression
+          bracket_start = i
+          j = i + 1
+
+          # Handle negation
+          j += 1 if j < pattern.length && (pattern[j] == '!' || pattern[j] == '^')
+          # Handle literal ] at start
+          j += 1 if j < pattern.length && pattern[j] == ']'
+
+          # Find the closing ] while skipping POSIX class brackets
+          while j < pattern.length
+            if pattern[j] == '[' && j + 1 < pattern.length && pattern[j + 1] == ':'
+              # This is a POSIX class [:...:] - find its end
+              end_pos = pattern.index(':]', j + 2)
+              if end_pos
+                j = end_pos + 2
+              else
+                j += 1
+              end
+            elsif pattern[j] == ']'
+              # Found the closing bracket
+              break
+            else
+              j += 1
+            end
+          end
+
+          if j < pattern.length && pattern[j] == ']'
+            # Extract bracket expression and expand POSIX classes
+            bracket_expr = pattern[bracket_start..j]
+            expanded = expand_posix_in_bracket(bracket_expr)
+            result << expanded
+            i = j + 1
+          else
+            result << pattern[i]
+            i += 1
+          end
+        else
+          result << pattern[i]
+          i += 1
+        end
+      end
+      result
+    end
+
+    def expand_posix_in_bracket(bracket_expr)
+      # Expand POSIX classes within a bracket expression
+      # [[:digit:]] -> [0-9]
+      # [[:alpha:][:digit:]] -> [a-zA-Z0-9]
+      # [^[:digit:]] -> [^0-9]
+      # [a[:digit:]] -> [a0-9]
+
+      return bracket_expr unless bracket_expr.include?('[:')
+
+      # Extract content between [ and ]
+      content = bracket_expr[1...-1]
+
+      # Check for negation
+      negation = ''
+      if content.start_with?('!') || content.start_with?('^')
+        negation = content[0]
+        content = content[1..]
+      end
+
+      # Expand all POSIX classes
+      expanded_content = content.gsub(/\[:([a-z]+):\]/) do |match|
+        class_name = $1
+        if POSIX_CHAR_CLASSES.key?(class_name)
+          POSIX_CHAR_CLASSES[class_name]
+        else
+          # Unknown class, keep as-is (will likely fail to match)
+          match
+        end
+      end
+
+      "[#{negation}#{expanded_content}]"
     end
 
     def expand_locale_ranges(pattern)
