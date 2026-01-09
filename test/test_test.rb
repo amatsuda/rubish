@@ -475,6 +475,86 @@ class TestTest < Test::Unit::TestCase
     assert_equal false, Rubish::Builtins.run('test', ['-v', 'UNSET1', '-o', '-v', 'UNSET2'])
   end
 
+  # Nameref tests (-R)
+  def test_R_nameref_variable
+    # Create a nameref using the Builtins API
+    Rubish::Builtins.set_nameref('REF_VAR', 'TARGET_VAR')
+    assert_equal true, Rubish::Builtins.run('test', ['-R', 'REF_VAR'])
+  ensure
+    Rubish::Builtins.unset_nameref('REF_VAR')
+  end
+
+  def test_R_regular_variable
+    ENV['REGULAR_VAR'] = 'value'
+    assert_equal false, Rubish::Builtins.run('test', ['-R', 'REGULAR_VAR'])
+  ensure
+    ENV.delete('REGULAR_VAR')
+  end
+
+  def test_R_unset_variable
+    ENV.delete('UNSET_REF_VAR')
+    Rubish::Builtins.unset_nameref('UNSET_REF_VAR')
+    assert_equal false, Rubish::Builtins.run('test', ['-R', 'UNSET_REF_VAR'])
+  end
+
+  def test_R_with_bracket_syntax
+    Rubish::Builtins.set_nameref('BRACKET_REF', 'SOME_VAR')
+    assert_equal true, Rubish::Builtins.run('[', ['-R', 'BRACKET_REF', ']'])
+  ensure
+    Rubish::Builtins.unset_nameref('BRACKET_REF')
+  end
+
+  def test_R_with_negation
+    ENV['NOT_A_REF'] = 'plain'
+    assert_equal true, Rubish::Builtins.run('test', ['!', '-R', 'NOT_A_REF'])
+  ensure
+    ENV.delete('NOT_A_REF')
+  end
+
+  def test_R_negation_nameref
+    Rubish::Builtins.set_nameref('IS_A_REF', 'TARGET')
+    assert_equal false, Rubish::Builtins.run('test', ['!', '-R', 'IS_A_REF'])
+  ensure
+    Rubish::Builtins.unset_nameref('IS_A_REF')
+  end
+
+  def test_R_with_and
+    Rubish::Builtins.set_nameref('REF1', 'T1')
+    Rubish::Builtins.set_nameref('REF2', 'T2')
+    assert_equal true, Rubish::Builtins.run('test', ['-R', 'REF1', '-a', '-R', 'REF2'])
+  ensure
+    Rubish::Builtins.unset_nameref('REF1')
+    Rubish::Builtins.unset_nameref('REF2')
+  end
+
+  def test_R_with_and_one_not_nameref
+    Rubish::Builtins.set_nameref('REF_ONLY', 'TARGET')
+    ENV['PLAIN_VAR'] = 'value'
+    assert_equal false, Rubish::Builtins.run('test', ['-R', 'REF_ONLY', '-a', '-R', 'PLAIN_VAR'])
+  ensure
+    Rubish::Builtins.unset_nameref('REF_ONLY')
+    ENV.delete('PLAIN_VAR')
+  end
+
+  def test_R_with_or
+    Rubish::Builtins.set_nameref('ONE_REF', 'TARGET')
+    ENV['ONE_PLAIN'] = 'value'
+    assert_equal true, Rubish::Builtins.run('test', ['-R', 'ONE_REF', '-o', '-R', 'ONE_PLAIN'])
+  ensure
+    Rubish::Builtins.unset_nameref('ONE_REF')
+    ENV.delete('ONE_PLAIN')
+  end
+
+  def test_R_combined_with_v
+    # Test -v and -R together: var is set AND is a nameref
+    Rubish::Builtins.set_nameref('COMBO_REF', 'COMBO_TARGET')
+    ENV['COMBO_TARGET'] = 'value'
+    assert_equal true, Rubish::Builtins.run('test', ['-v', 'COMBO_REF', '-a', '-R', 'COMBO_REF'])
+  ensure
+    Rubish::Builtins.unset_nameref('COMBO_REF')
+    ENV.delete('COMBO_TARGET')
+  end
+
   # Help documentation test
   def test_help_has_new_options
     help = Rubish::Builtins::BUILTIN_HELP['test']
@@ -490,5 +570,11 @@ class TestTest < Test::Unit::TestCase
     help = Rubish::Builtins::BUILTIN_HELP['test']
     assert_not_nil help
     assert help[:options].key?('-v varname')
+  end
+
+  def test_help_has_R_option
+    help = Rubish::Builtins::BUILTIN_HELP['test']
+    assert_not_nil help
+    assert help[:options].key?('-R varname')
   end
 end
