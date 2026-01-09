@@ -2931,44 +2931,119 @@ module Rubish
 
       return false if args.empty?
 
-      # Unary operators
-      if args.length == 2
-        op, arg = args
-        case op
-        when '-z' then return arg.empty?
-        when '-n' then return !arg.empty?
-        when '-f' then return File.file?(arg)
-        when '-d' then return File.directory?(arg)
-        when '-e' then return File.exist?(arg)
-        when '-r' then return File.readable?(arg)
-        when '-w' then return File.writable?(arg)
-        when '-x' then return File.executable?(arg)
-        when '-s' then return File.exist?(arg) && File.size(arg) > 0
-        end
+      # Handle compound expressions with -a (AND) and -o (OR)
+      # -o has lower precedence than -a
+      if args.include?('-o')
+        idx = args.index('-o')
+        left_result = run_test(args[0...idx])
+        right_result = run_test(args[(idx + 1)..])
+        return left_result || right_result
+      end
+
+      if args.include?('-a')
+        idx = args.index('-a')
+        left_result = run_test(args[0...idx])
+        right_result = run_test(args[(idx + 1)..])
+        return left_result && right_result
+      end
+
+      # Negation
+      if args.first == '!'
+        return !run_test(args[1..])
       end
 
       # Single argument - true if non-empty
       return !args.first.empty? if args.length == 1
 
+      # Unary operators
+      if args.length == 2
+        op, arg = args
+        case op
+        # String tests
+        when '-z' then return arg.empty?
+        when '-n' then return !arg.empty?
+        # File existence and type tests
+        when '-e' then return File.exist?(arg)
+        when '-f' then return File.file?(arg)
+        when '-d' then return File.directory?(arg)
+        when '-b' then return File.exist?(arg) && File.stat(arg).blockdev?
+        when '-c' then return File.exist?(arg) && File.stat(arg).chardev?
+        when '-L', '-h' then return File.symlink?(arg)
+        when '-S' then return File.exist?(arg) && File.stat(arg).socket?
+        when '-p' then return File.exist?(arg) && File.stat(arg).pipe?
+        when '-t'
+          # -t fd: true if file descriptor is open and refers to a terminal
+          fd = arg.to_i
+          begin
+            io = case fd
+                 when 0 then $stdin
+                 when 1 then $stdout
+                 when 2 then $stderr
+                 else IO.new(fd) rescue nil
+                 end
+            return io&.tty? || false
+          rescue
+            return false
+          end
+        # File permission tests
+        when '-r' then return File.readable?(arg)
+        when '-w' then return File.writable?(arg)
+        when '-x' then return File.executable?(arg)
+        when '-s' then return File.exist?(arg) && File.size(arg) > 0
+        when '-u'
+          # setuid bit
+          return File.exist?(arg) && (File.stat(arg).mode & 0o4000) != 0
+        when '-g'
+          # setgid bit
+          return File.exist?(arg) && (File.stat(arg).mode & 0o2000) != 0
+        when '-k'
+          # sticky bit
+          return File.exist?(arg) && (File.stat(arg).mode & 0o1000) != 0
+        when '-O'
+          # owned by effective user ID
+          return File.exist?(arg) && File.stat(arg).uid == Process.euid
+        when '-G'
+          # owned by effective group ID
+          return File.exist?(arg) && File.stat(arg).gid == Process.egid
+        when '-N'
+          # modified since last read
+          return File.exist?(arg) && File.mtime(arg) > File.atime(arg)
+        end
+      end
+
       # Binary operators
       if args.length == 3
         left, op, right = args
         case op
+        # String comparisons
         when '=' then return left == right
         when '==' then return left == right
         when '!=' then return left != right
+        when '<' then return left < right
+        when '>' then return left > right
+        # Integer comparisons
         when '-eq' then return left.to_i == right.to_i
         when '-ne' then return left.to_i != right.to_i
         when '-lt' then return left.to_i < right.to_i
         when '-le' then return left.to_i <= right.to_i
         when '-gt' then return left.to_i > right.to_i
         when '-ge' then return left.to_i >= right.to_i
+        # File comparisons
+        when '-nt'
+          # file1 is newer than file2
+          return false unless File.exist?(left) && File.exist?(right)
+          return File.mtime(left) > File.mtime(right)
+        when '-ot'
+          # file1 is older than file2
+          return false unless File.exist?(left) && File.exist?(right)
+          return File.mtime(left) < File.mtime(right)
+        when '-ef'
+          # file1 and file2 refer to same device and inode
+          return false unless File.exist?(left) && File.exist?(right)
+          stat1 = File.stat(left)
+          stat2 = File.stat(right)
+          return stat1.dev == stat2.dev && stat1.ino == stat2.ino
         end
-      end
-
-      # Negation
-      if args.first == '!'
-        return !run_test(args[1..])
       end
 
       false
@@ -6612,23 +6687,44 @@ module Rubish
         synopsis: 'test expr',
         description: 'Evaluate conditional expression and return 0 (true) or 1 (false).',
         options: {
+          '-b file' => 'true if file is a block special device',
+          '-c file' => 'true if file is a character special device',
+          '-d file' => 'true if file is a directory',
           '-e file' => 'true if file exists',
           '-f file' => 'true if file is a regular file',
-          '-d file' => 'true if file is a directory',
+          '-g file' => 'true if file has setgid bit set',
+          '-h file' => 'true if file is a symbolic link',
+          '-k file' => 'true if file has sticky bit set',
+          '-L file' => 'true if file is a symbolic link',
+          '-N file' => 'true if file modified since last read',
+          '-O file' => 'true if file is owned by effective user ID',
+          '-G file' => 'true if file is owned by effective group ID',
+          '-p file' => 'true if file is a named pipe (FIFO)',
           '-r file' => 'true if file is readable',
+          '-s file' => 'true if file has size greater than zero',
+          '-S file' => 'true if file is a socket',
+          '-t fd' => 'true if file descriptor is open and refers to a terminal',
+          '-u file' => 'true if file has setuid bit set',
           '-w file' => 'true if file is writable',
           '-x file' => 'true if file is executable',
-          '-s file' => 'true if file has size greater than zero',
           '-z string' => 'true if string length is zero',
           '-n string' => 'true if string length is non-zero',
           's1 = s2' => 'true if strings are equal',
           's1 != s2' => 'true if strings are not equal',
+          's1 < s2' => 'true if s1 sorts before s2 lexicographically',
+          's1 > s2' => 'true if s1 sorts after s2 lexicographically',
           'n1 -eq n2' => 'true if integers are equal',
           'n1 -ne n2' => 'true if integers are not equal',
           'n1 -lt n2' => 'true if n1 < n2',
           'n1 -le n2' => 'true if n1 <= n2',
           'n1 -gt n2' => 'true if n1 > n2',
-          'n1 -ge n2' => 'true if n1 >= n2'
+          'n1 -ge n2' => 'true if n1 >= n2',
+          'f1 -nt f2' => 'true if file f1 is newer than f2',
+          'f1 -ot f2' => 'true if file f1 is older than f2',
+          'f1 -ef f2' => 'true if f1 and f2 refer to same device and inode',
+          'e1 -a e2' => 'true if both e1 and e2 are true',
+          'e1 -o e2' => 'true if either e1 or e2 is true',
+          '! expr' => 'true if expr is false'
         }
       },
       '[' => {

@@ -11,6 +11,13 @@ class TestTest < Test::Unit::TestCase
     Dir.mkdir(@test_dir)
     @empty_file = File.join(@tempdir, 'empty.txt')
     File.write(@empty_file, '')
+    @symlink = File.join(@tempdir, 'symlink')
+    File.symlink(@test_file, @symlink)
+    @older_file = File.join(@tempdir, 'older.txt')
+    File.write(@older_file, 'older')
+    sleep 0.01  # Ensure time difference
+    @newer_file = File.join(@tempdir, 'newer.txt')
+    File.write(@newer_file, 'newer')
   end
 
   def teardown
@@ -219,5 +226,192 @@ class TestTest < Test::Unit::TestCase
 
   def test_bracket_numeric_comparison
     assert_equal true, Rubish::Builtins.run('[', ['5', '-eq', '5', ']'])
+  end
+
+  # Symlink tests
+  def test_L_symlink
+    assert_equal true, Rubish::Builtins.run('test', ['-L', @symlink])
+  end
+
+  def test_L_regular_file
+    assert_equal false, Rubish::Builtins.run('test', ['-L', @test_file])
+  end
+
+  def test_h_symlink
+    assert_equal true, Rubish::Builtins.run('test', ['-h', @symlink])
+  end
+
+  def test_h_regular_file
+    assert_equal false, Rubish::Builtins.run('test', ['-h', @test_file])
+  end
+
+  def test_L_nonexistent
+    assert_equal false, Rubish::Builtins.run('test', ['-L', '/nonexistent'])
+  end
+
+  # Block and character device tests
+  def test_b_regular_file
+    assert_equal false, Rubish::Builtins.run('test', ['-b', @test_file])
+  end
+
+  def test_c_regular_file
+    assert_equal false, Rubish::Builtins.run('test', ['-c', @test_file])
+  end
+
+  # Note: /dev/null is a character device on Unix systems
+  def test_c_dev_null
+    skip unless File.exist?('/dev/null')
+    assert_equal true, Rubish::Builtins.run('test', ['-c', '/dev/null'])
+  end
+
+  # Socket test
+  def test_S_regular_file
+    assert_equal false, Rubish::Builtins.run('test', ['-S', @test_file])
+  end
+
+  # Pipe test
+  def test_p_regular_file
+    assert_equal false, Rubish::Builtins.run('test', ['-p', @test_file])
+  end
+
+  # Terminal test
+  def test_t_stdout_not_tty
+    # In test context, stdout is usually not a terminal
+    assert_equal false, Rubish::Builtins.run('test', ['-t', '1'])
+  end
+
+  # Permission bit tests
+  def test_O_owned_file
+    assert_equal true, Rubish::Builtins.run('test', ['-O', @test_file])
+  end
+
+  def test_G_owned_file
+    assert_equal true, Rubish::Builtins.run('test', ['-G', @test_file])
+  end
+
+  def test_u_no_setuid
+    assert_equal false, Rubish::Builtins.run('test', ['-u', @test_file])
+  end
+
+  def test_g_no_setgid
+    assert_equal false, Rubish::Builtins.run('test', ['-g', @test_file])
+  end
+
+  def test_k_no_sticky
+    assert_equal false, Rubish::Builtins.run('test', ['-k', @test_file])
+  end
+
+  # String comparison with < and >
+  def test_string_less_than
+    assert_equal true, Rubish::Builtins.run('test', ['abc', '<', 'abd'])
+  end
+
+  def test_string_less_than_false
+    assert_equal false, Rubish::Builtins.run('test', ['abd', '<', 'abc'])
+  end
+
+  def test_string_greater_than
+    assert_equal true, Rubish::Builtins.run('test', ['abd', '>', 'abc'])
+  end
+
+  def test_string_greater_than_false
+    assert_equal false, Rubish::Builtins.run('test', ['abc', '>', 'abd'])
+  end
+
+  # File comparison tests
+  def test_nt_newer_than
+    assert_equal true, Rubish::Builtins.run('test', [@newer_file, '-nt', @older_file])
+  end
+
+  def test_nt_older_than
+    assert_equal false, Rubish::Builtins.run('test', [@older_file, '-nt', @newer_file])
+  end
+
+  def test_nt_nonexistent
+    assert_equal false, Rubish::Builtins.run('test', [@test_file, '-nt', '/nonexistent'])
+  end
+
+  def test_ot_older_than
+    assert_equal true, Rubish::Builtins.run('test', [@older_file, '-ot', @newer_file])
+  end
+
+  def test_ot_newer_than
+    assert_equal false, Rubish::Builtins.run('test', [@newer_file, '-ot', @older_file])
+  end
+
+  def test_ot_nonexistent
+    assert_equal false, Rubish::Builtins.run('test', [@test_file, '-ot', '/nonexistent'])
+  end
+
+  def test_ef_same_file
+    # Create a hard link
+    hard_link = File.join(@tempdir, 'hardlink')
+    File.link(@test_file, hard_link)
+    assert_equal true, Rubish::Builtins.run('test', [@test_file, '-ef', hard_link])
+  end
+
+  def test_ef_different_files
+    assert_equal false, Rubish::Builtins.run('test', [@test_file, '-ef', @empty_file])
+  end
+
+  def test_ef_nonexistent
+    assert_equal false, Rubish::Builtins.run('test', [@test_file, '-ef', '/nonexistent'])
+  end
+
+  # Compound expression tests with -a (AND)
+  def test_and_both_true
+    assert_equal true, Rubish::Builtins.run('test', ['-f', @test_file, '-a', '-r', @test_file])
+  end
+
+  def test_and_first_false
+    assert_equal false, Rubish::Builtins.run('test', ['-d', @test_file, '-a', '-r', @test_file])
+  end
+
+  def test_and_second_false
+    assert_equal false, Rubish::Builtins.run('test', ['-f', @test_file, '-a', '-d', @test_file])
+  end
+
+  def test_and_both_false
+    assert_equal false, Rubish::Builtins.run('test', ['-d', @test_file, '-a', '-d', @test_file])
+  end
+
+  # Compound expression tests with -o (OR)
+  def test_or_both_true
+    assert_equal true, Rubish::Builtins.run('test', ['-f', @test_file, '-o', '-r', @test_file])
+  end
+
+  def test_or_first_true
+    assert_equal true, Rubish::Builtins.run('test', ['-f', @test_file, '-o', '-d', @test_file])
+  end
+
+  def test_or_second_true
+    assert_equal true, Rubish::Builtins.run('test', ['-d', @test_file, '-o', '-f', @test_file])
+  end
+
+  def test_or_both_false
+    assert_equal false, Rubish::Builtins.run('test', ['-d', @test_file, '-o', '-d', @test_file])
+  end
+
+  # Compound expression precedence: -a binds tighter than -o
+  def test_compound_precedence
+    # -f file -o -d file -a -d dir should be: (-f file) -o ((-d file) -a (-d dir))
+    # = true -o (false -a true) = true -o false = true
+    assert_equal true, Rubish::Builtins.run('test', ['-f', @test_file, '-o', '-d', @test_file, '-a', '-d', @test_dir])
+  end
+
+  # Negation with compound
+  def test_negation_with_and
+    assert_equal true, Rubish::Builtins.run('test', ['!', '-d', @test_file, '-a', '-f', @test_file])
+  end
+
+  # Help documentation test
+  def test_help_has_new_options
+    help = Rubish::Builtins::BUILTIN_HELP['test']
+    assert_not_nil help
+    assert help[:options].key?('-L file')
+    assert help[:options].key?('-b file')
+    assert help[:options].key?('-S file')
+    assert help[:options].key?('f1 -nt f2')
+    assert help[:options].key?('e1 -a e2')
   end
 end
