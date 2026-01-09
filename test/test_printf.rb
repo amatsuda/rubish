@@ -297,4 +297,118 @@ class TestPrintf < Test::Unit::TestCase
     output = capture_stderr { Rubish::Builtins.run('printf', ['-x', '%s', 'test']) }
     assert_match(/invalid option/, output)
   end
+
+  # Test %q format specifier (shell quoting)
+  def test_printf_q_simple_string
+    # Simple alphanumeric strings don't need quoting
+    output = capture_output { Rubish::Builtins.run('printf', ['%q', 'hello']) }
+    assert_equal 'hello', output
+  end
+
+  def test_printf_q_string_with_spaces
+    output = capture_output { Rubish::Builtins.run('printf', ['%q', 'hello world']) }
+    # Should be quoted in some way that preserves the space
+    assert_match(/^'hello world'$|^hello\\ world$/, output)
+  end
+
+  def test_printf_q_empty_string
+    output = capture_output { Rubish::Builtins.run('printf', ['%q', '']) }
+    assert_equal "''", output
+  end
+
+  def test_printf_q_single_quote
+    output = capture_output { Rubish::Builtins.run('printf', ['%q', "it's"]) }
+    # Should escape the single quote using $'...' syntax
+    assert_match(/\$'it\\'s'/, output)
+  end
+
+  def test_printf_q_double_quote
+    output = capture_output { Rubish::Builtins.run('printf', ['%q', 'say "hello"']) }
+    # Double quotes inside single quotes are safe
+    assert_match(/'say "hello"'/, output)
+  end
+
+  def test_printf_q_special_chars
+    output = capture_output { Rubish::Builtins.run('printf', ['%q', 'a*b?c']) }
+    # Glob characters should be quoted
+    assert_match(/^'a\*b\?c'$/, output)
+  end
+
+  def test_printf_q_dollar_sign
+    output = capture_output { Rubish::Builtins.run('printf', ['%q', '$HOME']) }
+    # Dollar sign should be quoted to prevent expansion
+    assert_match(/'\$HOME'/, output)
+  end
+
+  def test_printf_q_backslash
+    output = capture_output { Rubish::Builtins.run('printf', ['%q', 'a\\b']) }
+    # Backslash should be preserved
+    refute_empty output
+  end
+
+  def test_printf_q_newline
+    output = capture_output { Rubish::Builtins.run('printf', ['%q', "hello\nworld"]) }
+    # Newline should be escaped using $'...' syntax
+    assert_match(/\$'hello\\nworld'/, output)
+  end
+
+  def test_printf_q_tab
+    output = capture_output { Rubish::Builtins.run('printf', ['%q', "hello\tworld"]) }
+    # Tab should be escaped
+    assert_match(/\$'hello\\tworld'/, output)
+  end
+
+  def test_printf_q_safe_chars
+    # These characters are safe and don't need quoting
+    output = capture_output { Rubish::Builtins.run('printf', ['%q', 'file.txt']) }
+    assert_equal 'file.txt', output
+
+    output = capture_output { Rubish::Builtins.run('printf', ['%q', '/usr/bin/ruby']) }
+    assert_equal '/usr/bin/ruby', output
+
+    output = capture_output { Rubish::Builtins.run('printf', ['%q', 'foo-bar_baz']) }
+    assert_equal 'foo-bar_baz', output
+  end
+
+  def test_printf_q_multiple_args
+    output = capture_output { Rubish::Builtins.run('printf', ['%q %q', 'hello', 'world']) }
+    assert_equal 'hello world', output
+  end
+
+  def test_printf_q_with_width
+    output = capture_output { Rubish::Builtins.run('printf', ['%10q', 'hi']) }
+    assert_equal '        hi', output
+  end
+
+  def test_printf_q_with_v_option
+    capture_output { Rubish::Builtins.run('printf', ['-v', 'quoted', '%q', 'hello world']) }
+    assert_match(/^'hello world'$|^hello\\ world$/, ENV['quoted'])
+  end
+
+  def test_printf_q_semicolon
+    output = capture_output { Rubish::Builtins.run('printf', ['%q', 'cmd1; cmd2']) }
+    # Semicolon should be quoted
+    assert_match(/'cmd1; cmd2'/, output)
+  end
+
+  def test_printf_q_pipe
+    output = capture_output { Rubish::Builtins.run('printf', ['%q', 'a|b']) }
+    # Pipe should be quoted
+    assert_match(/'a\|b'/, output)
+  end
+
+  def test_printf_q_parentheses
+    output = capture_output { Rubish::Builtins.run('printf', ['%q', '(subshell)']) }
+    # Parentheses should be quoted
+    assert_match(/'\(subshell\)'/, output)
+  end
+
+  def test_printf_q_via_repl
+    # Test using builtin directly since REPL execution may call external printf
+    # which doesn't support %q
+    capture_output do
+      result = Rubish::Builtins.run('printf', ['%q\n', 'hello world'])
+      assert result
+    end
+  end
 end

@@ -3288,6 +3288,52 @@ module Rubish
       end
     end
 
+    def self.shell_quote(str)
+      # Quote a string for safe reuse as shell input (like bash's printf %q)
+      # Returns a string that, when parsed by the shell, yields the original string
+
+      # Empty string needs explicit quoting
+      return "''" if str.empty?
+
+      # If string contains only safe characters, no quoting needed
+      # Safe chars: alphanumeric, underscore, hyphen, dot, slash, colon, at, percent, plus, comma, equals
+      if str.match?(/\A[a-zA-Z0-9_\-.\/:@%+=,]+\z/)
+        return str
+      end
+
+      # Use $'...' syntax for strings with control characters
+      if str.match?(/[\x00-\x1f\x7f]/)
+        return "$'" + str.gsub(/[\x00-\x1f\x7f'\\]/) { |c|
+          case c
+          when "\n" then '\\n'
+          when "\t" then '\\t'
+          when "\r" then '\\r'
+          when "\a" then '\\a'
+          when "\b" then '\\b'
+          when "\f" then '\\f'
+          when "\v" then '\\v'
+          when "\e" then '\\e'
+          when "'" then "\\'"
+          when '\\' then '\\\\'
+          else
+            # Other control characters as octal
+            format('\\%03o', c.ord)
+          end
+        } + "'"
+      end
+
+      # For strings with single quotes, use $'...' syntax
+      if str.include?("'")
+        return "$'" + str.gsub(/['\\]/) { |c|
+          c == "'" ? "\\'" : '\\\\'
+        } + "'"
+      end
+
+      # For other special characters, use single quotes
+      # (single quotes preserve everything literally except single quote itself)
+      "'" + str + "'"
+    end
+
     def self.format_arg(specifier, arg, flags, width, precision)
       width_int = width.empty? ? nil : width.to_i
       prec_int = precision.nil? ? nil : (precision.empty? ? 0 : precision.to_i)
@@ -3357,6 +3403,9 @@ module Rubish
                when 'b'
                  # String with backslash escapes
                  process_escape_sequences(arg.to_s)
+               when 'q'
+                 # Shell-quoted string (safe for reuse as shell input)
+                 shell_quote(arg.to_s)
                else
                  arg.to_s
                end
@@ -6953,9 +7002,10 @@ module Rubish
       },
       'printf' => {
         synopsis: 'printf [-v var] format [arguments]',
-        description: 'Write formatted output. Format specifiers: %s (string), %d (integer), %f (float), etc.',
+        description: 'Write formatted output. Format specifiers: %s (string), %d (integer), %f (float), %q (shell-quoted), etc.',
         options: {
-          '-v var' => 'assign the output to shell variable var instead of printing to stdout'
+          '-v var' => 'assign the output to shell variable var instead of printing to stdout',
+          '%q' => 'output the argument as a shell-quoted string, safe for reuse as input'
         }
       },
       'type' => {
