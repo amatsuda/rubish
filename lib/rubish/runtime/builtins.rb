@@ -3152,8 +3152,9 @@ module Rubish
 
     def self.run_printf(args)
       # printf [-v var] format [arguments...]
-      # Supports: %s, %d, %i, %f, %e, %g, %x, %X, %o, %c, %b, %%
+      # Supports: %s, %d, %i, %f, %e, %g, %x, %X, %o, %c, %b, %q, %%
       # Also supports width, precision, and flags: %-10s, %05d, %.2f, etc.
+      # %(fmt)T: format time using strftime format (arg is epoch seconds, -1=now, -2=shell start)
       # -v var: assign output to shell variable var instead of printing
 
       var_name = nil
@@ -3209,6 +3210,39 @@ module Rubish
           # Parse format specifier
           spec_start = i
           i += 1
+
+          # Check for %(strftime_format)T time format
+          if i < format.length && format[i] == '('
+            # Find the closing )T
+            paren_start = i + 1
+            paren_end = format.index(')T', i)
+            if paren_end
+              strftime_fmt = format[paren_start...paren_end]
+              i = paren_end + 2  # Skip past )T
+
+              # Get the time argument
+              arg = if arg_index < arguments.length
+                      arguments[arg_index]
+                    else
+                      '-1'  # Default to current time
+                    end
+              arg_index += 1
+
+              # Convert argument to time
+              time = case arg.to_s
+                     when '-1', ''
+                       Time.now
+                     when '-2'
+                       # Shell start time - use a class variable or fall back to current
+                       @shell_start_time ||= Time.now
+                     else
+                       Time.at(arg.to_i)
+                     end
+
+              output << time.strftime(strftime_fmt)
+              next
+            end
+          end
 
           # Parse flags
           flags = +''
@@ -7002,10 +7036,11 @@ module Rubish
       },
       'printf' => {
         synopsis: 'printf [-v var] format [arguments]',
-        description: 'Write formatted output. Format specifiers: %s (string), %d (integer), %f (float), %q (shell-quoted), etc.',
+        description: 'Write formatted output. Format specifiers: %s (string), %d (integer), %f (float), %q (shell-quoted), %(fmt)T (time), etc.',
         options: {
           '-v var' => 'assign the output to shell variable var instead of printing to stdout',
-          '%q' => 'output the argument as a shell-quoted string, safe for reuse as input'
+          '%q' => 'output the argument as a shell-quoted string, safe for reuse as input',
+          '%(fmt)T' => 'output date/time using strftime format fmt; argument is epoch seconds (-1=now, -2=shell start)'
         }
       },
       'type' => {

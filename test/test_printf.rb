@@ -411,4 +411,111 @@ class TestPrintf < Test::Unit::TestCase
       assert result
     end
   end
+
+  # Test %(fmt)T time formatting
+  def test_printf_T_current_time
+    output = capture_output { Rubish::Builtins.run('printf', ['%(%Y)T']) }
+    assert_equal Time.now.year.to_s, output
+  end
+
+  def test_printf_T_with_minus_one
+    output = capture_output { Rubish::Builtins.run('printf', ['%(%Y-%m-%d)T', '-1']) }
+    assert_equal Time.now.strftime('%Y-%m-%d'), output
+  end
+
+  def test_printf_T_with_epoch_timestamp
+    # Unix epoch: Jan 1, 1970 00:00:00 UTC
+    output = capture_output { Rubish::Builtins.run('printf', ['%(%Y-%m-%d)T', '0']) }
+    expected = Time.at(0).strftime('%Y-%m-%d')
+    assert_equal expected, output
+  end
+
+  def test_printf_T_with_specific_timestamp
+    # Specific timestamp: 1234567890 = 2009-02-13 23:31:30 UTC
+    timestamp = 1234567890
+    output = capture_output { Rubish::Builtins.run('printf', ['%(%Y)T', timestamp.to_s]) }
+    expected = Time.at(timestamp).strftime('%Y')
+    assert_equal expected, output
+  end
+
+  def test_printf_T_hour_minute_second
+    timestamp = 1234567890
+    output = capture_output { Rubish::Builtins.run('printf', ['%(%H:%M:%S)T', timestamp.to_s]) }
+    expected = Time.at(timestamp).strftime('%H:%M:%S')
+    assert_equal expected, output
+  end
+
+  def test_printf_T_full_date
+    timestamp = 1609459200  # 2021-01-01 00:00:00 UTC
+    output = capture_output { Rubish::Builtins.run('printf', ['%(%A, %B %d, %Y)T', timestamp.to_s]) }
+    expected = Time.at(timestamp).strftime('%A, %B %d, %Y')
+    assert_equal expected, output
+  end
+
+  def test_printf_T_with_minus_two
+    # -2 means shell start time, should return some valid time
+    output = capture_output { Rubish::Builtins.run('printf', ['%(%Y)T', '-2']) }
+    assert_match(/^\d{4}$/, output)
+  end
+
+  def test_printf_T_combined_with_string
+    output = capture_output { Rubish::Builtins.run('printf', ['Date: %(%Y-%m-%d)T', '-1']) }
+    assert_match(/^Date: \d{4}-\d{2}-\d{2}$/, output)
+  end
+
+  def test_printf_T_multiple_formats
+    timestamp = 1234567890
+    output = capture_output { Rubish::Builtins.run('printf', ['%(%Y)T-%(%m)T-%(%d)T', timestamp.to_s, timestamp.to_s, timestamp.to_s]) }
+    t = Time.at(timestamp)
+    expected = "#{t.strftime('%Y')}-#{t.strftime('%m')}-#{t.strftime('%d')}"
+    assert_equal expected, output
+  end
+
+  def test_printf_T_with_v_option
+    capture_output { Rubish::Builtins.run('printf', ['-v', 'timevar', '%(%Y)T', '-1']) }
+    assert_equal Time.now.year.to_s, ENV['timevar']
+  ensure
+    ENV.delete('timevar')
+  end
+
+  def test_printf_T_with_other_specifiers
+    timestamp = 1234567890
+    output = capture_output { Rubish::Builtins.run('printf', ['Year: %(%Y)T, Value: %d', timestamp.to_s, '42']) }
+    expected = "Year: #{Time.at(timestamp).strftime('%Y')}, Value: 42"
+    assert_equal expected, output
+  end
+
+  def test_printf_T_iso_format
+    timestamp = 1234567890
+    output = capture_output { Rubish::Builtins.run('printf', ['%(%FT%T)T', timestamp.to_s]) }
+    expected = Time.at(timestamp).strftime('%FT%T')
+    assert_equal expected, output
+  end
+
+  def test_printf_T_weekday
+    timestamp = 1234567890
+    output = capture_output { Rubish::Builtins.run('printf', ['%(%a %A)T', timestamp.to_s]) }
+    expected = Time.at(timestamp).strftime('%a %A')
+    assert_equal expected, output
+  end
+
+  def test_printf_T_no_argument_defaults_to_now
+    # When no argument provided, should default to current time
+    output = capture_output { Rubish::Builtins.run('printf', ['%(%Y)T']) }
+    assert_equal Time.now.year.to_s, output
+  end
+
+  def test_printf_T_timezone
+    timestamp = 1234567890
+    output = capture_output { Rubish::Builtins.run('printf', ['%(%Z)T', timestamp.to_s]) }
+    expected = Time.at(timestamp).strftime('%Z')
+    assert_equal expected, output
+  end
+
+  def test_printf_T_epoch_seconds
+    timestamp = 1234567890
+    output = capture_output { Rubish::Builtins.run('printf', ['%(%s)T', timestamp.to_s]) }
+    # %s in strftime returns epoch seconds
+    assert_equal timestamp.to_s, output
+  end
 end
