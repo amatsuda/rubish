@@ -518,4 +518,117 @@ class TestPrintf < Test::Unit::TestCase
     # %s in strftime returns epoch seconds
     assert_equal timestamp.to_s, output
   end
+
+  # Test dynamic width %*s
+  def test_printf_dynamic_width_string
+    output = capture_output { Rubish::Builtins.run('printf', ['%*s', '10', 'hello']) }
+    assert_equal '     hello', output
+  end
+
+  def test_printf_dynamic_width_right_align
+    output = capture_output { Rubish::Builtins.run('printf', ['%*s', '8', 'test']) }
+    assert_equal '    test', output
+  end
+
+  def test_printf_dynamic_width_negative_left_align
+    # Negative width means left-align
+    output = capture_output { Rubish::Builtins.run('printf', ['%*s', '-10', 'hello']) }
+    assert_equal 'hello     ', output
+  end
+
+  def test_printf_dynamic_width_zero
+    output = capture_output { Rubish::Builtins.run('printf', ['%*s', '0', 'hello']) }
+    assert_equal 'hello', output
+  end
+
+  def test_printf_dynamic_width_integer
+    output = capture_output { Rubish::Builtins.run('printf', ['%*d', '5', '42']) }
+    assert_equal '   42', output
+  end
+
+  def test_printf_dynamic_width_integer_zero_pad
+    output = capture_output { Rubish::Builtins.run('printf', ['%0*d', '5', '42']) }
+    assert_equal '00042', output
+  end
+
+  # Test dynamic precision %.*s
+  def test_printf_dynamic_precision_string
+    output = capture_output { Rubish::Builtins.run('printf', ['%.*s', '3', 'hello']) }
+    assert_equal 'hel', output
+  end
+
+  def test_printf_dynamic_precision_string_longer
+    output = capture_output { Rubish::Builtins.run('printf', ['%.*s', '10', 'hello']) }
+    assert_equal 'hello', output
+  end
+
+  def test_printf_dynamic_precision_float
+    output = capture_output { Rubish::Builtins.run('printf', ['%.*f', '2', '3.14159']) }
+    assert_equal '3.14', output
+  end
+
+  def test_printf_dynamic_precision_float_zero
+    output = capture_output { Rubish::Builtins.run('printf', ['%.*f', '0', '3.14159']) }
+    assert_equal '3', output
+  end
+
+  def test_printf_dynamic_precision_negative_ignored
+    # Negative precision is treated as if precision were omitted
+    output = capture_output { Rubish::Builtins.run('printf', ['%.*s', '-5', 'hello']) }
+    assert_equal 'hello', output
+  end
+
+  # Test combined dynamic width and precision %*.*s
+  def test_printf_dynamic_width_and_precision
+    output = capture_output { Rubish::Builtins.run('printf', ['%*.*s', '10', '3', 'hello']) }
+    assert_equal '       hel', output
+  end
+
+  def test_printf_dynamic_width_and_precision_left_align
+    output = capture_output { Rubish::Builtins.run('printf', ['%-*.*s', '10', '3', 'hello']) }
+    assert_equal 'hel       ', output
+  end
+
+  def test_printf_dynamic_width_negative_and_precision
+    # Negative width with precision
+    output = capture_output { Rubish::Builtins.run('printf', ['%*.*s', '-10', '3', 'hello']) }
+    assert_equal 'hel       ', output
+  end
+
+  def test_printf_dynamic_width_and_precision_float
+    output = capture_output { Rubish::Builtins.run('printf', ['%*.*f', '10', '2', '3.14159']) }
+    assert_equal '      3.14', output
+  end
+
+  # Test with multiple format specifiers
+  def test_printf_multiple_dynamic_widths
+    output = capture_output { Rubish::Builtins.run('printf', ['%*s %*s', '5', 'a', '5', 'b']) }
+    assert_equal '    a     b', output
+  end
+
+  def test_printf_mixed_static_and_dynamic_width
+    output = capture_output { Rubish::Builtins.run('printf', ['%5s %*s', 'a', '5', 'b']) }
+    assert_equal '    a     b', output
+  end
+
+  # Test with -v option
+  def test_printf_dynamic_width_with_v_option
+    capture_output { Rubish::Builtins.run('printf', ['-v', 'padded', '%*s', '10', 'test']) }
+    assert_equal '      test', ENV['padded']
+  ensure
+    ENV.delete('padded')
+  end
+
+  # Test missing arguments
+  def test_printf_dynamic_width_missing_arg
+    output = capture_output { Rubish::Builtins.run('printf', ['%*s', '10']) }
+    # Missing string argument defaults to empty string
+    assert_equal '          ', output
+  end
+
+  def test_printf_dynamic_width_missing_width_arg
+    output = capture_output { Rubish::Builtins.run('printf', ['%*s']) }
+    # Missing width arg defaults to 0
+    assert_equal '', output
+  end
 end

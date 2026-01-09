@@ -3154,6 +3154,7 @@ module Rubish
       # printf [-v var] format [arguments...]
       # Supports: %s, %d, %i, %f, %e, %g, %x, %X, %o, %c, %b, %q, %%
       # Also supports width, precision, and flags: %-10s, %05d, %.2f, etc.
+      # Dynamic width/precision: %*s (width from arg), %.*s (precision from arg), %*.*s (both)
       # %(fmt)T: format time using strftime format (arg is epoch seconds, -1=now, -2=shell start)
       # -v var: assign output to shell variable var instead of printing
 
@@ -3251,21 +3252,53 @@ module Rubish
             i += 1
           end
 
-          # Parse width
+          # Parse width (can be * for dynamic width from argument)
           width = +''
-          while i < format.length && format[i] =~ /\d/
-            width << format[i]
+          if i < format.length && format[i] == '*'
+            # Dynamic width from argument
             i += 1
+            width_arg = if arg_index < arguments.length
+                          arguments[arg_index]
+                        else
+                          '0'
+                        end
+            arg_index += 1
+            width_val = width_arg.to_i
+            # Negative width means left-align
+            if width_val < 0
+              flags << '-' unless flags.include?('-')
+              width_val = width_val.abs
+            end
+            width = width_val.to_s
+          else
+            while i < format.length && format[i] =~ /\d/
+              width << format[i]
+              i += 1
+            end
           end
 
-          # Parse precision
+          # Parse precision (can be * for dynamic precision from argument)
           precision = nil
           if i < format.length && format[i] == '.'
             i += 1
-            precision = +''
-            while i < format.length && format[i] =~ /\d/
-              precision << format[i]
+            if i < format.length && format[i] == '*'
+              # Dynamic precision from argument
               i += 1
+              prec_arg = if arg_index < arguments.length
+                           arguments[arg_index]
+                         else
+                           '0'
+                         end
+              arg_index += 1
+              prec_val = prec_arg.to_i
+              # Negative precision is treated as if precision were omitted
+              precision = prec_val >= 0 ? prec_val.to_s : nil
+            else
+              precision = +''
+              while i < format.length && format[i] =~ /\d/
+                precision << format[i]
+                i += 1
+              end
             end
           end
 
@@ -7040,7 +7073,10 @@ module Rubish
         options: {
           '-v var' => 'assign the output to shell variable var instead of printing to stdout',
           '%q' => 'output the argument as a shell-quoted string, safe for reuse as input',
-          '%(fmt)T' => 'output date/time using strftime format fmt; argument is epoch seconds (-1=now, -2=shell start)'
+          '%(fmt)T' => 'output date/time using strftime format fmt; argument is epoch seconds (-1=now, -2=shell start)',
+          '%*s' => 'dynamic width from argument (negative width means left-align)',
+          '%.*s' => 'dynamic precision from argument',
+          '%*.*s' => 'both width and precision from arguments'
         }
       },
       'type' => {
