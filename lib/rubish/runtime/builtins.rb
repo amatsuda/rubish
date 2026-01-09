@@ -5504,15 +5504,150 @@ module Rubish
     end
 
     def self.run_wait(args)
-      # wait [pid|%jobspec ...]
+      # wait [-fn] [-p VARNAME] [pid|%jobspec ...]
       # Wait for background jobs to complete
+      # -n: wait for any single job to complete (bash 4.3+)
+      # -p VARNAME: store the PID of the exited process in VARNAME (bash 5.1+)
+      # -f: wait for job to terminate, not just change state (bash 5.1+)
       # With no args, waits for all background jobs
       # Returns exit status of last job waited for
 
       manager = JobManager.instance
       last_status = true
+      wait_any = false
+      pid_var = nil
+      wait_terminate = false
+      pids_or_jobs = []
 
-      if args.empty?
+      # Parse options
+      i = 0
+      while i < args.length
+        arg = args[i]
+
+        if arg == '-n'
+          wait_any = true
+        elsif arg == '-f'
+          wait_terminate = true
+        elsif arg == '-p'
+          i += 1
+          if i >= args.length
+            puts 'wait: -p: option requires an argument'
+            return false
+          end
+          pid_var = args[i]
+        elsif arg.start_with?('-') && arg.length > 1 && !arg.start_with?('-%')
+          # Handle combined flags like -fn or -nf
+          chars = arg[1..].chars
+          j = 0
+          while j < chars.length
+            c = chars[j]
+            case c
+            when 'n'
+              wait_any = true
+            when 'f'
+              wait_terminate = true
+            when 'p'
+              # -p requires argument
+              if j + 1 < chars.length
+                # Rest of this arg is the varname
+                pid_var = chars[j + 1..].join
+                break
+              elsif i + 1 < args.length
+                i += 1
+                pid_var = args[i]
+              else
+                puts 'wait: -p: option requires an argument'
+                return false
+              end
+            else
+              puts "wait: -#{c}: invalid option"
+              return false
+            end
+            j += 1
+          end
+        else
+          pids_or_jobs << arg
+        end
+        i += 1
+      end
+
+      # Handle -n: wait for any single job
+      if wait_any
+        jobs = manager.active
+        if jobs.empty? && pids_or_jobs.empty?
+          # No jobs to wait for
+          return true
+        end
+
+        # If specific PIDs/jobs given, wait for one of those
+        target_pids = []
+        if pids_or_jobs.empty?
+          target_pids = jobs.map(&:pid)
+        else
+          pids_or_jobs.each do |arg|
+            if arg.start_with?('%')
+              job_id = arg[1..].to_i
+              job = manager.get(job_id)
+              target_pids << job.pid if job
+            else
+              target_pids << arg.to_i
+            end
+          end
+        end
+
+        if target_pids.empty?
+          return true
+        end
+
+        # Wait for any one of the target processes
+        begin
+          # Use WNOHANG in a loop with sleep to check specific PIDs
+          # Or use wait2(-1) if we're waiting for any child
+          if pids_or_jobs.empty?
+            # Wait for any child
+            pid, status = Process.wait2(-1)
+          else
+            # Poll each target PID
+            pid = nil
+            status = nil
+            loop do
+              target_pids.each do |target_pid|
+                begin
+                  wpid, wstatus = Process.wait2(target_pid, Process::WNOHANG)
+                  if wpid
+                    pid = wpid
+                    status = wstatus
+                    break
+                  end
+                rescue Errno::ECHILD
+                  # Process doesn't exist or already reaped
+                  target_pids.delete(target_pid)
+                end
+              end
+              break if pid || target_pids.empty?
+
+              sleep 0.01
+            end
+
+            unless pid
+              return true
+            end
+          end
+
+          ENV[pid_var] = pid.to_s if pid_var
+          job = manager.find_by_pid(pid)
+          if job
+            manager.update_status(pid, status)
+            manager.remove(job.id)
+          end
+          return status.success?
+        rescue Errno::ECHILD
+          return true
+        end
+      end
+
+      # Standard wait behavior
+      if pids_or_jobs.empty?
         # Wait for all background jobs
         jobs = manager.active
         if jobs.empty?
@@ -5520,7 +5655,8 @@ module Rubish
           # (e.g., when monitor mode is off). Wait for all children.
           begin
             loop do
-              _, status = Process.wait2(-1)
+              pid, status = Process.wait2(-1)
+              ENV[pid_var] = pid.to_s if pid_var
               last_status = status.success?
             end
           rescue Errno::ECHILD
@@ -5531,7 +5667,8 @@ module Rubish
 
         jobs.each do |job|
           begin
-            _, status = Process.wait2(job.pid)
+            pid, status = Process.wait2(job.pid)
+            ENV[pid_var] = pid.to_s if pid_var
             manager.update_status(job.pid, status)
             manager.remove(job.id)
             last_status = status.success?
@@ -5542,7 +5679,7 @@ module Rubish
         end
       else
         # Wait for specific jobs
-        args.each do |arg|
+        pids_or_jobs.each do |arg|
           job = nil
 
           if arg.start_with?('%')
@@ -5561,7 +5698,8 @@ module Rubish
             unless job
               # Try waiting for any child with this PID
               begin
-                _, status = Process.wait2(pid)
+                wpid, status = Process.wait2(pid)
+                ENV[pid_var] = wpid.to_s if pid_var
                 last_status = status.success?
                 next
               rescue Errno::ECHILD
@@ -5574,7 +5712,8 @@ module Rubish
 
           if job
             begin
-              _, status = Process.wait2(job.pid)
+              wpid, status = Process.wait2(job.pid)
+              ENV[pid_var] = wpid.to_s if pid_var
               manager.update_status(job.pid, status)
               manager.remove(job.id)
               last_status = status.success?
@@ -6498,10 +6637,12 @@ module Rubish
         description: 'Execute a shell builtin, bypassing functions and aliases.'
       },
       'wait' => {
-        synopsis: 'wait [-n] [id ...]',
+        synopsis: 'wait [-fn] [-p VARNAME] [id ...]',
         description: 'Wait for job completion and return exit status.',
         options: {
-          '-n' => 'wait for any single job to complete'
+          '-f' => 'wait for job to terminate, not just change state',
+          '-n' => 'wait for any single job to complete',
+          '-p VARNAME' => 'store PID of exited process in VARNAME'
         }
       },
       'kill' => {
