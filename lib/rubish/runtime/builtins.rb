@@ -901,7 +901,24 @@ module Rubish
     end
 
     def self.run_pushd(args)
-      if args.empty?
+      # pushd [-n] [+N | -N | dir]
+      # -n: Suppress the normal change of directory; only manipulate the stack
+      # +N: Rotate the stack so that the Nth directory (counting from left, starting at 0) is at the top
+      # -N: Rotate the stack so that the Nth directory (counting from right, starting at 0) is at the top
+      # dir: Push dir onto the stack and cd to it
+
+      no_cd = false
+      remaining_args = []
+
+      args.each do |arg|
+        if arg == '-n'
+          no_cd = true
+        else
+          remaining_args << arg
+        end
+      end
+
+      if remaining_args.empty?
         # Swap top two directories
         if @dir_stack.empty?
           puts 'pushd: no other directory'
@@ -909,46 +926,164 @@ module Rubish
         end
         current = Dir.pwd
         target = @dir_stack.shift
-        begin
-          Dir.chdir(target)
-          @dir_stack.unshift(current)
-          print_dir_stack
-          true
-        rescue Errno::ENOENT => e
-          puts "pushd: #{e.message}"
-          false
+        @dir_stack.unshift(current)
+        unless no_cd
+          begin
+            Dir.chdir(target)
+          rescue Errno::ENOENT => e
+            puts "pushd: #{e.message}"
+            return false
+          end
         end
+        print_dir_stack
+        true
+      elsif remaining_args.first =~ /^[+-]\d+$/
+        # Stack rotation: +N or -N
+        arg = remaining_args.first
+        n = arg[1..].to_i
+        full_stack = [Dir.pwd] + @dir_stack
+
+        if n >= full_stack.length
+          puts "pushd: #{arg}: directory stack index out of range"
+          return false
+        end
+
+        if arg.start_with?('+')
+          # +N: rotate left by N positions
+          rotated = full_stack.rotate(n)
+        else
+          # -N: count from right (end of stack)
+          # -0 is last element, -1 is second to last, etc.
+          index = full_stack.length - 1 - n
+          if index < 0
+            puts "pushd: #{arg}: directory stack index out of range"
+            return false
+          end
+          rotated = full_stack.rotate(index)
+        end
+
+        target = rotated.first
+        @dir_stack = rotated[1..]
+
+        unless no_cd
+          begin
+            Dir.chdir(target)
+          rescue Errno::ENOENT => e
+            puts "pushd: #{e.message}"
+            return false
+          end
+        end
+        print_dir_stack
+        true
       else
-        dir = args.first
+        # Push directory
+        dir = remaining_args.first
         dir = File.expand_path(dir)
         current = Dir.pwd
-        begin
-          Dir.chdir(dir)
-          @dir_stack.unshift(current)
-          print_dir_stack
-          true
-        rescue Errno::ENOENT => e
-          puts "pushd: #{e.message}"
-          false
+
+        unless File.directory?(dir)
+          puts "pushd: #{dir}: No such file or directory"
+          return false
         end
+
+        @dir_stack.unshift(current)
+        unless no_cd
+          begin
+            Dir.chdir(dir)
+          rescue Errno::ENOENT => e
+            puts "pushd: #{e.message}"
+            return false
+          end
+        end
+        print_dir_stack
+        true
       end
     end
 
     def self.run_popd(args)
-      if @dir_stack.empty?
+      # popd [-n] [+N | -N]
+      # -n: Suppress the normal change of directory; only manipulate the stack
+      # +N: Remove the Nth directory (counting from left, starting at 0)
+      # -N: Remove the Nth directory (counting from right, starting at 0)
+
+      no_cd = false
+      index_arg = nil
+
+      args.each do |arg|
+        if arg == '-n'
+          no_cd = true
+        elsif arg =~ /^[+-]\d+$/
+          index_arg = arg
+        else
+          puts "popd: #{arg}: invalid argument"
+          return false
+        end
+      end
+
+      if @dir_stack.empty? && index_arg.nil?
         puts 'popd: directory stack empty'
         return false
       end
 
-      target = @dir_stack.shift
-      begin
-        Dir.chdir(target)
-        print_dir_stack
-        true
-      rescue Errno::ENOENT => e
-        puts "popd: #{e.message}"
-        false
+      full_stack = [Dir.pwd] + @dir_stack
+
+      if index_arg
+        n = index_arg[1..].to_i
+
+        if index_arg.start_with?('+')
+          # +N: remove Nth element from left (0 = current dir)
+          index = n
+        else
+          # -N: remove Nth element from right (0 = last element)
+          index = full_stack.length - 1 - n
+        end
+
+        if index < 0 || index >= full_stack.length
+          puts "popd: #{index_arg}: directory stack index out of range"
+          return false
+        end
+
+        if index == 0
+          # Removing current directory - need to cd to next
+          if full_stack.length < 2
+            puts 'popd: directory stack empty'
+            return false
+          end
+          target = full_stack[1]
+          @dir_stack = full_stack[2..] || []
+          unless no_cd
+            begin
+              Dir.chdir(target)
+            rescue Errno::ENOENT => e
+              puts "popd: #{e.message}"
+              return false
+            end
+          end
+        else
+          # Removing from stack (not current dir)
+          full_stack.delete_at(index)
+          @dir_stack = full_stack[1..] || []
+        end
+      else
+        # Default: pop top of stack and cd there
+        if @dir_stack.empty?
+          puts 'popd: directory stack empty'
+          return false
+        end
+
+        target = @dir_stack.shift
+        unless no_cd
+          begin
+            Dir.chdir(target)
+          rescue Errno::ENOENT => e
+            puts "popd: #{e.message}"
+            return false
+          end
+        end
       end
+
+      print_dir_stack
+      true
     end
 
     def self.run_dirs(args)
@@ -6509,17 +6644,19 @@ module Rubish
         description: 'Resume the next iteration of the enclosing for, while, or until loop.'
       },
       'pushd' => {
-        synopsis: 'pushd [dir | +N | -N]',
+        synopsis: 'pushd [-n] [dir | +N | -N]',
         description: 'Save current directory on stack and change to dir.',
         options: {
+          '-n' => 'suppress directory change, only manipulate stack',
           '+N' => 'rotate stack, bringing Nth directory to top',
           '-N' => 'rotate stack, bringing Nth directory from bottom to top'
         }
       },
       'popd' => {
-        synopsis: 'popd [+N | -N]',
+        synopsis: 'popd [-n] [+N | -N]',
         description: 'Remove entries from the directory stack.',
         options: {
+          '-n' => 'suppress directory change, only manipulate stack',
           '+N' => 'remove Nth entry from top of stack',
           '-N' => 'remove Nth entry from bottom of stack'
         }
