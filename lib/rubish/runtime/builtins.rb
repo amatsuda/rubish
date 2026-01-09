@@ -3829,18 +3829,29 @@ module Rubish
       end
     end
 
+    # Mapping of set -o short flags to long names
+    SET_O_LONG_NAMES = {
+      'B' => 'braceexpand', 'H' => 'histexpand',
+      'e' => 'errexit', 'E' => 'errtrace', 'T' => 'functrace',
+      'x' => 'xtrace', 'u' => 'nounset', 'n' => 'noexec', 'v' => 'verbose',
+      'f' => 'noglob', 'C' => 'noclobber', 'a' => 'allexport', 'b' => 'notify',
+      'h' => 'hashall', 'm' => 'monitor', 'P' => 'physical',
+      't' => 'onecmd', 'k' => 'keyword', 'p' => 'privileged'
+    }.freeze
+
     def self.run_shopt(args)
       # shopt [-pqsu] [-o] [optname ...]
       # -s: enable (set) options
       # -u: disable (unset) options
       # -p: print in reusable format
       # -q: quiet mode, return status only
-      # -o: restrict to set -o options (not implemented)
+      # -o: restrict to set -o options
 
       set_mode = false
       unset_mode = false
       print_mode = false
       quiet_mode = false
+      set_o_mode = false
       opt_names = []
 
       i = 0
@@ -3859,8 +3870,7 @@ module Rubish
             when 'q'
               quiet_mode = true
             when 'o'
-              # -o is for set -o options, we'll just ignore it
-              nil
+              set_o_mode = true
             else
               puts "shopt: -#{c}: invalid option"
               return false
@@ -3876,6 +3886,11 @@ module Rubish
       if set_mode && unset_mode
         puts 'shopt: cannot set and unset options simultaneously'
         return false
+      end
+
+      # When -o is used, work with set -o options instead of shell options
+      if set_o_mode
+        return run_shopt_set_o(set_mode, unset_mode, print_mode, quiet_mode, opt_names)
       end
 
       # Helper to get current value of an option
@@ -3956,6 +3971,84 @@ module Rubish
         end
 
         @shell_options[name] = set_mode
+      end
+
+      true
+    end
+
+    # Handle shopt -o for set -o style options
+    def self.run_shopt_set_o(set_mode, unset_mode, print_mode, quiet_mode, opt_names)
+      # Build list of valid set -o option names (long names)
+      valid_options = {}
+      @set_options.each_key do |key|
+        long_name = SET_O_LONG_NAMES[key] || key
+        valid_options[long_name] = key
+      end
+
+      # Helper to get current value of a set -o option
+      get_option = lambda do |name|
+        key = valid_options[name]
+        return nil unless key
+        @set_options[key]
+      end
+
+      # Helper to print an option
+      print_option = lambda do |name, value|
+        unless quiet_mode
+          if print_mode
+            puts "shopt #{value ? '-so' : '-uo'} #{name}"
+          else
+            puts "#{name}\t\t#{value ? 'on' : 'off'}"
+          end
+        end
+      end
+
+      # No options specified: list all or specified options
+      unless set_mode || unset_mode
+        if opt_names.empty?
+          # List all set -o options
+          valid_options.keys.sort.each do |name|
+            value = get_option.call(name)
+            print_option.call(name, value)
+          end
+          return true
+        else
+          # List specified options
+          all_on = true
+          opt_names.each do |name|
+            unless valid_options.key?(name)
+              puts "shopt: #{name}: invalid shell option name" unless quiet_mode
+              return false
+            end
+            value = get_option.call(name)
+            print_option.call(name, value)
+            all_on = false unless value
+          end
+          return all_on  # Return status indicates if all are on
+        end
+      end
+
+      # Set or unset options
+      if opt_names.empty?
+        # List options that are on (with -s) or off (with -u)
+        valid_options.keys.sort.each do |name|
+          value = get_option.call(name)
+          if (set_mode && value) || (unset_mode && !value)
+            print_option.call(name, value)
+          end
+        end
+        return true
+      end
+
+      # Set or unset specified options
+      opt_names.each do |name|
+        unless valid_options.key?(name)
+          puts "shopt: #{name}: invalid shell option name"
+          return false
+        end
+
+        key = valid_options[name]
+        @set_options[key] = set_mode
       end
 
       true

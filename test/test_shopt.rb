@@ -13,6 +13,14 @@ class TestShopt < Test::Unit::TestCase
 
   def teardown
     Rubish::Builtins.shell_options.clear
+    # Reset set_options to defaults
+    Rubish::Builtins.set_options.each_key do |k|
+      # Reset to default values
+      Rubish::Builtins.set_options[k] = case k
+        when 'B', 'H', 'emacs', 'history' then true
+        else false
+      end
+    end
     FileUtils.rm_rf(@tempdir)
     ENV.clear
     @original_env.each { |k, v| ENV[k] = v }
@@ -221,5 +229,129 @@ class TestShopt < Test::Unit::TestCase
     assert_false Rubish::Builtins.shopt_enabled?('globasciiranges')
     execute('shopt -s globasciiranges')
     assert Rubish::Builtins.shopt_enabled?('globasciiranges')
+  end
+
+  # shopt -o tests (for set -o options)
+
+  def test_shopt_o_lists_set_options
+    output = capture_output { Rubish::Builtins.run('shopt', ['-o']) }
+    # POSIX-style set -o options
+    assert_match(/errexit/, output)
+    assert_match(/nounset/, output)
+    assert_match(/xtrace/, output)
+    assert_match(/noglob/, output)
+    # Should NOT include shopt-only options (autocd is shopt-only)
+    assert_no_match(/autocd/, output)
+    assert_no_match(/cdspell/, output)
+  end
+
+  def test_shopt_so_enables_set_option
+    result = Rubish::Builtins.run('shopt', ['-so', 'errexit'])
+    assert result
+    assert Rubish::Builtins.set_option?('e')
+  end
+
+  def test_shopt_uo_disables_set_option
+    Rubish::Builtins.run('shopt', ['-so', 'errexit'])
+    result = Rubish::Builtins.run('shopt', ['-uo', 'errexit'])
+    assert result
+    assert_false Rubish::Builtins.set_option?('e')
+  end
+
+  def test_shopt_o_specific_option
+    output = capture_output { Rubish::Builtins.run('shopt', ['-o', 'errexit']) }
+    assert_match(/errexit/, output)
+    assert_match(/off/, output)
+  end
+
+  def test_shopt_o_enabled_option
+    Rubish::Builtins.run('shopt', ['-so', 'xtrace'])
+    output = capture_output { Rubish::Builtins.run('shopt', ['-o', 'xtrace']) }
+    assert_match(/xtrace/, output)
+    assert_match(/on/, output)
+  end
+
+  def test_shopt_po_reusable_format
+    Rubish::Builtins.run('shopt', ['-so', 'errexit'])
+    output = capture_output { Rubish::Builtins.run('shopt', ['-po', 'errexit']) }
+    assert_equal "shopt -so errexit\n", output
+  end
+
+  def test_shopt_po_disabled_format
+    output = capture_output { Rubish::Builtins.run('shopt', ['-po', 'errexit']) }
+    assert_equal "shopt -uo errexit\n", output
+  end
+
+  def test_shopt_qo_quiet_mode
+    Rubish::Builtins.run('shopt', ['-so', 'errexit'])
+    output = capture_output { Rubish::Builtins.run('shopt', ['-qo', 'errexit']) }
+    assert_equal '', output
+  end
+
+  def test_shopt_qo_returns_status
+    Rubish::Builtins.run('shopt', ['-so', 'errexit'])
+    result = Rubish::Builtins.run('shopt', ['-qo', 'errexit'])
+    assert result
+
+    Rubish::Builtins.run('shopt', ['-uo', 'errexit'])
+    result = Rubish::Builtins.run('shopt', ['-qo', 'errexit'])
+    assert_false result
+  end
+
+  def test_shopt_o_invalid_option
+    output = capture_output do
+      result = Rubish::Builtins.run('shopt', ['-so', 'autocd'])  # autocd is shopt-only
+      assert_false result
+    end
+    assert_match(/invalid shell option name/, output)
+  end
+
+  def test_shopt_so_lists_enabled_set_options
+    Rubish::Builtins.run('shopt', ['-so', 'errexit'])
+    Rubish::Builtins.run('shopt', ['-so', 'xtrace'])
+    output = capture_output { Rubish::Builtins.run('shopt', ['-so']) }
+    assert_match(/errexit/, output)
+    assert_match(/xtrace/, output)
+    # braceexpand and histexpand are on by default
+    assert_match(/braceexpand/, output)
+  end
+
+  def test_shopt_uo_lists_disabled_set_options
+    output = capture_output { Rubish::Builtins.run('shopt', ['-uo']) }
+    assert_match(/errexit/, output)
+    assert_match(/nounset/, output)
+  end
+
+  def test_shopt_o_multiple_options
+    result = Rubish::Builtins.run('shopt', ['-so', 'errexit', 'xtrace', 'nounset'])
+    assert result
+    assert Rubish::Builtins.set_option?('e')
+    assert Rubish::Builtins.set_option?('x')
+    assert Rubish::Builtins.set_option?('u')
+  end
+
+  def test_shopt_o_via_repl
+    execute('shopt -so errexit')
+    assert Rubish::Builtins.set_option?('e')
+    execute('shopt -uo errexit')
+    assert_false Rubish::Builtins.set_option?('e')
+  end
+
+  def test_shopt_o_noglob
+    result = Rubish::Builtins.run('shopt', ['-so', 'noglob'])
+    assert result
+    assert Rubish::Builtins.set_option?('f')
+  end
+
+  def test_shopt_o_noclobber
+    result = Rubish::Builtins.run('shopt', ['-so', 'noclobber'])
+    assert result
+    assert Rubish::Builtins.set_option?('C')
+  end
+
+  def test_shopt_help_mentions_o_option
+    help = Rubish::Builtins::BUILTIN_HELP['shopt']
+    assert_not_nil help
+    assert help[:options].key?('-o')
   end
 end
