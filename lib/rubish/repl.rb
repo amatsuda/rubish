@@ -36,6 +36,9 @@ module Rubish
       @varname_fds = {}  # For {varname} redirection - maps varname to allocated FD
       @next_varname_fd = 10  # Next FD to allocate for {varname} redirections
       @bash_argv0_unset = false  # Track if BASH_ARGV0 has been unset (loses special properties)
+      @readline_line = ''  # For READLINE_LINE variable (current line buffer in bind -x)
+      @readline_point = 0  # For READLINE_POINT variable (cursor position in bind -x)
+      @readline_mark = 0   # For READLINE_MARK variable (mark position in bind -x)
       # SHLVL - shell nesting level (stored in ENV for inheritance)
       current_shlvl = ENV['SHLVL'].to_i
       ENV['SHLVL'] = (current_shlvl + 1).to_s
@@ -57,6 +60,13 @@ module Rubish
       Builtins.source_file_setter = ->(file) { @current_source_file = file }
       Builtins.lineno_getter = -> { @lineno }
       Builtins.bash_argv0_unsetter = -> { @bash_argv0_unset = true }
+      # Readline state callbacks
+      Builtins.readline_line_getter = -> { @readline_line }
+      Builtins.readline_line_setter = ->(line) { @readline_line = line }
+      Builtins.readline_point_getter = -> { @readline_point }
+      Builtins.readline_point_setter = ->(point) { @readline_point = point }
+      Builtins.readline_mark_getter = -> { @readline_mark }
+      Builtins.readline_mark_setter = ->(mark) { @readline_mark = mark }
       # History callbacks
       Builtins.history_file_getter = -> { history_file }
       Builtins.history_loader = -> { load_history }
@@ -1306,6 +1316,15 @@ module Rubish
             # BASH_COMPAT: Set shell compatibility level
             # Accepts "5.1", "51", or empty to clear
             Builtins.set_bash_compat(expanded_value)
+          elsif var_name == 'READLINE_LINE'
+            # READLINE_LINE: Set readline buffer (used in bind -x commands)
+            Builtins.readline_line = expanded_value
+          elsif var_name == 'READLINE_POINT'
+            # READLINE_POINT: Set cursor position in readline buffer
+            Builtins.readline_point = expanded_value.to_i
+          elsif var_name == 'READLINE_MARK'
+            # READLINE_MARK: Set mark position in readline buffer
+            Builtins.readline_mark = expanded_value.to_i
           elsif var_name == 'PPID' || var_name == 'UID' || var_name == 'EUID' || var_name == 'GROUPS' || var_name == 'HOSTNAME' || var_name == 'RUBISHPID' || var_name == 'BASHPID' || var_name == 'HISTCMD' || var_name == 'EPOCHSECONDS' || var_name == 'EPOCHREALTIME' || var_name == 'SRANDOM' || var_name == 'RUBISH_MONOSECONDS' || var_name == 'BASH_MONOSECONDS' || var_name == 'RUBISH_VERSION' || var_name == 'BASH_VERSION' || var_name == 'RUBISH_VERSINFO' || var_name == 'BASH_VERSINFO' || var_name == 'OSTYPE' || var_name == 'HOSTTYPE' || var_name == 'MACHTYPE' || var_name == 'PIPESTATUS' || var_name == 'RUBISH_COMMAND' || var_name == 'BASH_COMMAND' || var_name == 'FUNCNAME' || var_name == 'RUBISH_LINENO' || var_name == 'BASH_LINENO' || var_name == 'RUBISH_SOURCE' || var_name == 'BASH_SOURCE' || var_name == 'RUBISH_ARGC' || var_name == 'BASH_ARGC' || var_name == 'RUBISH_ARGV' || var_name == 'BASH_ARGV' || var_name == 'RUBISH_SUBSHELL' || var_name == 'BASH_SUBSHELL' || var_name == 'DIRSTACK' || var_name == 'COLUMNS' || var_name == 'LINES' || var_name == 'RUBISH_ALIASES' || var_name == 'BASH_ALIASES' || var_name == 'RUBISH_CMDS' || var_name == 'BASH_CMDS' || var_name == 'COMP_CWORD' || var_name == 'COMP_LINE' || var_name == 'COMP_POINT' || var_name == 'COMP_TYPE' || var_name == 'COMP_KEY' || var_name == 'COMP_WORDS' || var_name == 'RUBISH_EXECUTION_STRING' || var_name == 'BASH_EXECUTION_STRING' || var_name == 'RUBISH_REMATCH' || var_name == 'BASH_REMATCH' || var_name == 'RUBISH' || var_name == 'BASH' || var_name == 'RUBISH_TRAPSIG' || var_name == 'BASH_TRAPSIG'
             # These variables are read-only, silently ignore assignment
           else
@@ -1704,6 +1723,9 @@ module Rubish
       return ENV['RUBISH_EXECUTION_STRING'] || '' if var_name == 'RUBISH_EXECUTION_STRING' || var_name == 'BASH_EXECUTION_STRING'
       return __rubish_path if var_name == 'RUBISH' || var_name == 'BASH'
       return Builtins.current_trapsig || '' if var_name == 'RUBISH_TRAPSIG' || var_name == 'BASH_TRAPSIG'
+      return Builtins.readline_line if var_name == 'READLINE_LINE'
+      return Builtins.readline_point.to_s if var_name == 'READLINE_POINT'
+      return Builtins.readline_mark.to_s if var_name == 'READLINE_MARK'
 
       if Builtins.set_option?('u') && !ENV.key?(var_name)
         $stderr.puts Builtins.format_error('unbound variable', command: var_name)
@@ -2620,6 +2642,9 @@ module Rubish
       return ENV['RUBISH_EXECUTION_STRING'] || '' if var_name == 'RUBISH_EXECUTION_STRING' || var_name == 'BASH_EXECUTION_STRING'
       return __rubish_path if var_name == 'RUBISH' || var_name == 'BASH'
       return Builtins.current_trapsig || '' if var_name == 'RUBISH_TRAPSIG' || var_name == 'BASH_TRAPSIG'
+      return Builtins.readline_line if var_name == 'READLINE_LINE'
+      return Builtins.readline_point.to_s if var_name == 'READLINE_POINT'
+      return Builtins.readline_mark.to_s if var_name == 'READLINE_MARK'
 
       # Fetch variable with nounset check
       if Builtins.set_option?('u') && !ENV.key?(var_name)
@@ -2803,6 +2828,18 @@ module Rubish
         value = Builtins.current_trapsig || ''
         is_set = true
         is_null = value.empty?
+      elsif var_name == 'READLINE_LINE'
+        value = Builtins.readline_line
+        is_set = true
+        is_null = value.empty?
+      elsif var_name == 'READLINE_POINT'
+        value = Builtins.readline_point.to_s
+        is_set = true
+        is_null = false
+      elsif var_name == 'READLINE_MARK'
+        value = Builtins.readline_mark.to_s
+        is_set = true
+        is_null = false
       else
         value = ENV[var_name]
         is_set = ENV.key?(var_name)
@@ -2939,6 +2976,9 @@ module Rubish
       when 'RUBISH_EXECUTION_STRING', 'BASH_EXECUTION_STRING' then ENV['RUBISH_EXECUTION_STRING'] || ''
       when 'RUBISH', 'BASH' then __rubish_path
       when 'RUBISH_TRAPSIG', 'BASH_TRAPSIG' then Builtins.current_trapsig || ''
+      when 'READLINE_LINE' then Builtins.readline_line
+      when 'READLINE_POINT' then Builtins.readline_point.to_s
+      when 'READLINE_MARK' then Builtins.readline_mark.to_s
       end
     end
 

@@ -56,6 +56,7 @@ module Rubish
       attr_accessor :source_file_getter, :source_file_setter
       attr_accessor :lineno_getter
       attr_accessor :bash_argv0_unsetter
+      attr_accessor :readline_line_getter, :readline_line_setter, :readline_point_getter, :readline_point_setter, :readline_mark_getter, :readline_mark_setter
       attr_accessor :exit_blocked_by_jobs
     end
 
@@ -3868,6 +3869,33 @@ module Rubish
     # In bash, POSIX mode is enabled when POSIXLY_CORRECT is set (even to empty string)
     def self.posix_mode?
       ENV.key?('POSIXLY_CORRECT')
+    end
+
+    # READLINE_LINE - contents of the readline buffer during bind -x execution
+    def self.readline_line
+      @readline_line_getter&.call || ''
+    end
+
+    def self.readline_line=(value)
+      @readline_line_setter&.call(value.to_s)
+    end
+
+    # READLINE_POINT - cursor position (index) in READLINE_LINE during bind -x execution
+    def self.readline_point
+      @readline_point_getter&.call || 0
+    end
+
+    def self.readline_point=(value)
+      @readline_point_setter&.call(value.to_i)
+    end
+
+    # READLINE_MARK - mark position in READLINE_LINE during bind -x execution
+    def self.readline_mark
+      @readline_mark_getter&.call || 0
+    end
+
+    def self.readline_mark=(value)
+      @readline_mark_setter&.call(value.to_i)
     end
 
     # Track dynamically loaded builtins
