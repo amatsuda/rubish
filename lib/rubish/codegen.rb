@@ -46,6 +46,8 @@ module Rubish
         generate_time(node)
       when AST::ConditionalExpr
         generate_conditional_expr(node)
+      when AST::ArithmeticCommand
+        generate_arithmetic_command(node)
       when AST::ArrayAssign
         generate_array_assign(node)
       else
@@ -625,6 +627,12 @@ module Rubish
         end
       end
       "__cond_test([#{parts.join(', ')}])"
+    end
+
+    def generate_arithmetic_command(node)
+      # Generate code for arithmetic command (( expression ))
+      # The expression needs variable expansion but is evaluated as arithmetic
+      "__arithmetic_command(#{node.expression.inspect})"
     end
 
     def generate_array_assign(node)

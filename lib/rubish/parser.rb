@@ -134,6 +134,7 @@ module Rubish
       return parse_subshell if peek(:LPAREN)
       return parse_coproc if peek(:COPROC)
       return parse_conditional_expr if peek(:DOUBLE_LBRACKET)
+      return parse_arithmetic_command if peek(:ARITH_CMD)
 
       # Check for array assignment: VAR=(a b c) or VAR+=(d e)
       return parse_array_assign if peek(:ARRAY_ASSIGN)
@@ -468,6 +469,13 @@ module Rubish
       consume(:DOUBLE_RBRACKET) || raise('Expected "]]" to close conditional expression')
 
       AST::ConditionalExpr.new(expression)
+    end
+
+    # arithmetic_command : '((' expression '))'
+    # Parses arithmetic command (( expression ))
+    def parse_arithmetic_command
+      token = consume(:ARITH_CMD)
+      AST::ArithmeticCommand.new(token.value)
     end
 
     # Parse array assignment: VAR=(a b c) or VAR+=(d e)

@@ -113,6 +113,11 @@ module Rubish
     #           file tests (-f, -d, -e, etc.), logical operators (&&, ||, !)
     ConditionalExpr = Data.define(:expression)
 
+    # ArithmeticCommand: (( expression )) - arithmetic evaluation command
+    # expression: the arithmetic expression string
+    # Returns exit status 0 if result is non-zero, 1 if result is zero
+    ArithmeticCommand = Data.define(:expression)
+
     # ArrayAssign: VAR=(a b c) or VAR+=(d e) - array assignment
     # var: the variable name with = or += (e.g., "arr=" or "arr+=")
     # elements: array of element strings

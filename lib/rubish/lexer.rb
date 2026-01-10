@@ -91,6 +91,42 @@ module Rubish
         @pos += 2
         return read_heredoc_delimiter(:HEREDOC)
       end
+      # Arithmetic command (( )) - only when in command position
+      # Distinguish from nested subshell: ((cmd)) vs (( expr ))
+      # If followed by a word then space (like "echo "), it's likely a nested subshell
+      if two_char == '(('
+        # Look ahead to see if this looks like an arithmetic expression
+        # Skip whitespace to find what comes after ((
+        lookahead_pos = @pos + 2
+        while lookahead_pos < @input.length && @input[lookahead_pos] =~ /[ \t]/
+          lookahead_pos += 1
+        end
+        # Arithmetic expressions start with: number, variable (optionally with $),
+        # unary operators (!, -, ~, ++, --), or (
+        # Commands start with: letter followed by space, or are builtins like echo, cd, etc.
+        first_content = @input[lookahead_pos, 30] || ''
+        # It's arithmetic if it starts with:
+        # - A number (possibly negative)
+        # - $ (variable reference)
+        # - ! or ~ (unary operators)
+        # - identifier followed by arithmetic operator (=, +, -, ++, --, *, /, etc.)
+        # - ( followed by space or non-alpha (grouped expression, not command)
+        # Note: We must NOT match patterns like ((abc)(123)) which is regex grouping
+        is_arithmetic = case first_content
+                        when /\A-?\d/ then true  # Number
+                        when /\A\$/ then true    # Variable reference
+                        when /\A[!~]/ then true  # Unary operators
+                        when /\A(\+\+|--)[a-zA-Z_]/ then true  # Pre-increment/decrement
+                        when /\A[a-zA-Z_][a-zA-Z0-9_]*\s*(\+\+|--|[=+\-*\/%<>&|^]=?|\[)/ then true  # Identifier with operator
+                        when /\A\(\s*[\d$!~(+-]/ then true  # Grouped expression starting with arith
+                        else false
+                        end
+        if is_arithmetic
+          @pos += 2
+          return read_arithmetic_command
+        end
+        # Otherwise fall through to handle as nested subshells
+      end
       # Extended test command [[ ]] - only when in command position
       # Not when it's a nested array like [[1, 2], [3, 4]]
       if two_char == '[['
@@ -644,6 +680,46 @@ module Rubish
       end
 
       Token.new(:HERESTRING, value)
+    end
+
+    def read_arithmetic_command
+      # Read the arithmetic expression until ))
+      # Need to handle nested parentheses
+      expression = +''
+      depth = 1  # We've already consumed the opening ((
+
+      while @pos < @input.length && depth > 0
+        char = @input[@pos]
+        two_char = @input[@pos, 2]
+
+        if two_char == '))'
+          depth -= 1
+          if depth == 0
+            @pos += 2
+            break
+          else
+            expression << '))'
+            @pos += 2
+          end
+        elsif two_char == '(('
+          depth += 1
+          expression << '(('
+          @pos += 2
+        elsif char == '('
+          expression << char
+          @pos += 1
+        elsif char == ')'
+          expression << char
+          @pos += 1
+        else
+          expression << char
+          @pos += 1
+        end
+      end
+
+      raise 'Expected ")))" to close arithmetic command' if depth > 0
+
+      Token.new(:ARITH_CMD, expression.strip)
     end
 
     # Check if current position is a {varname} redirection pattern
