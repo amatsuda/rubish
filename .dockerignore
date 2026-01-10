@@ -1,0 +1,23 @@
+# Git
+.git
+.gitignore
+
+# Docker
+Dockerfile
+.dockerignore
+
+# Editor/IDE
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+
+# Ruby
+.bundle
+vendor/bundle
+
+# Test artifacts
+coverage
+tmp
