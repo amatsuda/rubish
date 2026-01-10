@@ -301,4 +301,46 @@ class TestStartupFiles < Test::Unit::TestCase
   ensure
     Rubish::Builtins.instance_variable_get(:@set_options)['i'] = false
   end
+
+  # ==========================================================================
+  # --rcfile / --init-file tests
+  # ==========================================================================
+
+  def test_rcfile_uses_custom_file_instead_of_bashrc
+    # Create custom rc file and regular bashrc
+    custom_rc = File.join(@tempdir, 'custom.rc')
+    File.write(custom_rc, 'CUSTOM_RC_SOURCED=yes')
+    File.write(File.join(@tempdir, '.bashrc'), 'BASHRC_SOURCED=yes')
+    File.write(File.join(@tempdir, '.rubishrc'), 'RUBISHRC_SOURCED=yes')
+
+    repl = Rubish::REPL.new(rcfile: custom_rc)
+    repl.send(:load_interactive_config)
+
+    # Only custom rc should be sourced
+    assert_equal 'yes', ENV['CUSTOM_RC_SOURCED']
+    assert_nil ENV['BASHRC_SOURCED']
+    assert_nil ENV['RUBISHRC_SOURCED']
+  end
+
+  def test_rcfile_with_tilde_expansion
+    # Create custom rc file in temp home
+    custom_rc = File.join(@tempdir, '.myrc')
+    File.write(custom_rc, 'MYRC_SOURCED=yes')
+
+    repl = Rubish::REPL.new(rcfile: '~/.myrc')
+    repl.send(:load_interactive_config)
+
+    assert_equal 'yes', ENV['MYRC_SOURCED']
+  end
+
+  def test_no_rc_overrides_rcfile
+    # Even with rcfile specified, --norc should skip it
+    custom_rc = File.join(@tempdir, 'custom.rc')
+    File.write(custom_rc, 'CUSTOM_RC_SOURCED=yes')
+
+    repl = Rubish::REPL.new(rcfile: custom_rc, no_rc: true)
+    repl.send(:load_interactive_config)
+
+    assert_nil ENV['CUSTOM_RC_SOURCED']
+  end
 end

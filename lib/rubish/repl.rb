@@ -5,7 +5,7 @@ module Rubish
   class FailglobError < StandardError; end
 
   class REPL
-    def initialize(login_shell: false, no_profile: false, no_rc: false, restricted: false)
+    def initialize(login_shell: false, no_profile: false, no_rc: false, restricted: false, rcfile: nil)
       @lexer_class = Lexer
       @parser_class = Parser
       @codegen = Codegen.new
@@ -43,6 +43,7 @@ module Rubish
       @no_profile = no_profile    # Skip profile files (--noprofile)
       @no_rc = no_rc              # Skip rc files (--norc)
       @restricted = restricted    # Start in restricted mode (-r or rbash)
+      @rcfile = rcfile            # Custom RC file (--rcfile, --init-file)
       # Set the login_shell shopt option (read-only)
       Builtins.set_shell_option('login_shell', login_shell)
       # SHLVL - shell nesting level (stored in ENV for inheritance)
@@ -355,6 +356,12 @@ module Rubish
     # Order: /etc/bash.bashrc or /etc/bashrc, then ~/.bashrc, then ~/.rubishrc
     def load_interactive_config
       return if @no_rc
+
+      # If --rcfile is specified, use only that file (replaces ~/.bashrc and ~/.rubishrc)
+      if @rcfile
+        source_if_exists(File.expand_path(@rcfile))
+        return
+      end
 
       # System-wide bashrc
       source_if_exists('/etc/bash.bashrc') || source_if_exists('/etc/bashrc')

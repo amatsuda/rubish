@@ -18,6 +18,7 @@ script_args = []
 no_profile = false
 no_rc = false
 force_interactive = false
+rcfile = nil  # Custom RC file (--rcfile, --init-file)
 
 i = 0
 while i < ARGV.length
@@ -48,6 +49,14 @@ while i < ARGV.length
   when '--norc'
     # Don't read ~/.bashrc or ~/.rubishrc (for interactive non-login shells)
     no_rc = true
+    i += 1
+  when '--rcfile', '--init-file'
+    # Use specified file instead of ~/.bashrc for interactive shells
+    rcfile = ARGV[i + 1]
+    i += 2
+  when /\A--rcfile=(.+)\z/, /\A--init-file=(.+)\z/
+    # Handle --rcfile=FILE syntax
+    rcfile = $1
     i += 1
   when '--'
     # End of options
@@ -92,7 +101,7 @@ end
 if command_string
   # -c mode: execute command string
   ENV['RUBISH_EXECUTION_STRING'] = command_string
-  repl = Rubish::REPL.new(no_rc: no_rc)
+  repl = Rubish::REPL.new(no_rc: no_rc, rcfile: rcfile)
   repl.script_name = script_args[0] || 'rubish'
   repl.positional_params = script_args[1..] || []
 
@@ -136,7 +145,7 @@ elsif script_file && !force_interactive
   exit(last_status)
 elsif script_file && force_interactive
   # Script mode with -i: run script with interactive settings (sources bashrc)
-  repl = Rubish::REPL.new(no_rc: no_rc)
+  repl = Rubish::REPL.new(no_rc: no_rc, rcfile: rcfile)
   repl.script_name = script_file
   repl.positional_params = script_args
 
@@ -165,7 +174,8 @@ else
     login_shell: login_shell,
     no_profile: no_profile,
     no_rc: no_rc,
-    restricted: restricted
+    restricted: restricted,
+    rcfile: rcfile
   )
   exit repl.run
 end
