@@ -135,4 +135,38 @@ class TestProcessSubstitution < Test::Unit::TestCase
     result = File.read(output_file).strip
     assert_match(/1.*hello/, result)
   end
+
+  # >(cmd) write mode tests
+  def test_proc_sub_out_simple
+    execute("echo hello | tee >(cat > #{output_file})")
+    sleep 0.5
+    assert_equal "hello\n", File.read(output_file)
+  end
+
+  def test_proc_sub_out_with_transform
+    execute("echo hello | tee >(tr a-z A-Z > #{output_file})")
+    sleep 0.5
+    assert_equal "HELLO\n", File.read(output_file)
+  end
+
+  def test_proc_sub_out_multiple
+    file2 = File.join(@tempdir, 'output2.txt')
+    execute("echo hello | tee >(cat > #{output_file}) >(tr a-z A-Z > #{file2})")
+    sleep 0.5
+    assert_equal "hello\n", File.read(output_file)
+    assert_equal "HELLO\n", File.read(file2)
+  end
+
+  def test_proc_sub_out_with_pipeline
+    execute("echo hello | tee >(cat | tr a-z A-Z > #{output_file})")
+    sleep 0.5
+    assert_equal "HELLO\n", File.read(output_file)
+  end
+
+  def test_proc_sub_out_with_wc
+    execute("printf 'a\\nb\\nc\\n' | tee >(wc -l > #{output_file})")
+    sleep 0.5
+    result = File.read(output_file).strip
+    assert_equal '3', result
+  end
 end
