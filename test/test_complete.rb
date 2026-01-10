@@ -20,6 +20,11 @@ class TestComplete < Test::Unit::TestCase
     @original_env.each { |k, v| ENV[k] = v }
   end
 
+
+  def output_file
+    File.join(@tempdir, 'output.txt')
+  end
+
   # Test complete is a builtin
   def test_complete_is_builtin
     assert Rubish::Builtins.builtin?('complete')
@@ -247,5 +252,123 @@ class TestComplete < Test::Unit::TestCase
     spec = Rubish::Builtins.get_completion_spec('mycommand')
     assert_includes spec[:actions], :directory
     assert_includes spec[:actions], :file
+  end
+
+  # Function-based completion tests
+  def test_function_completion_sets_compreply
+    # Define a completion function
+    execute('_testcomplete() { COMPREPLY=(alpha beta gamma); }')
+    execute('complete -F _testcomplete testcmd')
+
+    # Set up completion context
+    Rubish::Builtins.set_completion_context(
+      line: 'testcmd a',
+      point: 9,
+      words: %w[testcmd a],
+      cword: 1
+    )
+
+    # Call the function
+    @repl.send(:call_function, '_testcomplete', %w[testcmd a testcmd])
+
+    # Verify COMPREPLY
+    assert_equal %w[alpha beta gamma], Rubish::Builtins.compreply
+  end
+
+  def test_function_completion_receives_arguments
+    # Define a function that stores its arguments
+    execute('_argtest() { echo "$1 $2 $3" > ' + output_file + '; COMPREPLY=(); }')
+    execute('complete -F _argtest testcmd')
+
+    Rubish::Builtins.set_completion_context(
+      line: 'testcmd --opt val',
+      point: 17,
+      words: %w[testcmd --opt val],
+      cword: 2
+    )
+
+    @repl.send(:call_function, '_argtest', %w[testcmd val --opt])
+
+    # Verify function received: $1=command, $2=current word, $3=previous word
+    assert_equal "testcmd val --opt\n", File.read(output_file)
+  end
+
+  def test_function_completion_uses_comp_words
+    # Define a function that uses COMP_WORDS
+    execute('_wordstest() { echo "${COMP_WORDS[0]} ${COMP_WORDS[1]}" > ' + output_file + '; COMPREPLY=(); }')
+    execute('complete -F _wordstest testcmd')
+
+    Rubish::Builtins.set_completion_context(
+      line: 'testcmd arg1',
+      point: 12,
+      words: %w[testcmd arg1],
+      cword: 1
+    )
+
+    @repl.send(:call_function, '_wordstest', %w[testcmd arg1 testcmd])
+
+    assert_equal "testcmd arg1\n", File.read(output_file)
+  end
+
+  def test_function_completion_uses_comp_cword
+    execute('_cwordtest() { echo "$COMP_CWORD" > ' + output_file + '; COMPREPLY=(); }')
+    execute('complete -F _cwordtest testcmd')
+
+    Rubish::Builtins.set_completion_context(
+      line: 'testcmd arg1 arg2',
+      point: 17,
+      words: %w[testcmd arg1 arg2],
+      cword: 2
+    )
+
+    @repl.send(:call_function, '_cwordtest', %w[testcmd arg2 arg1])
+
+    assert_equal "2\n", File.read(output_file)
+  end
+
+  def test_function_completion_context_dependent
+    # Function that changes completion based on previous word
+    execute('_contexttest() {
+      if [ "$3" = "--file" ]; then
+        COMPREPLY=(file1.txt file2.txt)
+      else
+        COMPREPLY=(--help --version --file)
+      fi
+    }')
+    execute('complete -F _contexttest testcmd')
+
+    # Test without --file
+    Rubish::Builtins.set_completion_context(
+      line: 'testcmd --',
+      point: 10,
+      words: %w[testcmd --],
+      cword: 1
+    )
+    @repl.send(:call_function, '_contexttest', %w[testcmd -- testcmd])
+    assert_equal %w[--help --version --file], Rubish::Builtins.compreply
+
+    # Test with --file as previous word
+    Rubish::Builtins.set_completion_context(
+      line: 'testcmd --file f',
+      point: 16,
+      words: %w[testcmd --file f],
+      cword: 2
+    )
+    @repl.send(:call_function, '_contexttest', %w[testcmd f --file])
+    assert_equal %w[file1.txt file2.txt], Rubish::Builtins.compreply
+  end
+
+  def test_function_completion_clears_context
+    Rubish::Builtins.set_completion_context(
+      line: 'testcmd',
+      point: 7,
+      words: ['testcmd'],
+      cword: 0
+    )
+
+    Rubish::Builtins.clear_completion_context
+    assert_equal '', Rubish::Builtins.comp_line
+    assert_equal 0, Rubish::Builtins.comp_cword
+    assert_equal [], Rubish::Builtins.compreply
   end
 end
