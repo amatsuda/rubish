@@ -6888,6 +6888,7 @@ module Rubish
       # bind [-m keymap] -f filename
       # bind [-m keymap] -x keyseq:shell-command
       # bind [-m keymap] keyseq:function-name
+      # bind "set variable value"
 
       keymap = 'emacs'  # default keymap
       list_functions = false
@@ -6904,12 +6905,13 @@ module Rubish
       read_file = nil
       shell_command_binding = nil
       bindings_to_add = []
+      variable_settings = []
 
       i = 0
       while i < args.length
         arg = args[i]
 
-        if arg.start_with?('-')
+        if arg.start_with?('-') && !arg.include?(':')
           case arg
           when '-m'
             i += 1
@@ -6963,6 +6965,9 @@ module Rubish
               end
             end
           end
+        elsif arg.start_with?('set ')
+          # Variable setting: set variable value
+          variable_settings << arg
         elsif arg.include?(':')
           # keyseq:function-name or keyseq:macro
           bindings_to_add << arg
@@ -7022,7 +7027,7 @@ module Rubish
       # Print readline variables in reusable format
       if print_variables_readable
         READLINE_VARIABLES_LIST.each do |var|
-          value = @readline_variables[var] || 'off'
+          value = get_readline_variable(var) || 'off'
           puts "set #{var} #{value}"
         end
         return true
@@ -7031,7 +7036,7 @@ module Rubish
       # Print readline variables
       if print_variables
         READLINE_VARIABLES_LIST.each do |var|
-          value = @readline_variables[var] || 'off'
+          value = get_readline_variable(var) || 'off'
           puts "#{var} is set to `#{value}'"
         end
         return true
@@ -7083,14 +7088,17 @@ module Rubish
           line = line.strip
           next if line.empty? || line.start_with?('#')
 
+          # Skip conditional directives ($if, $else, $endif, $include)
+          next if line.start_with?('$')
+
           if line.start_with?('set ')
             # Variable setting: set variable value
-            parts = line.split(' ', 3)
+            parts = line.split(/\s+/, 3)
             if parts.length >= 3
-              @readline_variables[parts[1]] = parts[2]
+              apply_readline_variable(parts[1], parts[2])
             end
           elsif line.include?(':')
-            parse_and_add_binding(line)
+            parse_and_add_binding(line, keymap)
           end
         end
         return true
@@ -7115,6 +7123,14 @@ module Rubish
         parse_and_add_binding(binding, keymap)
       end
 
+      # Process variable settings: "set variable value"
+      variable_settings.each do |setting|
+        parts = setting.split(/\s+/, 3)
+        if parts.length >= 3 && parts[0] == 'set'
+          apply_readline_variable(parts[1], parts[2])
+        end
+      end
+
       true
     end
 
@@ -7136,26 +7152,97 @@ module Rubish
     end
 
     def self.escape_keyseq(keyseq)
-      keyseq.gsub("\e", '\\e').gsub("\C-a", '\\C-a').gsub("\t", '\\t').gsub("\n", '\\n')
+      result = +''
+      keyseq.each_char do |c|
+        case c.ord
+        when 0x00..0x1F
+          if c == "\t"
+            result << '\\t'
+          elsif c == "\n"
+            result << '\\n'
+          elsif c == "\r"
+            result << '\\r'
+          elsif c == "\e"
+            result << '\\e'
+          else
+            # Control character: display as \C-x
+            result << "\\C-#{(c.ord + 'a'.ord - 1).chr}"
+          end
+        when 0x7F
+          result << '\\C-?'
+        when 0x80..0x9F
+          # Meta control character
+          result << "\\M-\\C-#{(c.ord - 0x80 + 'a'.ord - 1).chr}"
+        when 0xA0..0xFF
+          # Meta character
+          result << "\\M-#{(c.ord - 0x80).chr}"
+        else
+          result << c
+        end
+      end
+      result
     end
 
     def self.unescape_keyseq(keyseq)
       result = keyseq.dup
 
+      # Handle meta escape sequences first (\M-x)
+      result.gsub!(/\\M-\\C-([a-z@\[\]\\^_?])/) do |_|
+        char = ::Regexp.last_match(1)
+        if char == '?'
+          (0x80 | 0x7F).chr  # Meta-DEL
+        else
+          (0x80 | (char.ord - 'a'.ord + 1)).chr
+        end
+      end
+
+      result.gsub!(/\\M-([^\s])/) do |_|
+        char = ::Regexp.last_match(1)
+        (0x80 | char.ord).chr
+      end
+
       # Handle escape sequences
       result.gsub!('\\e', "\e")
+      result.gsub!('\\E', "\e")  # Both \e and \E mean escape
       result.gsub!('\\t', "\t")
       result.gsub!('\\n', "\n")
       result.gsub!('\\r', "\r")
+      result.gsub!('\\a', "\a")  # Bell
+      result.gsub!('\\b', "\b")  # Backspace
+      result.gsub!('\\f', "\f")  # Form feed
+      result.gsub!('\\v', "\v")  # Vertical tab
+      result.gsub!('\\\\', '\\') # Literal backslash
+      result.gsub!('\\"', '"')   # Literal quote
+      result.gsub!("\\'", "'")   # Literal single quote
+
+      # Handle octal escape sequences \nnn
+      result.gsub!(/\\([0-7]{1,3})/) do |_|
+        ::Regexp.last_match(1).to_i(8).chr
+      end
+
+      # Handle hex escape sequences \xNN
+      result.gsub!(/\\x([0-9a-fA-F]{1,2})/) do |_|
+        ::Regexp.last_match(1).to_i(16).chr
+      end
 
       # Handle control characters \C-x format
-      result.gsub!(/\\C-([a-z@\[\]\\^_])/) do |_|
-        char = ::Regexp.last_match(1)
+      result.gsub!(/\\C-([a-zA-Z@\[\]\\^_])/) do |_|
+        char = ::Regexp.last_match(1).downcase
         (char.ord - 'a'.ord + 1).chr
       end
 
       # Handle control characters \C-? format for DEL
       result.gsub!('\\C-?', "\x7F")
+
+      # Handle ^x control character format
+      result.gsub!(/\^([a-zA-Z@\[\]\\^_?])/) do |_|
+        char = ::Regexp.last_match(1)
+        if char == '?'
+          "\x7F"  # DEL
+        else
+          (char.downcase.ord - 'a'.ord + 1).chr
+        end
+      end
 
       result
     end
@@ -7167,6 +7254,57 @@ module Rubish
     def self.clear_key_bindings
       @key_bindings.clear
       @readline_variables.clear
+    end
+
+    # Apply a readline variable to Reline (if applicable)
+    def self.apply_readline_variable(var, value)
+      @readline_variables[var] = value
+
+      # Sync with Reline where possible
+      begin
+        case var
+        when 'editing-mode'
+          if value == 'vi'
+            Reline.vi_editing_mode if defined?(Reline)
+          else
+            Reline.emacs_editing_mode if defined?(Reline)
+          end
+        when 'completion-ignore-case'
+          if defined?(Reline)
+            Reline.completion_case_fold = (value == 'on')
+          end
+        when 'horizontal-scroll-mode'
+          # Reline doesn't support this, but we store it
+        when 'mark-directories'
+          # Reline doesn't directly support, but completion can check this
+        when 'show-all-if-ambiguous'
+          # Could be implemented in completion_proc
+        when 'bell-style'
+          # Reline doesn't expose bell control
+        end
+      rescue => e
+        $stderr.puts "bind: warning: #{e.message}" if ENV['RUBISH_DEBUG']
+      end
+    end
+
+    # Get a readline variable value
+    def self.get_readline_variable(var)
+      # Check Reline state first for live values
+      begin
+        case var
+        when 'editing-mode'
+          if defined?(Reline)
+            return Reline.vi_editing_mode? ? 'vi' : 'emacs'
+          end
+        when 'completion-ignore-case'
+          if defined?(Reline)
+            return Reline.completion_case_fold ? 'on' : 'off'
+          end
+        end
+      rescue
+        # Fall through to stored value
+      end
+      @readline_variables[var]
     end
 
     def self.run_hash(args)

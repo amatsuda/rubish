@@ -229,4 +229,107 @@ class TestBind < Test::Unit::TestCase
     assert_not_nil Rubish::Builtins.get_key_binding("\C-a")
     assert_not_nil Rubish::Builtins.get_key_binding("\C-e")
   end
+
+  # ==========================================================================
+  # Escape sequence handling tests
+  # ==========================================================================
+
+  def test_unescape_control_chars
+    assert_equal "\C-a", Rubish::Builtins.unescape_keyseq('\\C-a')
+    assert_equal "\C-x", Rubish::Builtins.unescape_keyseq('\\C-x')
+    assert_equal "\C-z", Rubish::Builtins.unescape_keyseq('\\C-z')
+  end
+
+  def test_unescape_caret_control_chars
+    assert_equal "\C-a", Rubish::Builtins.unescape_keyseq('^a')
+    assert_equal "\C-a", Rubish::Builtins.unescape_keyseq('^A')
+    assert_equal "\x7F", Rubish::Builtins.unescape_keyseq('^?')
+  end
+
+  def test_unescape_escape_sequences
+    assert_equal "\e", Rubish::Builtins.unescape_keyseq('\\e')
+    assert_equal "\e", Rubish::Builtins.unescape_keyseq('\\E')
+    assert_equal "\t", Rubish::Builtins.unescape_keyseq('\\t')
+    assert_equal "\n", Rubish::Builtins.unescape_keyseq('\\n')
+    assert_equal "\r", Rubish::Builtins.unescape_keyseq('\\r')
+    assert_equal "\a", Rubish::Builtins.unescape_keyseq('\\a')
+  end
+
+  def test_unescape_octal
+    assert_equal "\001", Rubish::Builtins.unescape_keyseq('\\001')
+    assert_equal 'A', Rubish::Builtins.unescape_keyseq('\\101')
+  end
+
+  def test_unescape_hex
+    assert_equal "\x01", Rubish::Builtins.unescape_keyseq('\\x01')
+    assert_equal 'A', Rubish::Builtins.unescape_keyseq('\\x41')
+  end
+
+  def test_escape_control_chars
+    assert_match(/\\C-/, Rubish::Builtins.escape_keyseq("\C-a"))
+    assert_match(/\\e/, Rubish::Builtins.escape_keyseq("\e"))
+    assert_match(/\\t/, Rubish::Builtins.escape_keyseq("\t"))
+    assert_match(/\\n/, Rubish::Builtins.escape_keyseq("\n"))
+  end
+
+  def test_escape_roundtrip
+    original = "\C-x\C-f"
+    escaped = Rubish::Builtins.escape_keyseq(original)
+    unescaped = Rubish::Builtins.unescape_keyseq(escaped)
+    assert_equal original, unescaped
+  end
+
+  # ==========================================================================
+  # Readline variable tests
+  # ==========================================================================
+
+  def test_bind_set_variable
+    result = Rubish::Builtins.run('bind', ['set editing-mode vi'])
+    assert result
+    assert_equal 'vi', Rubish::Builtins.get_readline_variable('editing-mode')
+  end
+
+  def test_bind_apply_readline_variable
+    Rubish::Builtins.apply_readline_variable('editing-mode', 'vi')
+    assert_equal 'vi', Rubish::Builtins.get_readline_variable('editing-mode')
+  end
+
+  def test_bind_completion_ignore_case
+    Rubish::Builtins.apply_readline_variable('completion-ignore-case', 'on')
+    value = Rubish::Builtins.get_readline_variable('completion-ignore-case')
+    assert_equal 'on', value
+  end
+
+  # ==========================================================================
+  # File reading enhancements
+  # ==========================================================================
+
+  def test_bind_f_skips_conditionals
+    inputrc = File.join(@tempdir, 'inputrc')
+    File.write(inputrc, <<~INPUTRC)
+      $if Rubish
+      "\\C-a": beginning-of-line
+      $endif
+      "\\C-e": end-of-line
+    INPUTRC
+
+    result = Rubish::Builtins.run('bind', ['-f', inputrc])
+    assert result
+
+    # $if lines should be skipped, so only end-of-line should be bound
+    assert_not_nil Rubish::Builtins.get_key_binding("\C-e")
+  end
+
+  def test_bind_f_uses_keymap
+    inputrc = File.join(@tempdir, 'inputrc')
+    File.write(inputrc, <<~INPUTRC)
+      "\\C-a": beginning-of-line
+    INPUTRC
+
+    result = Rubish::Builtins.run('bind', ['-m', 'vi', '-f', inputrc])
+    assert result
+
+    binding = Rubish::Builtins.get_key_binding("\C-a")
+    assert_equal 'vi', binding[:keymap]
+  end
 end
