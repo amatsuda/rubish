@@ -1353,12 +1353,16 @@ module Rubish
           else
             # Indexed array
             elements = parse_array_elements(elements_str)
-            # Special handling for COMPREPLY array
+            # Special handling for COMPREPLY array - update both class variable and array
+            # Note: Use dup to avoid sharing array references between @compreply and @arrays['COMPREPLY']
             if var_name == 'COMPREPLY'
               if is_append
                 Builtins.compreply.concat(elements)
+                # Don't double-append; just sync from compreply
+                Builtins.set_array('COMPREPLY', Builtins.compreply.dup)
               else
-                Builtins.compreply = elements
+                Builtins.compreply = elements.dup
+                Builtins.set_array('COMPREPLY', elements.dup)
               end
             elsif is_append
               Builtins.array_append(var_name, elements)
@@ -1388,9 +1392,15 @@ module Rubish
             # Associative array element
             Builtins.set_assoc_element(var_name, expanded_key, expanded_value)
           elsif var_name == 'COMPREPLY'
-            # Special handling for COMPREPLY array element
+            # Special handling for COMPREPLY array element - update both class variable and array
             idx = expanded_key.to_i
+            # Ensure compreply array is large enough
+            while Builtins.compreply.length <= idx
+              Builtins.compreply << nil
+            end
             Builtins.compreply[idx] = expanded_value
+            # Sync to @arrays['COMPREPLY']
+            Builtins.set_array('COMPREPLY', Builtins.compreply.dup)
           else
             # Indexed array element
             Builtins.set_array_element(var_name, expanded_key, expanded_value)
@@ -5503,8 +5513,11 @@ module Rubish
               call_function(spec[:function], [cmd, input, prev])
             end
 
-            # Get results from COMPREPLY
-            results = Builtins.compreply.dup
+            # Get results from COMPREPLY array (synced from shell array for user-defined functions)
+            # Shell functions modify the COMPREPLY array via set_array, so read from there
+            results = Builtins.get_array('COMPREPLY').dup
+            # Also check the class variable for builtin completion functions
+            results = Builtins.compreply.dup if results.empty? && !Builtins.compreply.empty?
 
             # Apply filter pattern if specified
             if spec[:filterpat] && !results.empty?

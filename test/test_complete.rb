@@ -382,4 +382,175 @@ class TestComplete < Test::Unit::TestCase
     assert_equal 0, Rubish::Builtins.comp_cword
     assert_equal [], Rubish::Builtins.compreply
   end
+
+  # ==========================================================================
+  # Programmable completion - shell variable exposure tests
+  # ==========================================================================
+
+  def test_comp_line_exposed_as_env_var
+    Rubish::Builtins.set_completion_context(
+      line: 'mycmd --option value',
+      point: 20,
+      words: %w[mycmd --option value],
+      cword: 2
+    )
+
+    assert_equal 'mycmd --option value', ENV['COMP_LINE']
+    assert_equal '20', ENV['COMP_POINT']
+    assert_equal '2', ENV['COMP_CWORD']
+    assert_equal '9', ENV['COMP_TYPE']
+    assert_equal '9', ENV['COMP_KEY']
+  end
+
+  def test_comp_words_exposed_as_array
+    Rubish::Builtins.set_completion_context(
+      line: 'mycmd arg1 arg2',
+      point: 15,
+      words: %w[mycmd arg1 arg2],
+      cword: 2
+    )
+
+    words = Rubish::Builtins.get_array('COMP_WORDS')
+    assert_equal %w[mycmd arg1 arg2], words
+  end
+
+  def test_compreply_array_synced_with_class_variable
+    Rubish::Builtins.set_completion_context(
+      line: 'mycmd ',
+      point: 6,
+      words: %w[mycmd],
+      cword: 1
+    )
+
+    # Simulate shell function setting COMPREPLY=(opt1 opt2)
+    Rubish::Builtins.set_array('COMPREPLY', %w[opt1 opt2])
+    Rubish::Builtins.compreply = %w[opt1 opt2]
+
+    # Both should have the same values
+    assert_equal %w[opt1 opt2], Rubish::Builtins.get_array('COMPREPLY')
+    assert_equal %w[opt1 opt2], Rubish::Builtins.compreply
+  end
+
+  def test_clear_context_removes_env_vars
+    Rubish::Builtins.set_completion_context(
+      line: 'testcmd',
+      point: 7,
+      words: ['testcmd'],
+      cword: 0
+    )
+
+    assert_not_nil ENV['COMP_LINE']
+    assert_not_nil ENV['COMP_CWORD']
+
+    Rubish::Builtins.clear_completion_context
+
+    assert_nil ENV['COMP_LINE']
+    assert_nil ENV['COMP_CWORD']
+    assert_nil ENV['COMP_POINT']
+    assert_nil ENV['COMP_TYPE']
+    assert_nil ENV['COMP_KEY']
+    assert_equal [], Rubish::Builtins.get_array('COMP_WORDS')
+    assert_equal [], Rubish::Builtins.get_array('COMPREPLY')
+  end
+
+  def test_function_uses_comp_line
+    execute('_linetest() { echo "$COMP_LINE" > ' + output_file + '; COMPREPLY=(); }')
+    execute('complete -F _linetest testcmd')
+
+    Rubish::Builtins.set_completion_context(
+      line: 'testcmd --option value',
+      point: 22,
+      words: %w[testcmd --option value],
+      cword: 2
+    )
+
+    @repl.send(:call_function, '_linetest', %w[testcmd value --option])
+
+    assert_equal "testcmd --option value\n", File.read(output_file)
+  end
+
+  def test_function_uses_comp_point
+    execute('_pointtest() { echo "$COMP_POINT" > ' + output_file + '; COMPREPLY=(); }')
+    execute('complete -F _pointtest testcmd')
+
+    Rubish::Builtins.set_completion_context(
+      line: 'testcmd arg',
+      point: 11,
+      words: %w[testcmd arg],
+      cword: 1
+    )
+
+    @repl.send(:call_function, '_pointtest', %w[testcmd arg testcmd])
+
+    assert_equal "11\n", File.read(output_file)
+  end
+
+  def test_function_modifies_compreply_array
+    execute('_modifytest() { COMPREPLY=(result1 result2 result3); }')
+    execute('complete -F _modifytest testcmd')
+
+    Rubish::Builtins.set_completion_context(
+      line: 'testcmd ',
+      point: 8,
+      words: %w[testcmd],
+      cword: 1
+    )
+
+    @repl.send(:call_function, '_modifytest', %w[testcmd '' testcmd])
+
+    # Both the class variable and array should have the results
+    assert_equal %w[result1 result2 result3], Rubish::Builtins.compreply
+    assert_equal %w[result1 result2 result3], Rubish::Builtins.get_array('COMPREPLY')
+  end
+
+  def test_function_appends_to_compreply
+    execute('_appendtest() { COMPREPLY=(initial); COMPREPLY+=(added1 added2); }')
+    execute('complete -F _appendtest testcmd')
+
+    Rubish::Builtins.set_completion_context(
+      line: 'testcmd ',
+      point: 8,
+      words: %w[testcmd],
+      cword: 1
+    )
+
+    @repl.send(:call_function, '_appendtest', %w[testcmd '' testcmd])
+
+    assert_equal %w[initial added1 added2], Rubish::Builtins.compreply
+    assert_equal %w[initial added1 added2], Rubish::Builtins.get_array('COMPREPLY')
+  end
+
+  def test_function_sets_compreply_element
+    execute('_elementtest() { COMPREPLY=(); COMPREPLY[0]=first; COMPREPLY[1]=second; }')
+    execute('complete -F _elementtest testcmd')
+
+    Rubish::Builtins.set_completion_context(
+      line: 'testcmd ',
+      point: 8,
+      words: %w[testcmd],
+      cword: 1
+    )
+
+    @repl.send(:call_function, '_elementtest', %w[testcmd '' testcmd])
+
+    assert_equal %w[first second], Rubish::Builtins.compreply
+    assert_equal %w[first second], Rubish::Builtins.get_array('COMPREPLY')
+  end
+
+  def test_function_iterates_comp_words
+    # Use a simpler version without local to test array length
+    execute('_itertest() { echo "${#COMP_WORDS[@]}" > ' + output_file + '; COMPREPLY=(); }')
+    execute('complete -F _itertest testcmd')
+
+    Rubish::Builtins.set_completion_context(
+      line: 'testcmd one two three',
+      point: 21,
+      words: %w[testcmd one two three],
+      cword: 3
+    )
+
+    @repl.send(:call_function, '_itertest', %w[testcmd three two])
+
+    assert_equal "4\n", File.read(output_file)
+  end
 end

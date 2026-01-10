@@ -279,6 +279,7 @@ module Rubish
     end
 
     def self.set_completion_context(line:, point:, words:, cword:, type: 9, key: 9)
+      # Set internal class variables
       @comp_line = line
       @comp_point = point
       @comp_words = words
@@ -286,9 +287,24 @@ module Rubish
       @comp_type = type
       @comp_key = key
       @compreply = []
+
+      # Expose as shell-accessible variables for programmable completion
+      # COMP_WORDS - array accessible as ${COMP_WORDS[0]}, ${COMP_WORDS[@]}, etc.
+      set_array('COMP_WORDS', words)
+
+      # COMP_CWORD, COMP_LINE, COMP_POINT, COMP_TYPE, COMP_KEY - scalars
+      ENV['COMP_CWORD'] = cword.to_s
+      ENV['COMP_LINE'] = line
+      ENV['COMP_POINT'] = point.to_s
+      ENV['COMP_TYPE'] = type.to_s
+      ENV['COMP_KEY'] = key.to_s
+
+      # COMPREPLY - array that completion functions populate
+      set_array('COMPREPLY', [])
     end
 
     def self.clear_completion_context
+      # Clear internal class variables
       @comp_words = []
       @comp_cword = 0
       @comp_line = ''
@@ -296,6 +312,15 @@ module Rubish
       @comp_type = 0
       @comp_key = 0
       @compreply = []
+
+      # Clear shell-accessible variables
+      unset_array('COMP_WORDS')
+      unset_array('COMPREPLY')
+      ENV.delete('COMP_CWORD')
+      ENV.delete('COMP_LINE')
+      ENV.delete('COMP_POINT')
+      ENV.delete('COMP_TYPE')
+      ENV.delete('COMP_KEY')
     end
 
     # TMOUT - timeout for read builtin (in seconds)
