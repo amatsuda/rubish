@@ -27,6 +27,17 @@ class TestSetOptions < Test::Unit::TestCase
     Rubish::Builtins.set_options['emacs'] = true
   end
 
+  # Check if filesystem is case-sensitive (nocaseglob tests require case-insensitive fs)
+  def case_sensitive_filesystem?
+    return @case_sensitive_fs if defined?(@case_sensitive_fs)
+
+    test_file = File.join(@tempdir, 'CaSeTeSt')
+    File.write(test_file, '')
+    @case_sensitive_fs = !File.exist?(File.join(@tempdir, 'casetest'))
+    File.delete(test_file)
+    @case_sensitive_fs
+  end
+
   def output_file
     File.join(@tempdir, 'output.txt')
   end
@@ -1494,6 +1505,8 @@ class TestSetOptions < Test::Unit::TestCase
   end
 
   def test_nocaseglob_matches_pattern_case_insensitive
+    omit 'nocaseglob requires case-insensitive filesystem' if case_sensitive_filesystem?
+
     # Create a file with specific case
     File.write(File.join(@tempdir, 'MyFile.txt'), 'content')
 
@@ -1522,6 +1535,8 @@ class TestSetOptions < Test::Unit::TestCase
   end
 
   def test_nocaseglob_matches_with_wildcard
+    omit 'nocaseglob requires case-insensitive filesystem' if case_sensitive_filesystem?
+
     # Create files
     File.write(File.join(@tempdir, 'alpha.TXT'), 'a')
     File.write(File.join(@tempdir, 'beta.md'), 'b')
@@ -1537,6 +1552,8 @@ class TestSetOptions < Test::Unit::TestCase
   end
 
   def test_nocaseglob_wildcard_case_insensitive
+    omit 'nocaseglob requires case-insensitive filesystem' if case_sensitive_filesystem?
+
     # Create a file with mixed case extension
     File.write(File.join(@tempdir, 'document.PDF'), 'content')
 
@@ -1551,6 +1568,8 @@ class TestSetOptions < Test::Unit::TestCase
   end
 
   def test_nocaseglob_combined_with_dotglob
+    omit 'nocaseglob requires case-insensitive filesystem' if case_sensitive_filesystem?
+
     # Create a hidden file with specific case
     File.write(File.join(@tempdir, '.HiddenConfig'), 'content')
 
