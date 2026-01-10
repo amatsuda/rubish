@@ -19,6 +19,7 @@ no_profile = false
 no_rc = false
 force_interactive = false
 rcfile = nil  # Custom RC file (--rcfile, --init-file)
+read_stdin = false  # -s: read commands from stdin
 
 i = 0
 while i < ARGV.length
@@ -41,6 +42,10 @@ while i < ARGV.length
   when '-i'
     # Force interactive mode
     force_interactive = true
+    i += 1
+  when '-s'
+    # Read commands from stdin (remaining args become positional parameters after parsing)
+    read_stdin = true
     i += 1
   when '--noprofile'
     # Don't read profile files (for login shells)
@@ -68,9 +73,14 @@ while i < ARGV.length
     # Unknown option - skip for now
     i += 1
   else
-    # Script file
-    script_file = ARGV[i]
-    script_args = ARGV[i + 1..] || []
+    if read_stdin
+      # With -s, remaining args are positional parameters
+      script_args = ARGV[i..] || []
+    else
+      # Script file
+      script_file = ARGV[i]
+      script_args = ARGV[i + 1..] || []
+    end
     break
   end
 end
@@ -121,6 +131,34 @@ if command_string
 
   repl.send(:execute, command_string)
   # Get last exit status from repl
+  last_status = repl.instance_variable_get(:@last_status) || 0
+  exit(last_status)
+elsif read_stdin
+  # -s mode: read commands from stdin, args are positional parameters
+  repl = Rubish::REPL.new(no_rc: no_rc, rcfile: rcfile)
+  repl.script_name = script_args[0] || 'rubish'
+  repl.positional_params = script_args
+
+  # Enable interactive mode if -i was specified
+  Rubish::Builtins.enable_interactive_mode if force_interactive
+
+  # Source startup files based on mode
+  if force_interactive && !no_rc
+    repl.send(:load_interactive_config)
+  else
+    source_rubish_env(repl)
+  end
+
+  # Enable restricted mode AFTER sourcing startup files
+  Rubish::Builtins.enable_restricted_mode if restricted
+
+  # Read and execute commands from stdin
+  $stdin.each_line(chomp: true) do |line|
+    next if line.strip.empty? || line.strip.start_with?('#')
+
+    repl.send(:execute, line)
+  end
+
   last_status = repl.instance_variable_get(:@last_status) || 0
   exit(last_status)
 elsif script_file && !force_interactive
