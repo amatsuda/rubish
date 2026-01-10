@@ -4939,7 +4939,7 @@ module Rubish
     def self.format_completion_spec(name, spec)
       parts = ['complete']
 
-      spec[:actions].each do |action|
+      (spec[:actions] || []).each do |action|
         case action
         when :alias then parts << '-a'
         when :builtin then parts << '-b'
@@ -4958,7 +4958,7 @@ module Rubish
         end
       end
 
-      spec[:options].each { |o| parts << "-o #{o}" }
+      (spec[:options] || []).each { |o| parts << "-o #{o}" }
       parts << "-G #{spec[:globpat]}" if spec[:globpat]
       parts << "-W '#{spec[:wordlist]}'" if spec[:wordlist]
       parts << "-F #{spec[:function]}" if spec[:function]

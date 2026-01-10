@@ -91,6 +91,17 @@ class TestComplete < Test::Unit::TestCase
     assert_match(/complete -d cmd2/, output)
   end
 
+  # Test complete -p works with default completions (specs without all keys)
+  def test_complete_p_with_default_completions
+    # Setup default completions (which have specs without :options key)
+    Rubish::Builtins.setup_default_completions
+
+    output = capture_output { Rubish::Builtins.run('complete', ['-p']) }
+    assert_match(/complete -F _git git/, output)
+    assert_match(/complete -F _ssh ssh/, output)
+    assert_match(/complete -F _cd cd/, output)
+  end
+
   # Test complete -p with specific command
   def test_complete_p_specific
     Rubish::Builtins.run('complete', ['-f', 'mycommand'])
