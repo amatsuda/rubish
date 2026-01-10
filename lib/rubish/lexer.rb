@@ -451,7 +451,10 @@ module Rubish
         # Exception: ${VAR} is a shell variable, not a Ruby block
         break if char == '[' && @pos == start && !looks_like_glob_bracket?
 
-        if char == '"'
+        if char == '\\'
+          # Backslash escape - skip the next character
+          @pos += 2
+        elsif char == '"'
           read_double_quoted_string
         elsif char == "'"
           read_single_quoted_string

@@ -2035,6 +2035,8 @@ module Rubish
       # Returns [expanded_line, was_expanded, failed]
       # If histexpand (set -H) is disabled, don't expand history
       return [line, false, false] unless Builtins.set_option?('H')
+      # Don't expand history in sourced files (bash behavior)
+      return [line, false, false] if Builtins.sourcing_file
       return [line, false, false] unless line.include?('!') || line.start_with?('^')
 
       history = Reline::HISTORY.to_a

@@ -58,6 +58,7 @@ module Rubish
       attr_accessor :bash_argv0_unsetter
       attr_accessor :readline_line_getter, :readline_line_setter, :readline_point_getter, :readline_point_setter, :readline_mark_getter, :readline_mark_setter
       attr_accessor :exit_blocked_by_jobs
+      attr_accessor :sourcing_file  # True when sourcing a file (disables history expansion)
     end
 
     # Format error message based on gnu_errfmt setting
@@ -2681,9 +2682,14 @@ module Rubish
       source_file_value = shopt_enabled?('bash_source_fullpath') ? file : original_file
       @source_file_setter&.call(source_file_value)
 
+      # Disable history expansion while sourcing (bash behavior)
+      old_sourcing = @sourcing_file
+      @sourcing_file = true
+
       return_code = catch(:return) do
         buffer = +''
         depth = 0
+        pending_function_def = false  # Track if we're waiting for { after ()
         lines = File.readlines(file, chomp: true)
         i = 0
 
@@ -2713,6 +2719,9 @@ module Rubish
             @heredoc_content_setter&.call(content)
           end
 
+          # Remember if we're waiting for function body BEFORE processing this line
+          was_pending_function = pending_function_def
+
           # Track control structure depth
           words = line.split(/\s+/)
           words.each do |word|
@@ -2722,27 +2731,47 @@ module Rubish
             when 'fi', 'done', 'esac'
               depth -= 1
             when '{'
-              depth += 1
+              # If pending function def, don't double-count the depth
+              if pending_function_def
+                pending_function_def = false
+              else
+                depth += 1
+              end
             when '}'
-              depth -= 1
-            when '('
-              # Standalone ( is a subshell
-              depth += 1
-            when ')'
-              # Standalone ) closes a subshell
               depth -= 1
             end
           end
 
-          # Accumulate lines
+          # Track subshell depth separately (only standalone ( at start of word)
+          # This handles: ( cmd ) but not: arr=( ... ) or $( ... )
+          if line =~ /\A\s*\(/
+            depth += 1
+          end
+          # Check if line is just ) or ends with ) not preceded by ( on same line
+          if line =~ /\A\s*\)\s*\z/
+            depth -= 1
+          end
+
+          # Detect function definition: line ends with () or "function name"
+          # These need { on next line, so set flag and increment depth
+          if line =~ /\(\)\s*$/ || (line =~ /\Afunction\s+\w+\s*$/)
+            pending_function_def = true
+            depth += 1
+          end
+
+          # Accumulate lines - use newline for function definitions, semicolon otherwise
           if buffer.empty?
             buffer = line
+          elsif was_pending_function
+            # Function definitions need newline between () and {
+            buffer = "#{buffer}\n#{line}"
           else
+            # Other statements can be joined with semicolon
             buffer = "#{buffer}; #{line}"
           end
 
           # Execute when we have a complete statement
-          if depth == 0
+          if depth == 0 && !pending_function_def
             begin
               @executor.call(buffer)
             rescue => e
@@ -2764,10 +2793,11 @@ module Rubish
         nil
       end
 
-      # Restore script name, positional params, and source file
+      # Restore script name, positional params, source file, and sourcing flag
       @script_name_setter&.call(old_script_name) if old_script_name
       @positional_params_setter&.call(old_positional_params) if old_positional_params
       @source_file_setter&.call(old_source_file) if old_source_file
+      @sourcing_file = old_sourcing
 
       return_code.nil? || return_code == 0
     end
