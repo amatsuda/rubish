@@ -205,7 +205,9 @@ class TestParamTransform < Test::Unit::TestCase
     ENV['TEST'] = '\u'
     execute("echo ${TEST@P} > #{output_file}")
     # The result should be the current username
-    assert_equal "#{Etc.getlogin}\n", File.read(output_file)
+    # Matches rubish behavior: ENV['USER'] || Etc.getlogin || 'user'
+    expected_user = ENV['USER'] || Etc.getlogin || 'user'
+    assert_equal "#{expected_user}\n", File.read(output_file)
   end
 
   def test_transform_p_hostname
