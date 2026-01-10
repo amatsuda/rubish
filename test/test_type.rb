@@ -134,6 +134,10 @@ class TestType < Test::Unit::TestCase
 
   # Test via REPL
   def test_type_via_repl
+    # Skip on Linux where type doesn't exist as external command
+    # (rubish forks for redirections, and type builtin isn't available in subprocess)
+    omit 'type with redirection requires external type command' unless File.exist?('/usr/bin/type')
+
     file = File.join(@tempdir, 'output.txt')
     execute("type cd > #{file}")
     assert_match(/cd is a shell builtin/, File.read(file))
