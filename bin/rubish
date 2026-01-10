@@ -69,9 +69,16 @@ while i < ARGV.length
     script_file = ARGV[i]
     script_args = ARGV[i + 1..] if ARGV[i + 1]
     break
-  when /\A-/
-    # Unknown option - skip for now
-    i += 1
+  when /\A--(.+)/
+    # Unknown long option
+    $stderr.puts "rubish: --#{$1}: invalid option"
+    exit 2
+  when /\A-(.+)/
+    # Unknown short option(s) - could be combined like -xyz
+    $1.each_char do |c|
+      $stderr.puts "rubish: -#{c}: invalid option"
+    end
+    exit 2
   else
     if read_stdin
       # With -s, remaining args are positional parameters
