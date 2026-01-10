@@ -2,7 +2,7 @@
 
 module Rubish
   module Builtins
-    COMMANDS = %w(cd exit logout jobs fg bg export pwd history alias unalias source . shift set return read echo test [ break continue pushd popd dirs trap getopts local unset readonly declare typeset let printf type which true false : eval command builtin wait kill umask exec times hash disown ulimit suspend shopt enable caller complete compgen compopt bind help fc mapfile readarray basename dirname realpath).freeze
+    COMMANDS = %w(cd exit logout jobs fg bg export pwd history alias unalias source . shift set return read echo test [ break continue pushd popd dirs trap getopts local unset readonly declare typeset let printf type which true false : eval command builtin wait kill umask exec times hash disown ulimit suspend shopt enable caller complete compgen compopt bind help fc mapfile readarray basename dirname realpath _get_comp_words_by_ref _init_completion _filedir _have _split_longopt __ltrim_colon_completions _variables _tilde _quote_readline_by_ref _parse_help _upvars _usergroup).freeze
 
     @aliases = {}
     @dir_stack = []
@@ -696,6 +696,31 @@ module Rubish
         run_dirname(args)
       when 'realpath'
         run_realpath(args)
+      # Bash-completion helper functions
+      when '_get_comp_words_by_ref'
+        run__get_comp_words_by_ref(args)
+      when '_init_completion'
+        run__init_completion(args)
+      when '_filedir'
+        run__filedir(args)
+      when '_have'
+        run__have(args)
+      when '_split_longopt'
+        run__split_longopt(args)
+      when '__ltrim_colon_completions'
+        run____ltrim_colon_completions(args)
+      when '_variables'
+        run__variables(args)
+      when '_tilde'
+        run__tilde(args)
+      when '_quote_readline_by_ref'
+        run__quote_readline_by_ref(args)
+      when '_parse_help'
+        run__parse_help(args)
+      when '_upvars'
+        run__upvars(args)
+      when '_usergroup'
+        run__usergroup(args)
       else
         # Check for dynamically loaded builtins
         if @loaded_builtins.key?(name)
@@ -5309,6 +5334,484 @@ module Rubish
       vi-cmd-mode-string vi-ins-mode-string visible-stats
     ].freeze
 
+    # =========================================================================
+    # Bash-completion helper functions
+    # These implement the standard bash-completion helper functions for
+    # compatibility with bash-completion scripts.
+    # =========================================================================
+
+    # _get_comp_words_by_ref - Get completion words with special word-break handling
+    # Options:
+    #   -n EXCLUDE  - Characters to exclude from COMP_WORDBREAKS
+    #   -c VAR      - Store current word in VAR (default: cur)
+    #   -p VAR      - Store previous word in VAR (default: prev)
+    #   -w VAR      - Store words array in VAR (default: words)
+    #   -i VAR      - Store cword index in VAR (default: cword)
+    def self.run__get_comp_words_by_ref(args)
+      exclude_chars = ''
+      cur_var = 'cur'
+      prev_var = 'prev'
+      words_var = 'words'
+      cword_var = 'cword'
+
+      i = 0
+      while i < args.length
+        case args[i]
+        when '-n'
+          i += 1
+          exclude_chars = args[i] || ''
+        when '-c'
+          i += 1
+          cur_var = args[i] if args[i]
+        when '-p'
+          i += 1
+          prev_var = args[i] if args[i]
+        when '-w'
+          i += 1
+          words_var = args[i] if args[i]
+        when '-i'
+          i += 1
+          cword_var = args[i] if args[i]
+        when 'cur'
+          # Legacy positional argument
+        when 'prev'
+          # Legacy positional argument
+        when 'words'
+          # Legacy positional argument
+        when 'cword'
+          # Legacy positional argument
+        end
+        i += 1
+      end
+
+      # Get base completion context
+      words = @comp_words.dup
+      cword = @comp_cword
+      line = @comp_line
+      point = @comp_point
+
+      # If excluding characters from wordbreaks, re-split the line
+      unless exclude_chars.empty?
+        wordbreaks = comp_wordbreaks.chars.reject { |c| exclude_chars.include?(c) }.join
+        words, cword = resplit_comp_words(line, point, wordbreaks)
+      end
+
+      cur = words[cword] || ''
+      prev = cword > 0 ? (words[cword - 1] || '') : ''
+
+      # Set variables via the local scope or environment
+      ENV[cur_var] = cur
+      ENV[prev_var] = prev
+      set_array(words_var, words)
+      ENV[cword_var] = cword.to_s
+
+      true
+    end
+
+    # Helper to re-split completion words with different wordbreaks
+    def self.resplit_comp_words(line, point, wordbreaks)
+      words = []
+      current = +''
+      in_quote = nil
+      pos = 0
+
+      line.each_char.with_index do |c, idx|
+        if in_quote
+          current << c
+          in_quote = nil if c == in_quote
+        elsif c == '"' || c == "'"
+          current << c
+          in_quote = c
+        elsif c == '\\'
+          current << c
+          # Skip next char
+        elsif wordbreaks.include?(c)
+          words << current unless current.empty?
+          current = +''
+        else
+          current << c
+        end
+      end
+      words << current unless current.empty?
+
+      # Calculate cword based on point
+      cword = 0
+      char_pos = 0
+      words.each_with_index do |word, idx|
+        word_start = line.index(word, char_pos)
+        break unless word_start
+        word_end = word_start + word.length
+        if point >= word_start && point <= word_end
+          cword = idx
+          break
+        end
+        char_pos = word_end
+        cword = idx + 1
+      end
+
+      [words, [cword, words.length - 1].min]
+    end
+
+    # _init_completion - Initialize completion with common setup
+    # Options:
+    #   -n EXCLUDE  - Characters to exclude from COMP_WORDBREAKS
+    #   -s          - Split on = for --option=value
+    def self.run__init_completion(args)
+      exclude_chars = ''
+      split_on_equals = false
+
+      i = 0
+      while i < args.length
+        case args[i]
+        when '-n'
+          i += 1
+          exclude_chars = args[i] || ''
+        when '-s'
+          split_on_equals = true
+        end
+        i += 1
+      end
+
+      # Call _get_comp_words_by_ref with the exclude chars
+      ref_args = []
+      ref_args += ['-n', exclude_chars] unless exclude_chars.empty?
+      run__get_comp_words_by_ref(ref_args)
+
+      # Handle --option=value splitting if requested
+      if split_on_equals
+        cur = ENV['cur'] || ''
+        if cur.include?('=')
+          # Split on first =
+          parts = cur.split('=', 2)
+          ENV['cur'] = parts[1] || ''
+          ENV['prev'] = parts[0]
+        end
+      end
+
+      # Set COMPREPLY to empty
+      @compreply = []
+
+      true
+    end
+
+    # _filedir - Complete filenames, optionally filtering by extension/type
+    # Arguments: [extension_pattern]
+    # Options:
+    #   -d  - Only directories
+    def self.run__filedir(args)
+      dirs_only = false
+      pattern = nil
+
+      args.each do |arg|
+        if arg == '-d'
+          dirs_only = true
+        elsif !arg.start_with?('-')
+          pattern = arg
+        end
+      end
+
+      cur = ENV['cur'] || ''
+
+      # Expand tilde
+      expanded_cur = cur.start_with?('~') ? File.expand_path(cur) : cur
+
+      # Get directory and prefix
+      if cur.include?('/')
+        dir = File.dirname(expanded_cur)
+        prefix = File.basename(expanded_cur)
+      else
+        dir = '.'
+        prefix = expanded_cur
+      end
+
+      results = []
+
+      begin
+        Dir.entries(dir).each do |entry|
+          next if entry == '.' || entry == '..'
+          next unless entry.start_with?(prefix) || prefix.empty?
+
+          full_path = File.join(dir, entry)
+
+          if dirs_only
+            next unless File.directory?(full_path)
+          end
+
+          if pattern && !File.directory?(full_path)
+            # Check if file matches the pattern
+            next unless File.fnmatch(pattern, entry, File::FNM_EXTGLOB)
+          end
+
+          # Build the completion string
+          if cur.include?('/')
+            result = File.join(File.dirname(cur), entry)
+          else
+            result = entry
+          end
+
+          # Add trailing slash for directories
+          result += '/' if File.directory?(full_path)
+
+          results << result
+        end
+      rescue Errno::ENOENT, Errno::EACCES
+        # Directory doesn't exist or can't be accessed
+      end
+
+      # Add to COMPREPLY
+      @compreply = (@compreply || []) + results.sort
+      true
+    end
+
+    # _have - Check if a command exists in PATH
+    def self.run__have(args)
+      return false if args.empty?
+
+      cmd = args[0]
+
+      # Check builtins
+      return true if builtin?(cmd)
+
+      # Check PATH
+      path_dirs = (ENV['PATH'] || '').split(':')
+      path_dirs.any? do |dir|
+        path = File.join(dir, cmd)
+        File.executable?(path) && !File.directory?(path)
+      end
+    end
+
+    # _split_longopt - Handle --option=value completion
+    # Sets prev to option, cur to value after =
+    def self.run__split_longopt(args)
+      cur = ENV['cur'] || ''
+
+      return false unless cur.include?('=')
+
+      parts = cur.split('=', 2)
+      ENV['prev'] = parts[0]
+      ENV['cur'] = parts[1] || ''
+
+      # Store for later restoration
+      ENV['__SPLIT_LONGOPT_PREV'] = parts[0]
+      ENV['__SPLIT_LONGOPT'] = 'set'
+
+      true
+    end
+
+    # __ltrim_colon_completions - Remove colon prefix from completions
+    # Handles the case where cur contains colons (e.g., package:version)
+    def self.run____ltrim_colon_completions(args)
+      cur = args[0] || ENV['cur'] || ''
+
+      return true unless cur.include?(':')
+
+      # Find where the colon is and trim completions to match
+      colon_pos = cur.rindex(':')
+      return true unless colon_pos
+
+      prefix = cur[0..colon_pos]
+
+      # Trim prefix from all completions
+      @compreply = (@compreply || []).map do |comp|
+        if comp.start_with?(prefix)
+          comp[prefix.length..]
+        else
+          comp
+        end
+      end
+
+      true
+    end
+
+    # _variables - Complete variable names
+    def self.run__variables(args)
+      cur = ENV['cur'] || ''
+
+      # Remove leading $ if present
+      prefix = cur.start_with?('$') ? cur[1..] : cur
+
+      results = []
+
+      # Environment variables
+      ENV.keys.each do |key|
+        results << "$#{key}" if key.start_with?(prefix)
+      end
+
+      # Shell arrays
+      @arrays.keys.each do |key|
+        results << "$#{key}" if key.start_with?(prefix)
+      end
+
+      @compreply = (@compreply || []) + results.sort
+      true
+    end
+
+    # _tilde - Complete tilde expressions (~username)
+    def self.run__tilde(args)
+      cur = ENV['cur'] || ''
+
+      return true unless cur.start_with?('~')
+
+      prefix = cur[1..] || ''
+      results = []
+
+      # Get usernames from /etc/passwd or similar
+      begin
+        if File.exist?('/etc/passwd')
+          File.readlines('/etc/passwd').each do |line|
+            username = line.split(':').first
+            next unless username
+            results << "~#{username}/" if username.start_with?(prefix)
+          end
+        end
+      rescue Errno::EACCES
+        # Can't read passwd file
+      end
+
+      # Also try using getent if available
+      begin
+        `getent passwd 2>/dev/null`.each_line do |line|
+          username = line.split(':').first
+          next unless username
+          results << "~#{username}/" if username.start_with?(prefix)
+        end
+      rescue
+        # getent not available
+      end
+
+      @compreply = (@compreply || []) + results.sort.uniq
+      true
+    end
+
+    # _quote_readline_by_ref - Quote a string for readline
+    # Sets the named variable to the quoted string
+    def self.run__quote_readline_by_ref(args)
+      return false if args.length < 2
+
+      varname = args[0]
+      value = args[1]
+
+      # Quote special characters for readline
+      quoted = value.gsub(/([\\'"$`\s])/, '\\\\\1')
+
+      ENV[varname] = quoted
+      true
+    end
+
+    # _parse_help - Parse --help output to extract options
+    # Usage: _parse_help command [option]
+    def self.run__parse_help(args)
+      return false if args.empty?
+
+      cmd = args[0]
+      help_opt = args[1] || '--help'
+
+      results = []
+
+      begin
+        # Run command with help option and capture output
+        output = `#{cmd} #{help_opt} 2>&1`
+
+        # Parse options from the output
+        output.each_line do |line|
+          # Match patterns like:
+          #   -o, --option
+          #   --option
+          #   -o
+          line.scan(/(?:^|\s)(-{1,2}[a-zA-Z0-9][-a-zA-Z0-9_]*)/) do |match|
+            opt = match[0]
+            results << opt unless results.include?(opt)
+          end
+        end
+      rescue
+        # Command failed
+      end
+
+      # Filter by current word if set
+      cur = ENV['cur'] || ''
+      unless cur.empty?
+        results = results.select { |opt| opt.start_with?(cur) }
+      end
+
+      @compreply = (@compreply || []) + results.sort
+      true
+    end
+
+    # _upvars - Set variables in caller's scope (simplified implementation)
+    # Usage: _upvars [-v varname value]... [-a arrayname values...]...
+    def self.run__upvars(args)
+      i = 0
+      while i < args.length
+        case args[i]
+        when '-v'
+          # Set scalar variable
+          varname = args[i + 1]
+          value = args[i + 2]
+          if varname && value
+            ENV[varname] = value
+          end
+          i += 3
+        when '-a'
+          # Set array variable: -a N arrayname values...
+          count = (args[i + 1] || '0').to_i
+          arrayname = args[i + 2]
+          if arrayname && count > 0
+            values = args[(i + 3)...(i + 3 + count)]
+            set_array(arrayname, values)
+          end
+          i += 3 + count
+        else
+          i += 1
+        end
+      end
+      true
+    end
+
+    # _usergroup - Complete usernames or user:group combinations
+    # Options:
+    #   -u  - Complete usernames only
+    #   -g  - Complete groups only
+    def self.run__usergroup(args)
+      users_only = args.include?('-u')
+      groups_only = args.include?('-g')
+
+      cur = ENV['cur'] || ''
+      results = []
+
+      # Check if we're completing group part (after :)
+      if cur.include?(':') && !users_only
+        prefix = cur.split(':').last || ''
+        user_part = cur.split(':').first
+
+        # Complete groups
+        begin
+          if File.exist?('/etc/group')
+            File.readlines('/etc/group').each do |line|
+              group = line.split(':').first
+              next unless group
+              results << "#{user_part}:#{group}" if group.start_with?(prefix)
+            end
+          end
+        rescue Errno::EACCES
+        end
+      elsif !groups_only
+        # Complete users
+        begin
+          if File.exist?('/etc/passwd')
+            File.readlines('/etc/passwd').each do |line|
+              username = line.split(':').first
+              next unless username
+              results << username if username.start_with?(cur)
+            end
+          end
+        rescue Errno::EACCES
+        end
+      end
+
+      @compreply = (@compreply || []) + results.sort.uniq
+      true
+    end
+
     def self.run_bind(args)
       # bind [-m keymap] [-lpsvPSVX]
       # bind [-m keymap] [-q function] [-u function] [-r keyseq]
@@ -7524,6 +8027,81 @@ module Rubish
           '-q, --quiet' => 'suppress most error messages',
           '-s, --strip, --no-symlinks' => 'don\'t expand symlinks',
           '-z, --zero' => 'end each output line with NUL, not newline'
+        }
+      },
+      # Bash-completion helper functions
+      '_get_comp_words_by_ref' => {
+        synopsis: '_get_comp_words_by_ref [-n EXCLUDE] [-c VAR] [-p VAR] [-w VAR] [-i VAR] [cur] [prev] [words] [cword]',
+        description: 'Get completion words from COMP_WORDS with optional word-break exclusion. Sets cur, prev, words array, and cword index variables.',
+        options: {
+          '-n EXCLUDE' => 'characters to exclude from COMP_WORDBREAKS',
+          '-c VAR' => 'store current word in VAR (default: cur)',
+          '-p VAR' => 'store previous word in VAR (default: prev)',
+          '-w VAR' => 'store words array in VAR (default: words)',
+          '-i VAR' => 'store cword index in VAR (default: cword)'
+        }
+      },
+      '_init_completion' => {
+        synopsis: '_init_completion [-n EXCLUDE] [-s]',
+        description: 'Initialize completion with common setup. Calls _get_comp_words_by_ref and optionally splits --option=value.',
+        options: {
+          '-n EXCLUDE' => 'characters to exclude from COMP_WORDBREAKS',
+          '-s' => 'split on = for --option=value (sets prev to option, cur to value)'
+        }
+      },
+      '_filedir' => {
+        synopsis: '_filedir [-d] [PATTERN]',
+        description: 'Complete filenames and directories. Adds matching files/directories to COMPREPLY.',
+        options: {
+          '-d' => 'only complete directories',
+          'PATTERN' => 'glob pattern to filter files (directories always included)'
+        }
+      },
+      '_have' => {
+        synopsis: '_have COMMAND',
+        description: 'Check if a command exists in PATH or is a builtin. Returns true if found, false otherwise.'
+      },
+      '_split_longopt' => {
+        synopsis: '_split_longopt',
+        description: 'Handle --option=value completion. If cur contains =, splits it: sets prev to option part, cur to value part.'
+      },
+      '__ltrim_colon_completions' => {
+        synopsis: '__ltrim_colon_completions CUR',
+        description: 'Remove colon prefix from COMPREPLY entries. Used when cur contains colons (e.g., package:version).'
+      },
+      '_variables' => {
+        synopsis: '_variables',
+        description: 'Complete shell variable names. Adds $VAR entries matching cur to COMPREPLY.'
+      },
+      '_tilde' => {
+        synopsis: '_tilde',
+        description: 'Complete tilde expressions (~username). Only operates when cur starts with ~.'
+      },
+      '_quote_readline_by_ref' => {
+        synopsis: '_quote_readline_by_ref VARNAME VALUE',
+        description: 'Quote special characters in VALUE for readline and store in VARNAME.'
+      },
+      '_parse_help' => {
+        synopsis: '_parse_help COMMAND [HELP_OPTION]',
+        description: 'Parse command --help output to extract options. Adds matching options to COMPREPLY.',
+        options: {
+          'HELP_OPTION' => 'option to get help (default: --help)'
+        }
+      },
+      '_upvars' => {
+        synopsis: '_upvars [-v VAR VALUE]... [-a N ARRAY VALUES...]...',
+        description: 'Set variables in caller\'s scope.',
+        options: {
+          '-v VAR VALUE' => 'set scalar variable VAR to VALUE',
+          '-a N ARRAY VALUES' => 'set array variable ARRAY to N VALUES'
+        }
+      },
+      '_usergroup' => {
+        synopsis: '_usergroup [-u] [-g]',
+        description: 'Complete usernames or user:group combinations.',
+        options: {
+          '-u' => 'complete usernames only',
+          '-g' => 'complete groups only'
         }
       }
     }.freeze
