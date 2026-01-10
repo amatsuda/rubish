@@ -381,7 +381,39 @@ module Rubish
     end
 
     def generate_pipeline(node)
-      node.commands.map { |c| generate(c) }.join(' | ')
+      node.commands.map { |c| generate_pipeline_element(c) }.join(' | ')
+    end
+
+    def generate_pipeline_element(node)
+      # Compound commands need to be wrapped in __subshell to work in pipelines
+      # because they don't return Command objects that implement the | operator
+      if pipeline_compound_command?(node)
+        "__subshell { #{generate(node)} }"
+      elsif node.is_a?(AST::Redirect) && pipeline_compound_command?(node.command)
+        # Redirect wrapping a compound command - wrap in subshell and apply redirect
+        target = generate_string_arg(node.target)
+        op_method = case node.operator
+                    when '>' then 'redirect_out'
+                    when '>|' then 'redirect_clobber'
+                    when '>>' then 'redirect_append'
+                    when '<' then 'redirect_in'
+                    when '2>' then 'redirect_err'
+                    else 'redirect_out'
+                    end
+        "__subshell { #{generate(node.command)} }.#{op_method}(#{target})"
+      else
+        generate(node)
+      end
+    end
+
+    def pipeline_compound_command?(node)
+      case node
+      when AST::For, AST::ArithFor, AST::While, AST::Until, AST::Select,
+           AST::If, AST::Case, AST::Function
+        true
+      else
+        false
+      end
     end
 
     def generate_list(node)
