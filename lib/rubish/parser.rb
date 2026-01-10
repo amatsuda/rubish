@@ -275,7 +275,7 @@ module Rubish
         else_body = parse_if_body
       end
 
-      consume(:FI) || raise('Expected "fi" to close if statement')
+      consume_end_or(:FI) || raise('Expected "fi" or "end" to close if statement')
 
       cmd = AST::If.new(branches: branches, else_body: else_body)
       parse_redirections(cmd)
@@ -303,12 +303,12 @@ module Rubish
       left
     end
 
-    # Parse body of if/elif/else (stops at elif/else/fi)
+    # Parse body of if/elif/else (stops at elif/else/fi/end)
     def parse_if_body
       commands = []
       skip_semicolon
 
-      while !peek(:ELIF) && !peek(:ELSE) && !peek(:FI) && current
+      while !peek(:ELIF) && !peek(:ELSE) && !peek(:FI) && !peek_end && current
         cmd = parse_conditional
         break unless cmd
 
@@ -327,7 +327,7 @@ module Rubish
       skip_semicolon
       consume_word('do') || raise('Expected "do" after while condition')
       body = parse_while_body
-      consume_word('done') || raise('Expected "done" to close while loop')
+      consume_done_or_end || raise('Expected "done" or "end" to close while loop')
 
       AST::While.new(condition, body)
     end
@@ -340,17 +340,17 @@ module Rubish
       skip_semicolon
       consume_word('do') || raise('Expected "do" after until condition')
       body = parse_while_body  # Reuse while body parser (stops at done)
-      consume_word('done') || raise('Expected "done" to close until loop')
+      consume_done_or_end || raise('Expected "done" or "end" to close until loop')
 
       AST::Until.new(condition, body)
     end
 
-    # Parse body of while loop (stops at done)
+    # Parse body of while loop (stops at done/end)
     def parse_while_body
       commands = []
       skip_semicolon
 
-      while !peek_word('done') && current
+      while !peek_word('done') && !peek_end && current
         cmd = parse_conditional
         break unless cmd
 
@@ -382,8 +382,8 @@ module Rubish
 
       skip_semicolon
       consume_word('do') || raise('Expected "do" after for items')
-      body = parse_while_body  # Reuse while body parser (stops at done)
-      consume_word('done') || raise('Expected "done" to close for loop')
+      body = parse_while_body  # Reuse while body parser (stops at done/end)
+      consume_done_or_end || raise('Expected "done" or "end" to close for loop')
 
       AST::For.new(variable, items, body)
     end
@@ -403,7 +403,7 @@ module Rubish
       skip_semicolon
       consume_word('do') || raise('Expected "do" after for ((...))' )
       body = parse_while_body
-      consume_word('done') || raise('Expected "done" to close for loop')
+      consume_done_or_end || raise('Expected "done" or "end" to close for loop')
 
       AST::ArithFor.new(init, condition, update, body)
     end
@@ -452,8 +452,8 @@ module Rubish
 
       skip_semicolon
       consume_word('do') || raise('Expected "do" after select items')
-      body = parse_while_body  # Reuse while body parser (stops at done)
-      consume_word('done') || raise('Expected "done" to close select loop')
+      body = parse_while_body  # Reuse while body parser (stops at done/end)
+      consume_done_or_end || raise('Expected "done" or "end" to close select loop')
 
       AST::Select.new(variable, items, body)
     end
@@ -473,7 +473,7 @@ module Rubish
 
       branches = []
 
-      while !peek(:ESAC) && current
+      while !peek(:ESAC) && !peek_end && current
         # Parse patterns (separated by |)
         patterns = []
         loop do
@@ -513,7 +513,7 @@ module Rubish
         branches << [patterns, body, terminator]
       end
 
-      consume(:ESAC) || raise('Expected "esac" to close case statement')
+      consume_end_or(:ESAC) || raise('Expected "esac" or "end" to close case statement')
 
       AST::Case.new(word, branches)
     end
@@ -603,12 +603,12 @@ module Rubish
       AST::ArrayAssign.new(var: token.value[:var], elements: token.value[:elements])
     end
 
-    # Parse body of case branch (stops at ;;, ;&, ;;&, or esac)
+    # Parse body of case branch (stops at ;;, ;&, ;;&, esac, or end)
     def parse_case_body
       commands = []
       skip_semicolon
 
-      while !peek(:DOUBLE_SEMI) && !peek(:CASE_FALL) && !peek(:CASE_CONT) && !peek(:ESAC) && current
+      while !peek(:DOUBLE_SEMI) && !peek(:CASE_FALL) && !peek(:CASE_CONT) && !peek(:ESAC) && !peek_end && current
         cmd = parse_conditional
         break unless cmd
 
@@ -627,6 +627,21 @@ module Rubish
       return nil unless peek_word(value)
 
       consume(:WORD)
+    end
+
+    # Ruby-style 'end' can be used instead of fi/done/esac
+    def peek_end
+      peek_word('end')
+    end
+
+    # Consume 'end' as alternative to fi/esac
+    def consume_end_or(type)
+      consume(type) || consume_word('end')
+    end
+
+    # Consume 'done' or 'end'
+    def consume_done_or_end
+      consume_word('done') || consume_word('end')
     end
 
     def parse_arg
