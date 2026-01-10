@@ -47,9 +47,10 @@ module Rubish
     @source_file_setter = nil  # Sets current source file for RUBISH_SOURCE
     @lineno_getter = nil  # Gets current line number for LINENO
     @exit_blocked_by_jobs = false  # Track if exit was blocked due to running jobs (for checkjobs)
+    @builtin_completion_functions = {}  # Hash of function names to lambdas for builtin completions
 
     class << self
-      attr_reader :aliases, :dir_stack, :traps, :local_scope_stack, :readonly_vars, :var_attributes, :command_hash, :shell_options, :disabled_builtins, :call_stack, :completions, :completion_options, :key_bindings, :readline_variables, :arrays, :assoc_arrays, :namerefs, :coprocs
+      attr_reader :aliases, :dir_stack, :traps, :local_scope_stack, :readonly_vars, :var_attributes, :command_hash, :shell_options, :disabled_builtins, :call_stack, :completions, :completion_options, :key_bindings, :readline_variables, :arrays, :assoc_arrays, :namerefs, :coprocs, :builtin_completion_functions
       attr_accessor :current_trapsig
       attr_accessor :executor, :script_name_getter, :script_name_setter, :positional_params_getter, :positional_params_setter, :function_checker, :function_remover, :function_lister, :function_getter, :heredoc_content_setter, :command_executor, :current_completion_options
       attr_accessor :history_file_getter, :history_loader, :history_saver, :history_appender, :last_history_line, :history_timestamps
@@ -5159,6 +5160,848 @@ module Rubish
 
     def self.clear_completions
       @completions.clear
+    end
+
+    # Check if a function name is a builtin completion function
+    def self.builtin_completion_function?(name)
+      @builtin_completion_functions.key?(name)
+    end
+
+    # Call a builtin completion function
+    # Returns true if function was called, false if not found
+    def self.call_builtin_completion_function(name, cmd, cur, prev)
+      func = @builtin_completion_functions[name]
+      return false unless func
+      func.call(cmd, cur, prev)
+      true
+    end
+
+    # Register builtin completion functions
+    def self.register_builtin_completion_functions
+      # _git - Git completion
+      @builtin_completion_functions['_git'] = ->(cmd, cur, prev) { _git_completion(cmd, cur, prev) }
+
+      # _ssh - SSH completion
+      @builtin_completion_functions['_ssh'] = ->(cmd, cur, prev) { _ssh_completion(cmd, cur, prev) }
+
+      # _cd - Directory completion
+      @builtin_completion_functions['_cd'] = ->(cmd, cur, prev) { _cd_completion(cmd, cur, prev) }
+
+      # _make - Make target completion
+      @builtin_completion_functions['_make'] = ->(cmd, cur, prev) { _make_completion(cmd, cur, prev) }
+
+      # _man - Man page completion
+      @builtin_completion_functions['_man'] = ->(cmd, cur, prev) { _man_completion(cmd, cur, prev) }
+
+      # _kill - Process completion
+      @builtin_completion_functions['_kill'] = ->(cmd, cur, prev) { _kill_completion(cmd, cur, prev) }
+    end
+
+    # Initialize builtin completion functions on load
+    register_builtin_completion_functions
+
+    # Set up default completion specifications for common commands
+    # This registers the builtin completion functions with the completion system
+    def self.setup_default_completions
+      # Git completion
+      @completions['git'] = {actions: [], function: '_git'}
+
+      # SSH/SCP/SFTP completion
+      @completions['ssh'] = {actions: [], function: '_ssh'}
+      @completions['scp'] = {actions: [], function: '_ssh'}
+      @completions['sftp'] = {actions: [], function: '_ssh'}
+
+      # CD completion (directories only)
+      @completions['cd'] = {actions: [], function: '_cd'}
+      @completions['pushd'] = {actions: [], function: '_cd'}
+
+      # Make completion
+      @completions['make'] = {actions: [], function: '_make'}
+      @completions['gmake'] = {actions: [], function: '_make'}
+
+      # Man page completion
+      @completions['man'] = {actions: [], function: '_man'}
+
+      # Kill completion
+      @completions['kill'] = {actions: [], function: '_kill'}
+      @completions['killall'] = {actions: [], function: '_kill'}
+      @completions['pkill'] = {actions: [], function: '_kill'}
+    end
+
+    # ==========================================================================
+    # Git completion function
+    # ==========================================================================
+    GIT_COMMANDS = %w[
+      add am annotate archive bisect blame branch bundle cat-file
+      check-attr check-ignore check-mailmap checkout checkout-index
+      cherry cherry-pick citool clean clone column commit config count-objects
+      credential daemon describe diff diff-files diff-index diff-tree
+      difftool fast-export fast-import fetch fetch-pack filter-branch
+      fmt-merge-msg for-each-ref format-patch fsck gc get-tar-commit-id
+      grep gui hash-object help imap-send index-pack init init-db instaweb
+      interpret-trailers log ls-files ls-remote ls-tree mailinfo mailsplit
+      maintenance merge merge-base merge-file merge-index merge-octopus
+      merge-one-file merge-ours merge-recursive merge-resolve merge-subtree
+      merge-tree mergetool mktag mktree mv name-rev notes pack-objects
+      pack-redundant pack-refs patch-id prune prune-packed pull push
+      quiltimport range-diff read-tree rebase reflog remote repack replace
+      request-pull rerere reset restore rev-list rev-parse revert rm
+      send-email send-pack shortlog show show-branch show-index show-ref
+      sparse-checkout stash status stripspace submodule switch symbolic-ref
+      tag unpack-file unpack-objects update-index update-ref update-server-info
+      upload-archive upload-pack var verify-commit verify-pack verify-tag
+      whatchanged worktree write-tree
+    ].freeze
+
+    # Common git options that apply to most commands
+    GIT_COMMON_OPTIONS = %w[
+      --version --help -C --git-dir --work-tree --bare --no-replace-objects
+      --literal-pathspecs --glob-pathspecs --noglob-pathspecs --icase-pathspecs
+      --no-optional-locks -c --exec-path --html-path --man-path --info-path
+      --paginate --no-pager --config-env
+    ].freeze
+
+    def self._git_completion(cmd, cur, prev)
+      words = @comp_words
+      cword = @comp_cword
+
+      # Determine git subcommand
+      subcommand = nil
+      subcommand_idx = nil
+      words.each_with_index do |word, idx|
+        next if idx == 0  # Skip 'git'
+        next if word.start_with?('-')  # Skip options
+
+        # Found subcommand
+        subcommand = word
+        subcommand_idx = idx
+        break
+      end
+
+      if subcommand.nil? || cword <= (subcommand_idx || 1)
+        # Complete git subcommands or top-level options
+        if cur.start_with?('-')
+          @compreply = GIT_COMMON_OPTIONS.select { |opt| opt.start_with?(cur) }
+        else
+          @compreply = GIT_COMMANDS.select { |c| c.start_with?(cur) }
+        end
+        return
+      end
+
+      # Complete based on subcommand
+      case subcommand
+      when 'add'
+        _git_complete_add(cur, prev)
+      when 'branch'
+        _git_complete_branch(cur, prev)
+      when 'checkout', 'switch'
+        _git_complete_checkout(cur, prev)
+      when 'commit'
+        _git_complete_commit(cur, prev)
+      when 'diff'
+        _git_complete_diff(cur, prev)
+      when 'fetch', 'pull', 'push'
+        _git_complete_remote_branch(cur, prev, subcommand)
+      when 'log', 'show'
+        _git_complete_log(cur, prev)
+      when 'merge', 'rebase'
+        _git_complete_refs(cur)
+      when 'remote'
+        _git_complete_remote(cur, prev, words, cword, subcommand_idx)
+      when 'reset'
+        _git_complete_reset(cur, prev)
+      when 'revert'
+        _git_complete_refs(cur)
+      when 'stash'
+        _git_complete_stash(cur, prev, words, cword, subcommand_idx)
+      when 'tag'
+        _git_complete_tag(cur, prev)
+      else
+        # Default: complete files and refs
+        _git_complete_refs(cur)
+        _git_complete_files(cur)
+      end
+    end
+
+    def self._git_complete_add(cur, prev)
+      case prev
+      when '-p', '--patch'
+        _git_complete_files(cur)
+      else
+        if cur.start_with?('-')
+          opts = %w[-n --dry-run -v --verbose -i --interactive -p --patch
+                    -e --edit -f --force -u --update -A --all --no-ignore-removal
+                    --no-all --ignore-removal -N --intent-to-add --refresh
+                    --ignore-errors --ignore-missing --sparse --pathspec-from-file=
+                    --pathspec-file-nul --renormalize --chmod=+x --chmod=-x]
+          @compreply = opts.select { |opt| opt.start_with?(cur) }
+        else
+          _git_complete_files(cur)
+        end
+      end
+    end
+
+    def self._git_complete_branch(cur, prev)
+      case prev
+      when '-d', '-D', '--delete', '-m', '-M', '--move', '-c', '-C', '--copy'
+        _git_complete_local_branches(cur)
+      when '-u', '--set-upstream-to'
+        _git_complete_remote_refs(cur)
+      when '-t', '--track'
+        _git_complete_remote_refs(cur)
+      else
+        if cur.start_with?('-')
+          opts = %w[-a --all -d -D --delete -f --force -i --ignore-case -l --list
+                    -m -M --move -c -C --copy -r --remotes --show-current -v --verbose
+                    -q --quiet --track -t --no-track --set-upstream-to -u --unset-upstream
+                    --edit-description --contains --no-contains --merged --no-merged
+                    --column --no-column --sort= --points-at --format= --color --no-color]
+          @compreply = opts.select { |opt| opt.start_with?(cur) }
+        else
+          _git_complete_local_branches(cur)
+        end
+      end
+    end
+
+    def self._git_complete_checkout(cur, prev)
+      case prev
+      when '-b', '-B', '--orphan'
+        # New branch name - don't complete
+        @compreply = []
+      when '--'
+        _git_complete_files(cur)
+      else
+        if cur.start_with?('-')
+          opts = %w[-q --quiet -f --force -b -B --detach --ours --theirs
+                    -m --merge -l --track -t --no-track --orphan --ignore-other-worktrees
+                    --recurse-submodules --no-recurse-submodules --progress --no-progress
+                    --overlay --no-overlay --pathspec-from-file= --pathspec-file-nul]
+          @compreply = opts.select { |opt| opt.start_with?(cur) }
+        else
+          _git_complete_refs(cur)
+        end
+      end
+    end
+
+    def self._git_complete_commit(cur, prev)
+      case prev
+      when '-C', '-c', '--reuse-message', '--reedit-message', '--fixup', '--squash'
+        _git_complete_refs(cur)
+      when '-m', '--message'
+        @compreply = []  # Message string
+      when '-F', '--file', '--pathspec-from-file'
+        _git_complete_files(cur)
+      when '--author'
+        @compreply = []  # Author string
+      when '--date'
+        @compreply = []  # Date string
+      when '--cleanup'
+        @compreply = %w[strip whitespace verbatim scissors default].select { |opt| opt.start_with?(cur) }
+      else
+        if cur.start_with?('-')
+          opts = %w[-a --all -p --patch --reset-author -s --signoff -n --no-verify
+                    -v --verbose -u --untracked-files -q --quiet --dry-run
+                    --short --branch --porcelain --long -z --null --status
+                    --no-status -F --file -m --message --author --date
+                    -C --reuse-message -c --reedit-message --fixup --squash
+                    --amend --no-edit -e --edit --cleanup= --trailer
+                    --only -i --include --allow-empty --allow-empty-message]
+          @compreply = opts.select { |opt| opt.start_with?(cur) }
+        else
+          _git_complete_files(cur)
+        end
+      end
+    end
+
+    def self._git_complete_diff(cur, prev)
+      if cur.start_with?('-')
+        opts = %w[-p -u --patch -U --unified= --raw --patch-with-raw --stat
+                  --numstat --shortstat --dirstat --summary --patch-with-stat
+                  -z --name-only --name-status --color --no-color --color-moved
+                  --word-diff --color-words --no-renames --check --full-index
+                  --binary -a --text -R --ignore-space-change -w
+                  --ignore-all-space -b --ignore-blank-lines --inter-hunk-context=
+                  --patience --histogram --diff-algorithm= --anchored=
+                  --minimal --no-index --cached --staged -S -G --pickaxe-regex]
+        @compreply = opts.select { |opt| opt.start_with?(cur) }
+      else
+        _git_complete_refs(cur)
+        _git_complete_files(cur)
+      end
+    end
+
+    def self._git_complete_remote_branch(cur, prev, subcommand)
+      if cur.start_with?('-')
+        case subcommand
+        when 'fetch'
+          opts = %w[-q --quiet -v --verbose --all -a --append --depth= --deepen=
+                    --shallow-since= --shallow-exclude= --unshallow --update-shallow
+                    --dry-run -f --force -k --keep -p --prune -n --no-tags -t --tags
+                    --refmap= -u --update-head-ok --progress --no-progress -j --jobs=
+                    --prefetch --set-upstream -o --server-option= --upload-pack]
+        when 'pull'
+          opts = %w[-q --quiet -v --verbose --rebase -r --no-rebase --ff-only
+                    --no-ff --ff --no-commit --commit --no-stat --stat
+                    --no-signoff --signoff --no-log --log --squash --no-squash
+                    --strategy= -X --strategy-option= --depth= -s --strategy=
+                    --allow-unrelated-histories --autostash --no-autostash]
+        when 'push'
+          opts = %w[-q --quiet -v --verbose --all --mirror --tags --follow-tags
+                    -n --dry-run --porcelain --delete --prune -u --set-upstream
+                    --thin --no-thin --force -f --force-with-lease --repo
+                    --no-verify --progress --signed= --push-option= --atomic
+                    -d --delete --receive-pack= --exec= -o --push-option=]
+        else
+          opts = []
+        end
+        @compreply = opts.select { |opt| opt.start_with?(cur) }
+      else
+        _git_complete_remotes(cur)
+        _git_complete_refs(cur)
+      end
+    end
+
+    def self._git_complete_log(cur, prev)
+      if cur.start_with?('-')
+        opts = %w[--follow -p --patch --stat --shortstat --numstat --summary
+                  --name-only --name-status --pretty= --format= --abbrev-commit
+                  --oneline --graph --decorate --no-decorate --all --branches
+                  --remotes --tags --source --merges --no-merges --first-parent
+                  --author= --committer= --grep= --all-match --invert-grep
+                  --regexp-ignore-case --since= --after= --until= --before=
+                  --ancestry-path --cherry-pick --left-right --reverse
+                  -n --max-count= --skip= -S -G --pickaxe-regex --walk-reflogs
+                  --merge --boundary --simplify-merges --date= --date-order
+                  --author-date-order --topo-order --full-history]
+        @compreply = opts.select { |opt| opt.start_with?(cur) }
+      else
+        _git_complete_refs(cur)
+        _git_complete_files(cur)
+      end
+    end
+
+    def self._git_complete_remote(cur, prev, words, cword, subcommand_idx)
+      # Determine remote subcommand
+      remote_subcmd = nil
+      words[(subcommand_idx + 1)..].each do |word|
+        next if word.start_with?('-')
+        next if word.empty?  # Skip empty words
+        remote_subcmd = word
+        break
+      end
+
+      if remote_subcmd.nil? || remote_subcmd.empty?
+        # Complete remote subcommands
+        remote_cmds = %w[add rename remove rm show prune update get-url set-url set-head set-branches]
+        @compreply = remote_cmds.select { |c| c.start_with?(cur) }
+        return
+      end
+
+      case remote_subcmd
+      when 'add'
+        if cur.start_with?('-')
+          opts = %w[-t --track -m --master -f --fetch --tags --no-tags --mirror=]
+          @compreply = opts.select { |opt| opt.start_with?(cur) }
+        end
+      when 'rename', 'remove', 'rm', 'show', 'prune', 'get-url', 'set-url', 'set-head', 'set-branches'
+        _git_complete_remotes(cur)
+      when 'update'
+        if cur.start_with?('-')
+          @compreply = %w[-p --prune].select { |opt| opt.start_with?(cur) }
+        else
+          # Complete remote groups or remotes
+          _git_complete_remotes(cur)
+        end
+      end
+    end
+
+    def self._git_complete_reset(cur, prev)
+      if cur.start_with?('-')
+        opts = %w[-q --quiet --soft --mixed --hard --merge --keep -p --patch -N
+                  --intent-to-add --pathspec-from-file= --pathspec-file-nul]
+        @compreply = opts.select { |opt| opt.start_with?(cur) }
+      else
+        _git_complete_refs(cur)
+        _git_complete_files(cur)
+      end
+    end
+
+    def self._git_complete_stash(cur, prev, words, cword, subcommand_idx)
+      # Determine stash subcommand
+      stash_subcmd = nil
+      words[(subcommand_idx + 1)..].each do |word|
+        next if word.start_with?('-')
+        next if word.empty?  # Skip empty words
+        stash_subcmd = word
+        break
+      end
+
+      if stash_subcmd.nil? || stash_subcmd.empty?
+        stash_cmds = %w[list show drop pop apply branch push save clear create store]
+        @compreply = stash_cmds.select { |c| c.start_with?(cur) }
+        return
+      end
+
+      case stash_subcmd
+      when 'show', 'drop', 'pop', 'apply', 'branch'
+        _git_complete_stash_refs(cur)
+      when 'push', 'save'
+        if cur.start_with?('-')
+          opts = %w[-p --patch -k --keep-index --no-keep-index -q --quiet
+                    -u --include-untracked -a --all -m --message --pathspec-from-file=]
+          @compreply = opts.select { |opt| opt.start_with?(cur) }
+        else
+          _git_complete_files(cur)
+        end
+      end
+    end
+
+    def self._git_complete_tag(cur, prev)
+      case prev
+      when '-m', '--message', '-F', '--file'
+        @compreply = []  # Message or file
+      when '-u', '--local-user'
+        @compreply = []  # GPG key
+      else
+        if cur.start_with?('-')
+          opts = %w[-a --annotate -s --sign -u --local-user -f --force -d --delete
+                    -v --verify -n --n= -l --list --sort= --contains --no-contains
+                    --merged --no-merged --points-at --format= --color --no-color
+                    -i --ignore-case -m --message -F --file --cleanup=]
+          @compreply = opts.select { |opt| opt.start_with?(cur) }
+        else
+          _git_complete_tags(cur)
+        end
+      end
+    end
+
+    # Helper methods for git completion
+
+    def self._git_complete_refs(cur)
+      # Complete git refs (branches, tags, commits)
+      @compreply ||= []
+      return unless git_repo?
+
+      begin
+        # Get all refs
+        refs = `git for-each-ref --format='%(refname:short)' 2>/dev/null`.split("\n")
+        refs.concat(`git rev-parse --symbolic --branches --tags --remotes 2>/dev/null`.split("\n"))
+        refs.uniq!
+        @compreply.concat(refs.select { |r| r.start_with?(cur) })
+      rescue
+        # Git command failed
+      end
+    end
+
+    def self._git_complete_local_branches(cur)
+      @compreply = []
+      return unless git_repo?
+
+      begin
+        branches = `git for-each-ref --format='%(refname:short)' refs/heads/ 2>/dev/null`.split("\n")
+        @compreply = branches.select { |b| b.start_with?(cur) }
+      rescue
+        # Git command failed
+      end
+    end
+
+    def self._git_complete_remote_refs(cur)
+      @compreply = []
+      return unless git_repo?
+
+      begin
+        refs = `git for-each-ref --format='%(refname:short)' refs/remotes/ 2>/dev/null`.split("\n")
+        @compreply = refs.select { |r| r.start_with?(cur) }
+      rescue
+        # Git command failed
+      end
+    end
+
+    def self._git_complete_remotes(cur)
+      @compreply ||= []
+      return unless git_repo?
+
+      begin
+        remotes = `git remote 2>/dev/null`.split("\n")
+        @compreply.concat(remotes.select { |r| r.start_with?(cur) })
+      rescue
+        # Git command failed
+      end
+    end
+
+    def self._git_complete_tags(cur)
+      @compreply ||= []
+      return unless git_repo?
+
+      begin
+        tags = `git tag -l 2>/dev/null`.split("\n")
+        @compreply.concat(tags.select { |t| t.start_with?(cur) })
+      rescue
+        # Git command failed
+      end
+    end
+
+    def self._git_complete_stash_refs(cur)
+      @compreply = []
+      return unless git_repo?
+
+      begin
+        stashes = `git stash list 2>/dev/null`.each_line.map { |l| l.split(':').first }.compact
+        @compreply = stashes.select { |s| s.start_with?(cur) }
+      rescue
+        # Git command failed
+      end
+    end
+
+    def self._git_complete_files(cur)
+      @compreply ||= []
+
+      # Get modified/untracked files for git commands
+      if git_repo?
+        begin
+          # Modified files
+          modified = `git diff --name-only 2>/dev/null`.split("\n")
+          # Staged files
+          staged = `git diff --cached --name-only 2>/dev/null`.split("\n")
+          # Untracked files
+          untracked = `git ls-files --others --exclude-standard 2>/dev/null`.split("\n")
+
+          files = (modified + staged + untracked).uniq
+          @compreply.concat(files.select { |f| f.start_with?(cur) })
+        rescue
+          # Git command failed, fall back to regular file completion
+        end
+      end
+
+      # Also complete regular files
+      pattern = cur.empty? ? '*' : "#{cur}*"
+      @compreply.concat(Dir.glob(pattern).select { |f| File.file?(f) || File.directory?(f) })
+      @compreply.uniq!
+    end
+
+    def self.git_repo?
+      system('git rev-parse --git-dir >/dev/null 2>&1')
+    end
+
+    # ==========================================================================
+    # SSH completion function
+    # ==========================================================================
+    def self._ssh_completion(cmd, cur, prev)
+      case prev
+      when '-F', '-i', '-S', '-E', '-c', '-o'
+        # File/config completions
+        if %w[-F -i -S -E].include?(prev)
+          run__filedir([])
+        else
+          @compreply = []
+        end
+        return
+      when '-l'
+        # Username completion
+        run__usergroup(['-u'])
+        return
+      when '-p'
+        # Port number
+        @compreply = []
+        return
+      when '-J'
+        # Jump host - same as hostname
+        _ssh_complete_hosts(cur)
+        return
+      when '-O'
+        @compreply = %w[check forward cancel exit stop].select { |opt| opt.start_with?(cur) }
+        return
+      end
+
+      if cur.start_with?('-')
+        opts = %w[-4 -6 -A -a -C -f -G -g -K -k -M -N -n -q -s -T -t -V -v -X -x -Y -y
+                  -B -b -c -D -E -e -F -I -i -J -L -l -m -O -o -p -Q -R -S -W -w]
+        @compreply = opts.select { |opt| opt.start_with?(cur) }
+      else
+        _ssh_complete_hosts(cur)
+      end
+    end
+
+    def self._ssh_complete_hosts(cur)
+      @compreply = []
+      hosts = Set.new
+
+      # Parse ~/.ssh/config for Host entries
+      ssh_config = File.expand_path('~/.ssh/config')
+      if File.exist?(ssh_config)
+        begin
+          File.readlines(ssh_config).each do |line|
+            line = line.strip.downcase
+            if line.start_with?('host ')
+              # Skip patterns with wildcards
+              host_entries = line.sub(/^host\s+/, '').split
+              host_entries.each do |h|
+                hosts << h unless h.include?('*') || h.include?('?')
+              end
+            end
+          end
+        rescue Errno::EACCES
+          # Can't read file
+        end
+      end
+
+      # Parse /etc/hosts
+      if File.exist?('/etc/hosts')
+        begin
+          File.readlines('/etc/hosts').each do |line|
+            # Skip comments
+            line = line.split('#').first&.strip
+            next if line.nil? || line.empty?
+
+            parts = line.split(/\s+/)
+            next if parts.length < 2
+
+            # Add hostnames (skip IP address)
+            parts[1..].each { |h| hosts << h }
+          end
+        rescue Errno::EACCES
+          # Can't read file
+        end
+      end
+
+      # Parse ~/.ssh/known_hosts for hostnames
+      known_hosts = File.expand_path('~/.ssh/known_hosts')
+      if File.exist?(known_hosts)
+        begin
+          File.readlines(known_hosts).each do |line|
+            next if line.start_with?('#') || line.start_with?('@')
+
+            # First field is hostname/IP (may be hashed)
+            host_field = line.split[0]
+            next unless host_field
+
+            # Skip hashed entries
+            next if host_field.start_with?('|')
+
+            # May have multiple hosts comma-separated, with optional [host]:port
+            host_field.split(',').each do |h|
+              h = h.sub(/^\[/, '').sub(/\]:\d+$/, '')  # Remove port notation
+              hosts << h unless h.match?(/^\d+\.\d+\.\d+\.\d+$/)  # Skip bare IPs
+            end
+          end
+        rescue Errno::EACCES
+          # Can't read file
+        end
+      end
+
+      @compreply = hosts.to_a.select { |h| h.start_with?(cur) }.sort
+    end
+
+    # ==========================================================================
+    # CD completion function
+    # ==========================================================================
+    def self._cd_completion(cmd, cur, prev)
+      if cur.start_with?('-')
+        @compreply = %w[-L -P -e -@].select { |opt| opt.start_with?(cur) }
+        return
+      end
+
+      # Complete directories only
+      run__filedir(['-d'])
+    end
+
+    # ==========================================================================
+    # Make completion function
+    # ==========================================================================
+    def self._make_completion(cmd, cur, prev)
+      case prev
+      when '-f', '--file', '--makefile'
+        run__filedir([])
+        return
+      when '-C', '--directory'
+        run__filedir(['-d'])
+        return
+      when '-I', '--include-dir'
+        run__filedir(['-d'])
+        return
+      when '-j', '--jobs', '-l', '--load-average'
+        @compreply = []
+        return
+      when '-o', '--old-file', '--assume-old', '-W', '--what-if', '--new-file', '--assume-new'
+        run__filedir([])
+        return
+      end
+
+      if cur.start_with?('-')
+        opts = %w[-b -B --always-make -C --directory -d --debug -e --environment-overrides
+                  -E --eval -f --file --makefile -h --help -i --ignore-errors -I --include-dir
+                  -j --jobs -k --keep-going -l --load-average -L --check-symlink-times
+                  -n --just-print --dry-run --recon -o --old-file --assume-old -O --output-sync
+                  -p --print-data-base -q --question -r --no-builtin-rules -R --no-builtin-variables
+                  -s --silent --quiet -S --no-keep-going --stop -t --touch -v --version
+                  -w --print-directory --no-print-directory -W --what-if --new-file --assume-new]
+        @compreply = opts.select { |opt| opt.start_with?(cur) }
+        return
+      end
+
+      # Complete make targets
+      _make_complete_targets(cur)
+    end
+
+    def self._make_complete_targets(cur)
+      @compreply = []
+      targets = Set.new
+
+      # Find Makefile
+      makefiles = %w[GNUmakefile makefile Makefile]
+      makefile = makefiles.find { |f| File.exist?(f) }
+      return unless makefile
+
+      begin
+        File.readlines(makefile).each do |line|
+          # Skip comments and empty lines
+          next if line.strip.empty? || line.start_with?('#')
+
+          # Match target definitions (target: dependencies)
+          # Skip pattern rules (%) and special targets (.)
+          if line =~ /^([a-zA-Z0-9_][a-zA-Z0-9_.-]*)\s*:/
+            target = $1
+            next if target.start_with?('.')  # Skip special targets
+            targets << target
+          end
+        end
+      rescue Errno::EACCES, Errno::ENOENT
+        # Can't read file
+      end
+
+      @compreply = targets.to_a.select { |t| t.start_with?(cur) }.sort
+    end
+
+    # ==========================================================================
+    # Man completion function
+    # ==========================================================================
+    def self._man_completion(cmd, cur, prev)
+      case prev
+      when '-C', '--config-file', '-H', '--html', '-p', '--preprocessor'
+        @compreply = []
+        return
+      when '-M', '--manpath'
+        run__filedir(['-d'])
+        return
+      when '-S', '-s', '--sections'
+        @compreply = %w[1 2 3 4 5 6 7 8 9 n l].select { |s| s.start_with?(cur) }
+        return
+      end
+
+      if cur.start_with?('-')
+        opts = %w[-a --all -c --catman -d --debug -D --default -e --extension -f --whatis
+                  -h --help -H --html -i --ignore-case -I --match-case -k --apropos
+                  -K --global-apropos -l --local-file -L --locale -m --systems
+                  -M --manpath -n --nroff -p --preprocessor -P --pager -r --prompt
+                  -R --recode -s -S --sections -t --troff -T --troff-device
+                  -u --update -V --version -w --where --path --location -W --where-cat
+                  -X --gxditview -Z --ditroff]
+        @compreply = opts.select { |opt| opt.start_with?(cur) }
+        return
+      end
+
+      # Complete man page names
+      _man_complete_pages(cur)
+    end
+
+    def self._man_complete_pages(cur)
+      @compreply = []
+      pages = Set.new
+
+      # Get MANPATH
+      manpath = ENV['MANPATH'] || '/usr/share/man:/usr/local/share/man'
+      mandirs = manpath.split(':')
+
+      mandirs.each do |mandir|
+        next unless Dir.exist?(mandir)
+
+        # Look in man* subdirectories
+        Dir.glob(File.join(mandir, 'man*')).each do |section_dir|
+          next unless Dir.exist?(section_dir)
+
+          Dir.entries(section_dir).each do |entry|
+            next if entry.start_with?('.')
+
+            # Extract page name (remove .gz, .section)
+            name = entry.sub(/\.\d[a-z]*(?:\.gz)?$/, '')
+            pages << name if name.start_with?(cur)
+          end
+        rescue Errno::EACCES
+          # Can't read directory
+        end
+      rescue Errno::EACCES
+        # Can't read directory
+      end
+
+      @compreply = pages.to_a.sort.first(100)  # Limit results
+    end
+
+    # ==========================================================================
+    # Kill completion function
+    # ==========================================================================
+    def self._kill_completion(cmd, cur, prev)
+      case prev
+      when '-s', '-n', '--signal'
+        _kill_complete_signals(cur)
+        return
+      end
+
+      if cur.start_with?('-')
+        if cur.start_with?('--')
+          opts = %w[--signal --list --table --help --version]
+          @compreply = opts.select { |opt| opt.start_with?(cur) }
+        elsif cur == '-'
+          # Complete options and signal names
+          @compreply = %w[-l -s -n --signal --list --table --help --version]
+          # Don't add signal names for just '-' (user hasn't typed a signal yet)
+        else
+          # Signal names after -
+          _kill_complete_signals(cur.sub(/^-/, ''))
+          @compreply.map! { |s| "-#{s}" }
+        end
+        return
+      end
+
+      # Complete process IDs and job specs
+      _kill_complete_pids(cur)
+    end
+
+    def self._kill_complete_signals(cur)
+      @compreply = []
+      signals = %w[HUP INT QUIT ILL TRAP ABRT BUS FPE KILL USR1 SEGV USR2 PIPE
+                   ALRM TERM STKFLT CHLD CONT STOP TSTP TTIN TTOU URG XCPU XFSZ
+                   VTALRM PROF WINCH IO PWR SYS]
+      @compreply = signals.select { |s| s.start_with?(cur.upcase) }
+    end
+
+    def self._kill_complete_pids(cur)
+      @compreply = []
+
+      # Complete job specs
+      if cur.start_with?('%')
+        JobManager.instance.all.each do |job|
+          job_spec = "%#{job.id}"
+          @compreply << job_spec if job_spec.start_with?(cur)
+        end
+        return
+      end
+
+      # Complete process IDs
+      begin
+        # Use ps to get running processes
+        ps_output = `ps -u #{Process.uid} -o pid,comm 2>/dev/null`
+        ps_output.each_line.drop(1).each do |line|
+          parts = line.strip.split(/\s+/, 2)
+          next if parts.length < 2
+
+          pid = parts[0]
+          @compreply << pid if pid.start_with?(cur)
+        end
+      rescue
+        # ps command failed
+      end
+
+      @compreply.sort!
     end
 
     # Valid completion options for compopt

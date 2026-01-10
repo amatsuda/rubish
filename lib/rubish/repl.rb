@@ -95,6 +95,8 @@ module Rubish
 
     def setup_reline
       Reline.completion_proc = ->(input) { complete(input) }
+      # Set up default completions for common commands
+      Builtins.setup_default_completions
       # Load inputrc configuration
       # INPUTRC environment variable specifies the inputrc file location
       # Falls back to ~/.inputrc, then ~/.config/readline/inputrc
@@ -5491,7 +5493,13 @@ module Rubish
 
           begin
             # Call the completion function
-            call_function(spec[:function], [cmd, input, words[cword - 1] || ''])
+            # First check for builtin completion functions, then user-defined
+            prev = words[cword - 1] || ''
+            if Builtins.builtin_completion_function?(spec[:function])
+              Builtins.call_builtin_completion_function(spec[:function], cmd, input, prev)
+            else
+              call_function(spec[:function], [cmd, input, prev])
+            end
 
             # Get results from COMPREPLY
             results = Builtins.compreply.dup
