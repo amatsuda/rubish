@@ -24,31 +24,66 @@ class TestStartupFiles < Test::Unit::TestCase
   def create_test_repl(login_shell: false, no_profile: false, no_rc: false)
     repl = Rubish::REPL.new(login_shell: login_shell, no_profile: no_profile, no_rc: no_rc)
     # Override the load methods to skip system files for testing
+    # Rubish config is tried first, falling back to bash for compatibility
     def repl.load_login_config
       return if @no_profile
       # Skip /etc/profile - only load user files
-      profile_files = [
-        File.expand_path('~/.bash_profile'),
-        File.expand_path('~/.bash_login'),
-        File.expand_path('~/.profile')
-      ]
-      profile_files.each do |profile|
-        if File.exist?(profile)
-          source_if_exists(profile)
-          break
+      xdg_profile = File.join(xdg_config_dir, 'profile')
+      rubish_profile = File.expand_path('~/.rubish_profile')
+
+      if File.exist?(xdg_profile) || File.exist?(rubish_profile)
+        source_if_exists(xdg_profile)
+        source_if_exists(rubish_profile)
+      else
+        # Fall back to bash
+        profile_files = [
+          File.expand_path('~/.bash_profile'),
+          File.expand_path('~/.bash_login'),
+          File.expand_path('~/.profile')
+        ]
+        profile_files.each do |profile|
+          if File.exist?(profile)
+            source_if_exists(profile)
+            break
+          end
         end
       end
-      source_if_exists(File.expand_path('~/.rubish_profile'))
     end
 
     def repl.load_interactive_config
       return if @no_rc
-      # Skip system bashrc files for testing
-      source_if_exists(File.expand_path('~/.bashrc'))
-      source_if_exists(File.expand_path('~/.rubishrc'))
+      if @rcfile
+        source_if_exists(File.expand_path(@rcfile))
+        return
+      end
+      # Rubish config first, fall back to bash
+      xdg_config = File.join(xdg_config_dir, 'config')
+      rubishrc = File.expand_path('~/.rubishrc')
+
+      if File.exist?(xdg_config) || File.exist?(rubishrc)
+        source_if_exists(xdg_config)
+        source_if_exists(rubishrc)
+      else
+        # Fall back to bash (skip system bashrc for testing)
+        source_if_exists(File.expand_path('~/.bashrc'))
+      end
+
       env_file = ENV['ENV']
       if env_file && !env_file.empty?
         source_if_exists(File.expand_path(env_file))
+      end
+    end
+
+    def repl.load_logout_config
+      return unless @login_shell
+      xdg_logout = File.join(xdg_config_dir, 'logout')
+      rubish_logout = File.expand_path('~/.rubish_logout')
+
+      if File.exist?(xdg_logout) || File.exist?(rubish_logout)
+        source_if_exists(xdg_logout)
+        source_if_exists(rubish_logout)
+      else
+        source_if_exists(File.expand_path('~/.bash_logout'))
       end
     end
     repl
@@ -115,7 +150,7 @@ class TestStartupFiles < Test::Unit::TestCase
     assert_equal 'yes', ENV['RUBISH_PROFILE_SOURCED']
   end
 
-  def test_login_shell_sources_both_bash_profile_and_rubish_profile
+  def test_login_shell_rubish_profile_takes_priority_over_bash_profile
     # Create both
     File.write(File.join(@tempdir, '.bash_profile'), 'BASH_PROFILE_SOURCED=yes')
     File.write(File.join(@tempdir, '.rubish_profile'), 'RUBISH_PROFILE_SOURCED=yes')
@@ -123,8 +158,8 @@ class TestStartupFiles < Test::Unit::TestCase
     repl = create_test_repl(login_shell: true)
     repl.send(:load_config)
 
-    # Both should be sourced
-    assert_equal 'yes', ENV['BASH_PROFILE_SOURCED']
+    # Only rubish_profile should be sourced (rubish config takes priority)
+    assert_nil ENV['BASH_PROFILE_SOURCED']
     assert_equal 'yes', ENV['RUBISH_PROFILE_SOURCED']
   end
 
@@ -159,14 +194,15 @@ class TestStartupFiles < Test::Unit::TestCase
     assert_equal 'yes', ENV['RUBISHRC_SOURCED']
   end
 
-  def test_non_login_shell_sources_both_bashrc_and_rubishrc
+  def test_non_login_shell_rubishrc_takes_priority_over_bashrc
     File.write(File.join(@tempdir, '.bashrc'), 'BASHRC_SOURCED=yes')
     File.write(File.join(@tempdir, '.rubishrc'), 'RUBISHRC_SOURCED=yes')
 
     repl = create_test_repl(login_shell: false)
     repl.send(:load_config)
 
-    assert_equal 'yes', ENV['BASHRC_SOURCED']
+    # Only rubishrc should be sourced (rubish config takes priority)
+    assert_nil ENV['BASHRC_SOURCED']
     assert_equal 'yes', ENV['RUBISHRC_SOURCED']
   end
 
@@ -252,14 +288,15 @@ class TestStartupFiles < Test::Unit::TestCase
     assert_equal 'yes', ENV['RUBISH_LOGOUT_SOURCED']
   end
 
-  def test_login_shell_sources_both_logout_files
+  def test_login_shell_rubish_logout_takes_priority_over_bash_logout
     File.write(File.join(@tempdir, '.bash_logout'), 'BASH_LOGOUT_SOURCED=yes')
     File.write(File.join(@tempdir, '.rubish_logout'), 'RUBISH_LOGOUT_SOURCED=yes')
 
     repl = create_test_repl(login_shell: true)
     repl.send(:load_logout_config)
 
-    assert_equal 'yes', ENV['BASH_LOGOUT_SOURCED']
+    # Only rubish_logout should be sourced (rubish config takes priority)
+    assert_nil ENV['BASH_LOGOUT_SOURCED']
     assert_equal 'yes', ENV['RUBISH_LOGOUT_SOURCED']
   end
 
@@ -342,5 +379,75 @@ class TestStartupFiles < Test::Unit::TestCase
     repl.send(:load_interactive_config)
 
     assert_nil ENV['CUSTOM_RC_SOURCED']
+  end
+
+  # ==========================================================================
+  # XDG config directory tests (~/.config/rubish/)
+  # ==========================================================================
+
+  def test_xdg_config_sourced_for_interactive_shell
+    # Create XDG config directory and config file
+    xdg_dir = File.join(@tempdir, '.config', 'rubish')
+    FileUtils.mkdir_p(xdg_dir)
+    File.write(File.join(xdg_dir, 'config'), 'XDG_CONFIG_SOURCED=yes')
+
+    repl = create_test_repl(login_shell: false)
+    repl.send(:load_interactive_config)
+
+    assert_equal 'yes', ENV['XDG_CONFIG_SOURCED']
+  end
+
+  def test_xdg_profile_sourced_for_login_shell
+    # Create XDG config directory and profile file
+    xdg_dir = File.join(@tempdir, '.config', 'rubish')
+    FileUtils.mkdir_p(xdg_dir)
+    File.write(File.join(xdg_dir, 'profile'), 'XDG_PROFILE_SOURCED=yes')
+
+    repl = create_test_repl(login_shell: true)
+    repl.send(:load_config)
+
+    assert_equal 'yes', ENV['XDG_PROFILE_SOURCED']
+  end
+
+  def test_xdg_logout_sourced_for_login_shell
+    # Create XDG config directory and logout file
+    xdg_dir = File.join(@tempdir, '.config', 'rubish')
+    FileUtils.mkdir_p(xdg_dir)
+    File.write(File.join(xdg_dir, 'logout'), 'XDG_LOGOUT_SOURCED=yes')
+
+    repl = create_test_repl(login_shell: true)
+    repl.send(:load_logout_config)
+
+    assert_equal 'yes', ENV['XDG_LOGOUT_SOURCED']
+  end
+
+  def test_xdg_config_home_respected
+    # Set XDG_CONFIG_HOME to a custom location
+    custom_xdg = File.join(@tempdir, 'custom_xdg')
+    xdg_dir = File.join(custom_xdg, 'rubish')
+    FileUtils.mkdir_p(xdg_dir)
+    File.write(File.join(xdg_dir, 'config'), 'CUSTOM_XDG_HOME_SOURCED=yes')
+
+    ENV['XDG_CONFIG_HOME'] = custom_xdg
+
+    repl = create_test_repl(login_shell: false)
+    repl.send(:load_interactive_config)
+
+    assert_equal 'yes', ENV['CUSTOM_XDG_HOME_SOURCED']
+  ensure
+    ENV.delete('XDG_CONFIG_HOME')
+  end
+
+  def test_xdg_config_sourced_before_rubishrc
+    # Verify XDG config is sourced before ~/.rubishrc
+    xdg_dir = File.join(@tempdir, '.config', 'rubish')
+    FileUtils.mkdir_p(xdg_dir)
+    File.write(File.join(xdg_dir, 'config'), 'LOAD_ORDER="${LOAD_ORDER}xdg_"')
+    File.write(File.join(@tempdir, '.rubishrc'), 'LOAD_ORDER="${LOAD_ORDER}rubishrc"')
+
+    repl = create_test_repl(login_shell: false)
+    repl.send(:load_interactive_config)
+
+    assert_equal 'xdg_rubishrc', ENV['LOAD_ORDER']
   end
 end

@@ -326,69 +326,97 @@ module Rubish
     end
 
     # Load startup files for login shells
-    # Order: /etc/profile, then first of ~/.bash_profile, ~/.bash_login, ~/.profile
-    # Also checks ~/.rubish_profile for rubish-specific configuration
+    # Rubish-specific files are tried first, falling back to bash files for compatibility
+    # Order: /etc/profile, then rubish config (~/.config/rubish/profile or ~/.rubish_profile),
+    # or fall back to bash (~/.bash_profile, ~/.bash_login, ~/.profile)
     def load_login_config
       return if @no_profile
 
       # System-wide profile
       source_if_exists('/etc/profile')
 
-      # User profile - bash reads the first one that exists
-      profile_files = [
-        File.expand_path('~/.bash_profile'),
-        File.expand_path('~/.bash_login'),
-        File.expand_path('~/.profile')
-      ]
+      # Try rubish-specific profile first
+      xdg_profile = File.join(xdg_config_dir, 'profile')
+      rubish_profile = File.expand_path('~/.rubish_profile')
 
-      profile_files.each do |profile|
-        if File.exist?(profile)
-          source_if_exists(profile)
-          break  # Only source the first one found
+      if File.exist?(xdg_profile) || File.exist?(rubish_profile)
+        # Use rubish-specific profiles
+        source_if_exists(xdg_profile)
+        source_if_exists(rubish_profile)
+      else
+        # Fall back to bash profile files for compatibility
+        profile_files = [
+          File.expand_path('~/.bash_profile'),
+          File.expand_path('~/.bash_login'),
+          File.expand_path('~/.profile')
+        ]
+
+        profile_files.each do |profile|
+          if File.exist?(profile)
+            source_if_exists(profile)
+            break  # Only source the first one found
+          end
         end
       end
-
-      # Rubish-specific profile (always sourced if exists, after bash profile)
-      source_if_exists(File.expand_path('~/.rubish_profile'))
     end
 
     # Load startup files for interactive non-login shells
-    # Order: /etc/bash.bashrc or /etc/bashrc, then ~/.bashrc, then ~/.rubishrc
+    # Rubish-specific files are tried first, falling back to bash files for compatibility
+    # Order: ENV file first, then rubish config (~/.config/rubish/config or ~/.rubishrc),
+    # or fall back to bash (~/.bashrc), finally local ./.rubishrc
     def load_interactive_config
       return if @no_rc
 
-      # If --rcfile is specified, use only that file (replaces ~/.bashrc and ~/.rubishrc)
+      # If --rcfile is specified, use only that file (replaces all rc files)
       if @rcfile
         source_if_exists(File.expand_path(@rcfile))
         return
       end
 
-      # System-wide bashrc
-      source_if_exists('/etc/bash.bashrc') || source_if_exists('/etc/bashrc')
-
-      # User bashrc (for bash compatibility)
-      source_if_exists(File.expand_path('~/.bashrc'))
-
-      # Rubish-specific rc
-      source_if_exists(File.expand_path('~/.rubishrc'))
-
-      # Source ENV file if set (POSIX-style startup file for interactive shells)
+      # Source ENV file first if set (POSIX-style startup file for interactive shells)
       env_file = ENV['ENV']
       if env_file && !env_file.empty?
         source_if_exists(File.expand_path(env_file))
       end
+
+      # Try rubish-specific config first
+      xdg_config = File.join(xdg_config_dir, 'config')
+      rubishrc = File.expand_path('~/.rubishrc')
+
+      if File.exist?(xdg_config) || File.exist?(rubishrc)
+        # Use rubish-specific config
+        source_if_exists(xdg_config)
+        source_if_exists(rubishrc)
+      else
+        # Fall back to bash config for compatibility
+        source_if_exists('/etc/bash.bashrc') || source_if_exists('/etc/bashrc')
+        source_if_exists(File.expand_path('~/.bashrc'))
+      end
+
+      # Source local .rubishrc in current directory (project-specific config)
+      local_rubishrc = File.expand_path('./.rubishrc')
+      if local_rubishrc != rubishrc  # Skip if we're already in home dir
+        source_if_exists(local_rubishrc)
+      end
     end
 
     # Load logout files for login shells
-    # Order: ~/.bash_logout, then ~/.rubish_logout
+    # Rubish-specific files are tried first, falling back to bash files for compatibility
     def load_logout_config
       return unless @login_shell
 
-      # Source bash logout for compatibility
-      source_if_exists(File.expand_path('~/.bash_logout'))
+      # Try rubish-specific logout first
+      xdg_logout = File.join(xdg_config_dir, 'logout')
+      rubish_logout = File.expand_path('~/.rubish_logout')
 
-      # Rubish-specific logout
-      source_if_exists(File.expand_path('~/.rubish_logout'))
+      if File.exist?(xdg_logout) || File.exist?(rubish_logout)
+        # Use rubish-specific logout
+        source_if_exists(xdg_logout)
+        source_if_exists(rubish_logout)
+      else
+        # Fall back to bash logout for compatibility
+        source_if_exists(File.expand_path('~/.bash_logout'))
+      end
     end
 
     # Source a file if it exists, return true if sourced
@@ -401,6 +429,17 @@ module Rubish
       rescue => e
         $stderr.puts "rubish: #{path}: #{e.message}"
         false
+      end
+    end
+
+    # Get the XDG config directory for rubish
+    # Uses $XDG_CONFIG_HOME if set, otherwise ~/.config
+    def xdg_config_dir
+      base = ENV['XDG_CONFIG_HOME']
+      if base && !base.empty?
+        File.join(base, 'rubish')
+      else
+        File.expand_path('~/.config/rubish')
       end
     end
 
