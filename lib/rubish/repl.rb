@@ -5,7 +5,7 @@ module Rubish
   class FailglobError < StandardError; end
 
   class REPL
-    def initialize(login_shell: false, no_profile: false, no_rc: false)
+    def initialize(login_shell: false, no_profile: false, no_rc: false, restricted: false)
       @lexer_class = Lexer
       @parser_class = Parser
       @codegen = Codegen.new
@@ -42,6 +42,7 @@ module Rubish
       @login_shell = login_shell  # Whether this is a login shell
       @no_profile = no_profile    # Skip profile files (--noprofile)
       @no_rc = no_rc              # Skip rc files (--norc)
+      @restricted = restricted    # Start in restricted mode (-r or rbash)
       # Set the login_shell shopt option (read-only)
       Builtins.set_shell_option('login_shell', login_shell)
       # SHLVL - shell nesting level (stored in ENV for inheritance)
@@ -91,6 +92,9 @@ module Rubish
       setup_signals
       load_history
       load_config
+      # Enable restricted mode AFTER startup files are sourced
+      # This allows profile/rc files to set PATH and other variables
+      Builtins.enable_restricted_mode if @restricted
       exit_code = catch(:exit) do
         loop { process_line }
       end

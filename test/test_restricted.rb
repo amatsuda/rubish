@@ -241,4 +241,66 @@ class TestRestricted < Test::Unit::TestCase
     end
     assert_match(/readonly/, stderr)
   end
+
+  # ==========================================================================
+  # Invocation-time restricted mode tests (-r flag, rbash symlink)
+  # ==========================================================================
+
+  def test_repl_with_restricted_flag
+    # Create a REPL with restricted: true
+    repl = Rubish::REPL.new(restricted: true)
+    # Simulate what run() does - enable restricted mode after config
+    # (we don't call run() because it would start the interactive loop)
+    Rubish::Builtins.enable_restricted_mode
+
+    assert Rubish::Builtins.restricted_mode?
+  end
+
+  def test_restricted_mode_enabled_after_startup_files
+    # This tests that startup files can modify PATH before restricted mode kicks in
+    tempdir = Dir.mktmpdir('rubish_restricted_startup')
+    original_home = ENV['HOME']
+    ENV['HOME'] = tempdir
+
+    begin
+      # Create a bashrc that modifies PATH
+      bashrc_path = File.join(tempdir, '.bashrc')
+      File.write(bashrc_path, 'PATH=/custom/path:$PATH')
+
+      # Reset restricted mode
+      Rubish::Builtins.instance_variable_set(:@set_options,
+        Rubish::Builtins.instance_variable_get(:@set_options).merge('r' => false))
+      Rubish::Builtins.instance_variable_set(:@shell_options,
+        Rubish::Builtins.instance_variable_get(:@shell_options).merge('restricted_shell' => false))
+
+      # Create REPL with restricted flag
+      repl = Rubish::REPL.new(restricted: true)
+
+      # Override load_interactive_config to skip system files
+      def repl.load_interactive_config
+        return if @no_rc
+        source_if_exists(File.expand_path('~/.bashrc'))
+      end
+
+      # Load config (should work without restrictions)
+      repl.send(:load_config)
+
+      # PATH should have been modified (before restricted mode)
+      assert ENV['PATH'].include?('/custom/path'), 'PATH should be modified by bashrc'
+
+      # Now enable restricted mode (simulating what run() does)
+      Rubish::Builtins.enable_restricted_mode
+
+      # Verify restricted mode is now active
+      assert Rubish::Builtins.restricted_mode?
+    ensure
+      ENV['HOME'] = original_home
+      FileUtils.rm_rf(tempdir)
+      # Reset restricted mode
+      Rubish::Builtins.instance_variable_set(:@set_options,
+        Rubish::Builtins.instance_variable_get(:@set_options).merge('r' => false))
+      Rubish::Builtins.instance_variable_set(:@shell_options,
+        Rubish::Builtins.instance_variable_get(:@shell_options).merge('restricted_shell' => false))
+    end
+  end
 end

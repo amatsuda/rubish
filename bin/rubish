@@ -7,6 +7,10 @@ require_relative '../lib/rubish'
 # This is the traditional way shells detect login mode
 login_shell = $0.start_with?('-')
 
+# Detect restricted shell from $0 (invoked as rbash, rrubish, or similar)
+shell_basename = File.basename($0).sub(/\A-/, '')  # Remove leading '-' for login shells
+restricted = shell_basename == 'rbash' || shell_basename == 'rrubish'
+
 # Parse command line options
 command_string = nil
 script_file = nil
@@ -27,6 +31,10 @@ while i < ARGV.length
   when '-l', '--login'
     # Force login shell mode
     login_shell = true
+    i += 1
+  when '-r'
+    # Enable restricted shell mode
+    restricted = true
     i += 1
   when '--noprofile'
     # Don't read profile files (for login shells)
@@ -86,6 +94,9 @@ if command_string
   # Source RUBISH_ENV before executing command
   source_rubish_env(repl)
 
+  # Enable restricted mode AFTER sourcing env file
+  Rubish::Builtins.enable_restricted_mode if restricted
+
   repl.send(:execute, command_string)
   # Get last exit status from repl
   last_status = repl.instance_variable_get(:@last_status) || 0
@@ -98,6 +109,9 @@ elsif script_file
 
   # Source RUBISH_ENV before executing script
   source_rubish_env(repl)
+
+  # Enable restricted mode AFTER sourcing env file
+  Rubish::Builtins.enable_restricted_mode if restricted
 
   # Use the same repl to execute the script
   File.readlines(script_file, chomp: true).each do |line|
@@ -112,7 +126,8 @@ else
   repl = Rubish::REPL.new(
     login_shell: login_shell,
     no_profile: no_profile,
-    no_rc: no_rc
+    no_rc: no_rc,
+    restricted: restricted
   )
   exit repl.run
 end
