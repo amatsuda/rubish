@@ -28,6 +28,9 @@ class TestRUBISH_Variable < Test::Unit::TestCase
   end
 
   def test_rubish_variable_is_path
+    # Skip when running under rake/test loader (RUBISH returns $PROGRAM_NAME which is the test loader)
+    omit 'RUBISH reflects $PROGRAM_NAME which is test loader when running tests' unless $PROGRAM_NAME.include?('rubish')
+
     output_file = File.join(@tempdir, 'output.txt')
     execute("echo $RUBISH > #{output_file}")
     content = File.read(output_file).strip
