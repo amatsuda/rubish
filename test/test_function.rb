@@ -153,7 +153,8 @@ class TestFunction < Test::Unit::TestCase
   def test_function_in_middle_of_pipeline
     execute('double() { while read line; do echo $line; echo $line; done; }')
     execute("echo hello | double | wc -l > #{output_file}")
-    assert_equal "       2\n", File.read(output_file)
+    # wc output format differs between macOS (padded) and Linux (no padding)
+    assert_equal '2', File.read(output_file).strip
   end
 
   def test_multiple_functions_in_pipeline
