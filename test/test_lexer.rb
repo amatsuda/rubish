@@ -72,4 +72,65 @@ class TestLexer < Test::Unit::TestCase
     assert_equal 2, tokens.length
     assert_equal "'hello world'", tokens[1].value
   end
+
+  # New tests for parser edge cases
+
+  # Test |& (pipe both stdout and stderr)
+  def test_pipe_both
+    tokens = tokenize('cmd1 |& cmd2')
+    assert_equal 3, tokens.length
+    assert_equal :WORD, tokens[0].type
+    assert_equal :PIPE_BOTH, tokens[1].type
+    assert_equal '|&', tokens[1].value
+    assert_equal :WORD, tokens[2].type
+  end
+
+  # Test ;& (case fall-through)
+  def test_case_fall
+    tokens = tokenize(';&')
+    assert_equal 1, tokens.length
+    assert_equal :CASE_FALL, tokens[0].type
+    assert_equal ';&', tokens[0].value
+  end
+
+  # Test ;;& (case continue)
+  def test_case_cont
+    tokens = tokenize(';;&')
+    assert_equal 1, tokens.length
+    assert_equal :CASE_CONT, tokens[0].type
+    assert_equal ';;&', tokens[0].value
+  end
+
+  # Test ;; (double semi)
+  def test_double_semi
+    tokens = tokenize(';;')
+    assert_equal 1, tokens.length
+    assert_equal :DOUBLE_SEMI, tokens[0].type
+    assert_equal ';;', tokens[0].value
+  end
+
+  # Test case with fall-through
+  def test_case_with_fall_through_tokens
+    tokens = tokenize('case x in a) echo a ;& b) echo b ;; esac')
+    types = tokens.map(&:type)
+    assert_includes types, :CASE_FALL
+    assert_includes types, :DOUBLE_SEMI
+  end
+
+  # Test case with continue
+  def test_case_with_continue_tokens
+    tokens = tokenize('case x in a) echo a ;;& b) echo b ;; esac')
+    types = tokens.map(&:type)
+    assert_includes types, :CASE_CONT
+    assert_includes types, :DOUBLE_SEMI
+  end
+
+  # Ensure ;;& and ;& don't conflict with each other
+  def test_case_terminators_no_conflict
+    tokens = tokenize(';& ;;& ;;')
+    assert_equal 3, tokens.length
+    assert_equal :CASE_FALL, tokens[0].type
+    assert_equal :CASE_CONT, tokens[1].type
+    assert_equal :DOUBLE_SEMI, tokens[2].type
+  end
 end

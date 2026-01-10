@@ -68,4 +68,67 @@ class TestParser < Test::Unit::TestCase
     assert_equal 'echo', ast.commands[1].name
     assert_equal ['b'], ast.commands[1].args
   end
+
+  # Test |& (pipe both stdout and stderr)
+  def test_pipe_both
+    ast = parse('cmd1 |& cmd2')
+    assert_instance_of Rubish::AST::Pipeline, ast
+    assert_equal 2, ast.commands.length
+    assert_equal ['cmd1', 'cmd2'], ast.commands.map(&:name)
+    assert_equal [:pipe_both], ast.pipe_types
+  end
+
+  def test_pipe_both_mixed
+    ast = parse('cmd1 | cmd2 |& cmd3')
+    assert_instance_of Rubish::AST::Pipeline, ast
+    assert_equal 3, ast.commands.length
+    assert_equal [:pipe, :pipe_both], ast.pipe_types
+  end
+
+  # Test ! (pipeline negation)
+  def test_negation
+    ast = parse('! echo hello')
+    assert_instance_of Rubish::AST::Negation, ast
+    assert_instance_of Rubish::AST::Command, ast.command
+    assert_equal 'echo', ast.command.name
+  end
+
+  def test_negation_pipeline
+    ast = parse('! cmd1 | cmd2')
+    assert_instance_of Rubish::AST::Negation, ast
+    assert_instance_of Rubish::AST::Pipeline, ast.command
+  end
+
+  def test_negation_with_time
+    ast = parse('! time cmd')
+    assert_instance_of Rubish::AST::Negation, ast
+    assert_instance_of Rubish::AST::Time, ast.command
+  end
+
+  # Test case fall-through terminators
+  def test_case_fall_through
+    ast = parse('case x in a) echo a ;& b) echo b ;; esac')
+    assert_instance_of Rubish::AST::Case, ast
+    assert_equal 2, ast.branches.length
+    # branches now have [patterns, body, terminator]
+    assert_equal :fall, ast.branches[0][2]
+    assert_equal :double_semi, ast.branches[1][2]
+  end
+
+  def test_case_continue
+    ast = parse('case x in a) echo a ;;& b) echo b ;; esac')
+    assert_instance_of Rubish::AST::Case, ast
+    assert_equal 2, ast.branches.length
+    assert_equal :cont, ast.branches[0][2]
+    assert_equal :double_semi, ast.branches[1][2]
+  end
+
+  def test_case_mixed_terminators
+    ast = parse('case x in a) echo a ;& b) echo b ;;& c) echo c ;; esac')
+    assert_instance_of Rubish::AST::Case, ast
+    assert_equal 3, ast.branches.length
+    assert_equal :fall, ast.branches[0][2]
+    assert_equal :cont, ast.branches[1][2]
+    assert_equal :double_semi, ast.branches[2][2]
+  end
 end

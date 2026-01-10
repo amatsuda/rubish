@@ -6,8 +6,11 @@ module Rubish
 
     OPERATORS = {
       '|' => :PIPE,
+      '|&' => :PIPE_BOTH,    # Pipe stdout and stderr: cmd1 |& cmd2 = cmd1 2>&1 | cmd2
       ';' => :SEMICOLON,
       ';;' => :DOUBLE_SEMI,  # For case statement pattern terminators
+      ';&' => :CASE_FALL,    # Case fall-through (execute next pattern)
+      ';;&' => :CASE_CONT,   # Case continue (test next pattern)
       '&' => :AMPERSAND,
       '>' => :REDIRECT_OUT,
       '>|' => :REDIRECT_CLOBBER,  # Force overwrite even with noclobber
@@ -150,7 +153,13 @@ module Rubish
       if two_char == '>('
         return read_process_substitution(:PROC_SUB_OUT)
       end
-      if %w[>> >| 2> >& <& && || () ;;].include?(two_char)
+      # Check for three-char operators first: ;;&
+      three_char_op = @input[@pos, 3]
+      if three_char_op == ';;&'
+        @pos += 3
+        return Token.new(:CASE_CONT, ';;&')
+      end
+      if %w[>> >| 2> >& <& && || () ;; ;& |&].include?(two_char)
         @pos += 2
         return Token.new(OPERATORS[two_char], two_char)
       end

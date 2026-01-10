@@ -114,6 +114,12 @@ module Rubish
       self
     end
 
+    def redirect_err_to_out
+      # Used for |& - redirect stderr to stdout before piping
+      @stderr = :stdout
+      self
+    end
+
     private
 
     def expand_args(args)
@@ -140,7 +146,12 @@ module Rubish
       @pid = fork do
         $stdin.reopen(@stdin) if @stdin
         $stdout.reopen(@stdout) if @stdout
-        $stderr.reopen(@stderr) if @stderr
+        if @stderr == :stdout
+          # |& - redirect stderr to stdout
+          $stderr.reopen($stdout)
+        elsif @stderr
+          $stderr.reopen(@stderr)
+        end
 
         # Set keyword environment variables
         keyword_env.each { |k, v| ENV[k] = v }
@@ -175,7 +186,12 @@ module Rubish
         reader.close
         $stdin.reopen(@stdin) if @stdin
         $stdout.reopen(writer)
-        $stderr.reopen(@stderr) if @stderr
+        if @stderr == :stdout
+          # |& - redirect stderr to stdout (which is now writer)
+          $stderr.reopen($stdout)
+        elsif @stderr
+          $stderr.reopen(@stderr)
+        end
 
         # Set keyword environment variables
         keyword_env.each { |k, v| ENV[k] = v }
@@ -307,6 +323,11 @@ module Rubish
 
     def redirect_err(file)
       @commands.last.redirect_err(file)
+      self
+    end
+
+    def redirect_err_to_out
+      @commands.last.redirect_err_to_out
       self
     end
 
@@ -540,7 +561,11 @@ module Rubish
       pid = fork do
         $stdin.reopen(@stdin) if @stdin
         $stdout.reopen(@stdout) if @stdout
-        $stderr.reopen(@stderr) if @stderr
+        if @stderr == :stdout
+          $stderr.reopen($stdout)
+        elsif @stderr
+          $stderr.reopen(@stderr)
+        end
 
         # The block contains __run_cmd calls which handle execution
         # So we just call the block and check the result's status
@@ -593,6 +618,11 @@ module Rubish
 
     def redirect_err(file)
       @stderr = File.open(file, 'w')
+      self
+    end
+
+    def redirect_err_to_out
+      @stderr = :stdout
       self
     end
   end
@@ -680,6 +710,11 @@ module Rubish
 
     def redirect_err(file)
       @stderr = File.open(file, 'w')
+      self
+    end
+
+    def redirect_err_to_out
+      @stderr = :stdout
       self
     end
   end

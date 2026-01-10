@@ -4617,6 +4617,29 @@ module Rubish
       end
     end
 
+    def __negate(&block)
+      # Run command and negate exit status
+      result = block.call
+
+      # Handle different return types
+      case result
+      when Command, Pipeline, Subshell
+        result.run unless result.ran?
+        status = result.success?
+      when ExitStatus
+        status = result.success?
+      when true, false
+        status = result
+      when Integer
+        status = result == 0
+      else
+        status = result ? true : false
+      end
+
+      # Return negated status
+      ExitStatus.new(status ? 1 : 0)
+    end
+
     def __heredoc(delimiter, expand, strip_tabs, &block)
       content = @heredoc_content || ''
 
@@ -5502,27 +5525,234 @@ module Rubish
 
     def split_completion_words(line)
       # Split line into words using COMP_WORDBREAKS
+      # Handles: backslash escapes, quotes, $'...', $(cmd), <(cmd), >(cmd), ${var}, {a,b,c}
       wordbreaks = Builtins.comp_wordbreaks
       words = []
       current = +''
-      in_quote = nil
+      pos = 0
 
-      line.each_char do |c|
-        if in_quote
+      while pos < line.length
+        c = line[pos]
+        two_char = line[pos, 2]
+
+        # Backslash escape - skip next character
+        if c == '\\'
           current << c
-          in_quote = nil if c == in_quote
-        elsif c == '"' || c == "'"
+          pos += 1
+          if pos < line.length
+            current << line[pos]
+            pos += 1
+          end
+          next
+        end
+
+        # ANSI-C quoting: $'...'
+        if two_char == "$'"
+          start = pos
+          pos += 2  # skip $'
+          while pos < line.length
+            if line[pos] == '\\'
+              pos += 2  # skip escaped char
+            elsif line[pos] == "'"
+              pos += 1
+              break
+            else
+              pos += 1
+            end
+          end
+          current << line[start...pos]
+          next
+        end
+
+        # Command substitution: $(...)
+        if two_char == '$('
+          start = pos
+          pos += 2  # skip $(
+          depth = 1
+          while pos < line.length && depth > 0
+            if line[pos] == '('
+              depth += 1
+            elsif line[pos] == ')'
+              depth -= 1
+            elsif line[pos] == '"' || line[pos] == "'"
+              # Skip quoted content
+              quote = line[pos]
+              pos += 1
+              while pos < line.length && line[pos] != quote
+                pos += 2 if line[pos] == '\\'
+                pos += 1
+              end
+            end
+            pos += 1
+          end
+          current << line[start...pos]
+          next
+        end
+
+        # Variable expansion: ${...}
+        if two_char == '${'
+          start = pos
+          pos += 2  # skip ${
+          depth = 1
+          while pos < line.length && depth > 0
+            if line[pos] == '{'
+              depth += 1
+            elsif line[pos] == '}'
+              depth -= 1
+            end
+            pos += 1
+          end
+          current << line[start...pos]
+          next
+        end
+
+        # Process substitution: <(...) or >(...)
+        if two_char == '<(' || two_char == '>('
+          start = pos
+          pos += 2  # skip <( or >(
+          depth = 1
+          while pos < line.length && depth > 0
+            if line[pos] == '('
+              depth += 1
+            elsif line[pos] == ')'
+              depth -= 1
+            elsif line[pos] == '"' || line[pos] == "'"
+              quote = line[pos]
+              pos += 1
+              while pos < line.length && line[pos] != quote
+                pos += 2 if line[pos] == '\\'
+                pos += 1
+              end
+            end
+            pos += 1
+          end
+          current << line[start...pos]
+          next
+        end
+
+        # Brace expansion: {...}
+        # Only if it looks like brace expansion (contains comma or ..)
+        if c == '{' && looks_like_brace_expansion_at?(line, pos)
+          start = pos
+          depth = 1
+          pos += 1
+          while pos < line.length && depth > 0
+            if line[pos] == '{'
+              depth += 1
+            elsif line[pos] == '}'
+              depth -= 1
+            end
+            pos += 1
+          end
+          current << line[start...pos]
+          next
+        end
+
+        # Double-quoted string
+        if c == '"'
           current << c
-          in_quote = c
-        elsif wordbreaks.include?(c)
+          pos += 1
+          while pos < line.length && line[pos] != '"'
+            if line[pos] == '\\'
+              current << line[pos]
+              pos += 1
+              if pos < line.length
+                current << line[pos]
+                pos += 1
+              end
+            else
+              current << line[pos]
+              pos += 1
+            end
+          end
+          if pos < line.length
+            current << line[pos]  # closing quote
+            pos += 1
+          end
+          next
+        end
+
+        # Single-quoted string
+        if c == "'"
+          current << c
+          pos += 1
+          while pos < line.length && line[pos] != "'"
+            current << line[pos]
+            pos += 1
+          end
+          if pos < line.length
+            current << line[pos]  # closing quote
+            pos += 1
+          end
+          next
+        end
+
+        # Backtick command substitution: `...`
+        if c == '`'
+          start = pos
+          pos += 1
+          while pos < line.length
+            if line[pos] == '\\'
+              pos += 2
+            elsif line[pos] == '`'
+              pos += 1
+              break
+            else
+              pos += 1
+            end
+          end
+          current << line[start...pos]
+          next
+        end
+
+        # Word break character
+        if wordbreaks.include?(c)
           words << current unless current.empty?
           current = +''
-        else
-          current << c
+          pos += 1
+          next
         end
+
+        # Regular character
+        current << c
+        pos += 1
       end
+
       words << current unless current.empty?
       words
+    end
+
+    def looks_like_brace_expansion_at?(line, pos)
+      # Check if { at pos looks like brace expansion {a,b} or {1..5}
+      # Not: variable ${var} or function body { cmd; }
+      return false unless line[pos] == '{'
+
+      depth = 1
+      i = pos + 1
+      has_comma = false
+      has_dotdot = false
+
+      while i < line.length && depth > 0
+        case line[i]
+        when '{'
+          depth += 1
+        when '}'
+          depth -= 1
+        when ','
+          has_comma = true if depth == 1
+        when '.'
+          if line[i + 1] == '.'
+            has_dotdot = true if depth == 1
+            i += 1
+          end
+        when ' ', "\t", "\n"
+          # Whitespace inside braces suggests function body, not brace expansion
+          return false if depth > 0
+        end
+        i += 1
+      end
+
+      depth == 0 && (has_comma || has_dotdot)
     end
 
     def calculate_comp_cword(line, point, words)

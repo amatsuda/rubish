@@ -74,24 +74,45 @@ module Rubish
       left
     end
 
-    # pipeline : [time [-p]] command ('|' command)*
+    # pipeline : ['!'] [time [-p]] command (('|' | '|&') command)*
     def parse_pipeline
+      # Check for ! negation prefix
+      negated = false
+      if peek(:WORD) && current.value == '!'
+        consume(:WORD)
+        negated = true
+      end
+
       # Check for time prefix
       if peek(:TIME)
-        return parse_time
+        result = parse_time
+        return negated ? AST::Negation.new(result) : result
       end
 
       first = parse_command
       return nil unless first
 
       commands = [first]
-      while peek(:PIPE)
-        consume(:PIPE)
+      pipe_types = []
+      while peek(:PIPE) || peek(:PIPE_BOTH)
+        if peek(:PIPE_BOTH)
+          consume(:PIPE_BOTH)
+          pipe_types << :pipe_both
+        else
+          consume(:PIPE)
+          pipe_types << :pipe
+        end
         cmd = parse_command
         commands << cmd if cmd
       end
 
-      commands.length == 1 ? commands.first : AST::Pipeline.new(commands)
+      result = if commands.length == 1
+                 commands.first
+               else
+                 AST::Pipeline.new(commands: commands, pipe_types: pipe_types)
+               end
+
+      negated ? AST::Negation.new(result) : result
     end
 
     # time : TIME [-p] pipeline
@@ -110,13 +131,24 @@ module Rubish
       return AST::Time.new(command: nil, posix_format: posix_format) unless first
 
       commands = [first]
-      while peek(:PIPE)
-        consume(:PIPE)
+      pipe_types = []
+      while peek(:PIPE) || peek(:PIPE_BOTH)
+        if peek(:PIPE_BOTH)
+          consume(:PIPE_BOTH)
+          pipe_types << :pipe_both
+        else
+          consume(:PIPE)
+          pipe_types << :pipe
+        end
         cmd = parse_command
         commands << cmd if cmd
       end
 
-      timed_cmd = commands.length == 1 ? commands.first : AST::Pipeline.new(commands)
+      timed_cmd = if commands.length == 1
+                    commands.first
+                  else
+                    AST::Pipeline.new(commands: commands, pipe_types: pipe_types)
+                  end
       AST::Time.new(command: timed_cmd, posix_format: posix_format)
     end
 
@@ -426,7 +458,11 @@ module Rubish
       AST::Select.new(variable, items, body)
     end
 
-    # case_statement : CASE WORD 'in' (pattern ('|' pattern)* ')' body ';;')* ESAC
+    # case_statement : CASE WORD 'in' (pattern ('|' pattern)* ')' body (';;'|';&'|';;&'))* ESAC
+    # Terminators:
+    #   ;; - standard terminator (stop case)
+    #   ;& - fall-through to next body (without testing pattern)
+    #   ;;& - continue testing next patterns
     def parse_case
       consume(:CASE)
 
@@ -455,15 +491,26 @@ module Rubish
         # Consume closing )
         consume(:RPAREN) || raise('Expected ")" after case pattern')
 
-        # Parse body until ;;
+        # Parse body until terminator (;;, ;&, ;;&) or esac
         body = parse_case_body
-        branches << [patterns, body]
 
-        # Consume ;;
+        # Determine terminator type
+        terminator = nil
         if peek(:DOUBLE_SEMI)
           consume(:DOUBLE_SEMI)
+          terminator = :double_semi
+          skip_semicolon
+        elsif peek(:CASE_FALL)
+          consume(:CASE_FALL)
+          terminator = :fall
+          skip_semicolon
+        elsif peek(:CASE_CONT)
+          consume(:CASE_CONT)
+          terminator = :cont
           skip_semicolon
         end
+
+        branches << [patterns, body, terminator]
       end
 
       consume(:ESAC) || raise('Expected "esac" to close case statement')
@@ -556,12 +603,12 @@ module Rubish
       AST::ArrayAssign.new(var: token.value[:var], elements: token.value[:elements])
     end
 
-    # Parse body of case branch (stops at ;; or esac)
+    # Parse body of case branch (stops at ;;, ;&, ;;&, or esac)
     def parse_case_body
       commands = []
       skip_semicolon
 
-      while !peek(:DOUBLE_SEMI) && !peek(:ESAC) && current
+      while !peek(:DOUBLE_SEMI) && !peek(:CASE_FALL) && !peek(:CASE_CONT) && !peek(:ESAC) && current
         cmd = parse_conditional
         break unless cmd
 

@@ -10,7 +10,16 @@ module Rubish
     end
 
     # Pipeline: cmd1 | cmd2 | cmd3
-    Pipeline = Data.define(:commands)
+    # pipe_types: array of :pipe or :pipe_both (for |&) indicating connection type between commands
+    # If nil or empty, all pipes are regular pipes
+    Pipeline = Data.define(:commands, :pipe_types) do
+      def initialize(commands:, pipe_types: nil)
+        super
+      end
+    end
+
+    # Negation: ! pipeline - negates exit status of pipeline
+    Negation = Data.define(:command)
 
     # Command list: cmd1 ; cmd2
     List = Data.define(:commands)
@@ -68,7 +77,10 @@ module Rubish
     Function = Data.define(:name, :body)
 
     # Case statement: case word in pattern1) body ;; pattern2|pattern3) body ;; esac
-    # branches is array of [patterns, body] where patterns is array of pattern strings
+    # branches is array of [patterns, body, terminator] where:
+    #   - patterns is array of pattern strings
+    #   - body is the AST for the branch body
+    #   - terminator is :double_semi (;;), :fall (;&), :cont (;;&), or nil (last branch)
     Case = Data.define(:word, :branches)
 
     # Subshell: (commands) - runs commands in a child process

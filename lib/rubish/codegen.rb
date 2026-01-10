@@ -8,6 +8,8 @@ module Rubish
         generate_command(node)
       when AST::Pipeline
         generate_pipeline(node)
+      when AST::Negation
+        generate_negation(node)
       when AST::List
         generate_list(node)
       when AST::Redirect
@@ -391,7 +393,24 @@ module Rubish
     end
 
     def generate_pipeline(node)
-      node.commands.map { |c| generate_pipeline_element(c) }.join(' | ')
+      # Handle pipe_types for |& (pipe both stdout and stderr)
+      parts = []
+      node.commands.each_with_index do |cmd, idx|
+        element = generate_pipeline_element(cmd)
+
+        # Check if this is followed by |& (pipe_both)
+        if node.pipe_types && idx < node.pipe_types.length && node.pipe_types[idx] == :pipe_both
+          # |& means redirect stderr to stdout before piping
+          parts << "#{element}.redirect_err_to_out"
+        else
+          parts << element
+        end
+      end
+      parts.join(' | ')
+    end
+
+    def generate_negation(node)
+      "__negate { #{generate(node.command)} }"
     end
 
     def generate_pipeline_element(node)

@@ -309,4 +309,71 @@ class TestCompVariables < Test::Unit::TestCase
     words = @repl.send(:split_completion_words, '')
     assert_equal [], words
   end
+
+  # New edge case tests for split_completion_words
+
+  def test_split_completion_words_backslash_escape
+    words = @repl.send(:split_completion_words, 'echo hello\ world')
+    assert_equal ['echo', 'hello\ world'], words
+  end
+
+  def test_split_completion_words_ansi_c_quoting
+    words = @repl.send(:split_completion_words, "echo \$'hello\\nworld'")
+    assert_equal ['echo', "\$'hello\\nworld'"], words
+  end
+
+  def test_split_completion_words_command_substitution
+    words = @repl.send(:split_completion_words, 'echo $(date)')
+    assert_equal ['echo', '$(date)'], words
+  end
+
+  def test_split_completion_words_nested_command_substitution
+    words = @repl.send(:split_completion_words, 'echo $(cat $(find .))')
+    assert_equal ['echo', '$(cat $(find .))'], words
+  end
+
+  def test_split_completion_words_variable_expansion
+    words = @repl.send(:split_completion_words, 'echo ${HOME}')
+    assert_equal ['echo', '${HOME}'], words
+  end
+
+  def test_split_completion_words_process_substitution_in
+    words = @repl.send(:split_completion_words, 'diff <(ls dir1) <(ls dir2)')
+    assert_equal ['diff', '<(ls dir1)', '<(ls dir2)'], words
+  end
+
+  def test_split_completion_words_process_substitution_out
+    words = @repl.send(:split_completion_words, 'cmd >(tee file)')
+    assert_equal ['cmd', '>(tee file)'], words
+  end
+
+  def test_split_completion_words_brace_expansion
+    words = @repl.send(:split_completion_words, 'echo {a,b,c}')
+    assert_equal ['echo', '{a,b,c}'], words
+  end
+
+  def test_split_completion_words_brace_range
+    words = @repl.send(:split_completion_words, 'echo {1..10}')
+    assert_equal ['echo', '{1..10}'], words
+  end
+
+  def test_split_completion_words_backtick
+    words = @repl.send(:split_completion_words, 'echo `date`')
+    assert_equal ['echo', '`date`'], words
+  end
+
+  def test_split_completion_words_double_quotes_with_escape
+    words = @repl.send(:split_completion_words, 'echo "hello\"world"')
+    assert_equal ['echo', '"hello\"world"'], words
+  end
+
+  def test_split_completion_words_single_quotes
+    words = @repl.send(:split_completion_words, "echo 'hello world'")
+    assert_equal ['echo', "'hello world'"], words
+  end
+
+  def test_split_completion_words_mixed
+    words = @repl.send(:split_completion_words, 'git commit -m "fix $(date)" --all')
+    assert_equal ['git', 'commit', '-m', '"fix $(date)"', '--all'], words
+  end
 end
