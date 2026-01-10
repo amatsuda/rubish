@@ -114,6 +114,11 @@ module Rubish
     end
 
     def generate_string_arg_with_glob(str)
+      # $'...' ANSI-C quoting: process escape sequences
+      if str.start_with?("$'") && str.end_with?("'")
+        return "Builtins.process_escape_sequences(#{str[2...-1].inspect})"
+      end
+
       # Single-quoted strings: no expansion at all
       if str.start_with?("'") && str.end_with?("'")
         return str[1...-1].inspect
@@ -151,6 +156,11 @@ module Rubish
     end
 
     def generate_string_arg(str)
+      # $'...' ANSI-C quoting: process escape sequences
+      if str.start_with?("$'") && str.end_with?("'")
+        return "Builtins.process_escape_sequences(#{str[2...-1].inspect})"
+      end
+
       # Single-quoted strings: no expansion, strip quotes
       if str.start_with?("'") && str.end_with?("'")
         return str[1...-1].inspect
@@ -212,9 +222,9 @@ module Rubish
         char = str[i]
 
         if char == '\\'
-          # Escape sequence - keep as-is
-          result << str[i, 2]
-          i += 2
+          # Escape backslash for Ruby string
+          result << '\\\\'
+          i += 1
         elsif char == '`'
           # Backtick command substitution
           cmd_expr, consumed = parse_backtick_substitution(str, i)

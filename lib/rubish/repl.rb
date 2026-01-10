@@ -1482,6 +1482,11 @@ module Rubish
     def expand_assignment_value(value)
       return '' if value.nil? || value.empty?
 
+      # $'...' ANSI-C quoting: process escape sequences
+      if value.start_with?("$'") && value.end_with?("'")
+        return Builtins.process_escape_sequences(value[2...-1])
+      end
+
       # Handle quoted strings
       if value.start_with?("'") && value.end_with?("'")
         return value[1...-1]
@@ -1497,6 +1502,11 @@ module Rubish
 
     def expand_single_arg_with_brace_and_glob(arg)
       return [arg] unless arg.is_a?(String)
+
+      # $'...' ANSI-C quoting: process escape sequences
+      if arg.start_with?("$'") && arg.end_with?("'")
+        return [Builtins.process_escape_sequences(arg[2...-1])]
+      end
 
       # Single-quoted strings: no expansion, strip quotes
       if arg.start_with?("'") && arg.end_with?("'")
@@ -1531,6 +1541,11 @@ module Rubish
     def expand_single_arg_with_glob(arg)
       return [arg] unless arg.is_a?(String)
 
+      # $'...' ANSI-C quoting: process escape sequences
+      if arg.start_with?("$'") && arg.end_with?("'")
+        return [Builtins.process_escape_sequences(arg[2...-1])]
+      end
+
       # Single-quoted strings: no expansion, strip quotes
       if arg.start_with?("'") && arg.end_with?("'")
         return [arg[1...-1]]
@@ -1554,6 +1569,11 @@ module Rubish
 
     def expand_single_arg(arg)
       return arg unless arg.is_a?(String)
+
+      # $'...' ANSI-C quoting: process escape sequences
+      if arg.start_with?("$'") && arg.end_with?("'")
+        return Builtins.process_escape_sequences(arg[2...-1])
+      end
 
       # Single-quoted strings: no expansion, strip quotes
       if arg.start_with?("'") && arg.end_with?("'")

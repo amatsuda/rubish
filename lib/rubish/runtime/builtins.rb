@@ -3440,25 +3440,74 @@ module Rubish
     end
 
     def self.process_escape_sequences(str)
-      str.gsub(/\\(.)/) do |match|
-        case $1
-        when 'n' then "\n"
-        when 't' then "\t"
-        when 'r' then "\r"
-        when 'a' then "\a"
-        when 'b' then "\b"
-        when 'f' then "\f"
-        when 'v' then "\v"
-        when '\\' then '\\'
-        when "'" then "'"
-        when '"' then '"'
-        when '0'
-          # Octal escape - simplified handling
-          '\0'
+      result = +''
+      i = 0
+      while i < str.length
+        if str[i] == '\\' && i + 1 < str.length
+          next_char = str[i + 1]
+          case next_char
+          when 'n' then result << "\n"; i += 2
+          when 't' then result << "\t"; i += 2
+          when 'r' then result << "\r"; i += 2
+          when 'a' then result << "\a"; i += 2
+          when 'b' then result << "\b"; i += 2
+          when 'f' then result << "\f"; i += 2
+          when 'v' then result << "\v"; i += 2
+          when 'e', 'E' then result << "\e"; i += 2
+          when '\\' then result << '\\'; i += 2
+          when "'" then result << "'"; i += 2
+          when '"' then result << '"'; i += 2
+          when '?'  then result << '?'; i += 2
+          when 'x'
+            # Hex escape \xNN
+            hex = str[i + 2, 2]
+            if hex =~ /\A[0-9a-fA-F]{1,2}\z/
+              result << hex.to_i(16).chr
+              i += 2 + hex.length
+            else
+              result << str[i]; i += 1
+            end
+          when 'u'
+            # Unicode escape \uNNNN (4 hex digits)
+            hex = str[i + 2, 4]
+            if hex =~ /\A[0-9a-fA-F]{4}\z/
+              result << [hex.to_i(16)].pack('U')
+              i += 6
+            else
+              result << str[i]; i += 1
+            end
+          when 'U'
+            # Unicode escape \UNNNNNNNN (8 hex digits)
+            hex = str[i + 2, 8]
+            if hex =~ /\A[0-9a-fA-F]{8}\z/
+              result << [hex.to_i(16)].pack('U')
+              i += 10
+            else
+              result << str[i]; i += 1
+            end
+          when 'c'
+            # Control character \cX
+            if i + 2 < str.length
+              ctrl_char = str[i + 2]
+              result << (ctrl_char.ord & 0x1f).chr
+              i += 3
+            else
+              result << str[i]; i += 1
+            end
+          when /[0-7]/
+            # Octal escape \NNN (1-3 digits)
+            octal = str[i + 1, 3].match(/\A[0-7]{1,3}/)[0]
+            result << octal.to_i(8).chr
+            i += 1 + octal.length
+          else
+            # Unknown escape - keep backslash and character
+            result << str[i, 2]; i += 2
+          end
         else
-          match
+          result << str[i]; i += 1
         end
       end
+      result
     end
 
     def self.shell_quote(str)

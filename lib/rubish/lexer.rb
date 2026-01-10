@@ -456,6 +456,9 @@ module Rubish
           @pos += 2
         elsif char == '"'
           read_double_quoted_string
+        elsif char == '$' && @input[@pos + 1] == "'"
+          # $'...' ANSI-C quoting - handle escape sequences including \'
+          read_ansi_c_quoted_string
         elsif char == "'"
           read_single_quoted_string
         elsif char == '`'
@@ -516,6 +519,8 @@ module Rubish
 
         if char == '"'
           read_double_quoted_string
+        elsif char == '$' && @input[@pos + 1] == "'"
+          read_ansi_c_quoted_string
         elsif char == "'"
           read_single_quoted_string
         elsif char == '$' && @input[@pos + 1] == '('
@@ -543,6 +548,23 @@ module Rubish
       @pos += 1 # skip opening '
       @pos += 1 while @pos < @input.length && @input[@pos] != "'"
       @pos += 1 # skip closing '
+    end
+
+    def read_ansi_c_quoted_string
+      # $'...' - ANSI-C quoting with escape sequences
+      @pos += 2 # skip $'
+      while @pos < @input.length
+        char = @input[@pos]
+        if char == '\\'
+          # Skip escaped character (including \')
+          @pos += 2
+        elsif char == "'"
+          @pos += 1 # skip closing '
+          break
+        else
+          @pos += 1
+        end
+      end
     end
 
     def read_command_substitution
