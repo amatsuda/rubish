@@ -273,4 +273,32 @@ class TestStartupFiles < Test::Unit::TestCase
     assert_nil ENV['BASH_LOGOUT_SOURCED']
     assert_nil ENV['RUBISH_LOGOUT_SOURCED']
   end
+
+  # ==========================================================================
+  # Interactive mode tests (-i flag)
+  # ==========================================================================
+
+  def test_interactive_mode_flag_is_set
+    # Enable interactive mode
+    Rubish::Builtins.enable_interactive_mode
+
+    assert Rubish::Builtins.interactive_mode?
+  ensure
+    # Reset interactive mode
+    Rubish::Builtins.instance_variable_get(:@set_options)['i'] = false
+  end
+
+  def test_interactive_mode_cannot_be_changed_via_set
+    # Try to enable via set command
+    repl = create_test_repl
+    stderr = capture_stderr { repl.send(:execute, 'set -i') }
+    assert_match(/cannot modify/, stderr)
+
+    # Try to disable via set command
+    Rubish::Builtins.enable_interactive_mode
+    stderr = capture_stderr { repl.send(:execute, 'set +i') }
+    assert_match(/cannot modify/, stderr)
+  ensure
+    Rubish::Builtins.instance_variable_get(:@set_options)['i'] = false
+  end
 end

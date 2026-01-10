@@ -17,6 +17,7 @@ script_file = nil
 script_args = []
 no_profile = false
 no_rc = false
+force_interactive = false
 
 i = 0
 while i < ARGV.length
@@ -35,6 +36,10 @@ while i < ARGV.length
   when '-r'
     # Enable restricted shell mode
     restricted = true
+    i += 1
+  when '-i'
+    # Force interactive mode
+    force_interactive = true
     i += 1
   when '--noprofile'
     # Don't read profile files (for login shells)
@@ -87,22 +92,30 @@ end
 if command_string
   # -c mode: execute command string
   ENV['RUBISH_EXECUTION_STRING'] = command_string
-  repl = Rubish::REPL.new
+  repl = Rubish::REPL.new(no_rc: no_rc)
   repl.script_name = script_args[0] || 'rubish'
   repl.positional_params = script_args[1..] || []
 
-  # Source RUBISH_ENV before executing command
-  source_rubish_env(repl)
+  # Enable interactive mode if -i was specified
+  Rubish::Builtins.enable_interactive_mode if force_interactive
 
-  # Enable restricted mode AFTER sourcing env file
+  # Source interactive startup files if -i was specified
+  if force_interactive && !no_rc
+    repl.send(:load_interactive_config)
+  else
+    # Source RUBISH_ENV for non-interactive mode
+    source_rubish_env(repl)
+  end
+
+  # Enable restricted mode AFTER sourcing startup files
   Rubish::Builtins.enable_restricted_mode if restricted
 
   repl.send(:execute, command_string)
   # Get last exit status from repl
   last_status = repl.instance_variable_get(:@last_status) || 0
   exit(last_status)
-elsif script_file
-  # Script mode: execute script file
+elsif script_file && !force_interactive
+  # Script mode: execute script file (non-interactive)
   repl = Rubish::REPL.new
   repl.script_name = script_file
   repl.positional_params = script_args
@@ -121,8 +134,33 @@ elsif script_file
   end
   last_status = repl.instance_variable_get(:@last_status) || 0
   exit(last_status)
+elsif script_file && force_interactive
+  # Script mode with -i: run script with interactive settings (sources bashrc)
+  repl = Rubish::REPL.new(no_rc: no_rc)
+  repl.script_name = script_file
+  repl.positional_params = script_args
+
+  # Enable interactive mode
+  Rubish::Builtins.enable_interactive_mode
+
+  # Source interactive startup files
+  repl.send(:load_interactive_config) unless no_rc
+
+  # Enable restricted mode AFTER startup files
+  Rubish::Builtins.enable_restricted_mode if restricted
+
+  # Execute the script
+  File.readlines(script_file, chomp: true).each do |line|
+    next if line.strip.empty? || line.strip.start_with?('#')
+
+    repl.send(:execute, line)
+  end
+
+  last_status = repl.instance_variable_get(:@last_status) || 0
+  exit(last_status)
 else
   # Interactive mode
+  Rubish::Builtins.enable_interactive_mode
   repl = Rubish::REPL.new(
     login_shell: login_shell,
     no_profile: no_profile,

@@ -2925,6 +2925,7 @@ module Rubish
       'history' => true,     # history: enable command history (enabled by default)
       'nolog' => false,      # nolog: obsolete, has no effect
       'r' => false,          # restricted: restricted shell mode (cannot be disabled once set)
+      'i' => false,          # interactive: shell is interactive (read-only, set at startup)
     }
 
     def self.set_options
@@ -2944,6 +2945,16 @@ module Rubish
     def self.enable_restricted_mode
       @set_options['r'] = true
       @shell_options['restricted_shell'] = true
+    end
+
+    # Check if shell is interactive
+    def self.interactive_mode?
+      @set_options['i']
+    end
+
+    # Enable interactive mode (read-only, set at startup)
+    def self.enable_interactive_mode
+      @set_options['i'] = true
     end
 
     # List of variables that cannot be modified in restricted mode
@@ -2993,6 +3004,10 @@ module Rubish
               if c == 'r'
                 # Enable restricted mode (syncs with restricted_shell shopt)
                 enable_restricted_mode
+              elsif c == 'i'
+                # Cannot enable interactive mode via set (read-only)
+                $stderr.puts 'rubish: set: interactive: cannot modify at runtime'
+                return false
               else
                 @set_options[c] = true
               end
@@ -3005,6 +3020,10 @@ module Rubish
               if c == 'r' && restricted_mode?
                 # Cannot disable restricted mode once enabled
                 $stderr.puts 'rubish: set: restricted: cannot modify in restricted mode'
+                return false
+              elsif c == 'i'
+                # Cannot disable interactive mode (read-only)
+                $stderr.puts 'rubish: set: interactive: cannot modify at runtime'
                 return false
               else
                 @set_options[c] = false
