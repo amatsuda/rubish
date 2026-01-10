@@ -4791,8 +4791,11 @@ module Rubish
             left = tokens[0...i].join(' ')
             right_parts = tokens[i + 1..]
             # For regex (=~), reconstruct pattern without spaces around parens
+            # For glob (== !=), also reconstruct to preserve extglob patterns
             right = if token == '=~'
                       reconstruct_regex_pattern(right_parts)
+                    elsif token == '==' || token == '!='
+                      reconstruct_glob_pattern(right_parts)
                     else
                       right_parts.join(' ')
                     end
@@ -4872,9 +4875,23 @@ module Rubish
 
     def cond_pattern_match?(string, pattern)
       # In [[ ]], == does glob pattern matching (not literal)
-      # Convert glob pattern to regex
-      flags = Builtins.shopt_enabled?('nocasematch') ? File::FNM_CASEFOLD : 0
-      File.fnmatch(pattern, string, File::FNM_EXTGLOB | flags)
+      # Handle extglob patterns when extglob is enabled
+      if Builtins.shopt_enabled?('extglob') && has_extglob?(pattern)
+        # Convert extglob pattern to regex for matching
+        # extglob_to_regex returns a Regexp with anchors already included
+        base_regex = extglob_to_regex(pattern)
+        if Builtins.shopt_enabled?('nocasematch')
+          # Rebuild regex with case-insensitive flag
+          regex = Regexp.new(base_regex.source, Regexp::IGNORECASE)
+        else
+          regex = base_regex
+        end
+        !!string.match?(regex)
+      else
+        # Use File.fnmatch for standard glob patterns
+        flags = Builtins.shopt_enabled?('nocasematch') ? File::FNM_CASEFOLD : 0
+        File.fnmatch(pattern, string, File::FNM_EXTGLOB | flags)
+      end
     end
 
     def reconstruct_regex_pattern(parts)
@@ -4891,6 +4908,28 @@ module Rubish
           prev_part = i > 0 ? parts[i - 1] : nil
           needs_space = i > 0 && !result.empty? && !regex_special.include?(prev_part) &&
                         !regex_special.any? { |s| result.end_with?(s) }
+          result << ' ' if needs_space
+          result << part
+        end
+      end
+      result
+    end
+
+    def reconstruct_glob_pattern(parts)
+      # Reconstruct glob pattern from tokenized parts
+      # For extglob patterns like @(a|b), ?(x), *(y), +(z), !(w),
+      # parentheses and pipe should be directly attached (no spaces)
+      result = +''
+      glob_special = %w[( ) |]
+      parts.each_with_index do |part, i|
+        if glob_special.include?(part)
+          # Special glob characters don't get spaces around them
+          result << part
+        else
+          # Add space before if previous wasn't a special char and result doesn't end with one
+          prev_part = i > 0 ? parts[i - 1] : nil
+          needs_space = i > 0 && !result.empty? && !glob_special.include?(prev_part) &&
+                        !glob_special.any? { |s| result.end_with?(s) }
           result << ' ' if needs_space
           result << part
         end
