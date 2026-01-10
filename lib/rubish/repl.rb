@@ -351,6 +351,86 @@ module Rubish
       end
     end
 
+    # Check if a parse error indicates incomplete input (needs more lines)
+    def incomplete_command_error?(message)
+      # These patterns indicate the parser is waiting for a closing keyword/delimiter
+      incomplete_patterns = [
+        /Expected ['"]fi['"].*close if/,
+        /Expected ['"]done['"].*close (while|until|for|select)/,
+        /Expected ['"]esac['"].*close case/,
+        /Expected ['"][}]['"].*close function/,
+        /Expected ['"][)]?['"].*close (subshell|conditional)/,
+        /Expected ['"]then['"]/,
+        /Expected ['"]do['"]/,
+        /Expected ['"]in['"]/,
+        /Expected ['"]?\]\]?['"]?/,
+      ]
+      incomplete_patterns.any? { |pattern| message =~ pattern }
+    end
+
+    # Collect continuation lines for multi-line commands
+    def collect_continuation_lines(accumulated_lines, initial_error)
+      loop do
+        begin
+          cont_line = Reline.readline(continuation_prompt, false)
+        rescue Interrupt
+          puts
+          return nil  # User cancelled
+        end
+
+        return nil unless cont_line  # EOF
+
+        accumulated_lines << cont_line
+
+        # Build full command (with newlines for lithist, semicolons otherwise)
+        full_command = if Builtins.shopt_enabled?('lithist')
+                         accumulated_lines.join("\n")
+                       else
+                         accumulated_lines.join('; ')
+                       end
+
+        # Try parsing again
+        begin
+          tokens = @lexer_class.new(full_command).tokenize
+          ast = @parser_class.new(tokens).parse
+
+          # Parsing succeeded - update history if cmdhist is enabled
+          if Builtins.shopt_enabled?('cmdhist') && ast
+            update_multiline_history(accumulated_lines)
+          end
+
+          return ast
+        rescue => e
+          if incomplete_command_error?(e.message)
+            # Still incomplete, continue collecting
+            next
+          else
+            # Real syntax error
+            $stderr.puts "rubish: #{e.message}"
+            return nil
+          end
+        end
+      end
+    end
+
+    # Update history to combine multi-line command into single entry
+    def update_multiline_history(lines)
+      return if lines.size <= 1
+      return if Reline::HISTORY.empty?
+
+      # Remove the first line that was already added to history
+      last_idx = Reline::HISTORY.size - 1
+      Reline::HISTORY.delete_at(last_idx)
+
+      # Add the combined command
+      combined = if Builtins.shopt_enabled?('lithist')
+                   lines.join("\n")
+                 else
+                   lines.join('; ')
+                 end
+      Reline::HISTORY << combined
+    end
+
     def select_prompt
       ps3 = ENV['PS3']
       if ps3
@@ -917,8 +997,21 @@ module Rubish
       end
 
       # Variable expansion now happens at runtime in generated Ruby code
+      # Handle multi-line commands (cmdhist): collect continuation lines if parse fails
+      accumulated_lines = [line]
       tokens = @lexer_class.new(line).tokenize
-      ast = @parser_class.new(tokens).parse
+      begin
+        ast = @parser_class.new(tokens).parse
+      rescue => e
+        # Check if this is an incomplete command that needs more input
+        if incomplete_command_error?(e.message)
+          # Prompt for continuation lines until parsing succeeds
+          ast = collect_continuation_lines(accumulated_lines, e)
+          return unless ast  # User cancelled (Ctrl+C) or error
+        else
+          raise  # Re-raise actual syntax errors
+        end
+      end
       return unless ast
 
       # noexec: parse but don't execute (except 'set' to allow disabling noexec)
