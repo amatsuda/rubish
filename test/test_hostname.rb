@@ -68,6 +68,9 @@ class TestHOSTNAME < Test::Unit::TestCase
   end
 
   def test_hostname_not_stored_in_env
+    # Skip if HOSTNAME is already set by the environment (e.g., Docker containers)
+    omit 'HOSTNAME is set by environment (Docker)' if ENV['HOSTNAME']
+
     assert_nil ENV['HOSTNAME'], 'HOSTNAME should not be stored in ENV'
     execute('echo $HOSTNAME')
     assert_nil ENV['HOSTNAME'], 'HOSTNAME should still not be in ENV after access'
