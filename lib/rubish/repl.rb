@@ -95,6 +95,7 @@ module Rubish
         loop { process_line }
       end
       save_history
+      load_logout_config
       exit_code
     end
 
@@ -365,6 +366,18 @@ module Rubish
       if env_file && !env_file.empty?
         source_if_exists(File.expand_path(env_file))
       end
+    end
+
+    # Load logout files for login shells
+    # Order: ~/.bash_logout, then ~/.rubish_logout
+    def load_logout_config
+      return unless @login_shell
+
+      # Source bash logout for compatibility
+      source_if_exists(File.expand_path('~/.bash_logout'))
+
+      # Rubish-specific logout
+      source_if_exists(File.expand_path('~/.rubish_logout'))
     end
 
     # Source a file if it exists, return true if sourced

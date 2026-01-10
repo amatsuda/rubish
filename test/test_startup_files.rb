@@ -229,4 +229,48 @@ class TestStartupFiles < Test::Unit::TestCase
       Rubish::Builtins.instance_variable_get(:@set_options)['p'] = false
     end
   end
+
+  # ==========================================================================
+  # Logout file tests
+  # ==========================================================================
+
+  def test_login_shell_sources_bash_logout
+    File.write(File.join(@tempdir, '.bash_logout'), 'BASH_LOGOUT_SOURCED=yes')
+
+    repl = create_test_repl(login_shell: true)
+    repl.send(:load_logout_config)
+
+    assert_equal 'yes', ENV['BASH_LOGOUT_SOURCED']
+  end
+
+  def test_login_shell_sources_rubish_logout
+    File.write(File.join(@tempdir, '.rubish_logout'), 'RUBISH_LOGOUT_SOURCED=yes')
+
+    repl = create_test_repl(login_shell: true)
+    repl.send(:load_logout_config)
+
+    assert_equal 'yes', ENV['RUBISH_LOGOUT_SOURCED']
+  end
+
+  def test_login_shell_sources_both_logout_files
+    File.write(File.join(@tempdir, '.bash_logout'), 'BASH_LOGOUT_SOURCED=yes')
+    File.write(File.join(@tempdir, '.rubish_logout'), 'RUBISH_LOGOUT_SOURCED=yes')
+
+    repl = create_test_repl(login_shell: true)
+    repl.send(:load_logout_config)
+
+    assert_equal 'yes', ENV['BASH_LOGOUT_SOURCED']
+    assert_equal 'yes', ENV['RUBISH_LOGOUT_SOURCED']
+  end
+
+  def test_non_login_shell_does_not_source_logout_files
+    File.write(File.join(@tempdir, '.bash_logout'), 'BASH_LOGOUT_SOURCED=yes')
+    File.write(File.join(@tempdir, '.rubish_logout'), 'RUBISH_LOGOUT_SOURCED=yes')
+
+    repl = create_test_repl(login_shell: false)
+    repl.send(:load_logout_config)
+
+    assert_nil ENV['BASH_LOGOUT_SOURCED']
+    assert_nil ENV['RUBISH_LOGOUT_SOURCED']
+  end
 end
