@@ -1022,7 +1022,13 @@ module Rubish
 
       code = @codegen.generate(ast)
       result = eval_in_context(code)
-      @last_status = extract_exit_status(result)
+
+      # Special handling for exec with redirections
+      if result.is_a?(Command) && result.name == 'exec'
+        handle_exec_command(result)
+      else
+        @last_status = extract_exit_status(result)
+      end
       @command_number += 1
       @lineno += 1
       Builtins.clear_exit_blocked  # checkjobs: non-exit command resets flag
@@ -2307,7 +2313,11 @@ module Rubish
 
     def eval_in_context(code)
       result = binding.eval(code)
-      if result.is_a?(Command) && @functions.key?(result.name)
+      if result.is_a?(Command) && result.name == 'exec'
+        # Don't auto-run exec - it's handled specially in execute method
+        # to support redirections without command replacement
+        result
+      elsif result.is_a?(Command) && @functions.key?(result.name)
         # Call user-defined function, handling redirects
         call_function_with_redirects(result)
         @pipestatus = [@last_status]
@@ -4873,7 +4883,11 @@ module Rubish
       # Run DEBUG trap before each command
       Builtins.run_debug_trap
 
-      if result.is_a?(Command) && PROCESS_BUILTINS.include?(result.name)
+      if result.is_a?(Command) && result.name == 'exec'
+        # Special handling for exec builtin
+        handle_exec_command(result)
+        result
+      elsif result.is_a?(Command) && PROCESS_BUILTINS.include?(result.name)
         # Run process-affecting builtins directly in current process
         success = Builtins.run(result.name, result.args)
         @last_status = success ? 0 : 1
@@ -4907,6 +4921,67 @@ module Rubish
 
     def run_err_trap_if_failed
       Builtins.run_err_trap if @last_status != 0
+    end
+
+    # Handle exec builtin with special support for redirections
+    # exec with no command but with redirections modifies shell's own FDs
+    # exec with a command replaces the shell process
+    def handle_exec_command(cmd)
+      has_redirections = cmd.stdin || cmd.stdout || cmd.stderr
+
+      if cmd.args.empty? && has_redirections
+        # exec with only redirections - modify shell's FDs permanently
+        apply_exec_redirections(cmd)
+        @last_status = 0
+      elsif cmd.args.empty? && !has_redirections
+        # exec with no args and no redirections - just succeed
+        @last_status = 0
+      else
+        # exec with a command - need to apply redirections then exec
+        if has_redirections
+          # Apply redirections before exec
+          apply_exec_redirections(cmd)
+        end
+        # Run exec builtin (which will replace the process)
+        success = Builtins.run('exec', cmd.args)
+        @last_status = success ? 0 : 1
+        run_err_trap_if_failed
+      end
+    end
+
+    # Apply exec redirections to the current shell permanently
+    def apply_exec_redirections(cmd)
+      # Store original FDs if not already saved (for potential restore)
+      @original_stdin ||= $stdin.dup
+      @original_stdout ||= $stdout.dup
+      @original_stderr ||= $stderr.dup
+
+      # Apply redirections permanently to the shell
+      # Use the file path from the File object for reopening
+      if cmd.stdin
+        path = cmd.stdin.respond_to?(:path) ? cmd.stdin.path : cmd.stdin.to_s
+        mode = cmd.stdin.respond_to?(:internal_encoding) ? 'r' : 'r'
+        $stdin.reopen(path, mode)
+        cmd.stdin.close unless cmd.stdin.closed?
+        @shell_stdin = path
+      end
+
+      if cmd.stdout
+        path = cmd.stdout.respond_to?(:path) ? cmd.stdout.path : cmd.stdout.to_s
+        # Check if append mode
+        mode = cmd.stdout.respond_to?(:stat) && cmd.stdout.stat.size > 0 ? 'a' : 'w'
+        $stdout.reopen(path, mode)
+        cmd.stdout.close unless cmd.stdout.closed?
+        @shell_stdout = path
+      end
+
+      if cmd.stderr
+        path = cmd.stderr.respond_to?(:path) ? cmd.stderr.path : cmd.stderr.to_s
+        mode = 'w'
+        $stderr.reopen(path, mode)
+        cmd.stderr.close unless cmd.stderr.closed?
+        @shell_stderr = path
+      end
     end
 
     def complete(input)

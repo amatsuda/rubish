@@ -108,4 +108,88 @@ class TestExec < Test::Unit::TestCase
 
     assert_equal "arg1 arg2 arg3\n", File.read(output_file)
   end
+
+  # Test exec with stdout redirection (no command)
+  def test_exec_redirect_stdout
+    output_file = File.join(@tempdir, 'exec_out.txt')
+    # Run in subprocess to avoid affecting test process
+    pid = fork do
+      @repl = Rubish::REPL.new
+      @repl.send(:execute, "exec > #{output_file}")
+      @repl.send(:execute, 'echo hello from redirected stdout')
+    end
+    Process.wait(pid)
+
+    content = File.read(output_file)
+    assert_match(/hello from redirected stdout/, content)
+  end
+
+  # Test exec with stderr redirection
+  def test_exec_redirect_stderr
+    error_file = File.join(@tempdir, 'exec_err.txt')
+    # Run in subprocess to avoid affecting test process
+    pid = fork do
+      @repl = Rubish::REPL.new
+      @repl.send(:execute, "exec 2> #{error_file}")
+      # Write to stderr
+      $stderr.puts 'error message'
+      $stderr.flush
+    end
+    Process.wait(pid)
+
+    content = File.read(error_file)
+    assert_match(/error message/, content)
+  end
+
+  # Test exec with stdin redirection
+  def test_exec_redirect_stdin
+    input_file = File.join(@tempdir, 'exec_in.txt')
+    File.write(input_file, "line1\nline2\nline3\n")
+
+    output_file = File.join(@tempdir, 'output.txt')
+    # Run in subprocess to avoid affecting test process
+    pid = fork do
+      @repl = Rubish::REPL.new
+      @repl.send(:execute, "exec < #{input_file}")
+      @repl.send(:execute, "head -1 > #{output_file}")
+    end
+    Process.wait(pid)
+
+    content = File.read(output_file)
+    assert_match(/line1/, content)
+  end
+
+  # Test exec redirect and then run command
+  def test_exec_redirect_then_command
+    output_file = File.join(@tempdir, 'combined.txt')
+    # In a subprocess to avoid affecting the test process
+    pid = fork do
+      @repl = Rubish::REPL.new
+      @repl.send(:execute, "exec > #{output_file}")
+      @repl.send(:execute, 'echo line1')
+      @repl.send(:execute, 'echo line2')
+    end
+    Process.wait(pid)
+
+    content = File.read(output_file)
+    assert_match(/line1/, content)
+    assert_match(/line2/, content)
+  end
+
+  # Test exec with append redirection
+  def test_exec_redirect_append
+    output_file = File.join(@tempdir, 'append.txt')
+    File.write(output_file, "existing\n")
+
+    pid = fork do
+      @repl = Rubish::REPL.new
+      @repl.send(:execute, "exec >> #{output_file}")
+      @repl.send(:execute, 'echo appended')
+    end
+    Process.wait(pid)
+
+    content = File.read(output_file)
+    assert_match(/existing/, content)
+    assert_match(/appended/, content)
+  end
 end

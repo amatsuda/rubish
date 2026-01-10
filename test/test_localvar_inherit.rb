@@ -273,7 +273,7 @@ class TestLocalvarInherit < Test::Unit::TestCase
 
   # Test local outside function
   def test_local_outside_function_fails
-    output = capture_output do
+    output = capture_stderr do
       result = Rubish::Builtins.run('local', ['MYVAR'])
       assert_false result
     end

@@ -71,7 +71,7 @@ class TestReadonly < Test::Unit::TestCase
   def test_local_readonly_fails
     Rubish::Builtins.run('readonly', ['MYCONST=original'])
     Rubish::Builtins.push_local_scope
-    output = capture_output do
+    output = capture_stderr do
       Rubish::Builtins.run('local', ['MYCONST=modified'])
     end
     assert_match(/readonly variable/, output)
