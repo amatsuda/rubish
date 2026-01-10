@@ -5,7 +5,7 @@ module Rubish
   class FailglobError < StandardError; end
 
   class REPL
-    def initialize
+    def initialize(login_shell: false, no_profile: false, no_rc: false)
       @lexer_class = Lexer
       @parser_class = Parser
       @codegen = Codegen.new
@@ -39,6 +39,11 @@ module Rubish
       @readline_line = ''  # For READLINE_LINE variable (current line buffer in bind -x)
       @readline_point = 0  # For READLINE_POINT variable (cursor position in bind -x)
       @readline_mark = 0   # For READLINE_MARK variable (mark position in bind -x)
+      @login_shell = login_shell  # Whether this is a login shell
+      @no_profile = no_profile    # Skip profile files (--noprofile)
+      @no_rc = no_rc              # Skip rc files (--norc)
+      # Set the login_shell shopt option (read-only)
+      Builtins.set_shell_option('login_shell', login_shell)
       # SHLVL - shell nesting level (stored in ENV for inheritance)
       current_shlvl = ENV['SHLVL'].to_i
       ENV['SHLVL'] = (current_shlvl + 1).to_s
@@ -307,32 +312,71 @@ module Rubish
       # privileged mode: don't read startup files
       return if Builtins.set_option?('p')
 
-      # Source ENV file if set (POSIX-style startup file)
-      env_file = ENV['ENV']
-      if env_file && !env_file.empty?
-        expanded_path = File.expand_path(env_file)
-        if File.exist?(expanded_path)
-          begin
-            Builtins.run_source([expanded_path])
-          rescue => e
-            $stderr.puts "rubish: #{expanded_path}: #{e.message}"
-          end
+      if @login_shell
+        load_login_config
+      else
+        load_interactive_config
+      end
+    end
+
+    # Load startup files for login shells
+    # Order: /etc/profile, then first of ~/.bash_profile, ~/.bash_login, ~/.profile
+    # Also checks ~/.rubish_profile for rubish-specific configuration
+    def load_login_config
+      return if @no_profile
+
+      # System-wide profile
+      source_if_exists('/etc/profile')
+
+      # User profile - bash reads the first one that exists
+      profile_files = [
+        File.expand_path('~/.bash_profile'),
+        File.expand_path('~/.bash_login'),
+        File.expand_path('~/.profile')
+      ]
+
+      profile_files.each do |profile|
+        if File.exist?(profile)
+          source_if_exists(profile)
+          break  # Only source the first one found
         end
       end
 
-      rc_files = [
-        File.expand_path('~/.rubishrc'),
-        File.expand_path('./.rubishrc')
-      ]
+      # Rubish-specific profile (always sourced if exists, after bash profile)
+      source_if_exists(File.expand_path('~/.rubish_profile'))
+    end
 
-      rc_files.each do |config_file|
-        next unless File.exist?(config_file)
+    # Load startup files for interactive non-login shells
+    # Order: /etc/bash.bashrc or /etc/bashrc, then ~/.bashrc, then ~/.rubishrc
+    def load_interactive_config
+      return if @no_rc
 
-        begin
-          Builtins.run_source([config_file])
-        rescue => e
-          $stderr.puts "rubishrc: #{e.message}"
-        end
+      # System-wide bashrc
+      source_if_exists('/etc/bash.bashrc') || source_if_exists('/etc/bashrc')
+
+      # User bashrc (for bash compatibility)
+      source_if_exists(File.expand_path('~/.bashrc'))
+
+      # Rubish-specific rc
+      source_if_exists(File.expand_path('~/.rubishrc'))
+
+      # Source ENV file if set (POSIX-style startup file for interactive shells)
+      env_file = ENV['ENV']
+      if env_file && !env_file.empty?
+        source_if_exists(File.expand_path(env_file))
+      end
+    end
+
+    # Source a file if it exists, return true if sourced
+    def source_if_exists(path)
+      return false unless File.exist?(path)
+
+      begin
+        Builtins.run_source([path])
+        true
+      rescue => e
+        $stderr.puts "rubish: #{path}: #{e.message}"
+        false
       end
     end
 

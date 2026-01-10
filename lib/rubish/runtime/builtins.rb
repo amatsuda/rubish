@@ -4495,6 +4495,11 @@ module Rubish
       end
     end
 
+    # Set a shell option directly (for internal use)
+    def self.set_shell_option(name, value)
+      @shell_options[name] = value
+    end
+
     # Get current compatibility level from RUBISH_COMPAT or shopt compat* options
     # Returns a numeric version (e.g., 10 for 1.0) or nil if not set
     def self.compat_level

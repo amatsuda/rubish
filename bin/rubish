@@ -3,10 +3,16 @@
 
 require_relative '../lib/rubish'
 
+# Detect login shell from $0 (starts with '-')
+# This is the traditional way shells detect login mode
+login_shell = $0.start_with?('-')
+
 # Parse command line options
 command_string = nil
 script_file = nil
 script_args = []
+no_profile = false
+no_rc = false
 
 i = 0
 while i < ARGV.length
@@ -18,6 +24,18 @@ while i < ARGV.length
     # Remaining args become positional parameters
     script_args = ARGV[i..]
     break
+  when '-l', '--login'
+    # Force login shell mode
+    login_shell = true
+    i += 1
+  when '--noprofile'
+    # Don't read profile files (for login shells)
+    no_profile = true
+    i += 1
+  when '--norc'
+    # Don't read ~/.bashrc or ~/.rubishrc (for interactive non-login shells)
+    no_rc = true
+    i += 1
   when '--'
     # End of options
     i += 1
@@ -91,5 +109,10 @@ elsif script_file
   exit(last_status)
 else
   # Interactive mode
-  exit Rubish::REPL.new.run
+  repl = Rubish::REPL.new(
+    login_shell: login_shell,
+    no_profile: no_profile,
+    no_rc: no_rc
+  )
+  exit repl.run
 end
