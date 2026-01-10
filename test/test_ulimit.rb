@@ -81,8 +81,8 @@ class TestUlimit < Test::Unit::TestCase
     output = capture_output do
       Rubish::Builtins.run('ulimit', ['-n', 'unlimited'])
     end
-    # Either succeeds silently or fails with permission error
-    assert_match(/^$|cannot modify/, output)
+    # Either succeeds silently, fails with permission error, or invalid limit (some resources don't support unlimited)
+    assert_match(/^$|cannot modify|invalid limit/, output)
   end
 
   # Test ulimit -t shows CPU time
