@@ -35,6 +35,7 @@ module Rubish
     @function_remover = nil
     @function_lister = nil  # Returns hash of all functions {name => {source:, file:}}
     @function_getter = nil  # Returns function info for a specific name
+    @function_caller = nil  # Calls a function with args, returns success boolean
     @heredoc_content_setter = nil
     @command_executor = nil  # Executor that bypasses functions/aliases
     @history_file_getter = nil  # Gets HISTFILE path
@@ -52,7 +53,7 @@ module Rubish
     class << self
       attr_reader :aliases, :dir_stack, :traps, :local_scope_stack, :readonly_vars, :var_attributes, :command_hash, :shell_options, :disabled_builtins, :call_stack, :completions, :completion_options, :key_bindings, :readline_variables, :arrays, :assoc_arrays, :namerefs, :coprocs, :builtin_completion_functions
       attr_accessor :current_trapsig
-      attr_accessor :executor, :script_name_getter, :script_name_setter, :positional_params_getter, :positional_params_setter, :function_checker, :function_remover, :function_lister, :function_getter, :heredoc_content_setter, :command_executor, :current_completion_options
+      attr_accessor :executor, :script_name_getter, :script_name_setter, :positional_params_getter, :positional_params_setter, :function_checker, :function_remover, :function_lister, :function_getter, :function_caller, :heredoc_content_setter, :command_executor, :current_completion_options
       attr_accessor :history_file_getter, :history_loader, :history_saver, :history_appender, :last_history_line, :history_timestamps
       attr_accessor :source_file_getter, :source_file_setter
       attr_accessor :lineno_getter
@@ -5065,6 +5066,12 @@ module Rubish
         case action
         when :alias
           results.concat(@aliases.keys.select { |a| a.start_with?(word) })
+        when :arrayvar
+          # Array variable names
+          results.concat(@arrays.keys.select { |a| a.start_with?(word) })
+        when :binding
+          # Readline key binding names
+          results.concat(READLINE_FUNCTIONS.select { |f| f.start_with?(word) })
         when :builtin
           results.concat(COMMANDS.select { |c| c.start_with?(word) })
         when :command
@@ -5087,13 +5094,74 @@ module Rubish
           Dir.glob(pattern).each do |entry|
             results << entry if File.directory?(entry)
           end
+        when :disabled
+          # Disabled builtin names
+          results.concat(@disabled_builtins.to_a.select { |b| b.start_with?(word) })
+        when :enabled
+          # Enabled builtin names (builtins not in disabled list)
+          enabled = COMMANDS.reject { |c| @disabled_builtins.include?(c) }
+          results.concat(enabled.select { |c| c.start_with?(word) })
         when :export
           ENV.keys.select { |k| k.start_with?(word) }.each { |k| results << k }
         when :file
           pattern = word.empty? ? '*' : "#{word}*"
           results.concat(Dir.glob(pattern))
+        when :function
+          # Shell function names
+          functions = @function_lister&.call || {}
+          results.concat(functions.keys.select { |f| f.start_with?(word) })
+        when :group
+          begin
+            Etc.group { |g| results << g.name if g.name.start_with?(word) }
+          rescue StandardError
+            # Etc may not be available
+          end
+        when :helptopic
+          # Help topics (builtins and special topics)
+          results.concat(COMMANDS.select { |c| c.start_with?(word) })
+        when :hostname
+          # Hostnames from /etc/hosts and HOSTFILE
+          results.concat(get_hostnames.select { |h| h.start_with?(word) })
         when :job
           JobManager.instance.all.each do |job|
+            job_spec = "%#{job.id}"
+            results << job_spec if job_spec.start_with?(word)
+          end
+        when :keyword
+          # Shell reserved words
+          keywords = %w[if then else elif fi case esac for select while until do done
+                        in function time { } ! [[ ]] coproc]
+          results.concat(keywords.select { |k| k.start_with?(word) })
+        when :running
+          # Running jobs
+          JobManager.instance.all.each do |job|
+            next unless job.running?
+            job_spec = "%#{job.id}"
+            results << job_spec if job_spec.start_with?(word)
+          end
+        when :service
+          # Service names (from /etc/services)
+          results.concat(get_services.select { |s| s.start_with?(word) })
+        when :setopt
+          # set -o option names
+          set_options = %w[allexport braceexpand emacs errexit errtrace functrace hashall
+                           histexpand history ignoreeof interactive-comments keyword monitor
+                           noclobber noexec noglob nolog notify nounset onecmd physical
+                           pipefail posix privileged verbose vi xtrace]
+          results.concat(set_options.select { |o| o.start_with?(word) })
+        when :shopt
+          # shopt option names
+          results.concat(SHELL_OPTIONS.keys.select { |o| o.start_with?(word) })
+        when :signal
+          # Signal names
+          signals = %w[HUP INT QUIT ILL TRAP ABRT BUS FPE KILL USR1 SEGV USR2 PIPE
+                       ALRM TERM STKFLT CHLD CONT STOP TSTP TTIN TTOU URG XCPU XFSZ
+                       VTALRM PROF WINCH IO PWR SYS EXIT ERR DEBUG RETURN]
+          results.concat(signals.select { |s| s.start_with?(word.upcase) })
+        when :stopped
+          # Stopped jobs
+          JobManager.instance.all.each do |job|
+            next unless job.stopped?
             job_spec = "%#{job.id}"
             results << job_spec if job_spec.start_with?(word)
           end
@@ -5105,33 +5173,39 @@ module Rubish
           end
         when :variable
           ENV.keys.select { |k| k.start_with?(word) }.each { |k| results << k }
-        when :group
-          begin
-            Etc.group { |g| results << g.name if g.name.start_with?(word) }
-          rescue StandardError
-            # Etc may not be available
-          end
         end
       end
 
-      # Wordlist
+      # Wordlist (-W)
       if spec[:wordlist]
         words = spec[:wordlist].split
         results.concat(words.select { |w| w.start_with?(word) })
       end
 
-      # Glob pattern
+      # Function (-F) - call a function to generate completions
+      if spec[:function]
+        func_results = generate_function_completions(spec[:function], word)
+        results.concat(func_results.select { |r| r.start_with?(word) })
+      end
+
+      # Command (-C) - execute a command to generate completions
+      if spec[:command]
+        cmd_results = generate_command_completions(spec[:command], word)
+        results.concat(cmd_results.select { |r| r.start_with?(word) })
+      end
+
+      # Glob pattern (-G)
       if spec[:globpat]
         results.concat(Dir.glob(spec[:globpat]).select { |f| f.start_with?(word) })
       end
 
-      # Filter pattern
+      # Filter pattern (-X) - remove matches
       if spec[:filterpat]
-        pattern = Regexp.new(spec[:filterpat].gsub('*', '.*').gsub('?', '.'))
+        pattern = glob_to_regex(spec[:filterpat])
         results.reject! { |r| r.match?(pattern) }
       end
 
-      # Add prefix/suffix
+      # Add prefix/suffix (-P/-S)
       if spec[:prefix] || spec[:suffix]
         results.map! do |r|
           "#{spec[:prefix]}#{r}#{spec[:suffix]}"
@@ -5139,6 +5213,134 @@ module Rubish
       end
 
       results.uniq.sort
+    end
+
+    # Generate completions by calling a function (-F)
+    def self.generate_function_completions(function_name, word)
+      # Save current COMPREPLY
+      saved_compreply = @compreply.dup
+
+      # Clear COMPREPLY for the function
+      @compreply = []
+
+      # Set up completion context if not already set
+      # The function expects: $1 = command name, $2 = word being completed, $3 = previous word
+      cmd = @comp_words&.first || ''
+      prev = @comp_cword && @comp_cword > 0 ? (@comp_words[@comp_cword - 1] || '') : ''
+
+      begin
+        # Try builtin completion function first
+        if builtin_completion_function?(function_name)
+          call_builtin_completion_function(function_name, cmd, word, prev)
+        elsif @function_caller
+          # Call user-defined function
+          @function_caller.call(function_name, [cmd, word, prev])
+        end
+
+        # Return the results from COMPREPLY
+        @compreply.dup
+      ensure
+        # Restore COMPREPLY
+        @compreply = saved_compreply
+      end
+    end
+
+    # Generate completions by executing a command (-C)
+    def self.generate_command_completions(command, word)
+      results = []
+
+      begin
+        # Set up environment variables for the command
+        # COMP_LINE, COMP_POINT, COMP_WORDS, COMP_CWORD should already be set
+        # The command output (one completion per line) becomes the completions
+
+        output = `#{command} 2>/dev/null`
+        results = output.split("\n").map(&:strip).reject(&:empty?)
+      rescue => e
+        # Command execution failed
+        $stderr.puts "compgen: #{command}: #{e.message}" if ENV['RUBISH_DEBUG']
+      end
+
+      results
+    end
+
+    # Convert a shell glob pattern to a regex for -X filter
+    def self.glob_to_regex(pattern)
+      # Handle ! at the start (negation in bash, but for -X it means "remove if matches")
+      pattern = pattern.sub(/^!/, '')
+
+      # Convert glob to regex
+      regex_str = pattern.gsub(/[.+^${}()|\\]/) { |c| "\\#{c}" }
+                         .gsub('*', '.*')
+                         .gsub('?', '.')
+                         .gsub(/\[!/, '[^')
+
+      Regexp.new("^#{regex_str}$")
+    end
+
+    # Get hostnames from /etc/hosts and HOSTFILE
+    def self.get_hostnames
+      hostnames = Set.new
+
+      # Read /etc/hosts
+      if File.exist?('/etc/hosts')
+        begin
+          File.readlines('/etc/hosts').each do |line|
+            line = line.split('#').first&.strip
+            next if line.nil? || line.empty?
+
+            parts = line.split(/\s+/)
+            next if parts.length < 2
+
+            # Skip IP, add hostnames
+            parts[1..].each { |h| hostnames << h }
+          end
+        rescue Errno::EACCES
+          # Can't read file
+        end
+      end
+
+      # Read HOSTFILE if set
+      hostfile = ENV['HOSTFILE']
+      if hostfile && File.exist?(hostfile)
+        begin
+          File.readlines(hostfile).each do |line|
+            line = line.split('#').first&.strip
+            next if line.nil? || line.empty?
+
+            parts = line.split(/\s+/)
+            next if parts.length < 2
+
+            parts[1..].each { |h| hostnames << h }
+          end
+        rescue Errno::EACCES
+          # Can't read file
+        end
+      end
+
+      hostnames.to_a
+    end
+
+    # Get service names from /etc/services
+    def self.get_services
+      services = Set.new
+
+      if File.exist?('/etc/services')
+        begin
+          File.readlines('/etc/services').each do |line|
+            line = line.split('#').first&.strip
+            next if line.nil? || line.empty?
+
+            # Format: service_name port/protocol [aliases...]
+            name = line.split(/\s+/).first
+            services << name if name && !name.empty?
+          end
+        rescue Errno::EACCES
+          # Can't read file
+        end
+      end
+
+      services.to_a
     end
 
     def self.get_completion_spec(name)
@@ -8759,12 +8961,24 @@ module Rubish
         synopsis: 'compgen [-abcdefgjksuv] [-o option] [-A action] [-G globpat] [-W wordlist] [-F function] [-C command] [-X filterpat] [-P prefix] [-S suffix] [word]',
         description: 'Generate possible completions matching word.',
         options: {
-          '-b' => 'builtins',
           '-a' => 'aliases',
-          '-f' => 'filenames',
+          '-b' => 'builtins',
+          '-c' => 'commands',
           '-d' => 'directories',
+          '-e' => 'exported variables',
+          '-f' => 'filenames',
+          '-g' => 'groups',
+          '-j' => 'jobs',
+          '-k' => 'shell reserved words',
+          '-s' => 'services',
+          '-u' => 'users',
           '-v' => 'variables',
-          '-W wordlist' => 'words from wordlist',
+          '-A action' => 'use action (alias, arrayvar, binding, builtin, command, directory, disabled, enabled, export, file, function, group, helptopic, hostname, job, keyword, running, service, setopt, shopt, signal, stopped, user, variable)',
+          '-C command' => 'execute command and use output as completions',
+          '-F function' => 'call function to generate completions',
+          '-G globpat' => 'expand glob pattern for completions',
+          '-W wordlist' => 'split wordlist and use as completions',
+          '-X filterpat' => 'remove completions matching pattern',
           '-P prefix' => 'add prefix to each completion',
           '-S suffix' => 'add suffix to each completion'
         }

@@ -75,6 +75,8 @@ module Rubish
       # Set up Command class to handle functions in pipelines
       Command.function_checker = ->(name) { @functions.key?(name) }
       Command.function_caller = ->(name, args) { call_function(name, args) }
+      # Set up Builtins to call functions (for compgen -F)
+      Builtins.function_caller = ->(name, args) { call_function(name, args) }
     end
 
     attr_accessor :script_name, :positional_params, :functions, :lineno
