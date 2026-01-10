@@ -3040,6 +3040,61 @@ module Rubish
       end || ''
     end
 
+    def __param_transform(var_name, operator)
+      # ${var@operator} - transformation operators
+      value = __get_special_var(var_name) || ENV[var_name]
+
+      case operator
+      when 'Q'
+        # Quote the value for reuse as input
+        return "''" if value.nil?
+        "'" + value.gsub("'") { "'\\''" } + "'"
+      when 'E'
+        # Expand escape sequences like $'...'
+        return '' if value.nil?
+        Builtins.process_escape_sequences(value)
+      when 'P'
+        # Expand as prompt string (PS1-style)
+        return '' if value.nil?
+        expand_prompt(value)
+      when 'A'
+        # Assignment statement form
+        if value.nil?
+          "declare -- #{var_name}"
+        elsif Builtins.exported?(var_name)
+          "declare -x #{var_name}=#{__param_transform(var_name, 'Q')}"
+        else
+          "declare -- #{var_name}=#{__param_transform(var_name, 'Q')}"
+        end
+      when 'a'
+        # Attribute flags
+        flags = +''
+        flags << 'x' if Builtins.exported?(var_name)
+        flags << 'r' if Builtins.readonly?(var_name)
+        flags
+      when 'U'
+        # Uppercase entire value
+        return '' if value.nil?
+        value.upcase
+      when 'u'
+        # Uppercase first character
+        return '' if value.nil?
+        return '' if value.empty?
+        value[0].upcase + (value[1..] || '')
+      when 'L'
+        # Lowercase entire value
+        return '' if value.nil?
+        value.downcase
+      when 'K'
+        # For associative arrays, show key-value pairs
+        # For regular variables, just show quoted value
+        return "''" if value.nil?
+        __param_transform(var_name, 'Q')
+      else
+        value || ''
+      end
+    end
+
     def __get_special_var(var_name)
       # Returns value for special variables, or nil if not a special variable
       case var_name

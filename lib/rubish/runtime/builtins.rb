@@ -1815,6 +1815,10 @@ module Rubish
       @readonly_vars.clear
     end
 
+    def self.exported?(name)
+      @var_attributes[name]&.include?(:export)
+    end
+
     def self.run_declare(args)
       # declare [-aAfFgIilnrtux] [-p] [name[=value] ...]
       # -a: indexed array

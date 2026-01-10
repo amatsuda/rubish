@@ -769,6 +769,13 @@ module Rubish
         return "__param_expand(#{var_name.inspect}, #{operator.inspect}, #{operand.inspect})"
       end
 
+      # Handle ${var@operator} - transformation operators (Q, E, P, A, a, U, u, L, K)
+      if content =~ /\A([a-zA-Z_][a-zA-Z0-9_]*)@([QEPAaUuLK])\z/
+        var_name = $1
+        operator = $2
+        return "__param_transform(#{var_name.inspect}, #{operator.inspect})"
+      end
+
       # Simple ${VAR}
       "__fetch_var(#{content.inspect})"
     end
