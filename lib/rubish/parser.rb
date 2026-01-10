@@ -123,18 +123,35 @@ module Rubish
     # command : if_statement | while_statement | until_statement | for_statement | case_statement | function_def | subshell | coproc | conditional_expr | array_assign | WORD arg* block? (redirection)*
     # arg : WORD | ARRAY | REGEXP
     def parse_command
-      # Check for control structures
-      return parse_if if peek(:IF)
-      return parse_while if peek(:WHILE)
-      return parse_until if peek(:UNTIL)
-      return parse_for if peek(:FOR)
-      return parse_select if peek(:SELECT)
-      return parse_case if peek(:CASE)
-      return parse_function_keyword if peek(:FUNCTION)
-      return parse_subshell if peek(:LPAREN)
-      return parse_coproc if peek(:COPROC)
-      return parse_conditional_expr if peek(:DOUBLE_LBRACKET)
-      return parse_arithmetic_command if peek(:ARITH_CMD)
+      # Check for control structures (compound commands support redirections)
+      compound_cmd = if peek(:IF)
+                       parse_if
+                     elsif peek(:WHILE)
+                       parse_while
+                     elsif peek(:UNTIL)
+                       parse_until
+                     elsif peek(:FOR)
+                       parse_for
+                     elsif peek(:SELECT)
+                       parse_select
+                     elsif peek(:CASE)
+                       parse_case
+                     elsif peek(:FUNCTION)
+                       parse_function_keyword
+                     elsif peek(:LPAREN)
+                       parse_subshell
+                     elsif peek(:COPROC)
+                       parse_coproc
+                     elsif peek(:DOUBLE_LBRACKET)
+                       parse_conditional_expr
+                     elsif peek(:ARITH_CMD)
+                       parse_arithmetic_command
+                     end
+
+      if compound_cmd
+        # Compound commands can have redirections too (e.g., for ... done > file)
+        return parse_redirections(compound_cmd)
+      end
 
       # Check for array assignment: VAR=(a b c) or VAR+=(d e)
       return parse_array_assign if peek(:ARRAY_ASSIGN)
@@ -313,8 +330,14 @@ module Rubish
     end
 
     # for_statement : FOR WORD 'in' items 'do' body 'done'
+    #               | FOR '((' init ';' cond ';' update '))' 'do' body 'done'
     def parse_for
       consume(:FOR)
+
+      # Check for C-style arithmetic for loop: for ((init; cond; update))
+      if peek(:ARITH_CMD)
+        return parse_arith_for
+      end
 
       variable = consume(:WORD)&.value || raise('Expected variable name after "for"')
       consume_word('in') || raise('Expected "in" after for variable')
@@ -331,6 +354,55 @@ module Rubish
       consume_word('done') || raise('Expected "done" to close for loop')
 
       AST::For.new(variable, items, body)
+    end
+
+    # C-style arithmetic for loop: for ((init; cond; update)); do body; done
+    def parse_arith_for
+      arith_expr = consume(:ARITH_CMD).value
+
+      # Split by semicolons to get init, condition, update
+      # Be careful not to split inside nested parentheses
+      parts = split_arith_for_parts(arith_expr)
+
+      init = parts[0] || ''
+      condition = parts[1] || ''
+      update = parts[2] || ''
+
+      skip_semicolon
+      consume_word('do') || raise('Expected "do" after for ((...))' )
+      body = parse_while_body
+      consume_word('done') || raise('Expected "done" to close for loop')
+
+      AST::ArithFor.new(init, condition, update, body)
+    end
+
+    def split_arith_for_parts(expr)
+      parts = []
+      current = +''
+      depth = 0
+
+      expr.each_char do |c|
+        case c
+        when '('
+          depth += 1
+          current << c
+        when ')'
+          depth -= 1
+          current << c
+        when ';'
+          if depth == 0
+            parts << current.strip
+            current = +''
+          else
+            current << c
+          end
+        else
+          current << c
+        end
+      end
+
+      parts << current.strip unless current.strip.empty?
+      parts
     end
 
     # select_statement : SELECT WORD 'in' items 'do' body 'done'

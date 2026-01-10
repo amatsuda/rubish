@@ -28,6 +28,8 @@ module Rubish
         generate_until(node)
       when AST::For
         generate_for(node)
+      when AST::ArithFor
+        generate_arith_for(node)
       when AST::Select
         generate_select(node)
       when AST::Function
@@ -398,7 +400,26 @@ module Rubish
                   when '<&' then 'dup_in'
                   end
       target = generate_string_arg(node.target)
-      "#{generate(node.command)}.#{op_method}(#{target})"
+
+      # For compound commands (loops, conditionals, etc.), use block-based redirection
+      if compound_command?(node.command)
+        "__with_redirect(#{node.operator.inspect}, #{target}) { #{generate(node.command)} }"
+      else
+        "#{generate(node.command)}.#{op_method}(#{target})"
+      end
+    end
+
+    def compound_command?(node)
+      # Compound commands that execute inline and can use __with_redirect
+      # Subshell is excluded because it creates a Subshell object that is run later
+      # and needs the redirect set on the object itself
+      case node
+      when AST::For, AST::ArithFor, AST::While, AST::Until, AST::Select,
+           AST::If, AST::Case, AST::Function
+        true
+      else
+        false
+      end
     end
 
     def generate_varname_redirect(node)
@@ -427,12 +448,14 @@ module Rubish
       node.branches.each_with_index do |(condition, body), i|
         keyword = i == 0 ? 'if' : 'elsif'
         parts << "#{keyword} __condition { #{generate(condition)} }"
-        parts << generate(body)
+        # Use generate_loop_body to wrap single commands in __run_cmd
+        # This ensures commands are executed immediately within the if block
+        parts << generate_loop_body(body)
       end
 
       if node.else_body
         parts << 'else'
-        parts << generate(node.else_body)
+        parts << generate_loop_body(node.else_body)
       end
 
       parts << 'end'
@@ -474,6 +497,22 @@ module Rubish
       parts = []
       parts << '__loop_break = catch(:break_loop) do'
       parts << "__for_loop(#{escape_string(node.variable)}, [#{items}].flatten) do"
+      parts << '__loop_cont = catch(:continue_loop) do'
+      parts << generate_loop_body(node.body)
+      parts << 'nil; end'
+      parts << 'throw(:continue_loop, __loop_cont - 1) if __loop_cont.is_a?(Integer) && __loop_cont > 1'
+      parts << 'next if __loop_cont'
+      parts << 'end'
+      parts << 'nil; end'
+      parts << 'throw(:break_loop, __loop_break - 1) if __loop_break.is_a?(Integer) && __loop_break > 1'
+      parts.join("\n")
+    end
+
+    def generate_arith_for(node)
+      # C-style for loop: for ((init; cond; update)); do body; done
+      parts = []
+      parts << '__loop_break = catch(:break_loop) do'
+      parts << "__arith_for_loop(#{node.init.inspect}, #{node.condition.inspect}, #{node.update.inspect}) do"
       parts << '__loop_cont = catch(:continue_loop) do'
       parts << generate_loop_body(node.body)
       parts << 'nil; end'

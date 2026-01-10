@@ -119,6 +119,7 @@ module Rubish
                         when /\A(\+\+|--)[a-zA-Z_]/ then true  # Pre-increment/decrement
                         when /\A[a-zA-Z_][a-zA-Z0-9_]*\s*(\+\+|--|[=+\-*\/%<>&|^]=?|\[)/ then true  # Identifier with operator
                         when /\A\(\s*[\d$!~(+-]/ then true  # Grouped expression starting with arith
+                        when /\A;/ then true  # Empty init in for ((; cond; update))
                         else false
                         end
         if is_arithmetic

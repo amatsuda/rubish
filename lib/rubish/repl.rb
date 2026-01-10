@@ -2613,6 +2613,63 @@ module Rubish
       end
     end
 
+    # Redirect output for compound commands (loops, conditionals, etc.)
+    def __with_redirect(operator, target)
+      case operator
+      when '>'
+        # Check noclobber: if set and file exists, fail
+        if Builtins.set_option?('C') && File.exist?(target)
+          $stderr.puts "rubish: #{target}: cannot overwrite existing file"
+          return ExitStatus.new(1)
+        end
+        __with_stdout_redirect(target, 'w') { yield }
+      when '>|'
+        # Force overwrite even with noclobber
+        __with_stdout_redirect(target, 'w') { yield }
+      when '>>'
+        __with_stdout_redirect(target, 'a') { yield }
+      when '<'
+        __with_stdin_redirect(target) { yield }
+      when '2>'
+        __with_stderr_redirect(target) { yield }
+      else
+        yield
+      end
+    end
+
+    def __with_stdout_redirect(file, mode)
+      old_stdout = $stdout
+      begin
+        $stdout = File.open(file, mode)
+        yield
+      ensure
+        $stdout.close unless $stdout == old_stdout || $stdout.closed?
+        $stdout = old_stdout
+      end
+    end
+
+    def __with_stdin_redirect(file)
+      old_stdin = $stdin
+      begin
+        $stdin = File.open(file, 'r')
+        yield
+      ensure
+        $stdin.close unless $stdin == old_stdin || $stdin.closed?
+        $stdin = old_stdin
+      end
+    end
+
+    def __with_stderr_redirect(file)
+      old_stderr = $stderr
+      begin
+        $stderr = File.open(file, 'w')
+        yield
+      ensure
+        $stderr.close unless $stderr == old_stderr || $stderr.closed?
+        $stderr = old_stderr
+      end
+    end
+
     def __condition(&block)
       result = block.call
       if result.is_a?(Command) && Builtins.builtin?(result.name)
@@ -2628,6 +2685,27 @@ module Rubish
       items.each do |item|
         ENV[variable] = item
         block.call
+      end
+    end
+
+    def __arith_for_loop(init_expr, cond_expr, update_expr, &block)
+      # C-style arithmetic for loop: for ((init; cond; update)); do body; done
+      # Evaluate init expression once
+      eval_arithmetic_expr(init_expr) unless init_expr.empty?
+
+      # Loop while condition is true (non-zero)
+      loop do
+        # If condition is empty, it's always true (infinite loop)
+        unless cond_expr.empty?
+          result = eval_arithmetic_expr(cond_expr)
+          break if result == 0  # Condition is false
+        end
+
+        # Execute body
+        block.call
+
+        # Evaluate update expression
+        eval_arithmetic_expr(update_expr) unless update_expr.empty?
       end
     end
 
@@ -4859,8 +4937,8 @@ module Rubish
         return result
       end
 
-      # Handle simple assignment: var=expr
-      if expr =~ /\A([a-zA-Z_][a-zA-Z0-9_]*)\s*=\s*(.+)\z/
+      # Handle simple assignment: var=expr (but not == comparison)
+      if expr =~ /\A([a-zA-Z_][a-zA-Z0-9_]*)\s*=\s*(?!=)(.+)\z/
         var, rhs = $1, $2
         result = eval_single_arithmetic(rhs)
         ENV[var] = result.to_s
@@ -5221,10 +5299,23 @@ module Rubish
         @last_status = success ? 0 : 1
         run_err_trap_if_failed
         result
+      elsif result.is_a?(Command) && Builtins.builtin?(result.name) && !result.stdout && !result.stderr
+        # Run builtins without explicit redirects in current process
+        # This allows them to respect $stdout set by __with_redirect for compound commands
+        success = Builtins.run(result.name, result.args)
+        @last_status = success ? 0 : 1
+        run_err_trap_if_failed
+        # Return ExitStatus so callers (like Subshell) know the real exit status
+        ExitStatus.new(@last_status)
       elsif result.is_a?(Command) && @functions.key?(result.name)
         # Call user-defined function with redirects
         call_function_with_redirects(result)
         # Don't run ERR trap here - it was already handled inside the function
+        result
+      elsif result.is_a?(Command) && bare_assignment?(result.name) && result.args.all? { |a| bare_assignment?(a) }
+        # Handle bare variable assignments in lists (VAR=value)
+        handle_bare_assignments([result.name] + result.args)
+        @last_status = 0
         result
       else
         result.run if result.is_a?(Command) || result.is_a?(Pipeline) || result.is_a?(Subshell)

@@ -58,6 +58,9 @@ module Rubish
     # For loop: for var in items; do body; done
     For = Data.define(:variable, :items, :body)
 
+    # C-style arithmetic for loop: for ((init; cond; update)); do body; done
+    ArithFor = Data.define(:init, :condition, :update, :body)
+
     # Select loop: select var in items; do body; done
     Select = Data.define(:variable, :items, :body)
 
