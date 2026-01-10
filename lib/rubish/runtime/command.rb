@@ -19,6 +19,17 @@ module Rubish
     end
   end
 
+  # Status for restricted mode failures
+  class RestrictedStatus
+    def exitstatus
+      1
+    end
+
+    def success?
+      false
+    end
+  end
+
   class Command
     attr_reader :name, :pid, :status
     attr_accessor :stdin, :stdout, :stderr, :block
@@ -71,6 +82,12 @@ module Rubish
         return self
       end
 
+      # If restricted mode prevented redirection, fail without running
+      if @restricted_failed
+        @status = RestrictedStatus.new
+        return self
+      end
+
       if @block
         run_with_block
       else
@@ -83,6 +100,12 @@ module Rubish
     end
 
     def redirect_out(file)
+      # Restricted mode: cannot redirect output
+      if Builtins.restricted_mode?
+        $stderr.puts 'rubish: restricted: cannot redirect output'
+        @restricted_failed = true
+        return self
+      end
       # Check noclobber: if set and file exists, fail
       if Builtins.set_option?('C') && File.exist?(file)
         $stderr.puts "rubish: #{file}: cannot overwrite existing file"
@@ -94,12 +117,24 @@ module Rubish
     end
 
     def redirect_clobber(file)
+      # Restricted mode: cannot redirect output
+      if Builtins.restricted_mode?
+        $stderr.puts 'rubish: restricted: cannot redirect output'
+        @restricted_failed = true
+        return self
+      end
       # Force overwrite even with noclobber (>|)
       @stdout = File.open(file, 'w')
       self
     end
 
     def redirect_append(file)
+      # Restricted mode: cannot redirect output
+      if Builtins.restricted_mode?
+        $stderr.puts 'rubish: restricted: cannot redirect output'
+        @restricted_failed = true
+        return self
+      end
       @stdout = File.open(file, 'a')
       self
     end
@@ -110,6 +145,12 @@ module Rubish
     end
 
     def redirect_err(file)
+      # Restricted mode: cannot redirect output
+      if Builtins.restricted_mode?
+        $stderr.puts 'rubish: restricted: cannot redirect output'
+        @restricted_failed = true
+        return self
+      end
       @stderr = File.open(file, 'w')
       self
     end
@@ -137,6 +178,13 @@ module Rubish
     end
 
     def run_simple
+      # Restricted mode: cannot run commands containing '/'
+      if Builtins.restricted_mode? && name.include?('/')
+        $stderr.puts "rubish: #{name}: restricted: cannot specify `/' in command names"
+        @status = RestrictedStatus.new
+        return self
+      end
+
       # Resolve command path before forking (so hash updates are visible in parent)
       cmd_path = resolve_command_path(name)
 
@@ -558,6 +606,11 @@ module Rubish
         return self
       end
 
+      if @restricted_failed
+        @status = RestrictedStatus.new
+        return self
+      end
+
       pid = fork do
         $stdin.reopen(@stdin) if @stdin
         $stdout.reopen(@stdout) if @stdout
@@ -592,6 +645,11 @@ module Rubish
     end
 
     def redirect_out(file)
+      if Builtins.restricted_mode?
+        $stderr.puts 'rubish: restricted: cannot redirect output'
+        @restricted_failed = true
+        return self
+      end
       if Builtins.set_option?('C') && File.exist?(file)
         $stderr.puts "rubish: #{file}: cannot overwrite existing file"
         @noclobber_failed = true
@@ -602,11 +660,21 @@ module Rubish
     end
 
     def redirect_clobber(file)
+      if Builtins.restricted_mode?
+        $stderr.puts 'rubish: restricted: cannot redirect output'
+        @restricted_failed = true
+        return self
+      end
       @stdout = File.open(file, 'w')
       self
     end
 
     def redirect_append(file)
+      if Builtins.restricted_mode?
+        $stderr.puts 'rubish: restricted: cannot redirect output'
+        @restricted_failed = true
+        return self
+      end
       @stdout = File.open(file, 'a')
       self
     end
@@ -617,6 +685,11 @@ module Rubish
     end
 
     def redirect_err(file)
+      if Builtins.restricted_mode?
+        $stderr.puts 'rubish: restricted: cannot redirect output'
+        @restricted_failed = true
+        return self
+      end
       @stderr = File.open(file, 'w')
       self
     end
@@ -658,6 +731,11 @@ module Rubish
         return self
       end
 
+      if @restricted_failed
+        @status = RestrictedStatus.new
+        return self
+      end
+
       cmd = @block.call
       if cmd.is_a?(Command) || cmd.is_a?(Pipeline)
         # Create a pipe for heredoc content
@@ -684,6 +762,11 @@ module Rubish
     end
 
     def redirect_out(file)
+      if Builtins.restricted_mode?
+        $stderr.puts 'rubish: restricted: cannot redirect output'
+        @restricted_failed = true
+        return self
+      end
       if Builtins.set_option?('C') && File.exist?(file)
         $stderr.puts "rubish: #{file}: cannot overwrite existing file"
         @noclobber_failed = true
@@ -694,11 +777,21 @@ module Rubish
     end
 
     def redirect_clobber(file)
+      if Builtins.restricted_mode?
+        $stderr.puts 'rubish: restricted: cannot redirect output'
+        @restricted_failed = true
+        return self
+      end
       @stdout = File.open(file, 'w')
       self
     end
 
     def redirect_append(file)
+      if Builtins.restricted_mode?
+        $stderr.puts 'rubish: restricted: cannot redirect output'
+        @restricted_failed = true
+        return self
+      end
       @stdout = File.open(file, 'a')
       self
     end
@@ -709,6 +802,11 @@ module Rubish
     end
 
     def redirect_err(file)
+      if Builtins.restricted_mode?
+        $stderr.puts 'rubish: restricted: cannot redirect output'
+        @restricted_failed = true
+        return self
+      end
       @stderr = File.open(file, 'w')
       self
     end

@@ -767,6 +767,13 @@ module Rubish
       # cd [-L|-P] [dir]
       # -L: follow symbolic links (default)
       # -P: use physical directory structure (don't follow symlinks)
+
+      # Restricted mode: cd is disabled
+      if restricted_mode?
+        $stderr.puts 'rubish: cd: restricted'
+        return false
+      end
+
       physical = set_option?('P')
       remaining_args = []
 
@@ -2386,6 +2393,10 @@ module Rubish
               puts "export: #{key}: readonly variable"
               next
             end
+            if restricted_mode? && RESTRICTED_VARIABLES.include?(key)
+              $stderr.puts "rubish: #{key}: readonly variable"
+              next
+            end
             # Apply attributes if any
             value = apply_attributes(key, value)
             ENV[key] = value
@@ -2694,6 +2705,12 @@ module Rubish
       file = args.first
       original_file = file
 
+      # Restricted mode: cannot source files with '/' in the name
+      if restricted_mode? && file.include?('/')
+        $stderr.puts "rubish: #{file}: restricted: cannot specify `/' in command names"
+        return false
+      end
+
       # If file contains a slash, use it directly (absolute or relative path)
       if file.include?('/')
         file = File.expand_path(file)
@@ -2907,6 +2924,7 @@ module Rubish
       'p' => false,          # privileged: don't read startup files, ignore some env vars
       'history' => true,     # history: enable command history (enabled by default)
       'nolog' => false,      # nolog: obsolete, has no effect
+      'r' => false,          # restricted: restricted shell mode (cannot be disabled once set)
     }
 
     def self.set_options
@@ -2916,6 +2934,20 @@ module Rubish
     def self.set_option?(flag)
       @set_options[flag] || false
     end
+
+    # Check if shell is in restricted mode
+    def self.restricted_mode?
+      @set_options['r'] || @shell_options['restricted_shell']
+    end
+
+    # Enable restricted mode (cannot be disabled once set)
+    def self.enable_restricted_mode
+      @set_options['r'] = true
+      @shell_options['restricted_shell'] = true
+    end
+
+    # List of variables that cannot be modified in restricted mode
+    RESTRICTED_VARIABLES = %w[SHELL ENV PATH BASH_ENV SHELLOPTS RUBISHOPTS].freeze
 
     def self.run_set(args)
       # set [-+abCefhmnuvx] [-o option] [--] [arg...]
@@ -2956,10 +2988,29 @@ module Rubish
           end
         elsif arg.start_with?('-') && arg.length > 1 && arg != '-'
           # Short options: -e, -x, -ex
-          arg[1..].each_char { |c| @set_options[c] = true if @set_options.key?(c) }
+          arg[1..].each_char do |c|
+            if @set_options.key?(c)
+              if c == 'r'
+                # Enable restricted mode (syncs with restricted_shell shopt)
+                enable_restricted_mode
+              else
+                @set_options[c] = true
+              end
+            end
+          end
         elsif arg.start_with?('+') && arg.length > 1
           # Disable short options: +e, +x
-          arg[1..].each_char { |c| @set_options[c] = false if @set_options.key?(c) }
+          arg[1..].each_char do |c|
+            if @set_options.key?(c)
+              if c == 'r' && restricted_mode?
+                # Cannot disable restricted mode once enabled
+                $stderr.puts 'rubish: set: restricted: cannot modify in restricted mode'
+                return false
+              else
+                @set_options[c] = false
+              end
+            end
+          end
         else
           # Positional parameters
           @positional_params_setter&.call(args[i..])
@@ -2982,7 +3033,8 @@ module Rubish
         'dotglob' => 'dotglob', 'nocaseglob' => 'nocaseglob', 'ignoreeof' => 'ignoreeof',
         'extglob' => 'extglob', 'P' => 'physical', 'emacs' => 'emacs', 'vi' => 'vi',
         'nocasematch' => 'nocasematch', 't' => 'onecmd', 'k' => 'keyword',
-        'p' => 'privileged', 'history' => 'history', 'nolog' => 'nolog'
+        'p' => 'privileged', 'history' => 'history', 'nolog' => 'nolog',
+        'r' => 'restricted'
       }
       @set_options.each do |flag, value|
         name = long_names[flag] || flag
@@ -3004,7 +3056,8 @@ module Rubish
         'dotglob' => 'dotglob', 'nocaseglob' => 'nocaseglob', 'ignoreeof' => 'ignoreeof',
         'extglob' => 'extglob', 'P' => 'physical', 'emacs' => 'emacs', 'vi' => 'vi',
         'nocasematch' => 'nocasematch', 't' => 'onecmd', 'k' => 'keyword',
-        'p' => 'privileged', 'history' => 'history', 'nolog' => 'nolog'
+        'p' => 'privileged', 'history' => 'history', 'nolog' => 'nolog',
+        'r' => 'restricted'
       }
       enabled = @set_options.select { |_, v| v }.keys.map { |k| long_names[k] || k }
       enabled.sort.join(':')
@@ -3040,10 +3093,22 @@ module Rubish
         'dotglob' => 'dotglob', 'nocaseglob' => 'nocaseglob', 'ignoreeof' => 'ignoreeof',
         'extglob' => 'extglob', 'physical' => 'P', 'emacs' => 'emacs', 'vi' => 'vi',
         'nocasematch' => 'nocasematch', 'onecmd' => 't', 'keyword' => 'k',
-        'privileged' => 'p', 'history' => 'history', 'nolog' => 'nolog'
+        'privileged' => 'p', 'history' => 'history', 'nolog' => 'nolog',
+        'restricted' => 'r'
       }
       flag = mapping[name]
       return unless flag
+
+      # Handle restricted mode specially
+      if name == 'restricted'
+        if value
+          enable_restricted_mode
+        elsif restricted_mode?
+          $stderr.puts 'rubish: set: restricted: cannot modify in restricted mode'
+          return false
+        end
+        return true
+      end
 
       # vi and emacs are mutually exclusive
       if flag == 'vi' && value
@@ -4197,7 +4262,8 @@ module Rubish
       'x' => 'xtrace', 'u' => 'nounset', 'n' => 'noexec', 'v' => 'verbose',
       'f' => 'noglob', 'C' => 'noclobber', 'a' => 'allexport', 'b' => 'notify',
       'h' => 'hashall', 'm' => 'monitor', 'P' => 'physical',
-      't' => 'onecmd', 'k' => 'keyword', 'p' => 'privileged'
+      't' => 'onecmd', 'k' => 'keyword', 'p' => 'privileged',
+      'r' => 'restricted'
     }.freeze
 
     def self.run_shopt(args)
@@ -7489,6 +7555,12 @@ module Rubish
       # -l: place dash at beginning of argv[0] (login shell)
       # -a name: pass name as argv[0]
       # If no command, exec succeeds but does nothing (useful for redirects)
+
+      # Restricted mode: exec is disabled
+      if restricted_mode? && !args.empty?
+        $stderr.puts 'rubish: exec: restricted'
+        return false
+      end
 
       clear_env = false
       login_shell = false

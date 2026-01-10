@@ -1409,6 +1409,11 @@ module Rubish
           # Regular variable assignment
           var_name = $1
           value = $2
+          # Restricted mode: cannot modify restricted variables
+          if Builtins.restricted_mode? && Builtins::RESTRICTED_VARIABLES.include?(var_name)
+            $stderr.puts "rubish: #{var_name}: readonly variable"
+            next
+          end
           expanded_value = expand_assignment_value(value)
           # Special handling for SECONDS, RANDOM, LINENO, PPID, UID, and EUID
           if var_name == 'SECONDS'
@@ -3073,8 +3078,13 @@ module Rubish
       when ':='
         # ${var:=default} - assign default if unset or null
         if is_null
-          ENV[var_name] = operand
-          operand
+          if Builtins.restricted_mode? && Builtins::RESTRICTED_VARIABLES.include?(var_name)
+            $stderr.puts "rubish: #{var_name}: readonly variable"
+            ''
+          else
+            ENV[var_name] = operand
+            operand
+          end
         else
           value
         end
@@ -3083,8 +3093,13 @@ module Rubish
         if is_set
           value
         else
-          ENV[var_name] = operand
-          operand
+          if Builtins.restricted_mode? && Builtins::RESTRICTED_VARIABLES.include?(var_name)
+            $stderr.puts "rubish: #{var_name}: readonly variable"
+            ''
+          else
+            ENV[var_name] = operand
+            operand
+          end
         end
       when ':+'
         # ${var:+value} - use value if set and non-null
