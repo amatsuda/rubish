@@ -42,11 +42,12 @@ module Rubish
       'for' => :FOR,
       'select' => :SELECT,
       'function' => :FUNCTION,
+      'def' => :DEF,
       'case' => :CASE,
       'esac' => :ESAC,
       'coproc' => :COPROC,
       'time' => :TIME
-      # Note: 'do', 'done', 'in' are handled as WORD tokens and checked by parser
+      # Note: 'do', 'done', 'in', 'end' are handled as WORD tokens and checked by parser
       # to allow them as command arguments (e.g., "echo done")
     }.freeze
 

@@ -170,6 +170,8 @@ module Rubish
                        parse_case
                      elsif peek(:FUNCTION)
                        parse_function_keyword
+                     elsif peek(:DEF)
+                       parse_def
                      elsif peek(:LPAREN)
                        parse_subshell
                      elsif peek(:COPROC)
@@ -220,6 +222,34 @@ module Rubish
       consume(:FUNCTION)
       name = consume(:WORD)&.value || raise('Expected function name after "function"')
       parse_function_body(name)
+    end
+
+    # Ruby-style function: def name ... end
+    def parse_def
+      consume(:DEF)
+      name = consume(:WORD)&.value || raise('Expected function name after "def"')
+      # Allow optional () after name
+      consume(:PARENS) if peek(:PARENS)
+      skip_semicolon
+      body = parse_def_body
+      consume_word('end') || raise('Expected "end" to close def')
+      AST::Function.new(name, body)
+    end
+
+    # Parse body of def (stops at end)
+    def parse_def_body
+      commands = []
+      skip_semicolon
+
+      while !peek_end && current
+        cmd = parse_conditional
+        break unless cmd
+
+        commands << cmd
+        skip_semicolon
+      end
+
+      commands.length == 1 ? commands.first : AST::List.new(commands)
     end
 
     # Parse function body: { commands }

@@ -470,6 +470,7 @@ module Rubish
         /Expected ['"]done['"].*close (while|until|for|select)/,
         /Expected ['"]esac['"].*close case/,
         /Expected ['"][}]['"].*close function/,
+        /Expected ['"]end['"].*close def/,
         /Expected ['"][)]?['"].*close (subshell|conditional)/,
         /Expected ['"]then['"]/,
         /Expected ['"]do['"]/,

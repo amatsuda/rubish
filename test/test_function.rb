@@ -322,4 +322,94 @@ class TestFunction < Test::Unit::TestCase
     assert_match(/myfunc/, stderr)
     assert_match(/maximum function nesting level exceeded/, stderr)
   end
+
+  # Ruby-style def keyword tests
+
+  def test_def_is_keyword
+    tokens = Rubish::Lexer.new('def').tokenize
+    assert_equal :DEF, tokens.first.type
+  end
+
+  def test_def_tokenization
+    tokens = Rubish::Lexer.new('def greet; echo hello; end').tokenize
+    types = tokens.map(&:type)
+    assert_equal [:DEF, :WORD, :SEMICOLON, :WORD, :WORD, :SEMICOLON, :WORD], types
+  end
+
+  def test_def_parsing
+    tokens = Rubish::Lexer.new('def greet; echo hello; end').tokenize
+    ast = Rubish::Parser.new(tokens).parse
+    assert_instance_of Rubish::AST::Function, ast
+    assert_equal 'greet', ast.name
+  end
+
+  def test_def_with_parens_parsing
+    tokens = Rubish::Lexer.new('def greet(); echo hello; end').tokenize
+    ast = Rubish::Parser.new(tokens).parse
+    assert_instance_of Rubish::AST::Function, ast
+    assert_equal 'greet', ast.name
+  end
+
+  def test_def_multiple_commands_parsing
+    tokens = Rubish::Lexer.new('def myfunc; echo a; echo b; end').tokenize
+    ast = Rubish::Parser.new(tokens).parse
+    assert_instance_of Rubish::AST::Function, ast
+    assert_instance_of Rubish::AST::List, ast.body
+    assert_equal 2, ast.body.commands.length
+  end
+
+  def test_def_simple_definition
+    execute('def greet; echo hello; end')
+    assert @repl.functions.key?('greet')
+  end
+
+  def test_def_simple_call
+    execute('def greet; echo hello; end')
+    execute("greet > #{output_file}")
+    assert_equal "hello\n", File.read(output_file)
+  end
+
+  def test_def_with_params
+    execute('def say_hello; echo Hello $1; end')
+    execute("say_hello World > #{output_file}")
+    assert_equal "Hello World\n", File.read(output_file)
+  end
+
+  def test_def_multiline
+    script = File.join(@tempdir, 'def_func.sh')
+    File.write(script, <<~SCRIPT)
+      def greet
+        echo Hello $1
+      end
+      greet World > #{output_file}
+    SCRIPT
+
+    execute("source #{script}")
+    assert_equal "Hello World\n", File.read(output_file)
+  end
+
+  def test_def_with_loop
+    execute('def countdown; for n in 3 2 1; do echo $n >> ' + output_file + '; done; end')
+    execute('countdown')
+    assert_equal "3\n2\n1\n", File.read(output_file)
+  end
+
+  def test_def_with_conditional
+    execute('def check_arg; if test -n $1; then echo yes; else echo no; fi; end')
+    execute("check_arg hello > #{output_file}")
+    assert_equal "yes\n", File.read(output_file)
+  end
+
+  def test_def_nested_end
+    # def with nested loops using 'end'
+    execute('def multi_loop; for i in 1 2; do for j in a b; do echo $i$j >> ' + output_file + '; end; end; end')
+    execute('multi_loop')
+    assert_equal "1a\n1b\n2a\n2b\n", File.read(output_file)
+  end
+
+  def test_def_in_pipeline
+    execute('def shout; echo HELLO; end')
+    execute("shout | tr A-Z a-z > #{output_file}")
+    assert_equal "hello\n", File.read(output_file)
+  end
 end
