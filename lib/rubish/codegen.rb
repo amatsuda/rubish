@@ -24,6 +24,8 @@ module Rubish
         generate_or(node)
       when AST::If
         generate_if(node)
+      when AST::Unless
+        generate_unless(node)
       when AST::While
         generate_while(node)
       when AST::Until
@@ -438,7 +440,7 @@ module Rubish
     def pipeline_compound_command?(node)
       case node
       when AST::For, AST::ArithFor, AST::While, AST::Until, AST::Select,
-           AST::If, AST::Case, AST::Function
+           AST::If, AST::Unless, AST::Case, AST::Function
         true
       else
         false
@@ -476,7 +478,7 @@ module Rubish
       # and needs the redirect set on the object itself
       case node
       when AST::For, AST::ArithFor, AST::While, AST::Until, AST::Select,
-           AST::If, AST::Case, AST::Function
+           AST::If, AST::Unless, AST::Case, AST::Function
         true
       else
         false
@@ -513,6 +515,21 @@ module Rubish
         # This ensures commands are executed immediately within the if block
         parts << generate_loop_body(body)
       end
+
+      if node.else_body
+        parts << 'else'
+        parts << generate_loop_body(node.else_body)
+      end
+
+      parts << 'end'
+      parts.join("\n")
+    end
+
+    def generate_unless(node)
+      parts = []
+
+      parts << "unless __condition { #{generate(node.condition)} }"
+      parts << generate_loop_body(node.body)
 
       if node.else_body
         parts << 'else'
@@ -920,6 +937,15 @@ module Rubish
           parts << "    #{to_shell(node.else_body, indent + 1)}"
         end
         parts << 'fi'
+        parts.join("\n#{prefix}")
+      when AST::Unless
+        parts = ["unless #{to_shell(node.condition)}"]
+        parts << "    #{to_shell(node.body, indent + 1)}"
+        if node.else_body
+          parts << 'else'
+          parts << "    #{to_shell(node.else_body, indent + 1)}"
+        end
+        parts << 'end'
         parts.join("\n#{prefix}")
       when AST::While
         "while #{to_shell(node.condition)}; do\n#{prefix}    #{to_shell(node.body, indent + 1)}\n#{prefix}done"

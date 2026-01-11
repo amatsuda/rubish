@@ -2795,7 +2795,7 @@ module Rubish
           words = line.split(/\s+/)
           words.each do |word|
             case word
-            when 'if', 'while', 'until', 'for', 'case', 'def'
+            when 'if', 'unless', 'while', 'until', 'for', 'case', 'def'
               depth += 1
             when 'fi', 'done', 'esac', 'end'
               depth -= 1

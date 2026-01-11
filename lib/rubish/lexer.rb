@@ -33,6 +33,7 @@ module Rubish
 
     KEYWORDS = {
       'if' => :IF,
+      'unless' => :UNLESS,
       'then' => :THEN,
       'else' => :ELSE,
       'elif' => :ELIF,

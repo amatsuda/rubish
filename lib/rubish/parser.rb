@@ -158,6 +158,8 @@ module Rubish
       # Check for control structures (compound commands support redirections)
       compound_cmd = if peek(:IF)
                        parse_if
+                     elsif peek(:UNLESS)
+                       parse_unless
                      elsif peek(:WHILE)
                        parse_while
                      elsif peek(:UNTIL)
@@ -309,6 +311,47 @@ module Rubish
 
       cmd = AST::If.new(branches: branches, else_body: else_body)
       parse_redirections(cmd)
+    end
+
+    # unless_statement : UNLESS conditional [THEN] body (ELSE body)? 'end'
+    # Ruby-style unless (no elif support)
+    def parse_unless
+      consume(:UNLESS)
+
+      condition = parse_conditional_for_if
+      skip_semicolon
+      # 'then' is optional for Ruby-style syntax
+      consume(:THEN)
+      body = parse_unless_body
+      skip_semicolon
+
+      # Parse optional else branch
+      else_body = nil
+      if peek(:ELSE)
+        consume(:ELSE)
+        else_body = parse_unless_body
+      end
+
+      consume_word('end') || raise('Expected "end" to close unless statement')
+
+      cmd = AST::Unless.new(condition: condition, body: body, else_body: else_body)
+      parse_redirections(cmd)
+    end
+
+    # Parse body of unless (stops at else/end)
+    def parse_unless_body
+      commands = []
+      skip_semicolon
+
+      while !peek(:ELSE) && !peek_end && current
+        cmd = parse_conditional
+        break unless cmd
+
+        commands << cmd
+        skip_semicolon
+      end
+
+      commands.length == 1 ? commands.first : AST::List.new(commands)
     end
 
     def skip_semicolon

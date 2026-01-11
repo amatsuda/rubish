@@ -58,6 +58,14 @@ module Rubish
       end
     end
 
+    # Unless statement (Ruby-style): unless cond ... else ... end
+    # Executes body when condition is false (opposite of if)
+    Unless = Data.define(:condition, :body, :else_body) do
+      def initialize(condition:, body:, else_body: nil)
+        super
+      end
+    end
+
     # While loop: while cond; do body; done
     While = Data.define(:condition, :body)
 
