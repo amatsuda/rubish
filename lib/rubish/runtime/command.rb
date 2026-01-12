@@ -208,6 +208,9 @@ module Rubish
         if Command.function?(name)
           result = Command.call_function(name, cmd_args)
           exit(result ? 0 : 1)
+        elsif File.directory?(cmd_path)
+          $stderr.puts "rubish: #{cmd_path}: Is a directory"
+          exit(126)
         else
           exec(cmd_path, *cmd_args)
         end

@@ -108,4 +108,12 @@ class TestCommand < Test::Unit::TestCase
     output = capture_output { Rubish::Builtins.run('command', ['-x', 'ls']) }
     assert_match(/invalid option/, output)
   end
+
+  # Test executing a directory gives proper error
+  def test_execute_directory_error
+    error_file = File.join(@tempdir, 'stderr.txt')
+    execute("#{@tempdir} 2>#{error_file}")
+    assert_match(/Is a directory/, File.read(error_file))
+    assert_equal 126, @repl.instance_variable_get(:@last_status)
+  end
 end
