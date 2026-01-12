@@ -5480,7 +5480,8 @@ module Rubish
         success = Builtins.run(result.name, result.args)
         @last_status = success ? 0 : 1
         run_err_trap_if_failed
-        result
+        # Return ExitStatus to prevent eval_in_context from trying to run command again
+        ExitStatus.new(@last_status)
       elsif result.is_a?(Command) && Builtins.builtin?(result.name) && !result.stdout && !result.stderr
         # Run builtins without explicit redirects in current process
         # This allows them to respect $stdout set by __with_redirect for compound commands
