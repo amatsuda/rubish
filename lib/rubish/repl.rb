@@ -426,7 +426,7 @@ module Rubish
       begin
         Builtins.run_source([path])
         true
-      rescue => e
+      rescue SyntaxError => e
         $stderr.puts "rubish: #{path}: #{e.message}"
         false
       end

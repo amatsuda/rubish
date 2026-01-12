@@ -2848,7 +2848,7 @@ module Rubish
           if depth == 0 && !pending_function_def
             begin
               @executor.call(buffer)
-            rescue => e
+            rescue SyntaxError => e
               puts "source: #{e.message}"
             end
             buffer = +''
@@ -2859,7 +2859,7 @@ module Rubish
         unless buffer.empty?
           begin
             @executor.call(buffer)
-          rescue => e
+          rescue SyntaxError => e
             puts "source: #{e.message}"
           end
         end
