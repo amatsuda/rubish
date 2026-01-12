@@ -117,6 +117,9 @@ module Rubish
       # Set word break characters AFTER loading inputrc to ensure / is not included
       # This enables proper path completion (e.g., cd aaa/b<TAB> completes to aaa/bbb)
       Reline.completer_word_break_characters = " \t\n\"'><=;|&{("
+      # Rebind Ctrl-W to backward_kill_word which stops at non-word characters like /
+      # Default em_kill_region only stops at whitespace
+      Reline.core.config.add_default_key_binding_by_keymap(:emacs, [23], :backward_kill_word)
     end
 
     # Load readline/Reline configuration from inputrc file
