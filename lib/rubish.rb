@@ -15,8 +15,21 @@ require 'io/console'
 require 'syslog'
 require 'reline'
 
-require_relative 'rubish/lexer'
-require_relative 'rubish/ast'
+# Suppress deprecation warnings for Data class on Ruby < 3.2
+if RUBY_VERSION < '3.2'
+  verbose_was, $VERBOSE = $VERBOSE, nil
+  begin
+    require_relative 'rubish/data_define'
+    require_relative 'rubish/lexer'
+    require_relative 'rubish/ast'
+  ensure
+    $VERBOSE = verbose_was
+  end
+else
+  require_relative 'rubish/lexer'
+  require_relative 'rubish/ast'
+end
+
 require_relative 'rubish/parser'
 require_relative 'rubish/codegen'
 require_relative 'rubish/runtime/command'
