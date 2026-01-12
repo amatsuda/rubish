@@ -533,8 +533,9 @@ module Rubish
       AST::Select.new(variable, items, body)
     end
 
-    # case_statement : CASE WORD 'in' (pattern ('|' pattern)* ')' body (';;'|';&'|';;&'))* ESAC
-    # Terminators:
+    # case_statement : CASE WORD ['in'] (pattern ('|' pattern)* ')' body (';;'|';&'|';;&'))* ESAC
+    #                | CASE WORD (WHEN pattern (',' pattern)* body)* [ELSE body] 'end'
+    # Terminators (shell-style only):
     #   ;; - standard terminator (stop case)
     #   ;& - fall-through to next body (without testing pattern)
     #   ;;& - continue testing next patterns
@@ -543,54 +544,126 @@ module Rubish
 
       word = consume(:WORD)&.value || raise('Expected word after "case"')
       skip_semicolon
-      consume_word('in') || raise('Expected "in" after case word')
-      skip_semicolon
+
+      # Check if using Ruby-style (when) or shell-style (in)
+      ruby_style = peek(:WHEN)
+      unless ruby_style
+        consume_word('in') || raise('Expected "in" or "when" after case word')
+        skip_semicolon
+      end
 
       branches = []
 
-      while !peek(:ESAC) && !peek_end && current
-        # Parse patterns (separated by |)
-        patterns = []
-        loop do
-          pattern = consume(:WORD)&.value
-          break unless pattern
+      if ruby_style
+        # Ruby-style: case value when pattern ... end
+        while peek(:WHEN)
+          consume(:WHEN)
 
-          patterns << pattern
-          break unless peek(:PIPE)
+          # Parse patterns (separated by , or |)
+          patterns = parse_when_patterns
+          break if patterns.empty?
 
-          consume(:PIPE)
+          skip_semicolon
+          body = parse_when_body
+          branches << [patterns, body, nil]
         end
 
-        break if patterns.empty?
-
-        # Consume closing )
-        consume(:RPAREN) || raise('Expected ")" after case pattern')
-
-        # Parse body until terminator (;;, ;&, ;;&) or esac
-        body = parse_case_body
-
-        # Determine terminator type
-        terminator = nil
-        if peek(:DOUBLE_SEMI)
-          consume(:DOUBLE_SEMI)
-          terminator = :double_semi
+        # Parse optional else branch (becomes * pattern)
+        if peek(:ELSE)
+          consume(:ELSE)
           skip_semicolon
-        elsif peek(:CASE_FALL)
-          consume(:CASE_FALL)
-          terminator = :fall
-          skip_semicolon
-        elsif peek(:CASE_CONT)
-          consume(:CASE_CONT)
-          terminator = :cont
-          skip_semicolon
+          else_body = parse_when_body
+          branches << [['*'], else_body, nil]
         end
+      else
+        # Shell-style: case value in pattern) ... ;; esac
+        while !peek(:ESAC) && !peek_end && current
+          # Parse patterns (separated by |)
+          patterns = []
+          loop do
+            pattern = consume(:WORD)&.value
+            break unless pattern
 
-        branches << [patterns, body, terminator]
+            patterns << pattern
+            break unless peek(:PIPE)
+
+            consume(:PIPE)
+          end
+
+          break if patterns.empty?
+
+          # Consume closing )
+          consume(:RPAREN) || raise('Expected ")" after case pattern')
+
+          # Parse body until terminator (;;, ;&, ;;&) or esac
+          body = parse_case_body
+
+          # Determine terminator type
+          terminator = nil
+          if peek(:DOUBLE_SEMI)
+            consume(:DOUBLE_SEMI)
+            terminator = :double_semi
+            skip_semicolon
+          elsif peek(:CASE_FALL)
+            consume(:CASE_FALL)
+            terminator = :fall
+            skip_semicolon
+          elsif peek(:CASE_CONT)
+            consume(:CASE_CONT)
+            terminator = :cont
+            skip_semicolon
+          end
+
+          branches << [patterns, body, terminator]
+        end
       end
 
       consume_end_or(:ESAC) || raise('Expected "esac" or "end" to close case statement')
 
       AST::Case.new(word, branches)
+    end
+
+    # Parse patterns for Ruby-style when (separated by , or |)
+    def parse_when_patterns
+      patterns = []
+      loop do
+        pattern = consume(:WORD)&.value
+        break unless pattern
+
+        # Handle trailing comma (e.g., "foo," becomes "foo" and continues)
+        if pattern.end_with?(',')
+          patterns << pattern.chomp(',')
+          next
+        end
+
+        patterns << pattern
+
+        # Allow both , and | as separators
+        if peek(:PIPE)
+          consume(:PIPE)
+        elsif peek_word(',')
+          consume(:WORD)  # consume the comma as word
+        else
+          break
+        end
+      end
+      patterns
+    end
+
+    # Parse body of when clause (stops at when/else/end)
+    def parse_when_body
+      commands = []
+      skip_semicolon
+
+      while !peek(:WHEN) && !peek(:ELSE) && !peek_end && current
+        cmd = parse_conditional
+        break unless cmd
+
+        commands << cmd
+        skip_semicolon
+      end
+
+      commands.length == 1 ? commands.first : AST::List.new(commands)
     end
 
     # subshell : '(' list ')'

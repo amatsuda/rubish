@@ -45,6 +45,7 @@ module Rubish
       'function' => :FUNCTION,
       'def' => :DEF,
       'case' => :CASE,
+      'when' => :WHEN,
       'esac' => :ESAC,
       'coproc' => :COPROC,
       'time' => :TIME
