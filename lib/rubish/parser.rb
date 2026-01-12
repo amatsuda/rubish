@@ -278,7 +278,7 @@ module Rubish
       commands.length == 1 ? commands.first : AST::List.new(commands)
     end
 
-    # if_statement : IF conditional THEN body (ELIF conditional THEN body)* (ELSE body)? FI
+    # if_statement : IF conditional [THEN] body (ELIF conditional [THEN] body)* (ELSE body)? FI
     def parse_if
       consume(:IF)
       branches = []
@@ -286,7 +286,8 @@ module Rubish
       # Parse first branch
       condition = parse_conditional_for_if
       skip_semicolon
-      consume(:THEN) || raise('Expected "then" after if condition')
+      # 'then' is optional for Ruby-style syntax
+      consume(:THEN)
       body = parse_if_body
       branches << [condition, body]
 
@@ -295,7 +296,8 @@ module Rubish
         consume(:ELIF)
         elif_condition = parse_conditional_for_if
         skip_semicolon
-        consume(:THEN) || raise('Expected "then" after elif condition')
+        # 'then' is optional for Ruby-style syntax
+        consume(:THEN)
         elif_body = parse_if_body
         branches << [elif_condition, elif_body]
       end

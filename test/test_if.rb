@@ -200,4 +200,31 @@ class TestIf < Test::Unit::TestCase
     execute("if false || true; then echo yes > #{output_file}; fi")
     assert_equal "yes\n", File.read(output_file)
   end
+
+  # Ruby-style if without 'then'
+  def test_if_without_then
+    execute("if true; echo yes > #{output_file}; end")
+    assert_equal "yes\n", File.read(output_file)
+  end
+
+  def test_if_else_without_then
+    execute("if false; echo yes > #{output_file}; else echo no > #{output_file}; end")
+    assert_equal "no\n", File.read(output_file)
+  end
+
+  def test_if_elif_without_then
+    execute("if false; echo a > #{output_file}; elif true; echo b > #{output_file}; end")
+    assert_equal "b\n", File.read(output_file)
+  end
+
+  def test_if_without_then_multiline
+    script = File.join(@tempdir, 'if_no_then.sh')
+    File.write(script, <<~SCRIPT)
+      if true
+        echo yes > #{output_file}
+      end
+    SCRIPT
+    execute("source #{script}")
+    assert_equal "yes\n", File.read(output_file)
+  end
 end
