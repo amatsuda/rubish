@@ -2415,10 +2415,9 @@ module Rubish
             @var_attributes[key] ||= Set.new
             @var_attributes[key] << :export
           else
-            # Just export existing variable
+            # Just export existing variable (silently, like bash)
             @var_attributes[arg] ||= Set.new
             @var_attributes[arg] << :export
-            puts "export: #{arg}=#{ENV[arg]}" if ENV.key?(arg)
           end
         end
       end
