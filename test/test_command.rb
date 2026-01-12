@@ -116,4 +116,12 @@ class TestCommand < Test::Unit::TestCase
     assert_match(/Is a directory/, File.read(error_file))
     assert_equal 126, @repl.instance_variable_get(:@last_status)
   end
+
+  # Test command not found gives proper error
+  def test_command_not_found
+    error_file = File.join(@tempdir, 'stderr.txt')
+    execute("nonexistent_command_xyz 2>#{error_file}")
+    assert_match(/command not found/, File.read(error_file))
+    assert_equal 127, @repl.instance_variable_get(:@last_status)
+  end
 end

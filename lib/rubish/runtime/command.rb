@@ -50,6 +50,17 @@ module Rubish
       @function_caller&.call(name, args)
     end
 
+    # Execute a command with proper error handling for command not found / permission denied
+    def self.safe_exec(cmd_name, cmd_path, *args)
+      exec(cmd_path, *args)
+    rescue Errno::ENOENT
+      $stderr.puts "rubish: #{cmd_name}: command not found"
+      exit(127)
+    rescue Errno::EACCES
+      $stderr.puts "rubish: #{cmd_path}: Permission denied"
+      exit(126)
+    end
+
     def initialize(name, *args, &block)
       @name = name
       @args = expand_args(args)
@@ -212,7 +223,7 @@ module Rubish
           $stderr.puts "rubish: #{cmd_path}: Is a directory"
           exit(126)
         else
-          exec(cmd_path, *cmd_args)
+          Command.safe_exec(name, cmd_path, *cmd_args)
         end
       end
 
@@ -247,7 +258,7 @@ module Rubish
         # Set keyword environment variables
         keyword_env.each { |k, v| ENV[k] = v }
 
-        exec(cmd_path, *cmd_args)
+        Command.safe_exec(name, cmd_path, *cmd_args)
       end
 
       writer.close
@@ -432,7 +443,7 @@ module Rubish
             result = Command.call_function(cmd.name, cmd.args)
             exit(result ? 0 : 1)
           else
-            exec(cmd.name, *cmd.args)
+            Command.safe_exec(cmd.name, cmd.name, *cmd.args)
           end
         end
       end
@@ -468,7 +479,7 @@ module Rubish
             pid = fork do
               $stdout.reopen(last_cmd.stdout) if last_cmd.stdout
               $stderr.reopen(last_cmd.stderr) if last_cmd.stderr
-              exec(last_cmd.name, *last_cmd.args)
+              Command.safe_exec(last_cmd.name, last_cmd.name, *last_cmd.args)
             end
             Process.wait(pid)
             last_status = $?
@@ -543,7 +554,7 @@ module Rubish
             result = Command.call_function(cmd.name, cmd.args)
             exit(result ? 0 : 1)
           else
-            exec(cmd.name, *cmd.args)
+            Command.safe_exec(cmd.name, cmd.name, *cmd.args)
           end
         end
       end
