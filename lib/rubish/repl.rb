@@ -114,6 +114,9 @@ module Rubish
       # INPUTRC environment variable specifies the inputrc file location
       # Falls back to ~/.inputrc, then ~/.config/readline/inputrc
       load_inputrc
+      # Set word break characters AFTER loading inputrc to ensure / is not included
+      # This enables proper path completion (e.g., cd aaa/b<TAB> completes to aaa/bbb)
+      Reline.completer_word_break_characters = " \t\n\"'><=;|&{("
     end
 
     # Load readline/Reline configuration from inputrc file

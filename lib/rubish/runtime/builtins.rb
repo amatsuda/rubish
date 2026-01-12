@@ -299,6 +299,10 @@ module Rubish
       ENV['COMP_TYPE'] = type.to_s
       ENV['COMP_KEY'] = key.to_s
 
+      # cur/prev - bash completion convention for current and previous words
+      ENV['cur'] = words[cword] || ''
+      ENV['prev'] = words[cword - 1] || '' if cword > 0
+
       # COMPREPLY - array that completion functions populate
       set_array('COMPREPLY', [])
     end
@@ -321,6 +325,8 @@ module Rubish
       ENV.delete('COMP_POINT')
       ENV.delete('COMP_TYPE')
       ENV.delete('COMP_KEY')
+      ENV.delete('cur')
+      ENV.delete('prev')
     end
 
     # TMOUT - timeout for read builtin (in seconds)
