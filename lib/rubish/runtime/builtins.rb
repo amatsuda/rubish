@@ -1270,6 +1270,11 @@ module Rubish
       # trap command signal [signal...]
       # trap '' signal - ignore signal
       # trap - signal - reset to default
+      # trap -- command signal - use -- to separate options from command
+      # Skip -- if present (end of options marker)
+      if args.first == '--'
+        args = args[1..]
+      end
       command = args.first
       signals = args[1..]
 

@@ -194,4 +194,10 @@ class TestTrap < Test::Unit::TestCase
     sig = Rubish::Builtins.normalize_signal('POLL')
     assert_equal 'IO', sig
   end
+
+  def test_trap_double_dash_end_of_options
+    # trap -- '' SIGINT should ignore SIGINT (used by direnv hook)
+    Rubish::Builtins.run('trap', ['--', '', 'INT'])
+    assert_equal({'INT' => ''}, Rubish::Builtins.traps)
+  end
 end
