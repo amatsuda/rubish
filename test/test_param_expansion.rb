@@ -51,6 +51,17 @@ class TestParamExpansion < Test::Unit::TestCase
     assert_equal "\n", File.read(output_file)
   end
 
+  # Test builtin path (without redirection) for ${var-default}
+  def test_unset_only_default_builtin_path
+    ENV.delete('UNSET_VAR')
+    output = capture_output { execute('echo ${UNSET_VAR-nope}') }
+    assert_equal "nope\n", output
+
+    ENV['UNSET_VAR'] = 'value'
+    output = capture_output { execute('echo ${UNSET_VAR-nope}') }
+    assert_equal "value\n", output
+  end
+
   # ${var:=default} - assign default if unset or null
   def test_assign_default_when_unset
     ENV.delete('UNSET_VAR')

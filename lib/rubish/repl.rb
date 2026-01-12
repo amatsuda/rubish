@@ -1916,12 +1916,12 @@ module Rubish
         return [@positional_params[n - 1] || '', 2]
       end
 
-      # ${VAR} form
+      # ${VAR} or ${VAR-default} form
       if str[pos + 1] == '{'
-        end_brace = str.index('}', pos + 2)
+        end_brace = find_matching_brace(str, pos + 1)
         if end_brace
-          var_name = str[pos + 2...end_brace]
-          return [fetch_var_with_nounset(var_name), end_brace - pos + 1]
+          content = str[pos + 2...end_brace]
+          return [expand_parameter_expansion(content), end_brace - pos + 1]
         end
       end
 
@@ -1934,6 +1934,43 @@ module Rubish
       end
 
       ['', 0]
+    end
+
+    def find_matching_brace(str, open_pos)
+      # Find matching } for { at open_pos, handling nested braces
+      depth = 1
+      i = open_pos + 1
+      while i < str.length && depth > 0
+        case str[i]
+        when '{'
+          depth += 1
+        when '}'
+          depth -= 1
+        when '\\'
+          i += 1  # Skip escaped character
+        end
+        i += 1
+      end
+      depth == 0 ? i - 1 : nil
+    end
+
+    def expand_parameter_expansion(content)
+      # Handle ${var:-default}, ${var-default}, ${var:=default}, ${var:+value}, ${var:?message}
+      if content =~ /\A([a-zA-Z_][a-zA-Z0-9_]*)(:-|:=|:\+|:\?|-|=|\+|\?)(.*)?\z/
+        var_name = $1
+        operator = $2
+        operand = $3 || ''
+        return __param_expand(var_name, operator, operand)
+      end
+
+      # Handle ${#var} - length
+      if content =~ /\A#([a-zA-Z_][a-zA-Z0-9_]*)\z/
+        var_name = $1
+        return __param_length(var_name)
+      end
+
+      # Simple ${VAR}
+      fetch_var_with_nounset(content)
     end
 
     def fetch_var_with_nounset(var_name)
