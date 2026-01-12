@@ -250,8 +250,7 @@ module Rubish
             i += 1
           end
         elsif char == '"'
-          # Escape double quotes in the output
-          result << '\\"'
+          # Quote removal: skip double quotes (they're used for grouping, not literal)
           i += 1
         else
           result << char

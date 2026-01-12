@@ -1760,6 +1760,9 @@ module Rubish
             result << char
             i += 1
           end
+        elsif char == '"'
+          # Quote removal: skip double quotes (they're used for grouping, not literal)
+          i += 1
         else
           result << char
           i += 1
