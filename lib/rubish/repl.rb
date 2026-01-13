@@ -504,7 +504,8 @@ module Rubish
     end
 
     def prompt
-      ps1 = ENV['PS1']
+      # Support both bash (PS1) and zsh (PROMPT) environment variables
+      ps1 = ENV['PS1'] || ENV['PROMPT']
       if ps1
         expand_prompt(ps1)
       else
