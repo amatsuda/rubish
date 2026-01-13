@@ -639,4 +639,104 @@ class TestPrompt < Test::Unit::TestCase
     result = @repl.send(:terminal_width)
     assert result > 0
   end
+
+  # Zsh-style prompt escapes
+
+  def test_zsh_username
+    ENV['RPROMPT'] = '%n'
+    result = @repl.send(:right_prompt)
+    expected_user = ENV['USER'] || Etc.getlogin || 'user'
+    assert_equal expected_user, result
+  end
+
+  def test_zsh_hostname_short
+    ENV['RPROMPT'] = '%m'
+    result = @repl.send(:right_prompt)
+    expected_host = Socket.gethostname.split('.').first
+    assert_equal expected_host, result
+  end
+
+  def test_zsh_hostname_full
+    ENV['RPROMPT'] = '%M'
+    result = @repl.send(:right_prompt)
+    assert_equal Socket.gethostname, result
+  end
+
+  def test_zsh_working_directory
+    ENV['RPROMPT'] = '%~'
+    Dir.chdir(ENV['HOME'])
+    result = @repl.send(:right_prompt)
+    assert_equal '~', result
+  end
+
+  def test_zsh_time_24h
+    ENV['RPROMPT'] = '%T'
+    result = @repl.send(:right_prompt)
+    assert_match(/\d{2}:\d{2}/, result)
+  end
+
+  def test_zsh_time_with_seconds
+    ENV['RPROMPT'] = '%*'
+    result = @repl.send(:right_prompt)
+    assert_match(/\d{2}:\d{2}:\d{2}/, result)
+  end
+
+  def test_zsh_date
+    ENV['RPROMPT'] = '%D'
+    result = @repl.send(:right_prompt)
+    assert_match(/\d{2}-\d{2}-\d{2}/, result)
+  end
+
+  def test_zsh_custom_date_format
+    ENV['RPROMPT'] = '%D{%Y-%m-%d}'
+    result = @repl.send(:right_prompt)
+    assert_match(/\d{4}-\d{2}-\d{2}/, result)
+  end
+
+  def test_zsh_exit_status
+    ENV['RPROMPT'] = '%?'
+    @repl.instance_variable_set(:@last_status, 42)
+    result = @repl.send(:right_prompt)
+    assert_equal '42', result
+  end
+
+  def test_zsh_literal_percent
+    ENV['RPROMPT'] = '100%%'
+    result = @repl.send(:right_prompt)
+    assert_equal '100%', result
+  end
+
+  def test_zsh_foreground_color
+    ENV['RPROMPT'] = '%F{red}red%f'
+    result = @repl.send(:right_prompt)
+    assert_match(/\e\[31m/, result)  # Red foreground
+    assert_match(/\e\[39m/, result)  # Reset foreground
+  end
+
+  def test_zsh_foreground_color_number
+    ENV['RPROMPT'] = '%F{4}blue%f'
+    result = @repl.send(:right_prompt)
+    assert_match(/\e\[34m/, result)  # Blue foreground (30 + 4)
+  end
+
+  def test_zsh_bold
+    ENV['RPROMPT'] = '%Bbold%b'
+    result = @repl.send(:right_prompt)
+    assert_match(/\e\[1m/, result)   # Bold on
+    assert_match(/\e\[22m/, result)  # Bold off
+  end
+
+  def test_zsh_256_color
+    ENV['RPROMPT'] = '%F{208}orange%f'
+    result = @repl.send(:right_prompt)
+    assert_match(/\e\[38;5;208m/, result)  # 256-color foreground
+  end
+
+  def test_mixed_bash_and_zsh_escapes
+    ENV['RPROMPT'] = '\u@%m'  # Bash \u and zsh %m
+    result = @repl.send(:right_prompt)
+    expected_user = ENV['USER'] || Etc.getlogin || 'user'
+    expected_host = Socket.gethostname.split('.').first
+    assert_equal "#{expected_user}@#{expected_host}", result
+  end
 end

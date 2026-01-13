@@ -957,6 +957,7 @@ module Rubish
 
       while i < ps.length
         if ps[i] == '\\'
+          # Bash-style escapes: \X
           i += 1
           break if i >= ps.length
 
@@ -1050,6 +1051,124 @@ module Rubish
             result << '\\' << ps[i]
           end
           i += 1
+        elsif ps[i] == '%'
+          # Zsh-style escapes: %X
+          i += 1
+          break if i >= ps.length
+
+          case ps[i]
+          when 'n'
+            result << (ENV['USER'] || Etc.getlogin || 'user')
+          when 'm'
+            result << Socket.gethostname.split('.').first
+          when 'M'
+            result << Socket.gethostname
+          when '~'
+            home = ENV['HOME'] || ''
+            cwd = Dir.pwd
+            display_path = home.empty? ? cwd : cwd.sub(/\A#{Regexp.escape(home)}/, '~')
+            result << trim_prompt_dir(display_path)
+          when '/'
+            result << Dir.pwd
+          when 'd'
+            result << Dir.pwd
+          when '.'
+            # %. - basename like %1~
+            cwd = Dir.pwd
+            home = ENV['HOME'] || ''
+            result << (cwd == home ? '~' : File.basename(cwd))
+          when '1', '2', '3', '4', '5', '6', '7', '8', '9'
+            # %N~ - last N path components
+            n = ps[i].to_i
+            i += 1
+            if i < ps.length && ps[i] == '~'
+              home = ENV['HOME'] || ''
+              cwd = Dir.pwd
+              display_path = home.empty? ? cwd : cwd.sub(/\A#{Regexp.escape(home)}/, '~')
+              components = display_path.split('/')
+              if components.length > n
+                result << components.last(n).join('/')
+              else
+                result << display_path
+              end
+            else
+              i -= 1
+              result << '%' << ps[i]
+            end
+          when 'T'
+            result << Time.now.strftime('%H:%M')
+          when 't', '@'
+            result << Time.now.strftime('%I:%M %p')
+          when '*'
+            result << Time.now.strftime('%H:%M:%S')
+          when 'D'
+            # %D or %D{format}
+            i += 1
+            if i < ps.length && ps[i] == '{'
+              i += 1
+              fmt_end = ps.index('}', i)
+              if fmt_end
+                fmt = ps[i...fmt_end]
+                result << Time.now.strftime(fmt)
+                i = fmt_end
+              end
+            else
+              i -= 1
+              result << Time.now.strftime('%y-%m-%d')
+            end
+          when 'j'
+            result << JobManager.instance.active.count.to_s
+          when '?'
+            result << @last_status.to_s
+          when '#'
+            result << (Process.uid == 0 ? '#' : '%')
+          when 'F'
+            # %F{color} - foreground color
+            i += 1
+            if i < ps.length && ps[i] == '{'
+              i += 1
+              color_end = ps.index('}', i)
+              if color_end
+                color = ps[i...color_end]
+                result << zsh_color_to_ansi(color, :fg)
+                i = color_end
+              end
+            else
+              i -= 1
+            end
+          when 'f'
+            result << "\e[39m"  # Reset foreground
+          when 'K'
+            # %K{color} - background color
+            i += 1
+            if i < ps.length && ps[i] == '{'
+              i += 1
+              color_end = ps.index('}', i)
+              if color_end
+                color = ps[i...color_end]
+                result << zsh_color_to_ansi(color, :bg)
+                i = color_end
+              end
+            else
+              i -= 1
+            end
+          when 'k'
+            result << "\e[49m"  # Reset background
+          when 'B'
+            result << "\e[1m"   # Bold on
+          when 'b'
+            result << "\e[22m"  # Bold off
+          when 'U'
+            result << "\e[4m"   # Underline on
+          when 'u'
+            result << "\e[24m"  # Underline off
+          when '%'
+            result << '%'
+          else
+            # Unknown escape, keep literal
+            result << '%' << ps[i]
+          end
+          i += 1
         else
           result << ps[i]
           i += 1
@@ -1062,6 +1181,35 @@ module Rubish
       end
 
       result
+    end
+
+    # Convert zsh color names/numbers to ANSI escape codes
+    # Supports: color names (red, green, blue, etc.), 0-255 color numbers
+    ZSH_COLORS = {
+      'black' => 0, 'red' => 1, 'green' => 2, 'yellow' => 3,
+      'blue' => 4, 'magenta' => 5, 'cyan' => 6, 'white' => 7,
+      'default' => 9
+    }.freeze
+
+    def zsh_color_to_ansi(color, type)
+      base = type == :fg ? 30 : 40
+
+      if color =~ /\A\d+\z/
+        num = color.to_i
+        if num < 8
+          "\e[#{base + num}m"
+        elsif num < 16
+          # Bright colors (8-15)
+          "\e[#{base + 60 + (num - 8)}m"
+        else
+          # 256-color mode
+          "\e[#{type == :fg ? 38 : 48};5;#{num}m"
+        end
+      elsif ZSH_COLORS.key?(color.downcase)
+        "\e[#{base + ZSH_COLORS[color.downcase]}m"
+      else
+        ''
+      end
     end
 
     # Trim directory path according to PROMPT_DIRTRIM
