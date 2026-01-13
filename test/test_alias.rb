@@ -93,4 +93,28 @@ class TestAlias < Test::Unit::TestCase
     result = Rubish::Builtins.expand_alias('echo g')
     assert_equal 'echo g', result
   end
+
+  # Test default aliases (like fish's colored ls)
+  def test_setup_default_aliases_sets_ls
+    repl = Rubish::REPL.new
+    repl.send(:setup_default_aliases)
+
+    assert Rubish::Builtins.aliases.key?('ls'), 'ls alias should be set'
+    if RUBY_PLATFORM =~ /darwin|bsd/i
+      assert_equal 'ls -G', Rubish::Builtins.aliases['ls']
+    else
+      assert_equal 'ls --color=auto', Rubish::Builtins.aliases['ls']
+    end
+  end
+
+  def test_setup_default_aliases_does_not_overwrite_existing
+    # Set a custom ls alias first
+    Rubish::Builtins.aliases['ls'] = 'ls -la'
+
+    repl = Rubish::REPL.new
+    repl.send(:setup_default_aliases)
+
+    # Should preserve the existing alias
+    assert_equal 'ls -la', Rubish::Builtins.aliases['ls']
+  end
 end

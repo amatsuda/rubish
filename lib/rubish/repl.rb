@@ -93,6 +93,7 @@ module Rubish
       setup_reline
       setup_signals
       load_history
+      setup_default_aliases
       load_config
       # Enable restricted mode AFTER startup files are sourced
       # This allows profile/rc files to set PATH and other variables
@@ -309,6 +310,18 @@ module Rubish
 
     # Set up job control for interactive shells
     # This puts the shell in its own process group and takes control of the terminal
+    # Set up default aliases (like fish does for colored ls)
+    # These are set before load_config so users can override in .rubishrc
+    def setup_default_aliases
+      # Colored ls by default (like fish)
+      # -G is BSD/macOS style, --color=auto is GNU/Linux style
+      if RUBY_PLATFORM =~ /darwin|bsd/i
+        Builtins.aliases['ls'] ||= 'ls -G'
+      else
+        Builtins.aliases['ls'] ||= 'ls --color=auto'
+      end
+    end
+
     def setup_job_control
       return unless $stdin.tty?
 
