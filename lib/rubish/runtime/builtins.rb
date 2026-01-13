@@ -2256,6 +2256,28 @@ module Rubish
       true
     end
 
+    # Strip surrounding quotes from a value (single or double)
+    def self.strip_quotes(value)
+      return value if value.nil? || value.empty?
+
+      # $'...' ANSI-C quoting
+      if value.start_with?("$'") && value.end_with?("'")
+        return process_escape_sequences(value[2...-1])
+      end
+
+      # Single quotes
+      if value.start_with?("'") && value.end_with?("'") && value.length >= 2
+        return value[1...-1]
+      end
+
+      # Double quotes
+      if value.start_with?('"') && value.end_with?('"') && value.length >= 2
+        return value[1...-1]
+      end
+
+      value
+    end
+
     def self.apply_attributes(name, value)
       attrs = @var_attributes[name] || Set.new
 
@@ -2584,6 +2606,8 @@ module Rubish
               $stderr.puts "rubish: #{key}: readonly variable"
               next
             end
+            # Strip quotes from value
+            value = strip_quotes(value)
             # Apply attributes if any
             value = apply_attributes(key, value)
             ENV[key] = value
