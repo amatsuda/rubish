@@ -310,16 +310,23 @@ module Rubish
 
     # Set up job control for interactive shells
     # This puts the shell in its own process group and takes control of the terminal
-    # Set up default aliases (like fish does for colored ls)
+    # Set up default aliases (like fish)
     # These are set before load_config so users can override in .rubishrc
     def setup_default_aliases
       # Colored ls by default (like fish)
       # -G is BSD/macOS style, --color=auto is GNU/Linux style
       if RUBY_PLATFORM =~ /darwin|bsd/i
         Builtins.aliases['ls'] ||= 'ls -G'
+        Builtins.aliases['ll'] ||= 'ls -lG'
+        Builtins.aliases['la'] ||= 'ls -laG'
       else
         Builtins.aliases['ls'] ||= 'ls --color=auto'
+        Builtins.aliases['ll'] ||= 'ls -l --color=auto'
+        Builtins.aliases['la'] ||= 'ls -la --color=auto'
       end
+
+      # Colored grep (like fish)
+      Builtins.aliases['grep'] ||= 'grep --color=auto'
     end
 
     def setup_job_control
