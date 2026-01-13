@@ -531,29 +531,9 @@ module Rubish
       expand_prompt(rprompt)
     end
 
-    # Build prompt string with RPROMPT embedded
-    # Uses ANSI escape codes to position RPROMPT at right edge
-    def prompt_with_rprompt(left_prompt)
-      rp = right_prompt
-      return left_prompt unless rp
-
-      # Get terminal width
-      term_width = terminal_width
-      return left_prompt unless term_width > 0
-
-      # Calculate visible lengths (excluding ANSI escape codes)
-      left_visible_len = visible_length(left_prompt)
-      right_visible_len = visible_length(rp)
-
-      # Only display if there's room (leave at least 10 chars for input)
-      return left_prompt if left_visible_len + right_visible_len + 10 > term_width
-
-      # Build prompt: save cursor, move to right, print RPROMPT, restore cursor, then left prompt
-      # The entire RPROMPT sequence is wrapped in \001...\002 because the cursor returns
-      # to the start position, so Reline shouldn't count any of it for cursor positioning
-      right_col = term_width - right_visible_len + 1
-      rprompt_sequence = "\001\e[s\e[#{right_col}G#{rp}\e[u\002"
-      "#{rprompt_sequence}#{left_prompt}"
+    # Set Reline's rprompt for right-side prompt display
+    def setup_rprompt
+      Reline.rprompt = right_prompt
     end
 
     # Calculate visible length of a string (excluding ANSI escape codes)
@@ -1176,8 +1156,8 @@ module Rubish
         end
       end
 
-      # promptvars: if enabled, perform variable and command substitution on the result
-      if Builtins.shopt_enabled?('promptvars')
+      # promptvars (bash) / prompt_subst (zsh): if enabled, perform variable and command substitution
+      if Builtins.shopt_enabled?('promptvars') || Builtins.zsh_option_enabled?('prompt_subst')
         result = expand_string_content(result)
       end
 
@@ -1258,11 +1238,14 @@ module Rubish
       # Execute PROMPT_COMMAND before displaying prompt
       run_prompt_command
 
-      # Build prompt with RPROMPT if set
-      full_prompt = prompt_with_rprompt(prompt)
+      # Get the left prompt
+      left_prompt = prompt
+
+      # Set Reline's rprompt for right-side prompt
+      setup_rprompt
 
       # Don't auto-add to history; we'll do it ourselves after checking HISTCONTROL/HISTIGNORE
-      line = Reline.readline(full_prompt, false)
+      line = Reline.readline(left_prompt, false)
       unless line
         # EOF received (Ctrl+D)
         # Check IGNOREEOF variable first, then fall back to set -o ignoreeof

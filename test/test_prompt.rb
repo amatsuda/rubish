@@ -739,4 +739,49 @@ class TestPrompt < Test::Unit::TestCase
     expected_host = Socket.gethostname.split('.').first
     assert_equal "#{expected_user}@#{expected_host}", result
   end
+
+  # Test prompt_subst (zsh option) - enables parameter expansion in prompts
+  def test_prompt_subst_variable_expansion
+    Rubish::Builtins.set_zsh_option('prompt_subst', true)
+    ENV['TEST_PROMPT_VAR'] = 'hello'
+    ENV['PS1'] = '$TEST_PROMPT_VAR $ '
+    result = @repl.send(:prompt)
+    assert_equal 'hello $ ', result
+  ensure
+    Rubish::Builtins.set_zsh_option('prompt_subst', false)
+    ENV.delete('TEST_PROMPT_VAR')
+  end
+
+  def test_prompt_subst_command_substitution
+    Rubish::Builtins.set_zsh_option('prompt_subst', true)
+    ENV['PS1'] = '$(echo world) $ '
+    result = @repl.send(:prompt)
+    assert_equal 'world $ ', result
+  ensure
+    Rubish::Builtins.set_zsh_option('prompt_subst', false)
+  end
+
+  def test_prompt_subst_disabled_no_expansion
+    Rubish::Builtins.set_zsh_option('prompt_subst', false)
+    Rubish::Builtins.shell_options['promptvars'] = false
+    ENV['TEST_PROMPT_VAR'] = 'hello'
+    ENV['PS1'] = '$TEST_PROMPT_VAR $ '
+    result = @repl.send(:prompt)
+    assert_equal '$TEST_PROMPT_VAR $ ', result
+  ensure
+    Rubish::Builtins.shell_options['promptvars'] = true
+    ENV.delete('TEST_PROMPT_VAR')
+  end
+
+  def test_prompt_subst_with_zsh_escapes
+    Rubish::Builtins.set_zsh_option('prompt_subst', true)
+    ENV['MY_DIR'] = '/tmp'
+    ENV['PS1'] = '%n:$MY_DIR $ '
+    result = @repl.send(:prompt)
+    expected_user = ENV['USER'] || Etc.getlogin || 'user'
+    assert_equal "#{expected_user}:/tmp $ ", result
+  ensure
+    Rubish::Builtins.set_zsh_option('prompt_subst', false)
+    ENV.delete('MY_DIR')
+  end
 end
