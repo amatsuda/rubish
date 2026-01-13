@@ -581,4 +581,62 @@ class TestPrompt < Test::Unit::TestCase
     # to_i returns 0 for non-numeric, so no trimming
     assert_equal path, result
   end
+
+  # RPROMPT tests (right prompt like zsh)
+
+  def test_rprompt_nil_when_not_set
+    ENV.delete('RPROMPT')
+    ENV.delete('RPS1')
+    result = @repl.send(:right_prompt)
+    assert_nil result
+  end
+
+  def test_rprompt_from_env
+    ENV['RPROMPT'] = 'right>'
+    result = @repl.send(:right_prompt)
+    assert_equal 'right>', result
+  end
+
+  def test_rprompt_from_rps1
+    ENV.delete('RPROMPT')
+    ENV['RPS1'] = 'rps1>'
+    result = @repl.send(:right_prompt)
+    assert_equal 'rps1>', result
+  end
+
+  def test_rprompt_prefers_rprompt_over_rps1
+    ENV['RPROMPT'] = 'rprompt>'
+    ENV['RPS1'] = 'rps1>'
+    result = @repl.send(:right_prompt)
+    assert_equal 'rprompt>', result
+  end
+
+  def test_rprompt_expands_escape_sequences
+    ENV['RPROMPT'] = '\u@\h'
+    result = @repl.send(:right_prompt)
+    expected_user = ENV['USER'] || Etc.getlogin || 'user'
+    expected_host = Socket.gethostname.split('.').first
+    assert_equal "#{expected_user}@#{expected_host}", result
+  end
+
+  def test_visible_length_plain_text
+    result = @repl.send(:visible_length, 'hello')
+    assert_equal 5, result
+  end
+
+  def test_visible_length_with_ansi_codes
+    # Text with color codes should only count visible characters
+    result = @repl.send(:visible_length, "\e[31mhello\e[0m")
+    assert_equal 5, result
+  end
+
+  def test_visible_length_complex_ansi
+    result = @repl.send(:visible_length, "\e[1;32mbold green\e[0m text")
+    assert_equal 15, result  # "bold green text"
+  end
+
+  def test_terminal_width_returns_positive
+    result = @repl.send(:terminal_width)
+    assert result > 0
+  end
 end

@@ -522,6 +522,59 @@ module Rubish
       end
     end
 
+    # Right prompt (like zsh's RPROMPT)
+    def right_prompt
+      rprompt = ENV['RPROMPT'] || ENV['RPS1']
+      return nil unless rprompt && !rprompt.empty?
+
+      expand_prompt(rprompt)
+    end
+
+    # Build prompt string with RPROMPT embedded
+    # Uses ANSI escape codes to position RPROMPT at right edge
+    def prompt_with_rprompt(left_prompt)
+      rp = right_prompt
+      return left_prompt unless rp
+
+      # Get terminal width
+      term_width = terminal_width
+      return left_prompt unless term_width > 0
+
+      # Calculate visible lengths (excluding ANSI escape codes)
+      left_visible_len = visible_length(left_prompt)
+      right_visible_len = visible_length(rp)
+
+      # Only display if there's room (leave at least 10 chars for input)
+      return left_prompt if left_visible_len + right_visible_len + 10 > term_width
+
+      # Build prompt: save cursor, move to right, print RPROMPT, restore cursor, then left prompt
+      # The entire RPROMPT sequence is wrapped in \001...\002 because the cursor returns
+      # to the start position, so Reline shouldn't count any of it for cursor positioning
+      right_col = term_width - right_visible_len + 1
+      rprompt_sequence = "\001\e[s\e[#{right_col}G#{rp}\e[u\002"
+      "#{rprompt_sequence}#{left_prompt}"
+    end
+
+    # Calculate visible length of a string (excluding ANSI escape codes)
+    def visible_length(str)
+      # Remove ANSI escape sequences
+      str.gsub(/\e\[[0-9;]*[a-zA-Z]/, '').length
+    end
+
+    # Get terminal width
+    def terminal_width
+      if $stdout.tty?
+        begin
+          _rows, cols = $stdout.winsize
+          cols
+        rescue
+          ENV['COLUMNS']&.to_i || 80
+        end
+      else
+        80
+      end
+    end
+
     # Check if a parse error indicates incomplete input (needs more lines)
     def incomplete_command_error?(message)
       # These patterns indicate the parser is waiting for a closing keyword/delimiter
@@ -1056,8 +1109,11 @@ module Rubish
       # Execute PROMPT_COMMAND before displaying prompt
       run_prompt_command
 
+      # Build prompt with RPROMPT if set
+      full_prompt = prompt_with_rprompt(prompt)
+
       # Don't auto-add to history; we'll do it ourselves after checking HISTCONTROL/HISTIGNORE
-      line = Reline.readline(prompt, false)
+      line = Reline.readline(full_prompt, false)
       unless line
         # EOF received (Ctrl+D)
         # Check IGNOREEOF variable first, then fall back to set -o ignoreeof
