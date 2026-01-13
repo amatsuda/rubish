@@ -2691,8 +2691,10 @@ module Rubish
       end
     end
 
-    def __cmd(name, *args, &block)
-      Command.new(name, *args, &block)
+    def __cmd(name, *args, __prefix_env: nil, &block)
+      cmd = Command.new(name, *args, &block)
+      cmd.prefix_env = __prefix_env if __prefix_env
+      cmd
     end
 
     def __and_cmd(left_proc, right_proc)

@@ -194,6 +194,23 @@ module Rubish
 
       return nil unless peek(:WORD)
 
+      # Collect prefix environment variable assignments (e.g., FOO=bar BAZ=qux cmd)
+      prefix_env = []
+      while peek(:WORD) && assignment?(current.value)
+        # Check if there's a command after this assignment
+        # If the next token is also a WORD (and possibly an assignment), continue collecting
+        # If there's no next WORD, this is a bare assignment, not a prefix env
+        next_pos = @pos + 1
+        if next_pos < @tokens.length && [:WORD, :ARRAY, :REGEXP, :PROC_SUB_IN, :PROC_SUB_OUT].include?(@tokens[next_pos]&.type)
+          prefix_env << consume(:WORD).value
+        else
+          # No command follows, let caller handle as bare assignment
+          break
+        end
+      end
+
+      return nil unless peek(:WORD)
+
       name = consume(:WORD).value
 
       # Check for function definition: name() { body }
@@ -215,8 +232,13 @@ module Rubish
         block = consume(:BLOCK).value
       end
 
-      cmd = AST::Command.new(name: name, args: args, block: block)
+      cmd = AST::Command.new(name: name, args: args, block: block, env: prefix_env)
       parse_redirections(cmd)
+    end
+
+    # Check if a string looks like a variable assignment (VAR=value or VAR+=value)
+    def assignment?(str)
+      str.match?(/\A[A-Za-z_][A-Za-z0-9_]*\+?=/)
     end
 
     # function_def : FUNCTION WORD '{' body '}'

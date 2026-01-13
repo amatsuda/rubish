@@ -3,8 +3,9 @@
 module Rubish
   module AST
     # Single command: ls -la
-    Command = Data.define(:name, :args, :block) do
-      def initialize(name:, args: [], block: nil)
+    # env: prefix environment variables (e.g., FOO=bar cmd)
+    Command = Data.define(:name, :args, :block, :env) do
+      def initialize(name:, args: [], block: nil, env: [])
         super
       end
     end

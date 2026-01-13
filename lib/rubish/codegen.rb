@@ -66,11 +66,28 @@ module Rubish
     def generate_command(node)
       args = node.args.map { |a| generate_arg(a) }.join(', ')
       name = generate_string_arg(node.name)
-      cmd = if args.empty?
+
+      # Generate prefix environment variables hash
+      env_code = if node.env.empty?
+                   nil
+                 else
+                   pairs = node.env.map do |assignment|
+                     var, val = assignment.split('=', 2)
+                     val ||= ''
+                     "#{var.inspect} => #{generate_string_arg(val)}"
+                   end
+                   "{#{pairs.join(', ')}}"
+                 end
+
+      cmd = if args.empty? && env_code.nil?
               "__cmd(#{name})"
-            else
+            elsif args.empty?
+              "__cmd(#{name}, __prefix_env: #{env_code})"
+            elsif env_code.nil?
               # Flatten args in case of glob expansion
               "__cmd(#{name}, *[#{args}].flatten)"
+            else
+              "__cmd(#{name}, *[#{args}].flatten, __prefix_env: #{env_code})"
             end
 
       # Append block if present

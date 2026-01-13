@@ -64,7 +64,7 @@ module Rubish
 
   class Command
     attr_reader :name, :pid, :status
-    attr_accessor :stdin, :stdout, :stderr, :block
+    attr_accessor :stdin, :stdout, :stderr, :block, :prefix_env
 
     # Class-level accessors for function support in pipelines
     @function_checker = nil
@@ -260,6 +260,9 @@ module Rubish
         # Set keyword environment variables
         keyword_env.each { |k, v| ENV[k] = v }
 
+        # Set prefix environment variables (e.g., FOO=bar cmd)
+        @prefix_env&.each { |k, v| ENV[k] = v }
+
         # Check if this is a user-defined function
         if Command.function?(name)
           result = Command.call_function(name, cmd_args)
@@ -345,6 +348,9 @@ module Rubish
 
         # Set keyword environment variables
         keyword_env.each { |k, v| ENV[k] = v }
+
+        # Set prefix environment variables (e.g., FOO=bar cmd)
+        @prefix_env&.each { |k, v| ENV[k] = v }
 
         Command.safe_exec(name, cmd_path, *cmd_args)
       end
@@ -539,6 +545,9 @@ module Rubish
           $stdout.reopen(cmd.stdout) if cmd.stdout
           $stderr.reopen(cmd.stderr) if cmd.stderr
 
+          # Set prefix environment variables (e.g., FOO=bar cmd)
+          cmd.prefix_env&.each { |k, v| ENV[k] = v } if cmd.respond_to?(:prefix_env)
+
           # Handle different command types
           if cmd.is_a?(Subshell)
             # Run subshell block
@@ -703,6 +712,9 @@ module Rubish
           $stdin.reopen(cmd.stdin) if cmd.stdin
           $stdout.reopen(cmd.stdout) if cmd.stdout
           $stderr.reopen(cmd.stderr) if cmd.stderr
+
+          # Set prefix environment variables (e.g., FOO=bar cmd)
+          cmd.prefix_env&.each { |k, v| ENV[k] = v } if cmd.respond_to?(:prefix_env)
 
           # Handle different command types
           if cmd.is_a?(Subshell)
