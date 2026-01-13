@@ -201,7 +201,31 @@ module Rubish
         # If the next token is also a WORD (and possibly an assignment), continue collecting
         # If there's no next WORD, this is a bare assignment, not a prefix env
         next_pos = @pos + 1
-        if next_pos < @tokens.length && [:WORD, :ARRAY, :REGEXP, :PROC_SUB_IN, :PROC_SUB_OUT].include?(@tokens[next_pos]&.type)
+        next_token = @tokens[next_pos]
+        if next_pos < @tokens.length && [:WORD, :ARRAY, :REGEXP, :PROC_SUB_IN, :PROC_SUB_OUT].include?(next_token&.type)
+          # Check if the next token is also an assignment - if it's followed by
+          # nothing or by end-of-input, then ALL of these are bare assignments, not prefix env
+          # This handles: A=1 B=2 C=3 (all assignments, no command)
+          if next_token.type == :WORD && assignment?(next_token.value)
+            # Look ahead to see if there's a real command after all the assignments
+            look_pos = next_pos + 1
+            found_command = false
+            while look_pos < @tokens.length
+              tok = @tokens[look_pos]
+              if tok.type == :WORD && assignment?(tok.value)
+                look_pos += 1
+              elsif [:WORD, :ARRAY, :REGEXP, :PROC_SUB_IN, :PROC_SUB_OUT].include?(tok.type)
+                found_command = true
+                break
+              else
+                break
+              end
+            end
+            unless found_command
+              # All remaining tokens are assignments, no command follows
+              break
+            end
+          end
           prefix_env << consume(:WORD).value
         else
           # No command follows, let caller handle as bare assignment
