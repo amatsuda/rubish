@@ -2,7 +2,7 @@
 
 module Rubish
   module Builtins
-    COMMANDS = %w(cd exit logout jobs fg bg export pwd history alias unalias source . shift set return read echo test [ break continue pushd popd dirs trap getopts local unset readonly declare typeset let printf type which true false : eval command builtin wait kill umask exec times hash disown ulimit suspend shopt enable caller complete compgen compopt bind help fc mapfile readarray basename dirname realpath _get_comp_words_by_ref _init_completion _filedir _have _split_longopt __ltrim_colon_completions _variables _tilde _quote_readline_by_ref _parse_help _upvars _usergroup).freeze
+    COMMANDS = %w(cd exit logout jobs fg bg export pwd history alias unalias source . shift set return read echo test [ break continue pushd popd dirs trap getopts local unset readonly declare typeset let printf type which true false : eval command builtin wait kill umask exec times hash disown ulimit suspend shopt enable caller complete compgen compopt bind help fc mapfile readarray basename dirname realpath _get_comp_words_by_ref _init_completion _filedir _have _split_longopt __ltrim_colon_completions _variables _tilde _quote_readline_by_ref _parse_help _upvars _usergroup setopt unsetopt).freeze
 
     @aliases = {}
     @dir_stack = []
@@ -14,6 +14,7 @@ module Rubish
     @var_attributes = {}  # Hash of variable names to Set of attributes (:integer, :lowercase, :uppercase, :export)
     @command_hash = {}  # Hash of command names to their cached paths
     @shell_options = {}  # Hash of shell option names to boolean values
+    @zsh_options = {}  # Hash of zsh-specific option names to boolean values
     @disabled_builtins = Set.new  # Set of disabled builtin names
     @dynamic_commands = []  # Array of dynamically loaded builtin names
     @call_stack = []  # Stack of [line_number, function_name, filename] for caller builtin
@@ -51,7 +52,7 @@ module Rubish
     @builtin_completion_functions = {}  # Hash of function names to lambdas for builtin completions
 
     class << self
-      attr_reader :aliases, :dir_stack, :traps, :local_scope_stack, :readonly_vars, :var_attributes, :command_hash, :shell_options, :disabled_builtins, :call_stack, :completions, :completion_options, :key_bindings, :readline_variables, :arrays, :assoc_arrays, :namerefs, :coprocs, :builtin_completion_functions
+      attr_reader :aliases, :dir_stack, :traps, :local_scope_stack, :readonly_vars, :var_attributes, :command_hash, :shell_options, :zsh_options, :disabled_builtins, :call_stack, :completions, :completion_options, :key_bindings, :readline_variables, :arrays, :assoc_arrays, :namerefs, :coprocs, :builtin_completion_functions
       attr_accessor :current_trapsig
       attr_accessor :executor, :script_name_getter, :script_name_setter, :positional_params_getter, :positional_params_setter, :function_checker, :function_remover, :function_lister, :function_getter, :function_caller, :heredoc_content_setter, :command_executor, :current_completion_options
       attr_accessor :history_file_getter, :history_loader, :history_saver, :history_appender, :last_history_line, :history_timestamps
@@ -591,6 +592,177 @@ module Rubish
     # Compatibility level options (like bash's compat31, compat32, etc.)
     COMPAT_OPTIONS = %w[compat10 compat31 compat32 compat40 compat41 compat42 compat43 compat44 compat50 compat51 compat52 compat53 compat54 compat55].freeze
 
+    # Mapping from zsh option names to bash shopt equivalents
+    # These options exist in both shells (possibly with different names)
+    ZSH_TO_BASH_OPTIONS = {
+      'autocd' => 'autocd',
+      'auto_cd' => 'autocd',
+      'cdablevars' => 'cdable_vars',
+      'cdable_vars' => 'cdable_vars',
+      'globdots' => 'dotglob',
+      'glob_dots' => 'dotglob',
+      'extendedglob' => 'extglob',
+      'extended_glob' => 'extglob',
+      'nullglob' => 'nullglob',
+      'null_glob' => 'nullglob',
+      'globstar' => 'globstar',
+      'glob_star' => 'globstar',
+      'nocaseglob' => 'nocaseglob',
+      'nocase_glob' => 'nocaseglob',
+      'histappend' => 'histappend',
+      'hist_append' => 'histappend',
+      'appendhistory' => 'histappend',
+      'append_history' => 'histappend',
+      'interactivecomments' => 'interactive_comments',
+      'interactive_comments' => 'interactive_comments',
+      'checkjobs' => 'checkjobs',
+      'check_jobs' => 'checkjobs',
+      'pipefail' => 'pipefail',
+      'pipe_fail' => 'pipefail'
+    }.freeze
+
+    # Zsh-specific options (not in bash)
+    # Format: option_name => [default_value, description]
+    ZSH_OPTIONS = {
+      # Changing Directories
+      'auto_pushd' => [false, 'make cd push the old directory onto the directory stack'],
+      'chase_dots' => [false, 'resolve .. in cd to physical directory'],
+      'chase_links' => [false, 'resolve symbolic links in cd to physical directory'],
+      'pushd_ignore_dups' => [false, 'do not push duplicate directories'],
+      'pushd_minus' => [false, 'exchange +/- meanings in pushd'],
+      'pushd_silent' => [false, 'do not print directory stack after pushd/popd'],
+      'pushd_to_home' => [false, 'pushd with no args goes to home'],
+
+      # Completion
+      'always_to_end' => [false, 'move cursor to end after completion'],
+      'auto_list' => [true, 'automatically list choices on ambiguous completion'],
+      'auto_menu' => [true, 'show completion menu on successive tab'],
+      'auto_param_slash' => [true, 'add trailing slash for completed directories'],
+      'auto_remove_slash' => [true, 'remove trailing slash when next char is word delimiter'],
+      'complete_in_word' => [false, 'complete from both ends of cursor'],
+      'glob_complete' => [false, 'generate matches from glob pattern'],
+      'list_ambiguous' => [true, 'list completions when ambiguous'],
+      'list_packed' => [false, 'variable width completion list'],
+      'list_rows_first' => [false, 'list completions in rows instead of columns'],
+      'list_types' => [true, 'show file type indicator in completion list'],
+      'menu_complete' => [false, 'insert first match immediately on ambiguous completion'],
+      'rec_exact' => [false, 'recognize exact matches even if ambiguous'],
+
+      # Expansion and Globbing
+      'bad_pattern' => [true, 'print error on bad glob pattern'],
+      'bare_glob_qual' => [true, 'allow glob qualifiers without parentheses'],
+      'brace_ccl' => [false, 'expand {a-z} to a b c ... z'],
+      'case_glob' => [true, 'case-sensitive globbing'],
+      'case_match' => [true, 'case-sensitive pattern matching'],
+      'equals' => [true, 'expand =cmd to path of cmd'],
+      'extended_glob' => [false, 'enable extended glob operators'],
+      'glob' => [true, 'enable globbing'],
+      'glob_subst' => [false, 'treat characters from parameter expansion as glob'],
+      'mark_dirs' => [false, 'append / to directories from globbing'],
+      'multibyte' => [true, 'respect multibyte characters'],
+      'nomatch' => [true, 'print error if glob has no matches'],
+      'numeric_glob_sort' => [false, 'sort numerically when globbing'],
+      'rc_expand_param' => [false, 'array expansion like rc shell'],
+      'rematch_pcre' => [false, 'use PCRE for =~ operator'],
+      'sh_glob' => [false, 'disable special glob characters'],
+      'unset' => [false, 'treat unset variables as empty instead of error'],
+      'warn_create_global' => [false, 'warn when creating global in function'],
+
+      # History
+      'bang_hist' => [true, 'enable ! history expansion'],
+      'extended_history' => [false, 'save timestamp in history'],
+      'hist_expire_dups_first' => [false, 'expire duplicate entries first'],
+      'hist_find_no_dups' => [false, 'skip duplicates when searching history'],
+      'hist_ignore_all_dups' => [false, 'remove older duplicate entries'],
+      'hist_ignore_dups' => [false, 'do not record consecutive duplicates'],
+      'hist_ignore_space' => [false, 'do not record entries starting with space'],
+      'hist_no_functions' => [false, 'do not record function definitions'],
+      'hist_no_store' => [false, 'do not record history command'],
+      'hist_reduce_blanks' => [false, 'remove superfluous blanks'],
+      'hist_save_no_dups' => [false, 'do not save duplicates to history file'],
+      'hist_verify' => [false, 'show history expansion before executing'],
+      'inc_append_history' => [false, 'append incrementally to history file'],
+      'share_history' => [false, 'share history between sessions'],
+
+      # Input/Output
+      'aliases' => [true, 'enable aliases'],
+      'clobber' => [true, 'allow > to overwrite existing files'],
+      'correct' => [false, 'try to correct spelling of commands'],
+      'correct_all' => [false, 'try to correct spelling of all arguments'],
+      'flow_control' => [true, 'enable ^S/^Q flow control'],
+      'ignore_eof' => [false, 'do not exit on end-of-file'],
+      'hash_cmds' => [true, 'hash command locations'],
+      'hash_dirs' => [true, 'hash directories containing commands'],
+      'mail_warning' => [false, 'warn if mail file has been accessed'],
+      'path_dirs' => [false, 'search path for / commands'],
+      'print_exit_value' => [false, 'print non-zero exit values'],
+      'rc_quotes' => [false, "allow '' to escape ' in single quotes"],
+      'rm_star_silent' => [false, 'do not warn on rm *'],
+      'rm_star_wait' => [false, 'wait before executing rm *'],
+      'short_loops' => [true, 'allow short loop forms'],
+
+      # Job Control
+      'auto_continue' => [false, 'automatically send SIGCONT to disowned jobs'],
+      'auto_resume' => [false, 'treat single word as resume of existing job'],
+      'bg_nice' => [true, 'run background jobs at lower priority'],
+      'check_running_jobs' => [false, 'check for running jobs on exit'],
+      'hup' => [true, 'send SIGHUP to jobs when shell exits'],
+      'long_list_jobs' => [false, 'list jobs in long format'],
+      'monitor' => [true, 'enable job control'],
+      'notify' => [false, 'report job status immediately'],
+
+      # Prompting
+      'prompt_bang' => [false, 'enable ! substitution in prompts'],
+      'prompt_cr' => [true, 'print CR before prompt'],
+      'prompt_percent' => [true, 'enable % substitution in prompts'],
+      'prompt_sp' => [true, 'preserve partial line'],
+      'prompt_subst' => [false, 'enable parameter expansion in prompts'],
+      'transient_rprompt' => [false, 'remove right prompt after command'],
+
+      # Scripts and Functions
+      'c_bases' => [false, 'output hex/octal in C format'],
+      'err_exit' => [false, 'exit on non-zero status (like set -e)'],
+      'err_return' => [false, 'return from function on error'],
+      'exec' => [true, 'execute commands'],
+      'function_argzero' => [true, 'set $0 to function name'],
+      'local_loops' => [false, 'break/continue affect only local loops'],
+      'local_options' => [false, 'restore options on function return'],
+      'local_traps' => [false, 'restore traps on function return'],
+      'multios' => [true, 'enable multiple redirections'],
+      'octal_zeroes' => [false, 'interpret leading 0 as octal'],
+      'source_trace' => [false, 'print source file names'],
+      'typeset_silent' => [false, 'do not print variable values in typeset'],
+      'verbose' => [false, 'print shell input lines'],
+      'xtrace' => [false, 'print commands before execution'],
+
+      # Shell Emulation
+      'bsd_echo' => [false, 'make echo BSD compatible'],
+      'csh_junkie_loops' => [false, 'allow csh-style loop syntax'],
+      'csh_nullcmd' => [false, 'do not use NULLCMD/READNULLCMD'],
+      'ksh_arrays' => [false, 'array index starts at 0'],
+      'ksh_autoload' => [false, 'ksh-style autoloading'],
+      'ksh_option_print' => [false, 'print options ksh-style'],
+      'ksh_typeset' => [false, 'ksh-style typeset behavior'],
+      'posix_aliases' => [false, 'POSIX alias expansion'],
+      'posix_builtins' => [false, 'POSIX builtin behavior'],
+      'posix_identifiers' => [false, 'POSIX identifier rules'],
+      'posix_strings' => [false, 'POSIX string behavior'],
+      'posix_traps' => [false, 'POSIX trap behavior'],
+      'sh_file_expansion' => [false, 'sh-style filename expansion'],
+      'sh_nullcmd' => [false, 'do not use NULLCMD for empty redirections'],
+      'sh_word_split' => [false, 'split unquoted parameter expansions'],
+      'traps_async' => [false, 'run traps asynchronously'],
+
+      # Zle (Zsh Line Editor)
+      'beep' => [true, 'beep on errors'],
+      'combining_chars' => [false, 'handle combining characters'],
+      'emacs' => [false, 'use emacs keybindings'],
+      'overstrike' => [false, 'start in overstrike mode'],
+      'single_line_zle' => [false, 'use single line editing'],
+      'vi' => [false, 'use vi keybindings'],
+      'zle' => [true, 'use zsh line editor']
+    }.freeze
+
     def self.builtin?(name)
       (COMMANDS.include?(name) || @dynamic_commands.include?(name)) && !@disabled_builtins.include?(name)
     end
@@ -754,6 +926,10 @@ module Rubish
         run__upvars(args)
       when '_usergroup'
         run__usergroup(args)
+      when 'setopt'
+        run_setopt(args)
+      when 'unsetopt'
+        run_unsetopt(args)
       else
         # Check for dynamically loaded builtins
         if @loaded_builtins.key?(name)
@@ -4527,6 +4703,185 @@ module Rubish
     # Set a shell option directly (for internal use)
     def self.set_shell_option(name, value)
       @shell_options[name] = value
+    end
+
+    # Normalize zsh option name: lowercase and remove underscores
+    # zsh options are case-insensitive and underscores are ignored
+    def self.normalize_zsh_option(name)
+      name.downcase.gsub('_', '')
+    end
+
+    # Find the canonical zsh option name from a possibly non-canonical form
+    def self.find_zsh_option(name)
+      normalized = normalize_zsh_option(name)
+
+      # Check bash-compatible options first (via ZSH_TO_BASH_OPTIONS mapping)
+      ZSH_TO_BASH_OPTIONS.each do |zsh_name, bash_name|
+        return [:bash, bash_name] if normalize_zsh_option(zsh_name) == normalized
+      end
+
+      # Check zsh-specific options
+      ZSH_OPTIONS.each_key do |opt_name|
+        return [:zsh, opt_name] if normalize_zsh_option(opt_name) == normalized
+      end
+
+      # Not found
+      nil
+    end
+
+    # Get the current value of a zsh option
+    def self.zsh_option_enabled?(name)
+      result = find_zsh_option(name)
+      return false unless result
+
+      type, canonical_name = result
+      if type == :bash
+        shopt_enabled?(canonical_name)
+      else
+        if @zsh_options.key?(canonical_name)
+          @zsh_options[canonical_name]
+        else
+          ZSH_OPTIONS[canonical_name][0]  # default value
+        end
+      end
+    end
+
+    # Set a zsh option directly (for internal use)
+    def self.set_zsh_option(name, value)
+      result = find_zsh_option(name)
+      return false unless result
+
+      type, canonical_name = result
+      if type == :bash
+        @shell_options[canonical_name] = value
+      else
+        @zsh_options[canonical_name] = value
+      end
+      true
+    end
+
+    # setopt [+-options] [name ...]
+    # Enable shell options (zsh-style)
+    def self.run_setopt(args)
+      # No arguments: list all enabled options
+      if args.empty?
+        list_enabled_zsh_options
+        return true
+      end
+
+      success = true
+      args.each do |arg|
+        # Handle NO prefix (e.g., noautocd -> disable autocd)
+        if arg.downcase.start_with?('no')
+          # Try without the 'no' prefix
+          opt_without_no = arg[2..]
+          result = find_zsh_option(opt_without_no)
+          if result
+            type, canonical_name = result
+            if type == :bash
+              @shell_options[canonical_name] = false
+            else
+              @zsh_options[canonical_name] = false
+            end
+            next
+          end
+        end
+
+        result = find_zsh_option(arg)
+        if result
+          type, canonical_name = result
+          if type == :bash
+            @shell_options[canonical_name] = true
+          else
+            @zsh_options[canonical_name] = true
+          end
+        else
+          $stderr.puts "setopt: no such option: #{arg}"
+          success = false
+        end
+      end
+
+      success
+    end
+
+    # unsetopt [+-options] [name ...]
+    # Disable shell options (zsh-style)
+    def self.run_unsetopt(args)
+      # No arguments: list all disabled options
+      if args.empty?
+        list_disabled_zsh_options
+        return true
+      end
+
+      success = true
+      args.each do |arg|
+        # Handle NO prefix (e.g., noautocd -> enable autocd, inverting the disable)
+        if arg.downcase.start_with?('no')
+          # Try without the 'no' prefix
+          opt_without_no = arg[2..]
+          result = find_zsh_option(opt_without_no)
+          if result
+            type, canonical_name = result
+            if type == :bash
+              @shell_options[canonical_name] = true
+            else
+              @zsh_options[canonical_name] = true
+            end
+            next
+          end
+        end
+
+        result = find_zsh_option(arg)
+        if result
+          type, canonical_name = result
+          if type == :bash
+            @shell_options[canonical_name] = false
+          else
+            @zsh_options[canonical_name] = false
+          end
+        else
+          $stderr.puts "unsetopt: no such option: #{arg}"
+          success = false
+        end
+      end
+
+      success
+    end
+
+    # List all currently enabled zsh options
+    def self.list_enabled_zsh_options
+      enabled = []
+
+      # Bash-compatible options that are enabled
+      ZSH_TO_BASH_OPTIONS.values.uniq.each do |bash_name|
+        enabled << bash_name if shopt_enabled?(bash_name)
+      end
+
+      # Zsh-specific options that are enabled
+      ZSH_OPTIONS.each do |name, (default, _desc)|
+        value = @zsh_options.key?(name) ? @zsh_options[name] : default
+        enabled << name if value
+      end
+
+      enabled.sort.each { |name| puts name }
+    end
+
+    # List all currently disabled zsh options
+    def self.list_disabled_zsh_options
+      disabled = []
+
+      # Bash-compatible options that are disabled
+      ZSH_TO_BASH_OPTIONS.values.uniq.each do |bash_name|
+        disabled << bash_name unless shopt_enabled?(bash_name)
+      end
+
+      # Zsh-specific options that are disabled
+      ZSH_OPTIONS.each do |name, (default, _desc)|
+        value = @zsh_options.key?(name) ? @zsh_options[name] : default
+        disabled << name unless value
+      end
+
+      disabled.sort.each { |name| puts name }
     end
 
     # Get current compatibility level from RUBISH_COMPAT or shopt compat* options
@@ -9429,6 +9784,14 @@ module Rubish
           '-u' => 'complete usernames only',
           '-g' => 'complete groups only'
         }
+      },
+      'setopt' => {
+        synopsis: 'setopt [option ...]',
+        description: 'Enable shell options (zsh-style). Option names are case-insensitive and underscores are ignored. Without arguments, lists all enabled options. Prefix option with "no" to disable (e.g., noautocd).'
+      },
+      'unsetopt' => {
+        synopsis: 'unsetopt [option ...]',
+        description: 'Disable shell options (zsh-style). Option names are case-insensitive and underscores are ignored. Without arguments, lists all disabled options. Prefix option with "no" to enable (e.g., noautocd enables autocd).'
       }
     }.freeze
 
