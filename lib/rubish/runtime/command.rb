@@ -1,6 +1,38 @@
 # frozen_string_literal: true
 
 module Rubish
+  # Terminal control functions for job control
+  module Terminal
+    extend Fiddle::Importer
+    dlload Fiddle::Handle::DEFAULT
+
+    extern 'int tcsetpgrp(int, int)'
+    extern 'int tcgetpgrp(int)'
+
+    STDIN_FD = 0
+
+    # Give terminal control to a process group
+    def self.set_foreground(pgid)
+      tcsetpgrp(STDIN_FD, pgid)
+    rescue
+      # Ignore errors (e.g., not a tty)
+    end
+
+    # Get current foreground process group
+    def self.get_foreground
+      tcgetpgrp(STDIN_FD)
+    rescue
+      nil
+    end
+
+    # Check if stdin is a tty
+    def self.tty?
+      $stdin.tty?
+    rescue
+      false
+    end
+  end
+
   # Simple exit status for builtins
   ExitStatus = Struct.new(:exitstatus) do
     def success?
@@ -202,7 +234,20 @@ module Rubish
       # Extract keyword assignments if -k is set
       cmd_args, keyword_env = extract_keyword_assignments(@args)
 
+      # Check if job control (monitor mode) is enabled
+      job_control = Builtins.set_option?('m')
+
       @pid = fork do
+        # Set up job control in child if enabled
+        if job_control
+          # Create new process group with this process as leader
+          Process.setpgid(0, 0)
+          # Reset signal handlers so Ctrl-Z works
+          trap('TSTP', 'DEFAULT')
+          trap('TTIN', 'DEFAULT')
+          trap('TTOU', 'DEFAULT')
+        end
+
         $stdin.reopen(@stdin) if @stdin
         $stdout.reopen(@stdout) if @stdout
         if @stderr == :stdout
@@ -230,8 +275,51 @@ module Rubish
       @stdin&.close unless @stdin == $stdin
       @stdout&.close unless @stdout == $stdout
 
-      Process.wait(@pid)
-      @status = $?
+      if job_control
+        # Set process group in parent too (race condition protection)
+        Process.setpgid(@pid, @pid) rescue nil
+
+        shell_pgid = Process.getpgrp
+
+        # Use 'IGNORE' for SIGTTOU/SIGTTIN (maps to SIG_IGN) so tcsetpgrp works from background
+        # Use a noop proc for SIGCHLD because 'IGNORE' causes OS to auto-reap children
+        noop = proc {}
+        old_chld = trap('CHLD', noop)
+        old_ttou = trap('TTOU', 'IGNORE')
+        old_ttin = trap('TTIN', 'IGNORE')
+
+        # Give terminal control to the child process group
+        # This allows the child to receive Ctrl-Z (SIGTSTP)
+        Terminal.set_foreground(@pid) if Terminal.tty?
+
+        begin
+          # Wait with WUNTRACED to detect stopped processes (Ctrl-Z)
+          _, @status = Process.wait2(@pid, Process::WUNTRACED)
+        ensure
+          # Take back terminal control BEFORE restoring signal handlers
+          Terminal.set_foreground(shell_pgid) if Terminal.tty?
+
+          # Restore signal handlers after we have terminal control back
+          trap('CHLD', old_chld || 'DEFAULT')
+          trap('TTOU', old_ttou || 'DEFAULT')
+          trap('TTIN', old_ttin || 'DEFAULT')
+        end
+
+        # If the process was stopped, add it to the job manager
+        if @status&.stopped?
+          command_str = ([name] + @args).join(' ')
+          job = JobManager.instance.add(
+            pid: @pid,
+            pgid: @pid,
+            command: command_str
+          )
+          job.status = :stopped
+          $stderr.puts "\n[#{job.id}]+  Stopped                 #{command_str}"
+        end
+      else
+        Process.wait(@pid)
+        @status = $?
+      end
       self
     end
 
@@ -399,11 +487,18 @@ module Rubish
       # Check if lastpipe is enabled - run last command in current shell
       use_lastpipe = Builtins.shopt_enabled?('lastpipe') && @commands.length > 1
 
+      # Check if job control (monitor mode) is enabled
+      job_control = Builtins.set_option?('m')
+
       # Set up pipes between commands
       pipes = (@commands.length - 1).times.map { IO.pipe }
 
       # Determine which commands to fork (all except last if lastpipe)
       fork_count = use_lastpipe ? @commands.length - 1 : @commands.length
+
+      # For job control, all processes in the pipeline share a process group
+      # The first process's PID becomes the PGID
+      pgid = nil
 
       pids = @commands[0...fork_count].each_with_index.map do |cmd, i|
         # Set stdin from previous pipe (except first command)
@@ -413,6 +508,21 @@ module Rubish
         cmd.stdout ||= pipes[i][1] if i < @commands.length - 1
 
         fork do
+          # Set up job control in child if enabled
+          if job_control
+            # First process becomes the process group leader
+            # Others join that process group
+            if pgid
+              Process.setpgid(0, pgid)
+            else
+              Process.setpgid(0, 0)
+            end
+            # Reset signal handlers so Ctrl-Z works
+            trap('TSTP', 'DEFAULT')
+            trap('TTIN', 'DEFAULT')
+            trap('TTOU', 'DEFAULT')
+          end
+
           # Close unused pipe ends
           pipes.each_with_index do |(reader, writer), j|
             if j == i - 1
@@ -444,6 +554,16 @@ module Rubish
             exit(result ? 0 : 1)
           else
             Command.safe_exec(cmd.name, cmd.name, *cmd.args)
+          end
+        end.tap do |pid|
+          # Set up process group in parent (first process becomes leader)
+          if job_control
+            if pgid.nil?
+              pgid = pid
+              Process.setpgid(pid, pid) rescue nil
+            else
+              Process.setpgid(pid, pgid) rescue nil
+            end
           end
         end
       end
@@ -498,10 +618,54 @@ module Rubish
         end
       end
 
-      # Wait for all forked children and collect statuses
-      statuses = pids.map do |pid|
-        Process.wait(pid)
-        $?
+      shell_pgid = Process.getpgrp
+      stopped = false
+
+      if job_control && pgid
+        # Use 'IGNORE' for SIGTTOU/SIGTTIN (maps to SIG_IGN) so tcsetpgrp works from background
+        # Use a noop proc for SIGCHLD because 'IGNORE' causes OS to auto-reap children
+        noop = proc {}
+        old_chld = trap('CHLD', noop)
+        old_ttou = trap('TTOU', 'IGNORE')
+        old_ttin = trap('TTIN', 'IGNORE')
+
+        # Give terminal control to the pipeline's process group
+        Terminal.set_foreground(pgid) if Terminal.tty?
+
+        begin
+          # Wait for all forked children and collect statuses
+          statuses = pids.map do |pid|
+            _, status = Process.wait2(pid, Process::WUNTRACED)
+            stopped = true if status.stopped?
+            status
+          end
+        ensure
+          # Take back terminal control BEFORE any output
+          Terminal.set_foreground(shell_pgid) if Terminal.tty?
+
+          # Restore signal handlers
+          trap('CHLD', old_chld || 'DEFAULT')
+          trap('TTOU', old_ttou || 'DEFAULT')
+          trap('TTIN', old_ttin || 'DEFAULT')
+        end
+      else
+        # Wait for all forked children and collect statuses
+        statuses = pids.map do |pid|
+          Process.wait(pid)
+          $?
+        end
+      end
+
+      # If any process was stopped (Ctrl-Z), add the pipeline as a stopped job
+      if job_control && stopped && pgid
+        command_str = @commands.map { |c| c.respond_to?(:name) ? ([c.name] + c.args).join(' ') : c.to_s }.join(' | ')
+        job = JobManager.instance.add(
+          pid: pgid,
+          pgid: pgid,
+          command: command_str
+        )
+        job.status = :stopped
+        puts "\n[#{job.id}]+  Stopped                 #{command_str}"
       end
 
       # Add last command status if using lastpipe

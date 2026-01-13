@@ -89,6 +89,7 @@ module Rubish
     attr_accessor :script_name, :positional_params, :functions, :lineno
 
     def run
+      setup_job_control
       setup_reline
       setup_signals
       load_history
@@ -306,11 +307,44 @@ module Rubish
       end
     end
 
+    # Set up job control for interactive shells
+    # This puts the shell in its own process group and takes control of the terminal
+    def setup_job_control
+      return unless $stdin.tty?
+
+      # Get the shell's original process group
+      shell_pgid = Process.getpgrp
+
+      # If we're not the process group leader, become one
+      # This is needed when rubish is started from another shell
+      if shell_pgid != Process.pid
+        # Ignore SIGTTOU while we set up job control (we might be in background)
+        old_ttou = trap('TTOU', 'IGNORE')
+
+        begin
+          # Put ourselves in our own process group
+          Process.setpgid(0, 0)
+
+          # Take control of the terminal
+          Terminal.set_foreground(Process.pid) if defined?(Terminal)
+        rescue Errno::EPERM
+          # Can't become process group leader (e.g., already a session leader)
+        ensure
+          trap('TTOU', old_ttou || 'DEFAULT')
+        end
+      end
+
+      # Save our process group for later use
+      @shell_pgid = Process.getpgrp
+    end
+
     def setup_signals
       # Ignore SIGINT and SIGTSTP in the shell itself
       # They should only affect foreground jobs
-      trap('INT') { puts }   # Just print newline on Ctrl+C
+      trap('INT') { }        # Ignore Ctrl+C for shell (child will get it)
       trap('TSTP') { }       # Ignore Ctrl+Z for shell
+      trap('TTIN') { }       # Ignore background read attempts
+      trap('TTOU') { }       # Ignore background write attempts
 
       # SIGCHLD handler for immediate job notification when set -b is enabled
       trap('CHLD') do
@@ -1066,6 +1100,8 @@ module Rubish
       throw(:exit, @last_status || 0) if Builtins.set_option?('t')
     rescue Interrupt
       puts
+    rescue Errno::EIO
+      # Ignore I/O errors from terminal control issues during job control
     rescue => e
       puts "rubish: #{e.message}"
     end

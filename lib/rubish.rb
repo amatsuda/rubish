@@ -13,6 +13,8 @@ require 'etc'
 require 'shellwords'
 require 'io/console'
 require 'syslog'
+require 'fiddle'
+require 'fiddle/import'
 require 'reline'
 
 # Suppress deprecation warnings for Data class on Ruby < 3.2

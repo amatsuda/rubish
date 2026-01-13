@@ -3139,8 +3139,10 @@ module Rubish
     end
 
     # Enable interactive mode (read-only, set at startup)
+    # Also enables monitor mode (job control) as per bash behavior
     def self.enable_interactive_mode
       @set_options['i'] = true
+      @set_options['m'] = true  # Job control enabled for interactive shells
     end
 
     # List of variables that cannot be modified in restricted mode
@@ -9079,21 +9081,39 @@ module Rubish
       # Bring to foreground
       Process.kill('CONT', -job.pgid) if job.stopped?
 
+      shell_pgid = Process.getpgrp
+
+      # Use 'IGNORE' for SIGTTOU/SIGTTIN so tcsetpgrp works from background
+      # Use a noop proc for SIGCHLD because 'IGNORE' causes OS to auto-reap children
+      noop = proc {}
+      old_chld = trap('CHLD', noop)
+      old_ttou = trap('TTOU', 'IGNORE')
+      old_ttin = trap('TTIN', 'IGNORE')
+
       # Give terminal control to the job's process group
+      Terminal.set_foreground(job.pgid) if Terminal.tty?
+
       begin
         # Wait for the job
         _, status = Process.wait2(job.pid, Process::WUNTRACED)
-
-        if status.stopped?
-          job.status = :stopped
-          puts "\n[#{job.id}]  Stopped                 #{job.command}"
-        else
-          job.status = :done
-          JobManager.instance.remove(job.id)
-        end
       rescue Errno::ECHILD
+        status = nil
+      ensure
+        # Take back terminal control BEFORE restoring signal handlers
+        Terminal.set_foreground(shell_pgid) if Terminal.tty?
+
+        # Restore signal handlers
+        trap('CHLD', old_chld || 'DEFAULT')
+        trap('TTOU', old_ttou || 'DEFAULT')
+        trap('TTIN', old_ttin || 'DEFAULT')
+      end
+
+      if status.nil? || !status.stopped?
         job.status = :done
         JobManager.instance.remove(job.id)
+      else
+        job.status = :stopped
+        puts "\n[#{job.id}]  Stopped                 #{job.command}"
       end
 
       true

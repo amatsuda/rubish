@@ -105,6 +105,8 @@ class TestSetopt < Test::Unit::TestCase
   end
 
   def test_unsetopt_with_no_prefix_enables
+    # Ensure auto_pushd is off first
+    Rubish::Builtins.run('unsetopt', ['auto_pushd'])
     refute Rubish::Builtins.zsh_option_enabled?('auto_pushd')
 
     result = Rubish::Builtins.run('unsetopt', ['noautopushd'])

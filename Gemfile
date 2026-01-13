@@ -7,3 +7,4 @@ gem 'test-unit'
 
 gem 'reline'
 gem 'syslog'
+gem 'fiddle'
