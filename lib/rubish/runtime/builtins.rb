@@ -2,7 +2,7 @@
 
 module Rubish
   module Builtins
-    COMMANDS = %w(cd exit logout jobs fg bg export pwd history alias unalias source . shift set return read echo test [ break continue pushd popd dirs trap getopts local unset readonly declare typeset let printf type which true false : eval command builtin wait kill umask exec times hash disown ulimit suspend shopt enable caller complete compgen compopt bind help fc mapfile readarray basename dirname realpath _get_comp_words_by_ref _init_completion _filedir _have _split_longopt __ltrim_colon_completions _variables _tilde _quote_readline_by_ref _parse_help _upvars _usergroup setopt unsetopt).freeze
+    COMMANDS = %w(cd exit logout jobs fg bg export pwd history alias unalias source . shift set return read echo test [ break continue pushd popd dirs trap getopts local unset readonly declare typeset let printf type which true false : eval command builtin wait kill umask exec times hash disown ulimit suspend shopt enable caller complete compgen compopt bind bindkey help fc mapfile readarray basename dirname realpath _get_comp_words_by_ref _init_completion _filedir _have _split_longopt __ltrim_colon_completions _variables _tilde _quote_readline_by_ref _parse_help _upvars _usergroup setopt unsetopt).freeze
 
     @aliases = {}
     @dir_stack = []
@@ -930,6 +930,8 @@ module Rubish
         run_setopt(args)
       when 'unsetopt'
         run_unsetopt(args)
+      when 'bindkey'
+        run_bindkey(args)
       else
         # Check for dynamically loaded builtins
         if @loaded_builtins.key?(name)
@@ -4872,6 +4874,257 @@ module Rubish
       end
 
       success
+    end
+
+    # bindkey - zsh-style key binding command
+    # Usage:
+    #   bindkey                    - list all bindings
+    #   bindkey -l                 - list keymap names
+    #   bindkey -M keymap          - specify keymap
+    #   bindkey -e                 - select emacs keymap
+    #   bindkey -v                 - select viins keymap (vi insert mode)
+    #   bindkey -a                 - select vicmd keymap (vi command mode)
+    #   bindkey -r key             - remove binding for key
+    #   bindkey -s key string      - bind key to output string (macro)
+    #   bindkey key                - show binding for key
+    #   bindkey key widget         - bind key to widget
+    def self.run_bindkey(args)
+      keymap = nil
+      list_keymaps = false
+      remove_key = nil
+      macro_binding = false
+      i = 0
+
+      while i < args.length
+        arg = args[i]
+
+        if arg.start_with?('-')
+          case arg
+          when '-l'
+            list_keymaps = true
+          when '-L'
+            # List in bindkey command format (same as no args for now)
+            return list_bindkey_bindings(keymap)
+          when '-M'
+            i += 1
+            keymap = args[i] if args[i]
+          when '-e'
+            # Select emacs keymap
+            select_keymap('emacs')
+            return true
+          when '-v'
+            # Select viins keymap
+            select_keymap('viins')
+            return true
+          when '-a'
+            # Select vicmd keymap
+            select_keymap('vicmd')
+            return true
+          when '-r'
+            i += 1
+            remove_key = args[i] if args[i]
+          when '-s'
+            macro_binding = true
+          else
+            $stderr.puts "bindkey: bad option: #{arg}"
+            return false
+          end
+        else
+          # Non-option argument
+          break
+        end
+        i += 1
+      end
+
+      # List keymap names
+      if list_keymaps
+        puts 'emacs'
+        puts 'viins'
+        puts 'vicmd'
+        puts 'visual'
+        puts 'isearch'
+        puts 'command'
+        puts 'main'
+        return true
+      end
+
+      # Remove binding
+      if remove_key
+        keyseq = parse_bindkey_keyseq(remove_key)
+        @key_bindings.delete(keyseq)
+        return true
+      end
+
+      remaining_args = args[i..]
+
+      # No more args - list all bindings
+      if remaining_args.empty?
+        return list_bindkey_bindings(keymap)
+      end
+
+      # One arg - show binding for that key
+      if remaining_args.length == 1
+        keyseq = parse_bindkey_keyseq(remaining_args[0])
+        binding = @key_bindings[keyseq]
+        if binding
+          puts "\"#{format_bindkey_keyseq(keyseq)}\" #{binding[:value]}"
+        else
+          puts "\"#{format_bindkey_keyseq(keyseq)}\" undefined-key"
+        end
+        return true
+      end
+
+      # Two args - bind key to widget/macro
+      keyseq = parse_bindkey_keyseq(remaining_args[0])
+      value = remaining_args[1]
+
+      if macro_binding
+        # -s: bind to macro (string output)
+        @key_bindings[keyseq] = {type: :macro, value: parse_bindkey_keyseq(value), keymap: keymap || 'main'}
+      else
+        # Bind to widget (function)
+        @key_bindings[keyseq] = {type: :function, value: value, keymap: keymap || 'main'}
+      end
+
+      true
+    end
+
+    # Parse zsh-style key sequence (e.g., "^A", "^[a", "\e[A")
+    def self.parse_bindkey_keyseq(str)
+      return str if str.nil? || str.empty?
+
+      result = +''
+      i = 0
+
+      # Remove surrounding quotes if present
+      if (str.start_with?('"') && str.end_with?('"')) ||
+         (str.start_with?("'") && str.end_with?("'"))
+        str = str[1...-1]
+      end
+
+      while i < str.length
+        char = str[i]
+
+        if char == '^' && i + 1 < str.length
+          # ^X -> Ctrl-X
+          next_char = str[i + 1]
+          if next_char == '?'
+            result << "\x7F"  # DEL
+          elsif next_char == '['
+            result << "\e"  # ESC
+          else
+            # Convert to control character
+            result << (next_char.upcase.ord & 0x1F).chr
+          end
+          i += 2
+        elsif char == '\\' && i + 1 < str.length
+          next_char = str[i + 1]
+          case next_char
+          when 'e', 'E'
+            result << "\e"
+            i += 2
+          when 'n'
+            result << "\n"
+            i += 2
+          when 'r'
+            result << "\r"
+            i += 2
+          when 't'
+            result << "\t"
+            i += 2
+          when '\\'
+            result << '\\'
+            i += 2
+          when 'C'
+            # \C-x -> Ctrl-x
+            if i + 3 < str.length && str[i + 2] == '-'
+              ctrl_char = str[i + 3]
+              result << (ctrl_char.upcase.ord & 0x1F).chr
+              i += 4
+            else
+              result << char
+              i += 1
+            end
+          when 'M'
+            # \M-x -> Meta-x (ESC + x)
+            if i + 3 < str.length && str[i + 2] == '-'
+              result << "\e" << str[i + 3]
+              i += 4
+            else
+              result << char
+              i += 1
+            end
+          else
+            result << next_char
+            i += 2
+          end
+        else
+          result << char
+          i += 1
+        end
+      end
+
+      result
+    end
+
+    # Format key sequence for display
+    def self.format_bindkey_keyseq(keyseq)
+      return '' if keyseq.nil? || keyseq.empty?
+
+      result = +''
+      keyseq.each_char do |char|
+        ord = char.ord
+        if ord < 32
+          if ord == 27
+            result << '^['
+          else
+            result << '^' << (ord + 64).chr
+          end
+        elsif ord == 127
+          result << '^?'
+        else
+          result << char
+        end
+      end
+      result
+    end
+
+    # List all key bindings in bindkey format
+    def self.list_bindkey_bindings(keymap = nil)
+      if @key_bindings.empty?
+        # Show some default bindings
+        puts '"^A" beginning-of-line'
+        puts '"^E" end-of-line'
+        puts '"^K" kill-line'
+        puts '"^U" unix-line-discard'
+        puts '"^W" backward-kill-word'
+        return true
+      end
+
+      @key_bindings.each do |keyseq, binding|
+        next if keymap && binding[:keymap] != keymap
+
+        formatted_key = format_bindkey_keyseq(keyseq)
+        case binding[:type]
+        when :function
+          puts "\"#{formatted_key}\" #{binding[:value]}"
+        when :macro
+          puts "\"#{formatted_key}\" \"#{format_bindkey_keyseq(binding[:value])}\""
+        when :command
+          puts "\"#{formatted_key}\" \"#{binding[:value]}\""
+        end
+      end
+      true
+    end
+
+    # Select a keymap (emacs or vi)
+    def self.select_keymap(keymap)
+      case keymap
+      when 'emacs', 'main'
+        apply_readline_variable('editing-mode', 'emacs')
+      when 'viins', 'vicmd', 'vi'
+        apply_readline_variable('editing-mode', 'vi')
+      end
     end
 
     # List all currently enabled zsh options
@@ -9219,6 +9472,20 @@ module Rubish
       'bg' => {
         synopsis: 'bg [job_spec ...]',
         description: 'Move jobs to the background. If job_spec is not present, the most recent job is used.'
+      },
+      'bindkey' => {
+        synopsis: 'bindkey [-l|-L] [-M keymap] [-e|-v|-a] [-r key] [-s key string] [key [widget]]',
+        description: 'Manage key bindings for the line editor. Display, add, or remove key bindings.',
+        options: {
+          '-l' => 'list available keymaps',
+          '-L' => 'output bindings in a form suitable for re-input',
+          '-M keymap' => 'select keymap to operate on',
+          '-e' => 'select emacs keymap',
+          '-v' => 'select viins (vi insert mode) keymap',
+          '-a' => 'select vicmd (vi command mode) keymap',
+          '-r key' => 'remove binding for key',
+          '-s key string' => 'bind key to a macro string'
+        }
       },
       'export' => {
         synopsis: 'export [-n] [name[=value] ...]',
