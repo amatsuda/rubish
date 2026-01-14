@@ -92,6 +92,7 @@ module Rubish
       setup_job_control
       setup_reline
       setup_signals
+      setup_terminal_title
       load_history
       setup_default_aliases
       load_config
@@ -122,6 +123,17 @@ module Rubish
       # Rebind Ctrl-W to backward_kill_word which stops at non-word characters like /
       # Default em_kill_region only stops at whitespace
       Reline.core.config.add_default_key_binding_by_keymap(:emacs, [23], :backward_kill_word)
+    end
+
+    # Set terminal title to "rubish" (or custom title via RUBISH_TITLE env var)
+    def setup_terminal_title
+      return unless $stdout.tty?
+
+      title = ENV['RUBISH_TITLE'] || 'rubish'
+      # OSC 0 sets both window title and icon name
+      # \e]0;title\a is the standard escape sequence
+      print "\e]0;#{title}\a"
+      $stdout.flush
     end
 
     # Load readline/Reline configuration from inputrc file
