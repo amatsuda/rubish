@@ -2,7 +2,7 @@
 
 module Rubish
   module Builtins
-    COMMANDS = %w(cd exit logout jobs fg bg export pwd history alias unalias source . shift set return read echo test [ break continue pushd popd dirs trap getopts local unset readonly declare typeset let printf type which true false : eval command builtin wait kill umask exec times hash disown ulimit suspend shopt enable caller complete compgen compopt bind bindkey help fc mapfile readarray basename dirname realpath _get_comp_words_by_ref _init_completion _filedir _have _split_longopt __ltrim_colon_completions _variables _tilde _quote_readline_by_ref _parse_help _upvars _usergroup setopt unsetopt autoload).freeze
+    COMMANDS = %w(cd exit logout jobs fg bg export pwd history alias unalias source . shift set return read echo test [ break continue pushd popd dirs trap getopts local unset readonly declare typeset let printf type which true false : eval command builtin wait kill umask exec times hash disown ulimit suspend shopt enable caller complete compgen compopt bind bindkey help fc mapfile readarray basename dirname realpath _get_comp_words_by_ref _init_completion _filedir _have _split_longopt __ltrim_colon_completions _variables _tilde _quote_readline_by_ref _parse_help _upvars _usergroup setopt unsetopt autoload compinit compdef).freeze
 
     @aliases = {}
     @dir_stack = []
@@ -935,6 +935,10 @@ module Rubish
         run_bindkey(args)
       when 'autoload'
         run_autoload(args)
+      when 'compinit'
+        run_compinit(args)
+      when 'compdef'
+        run_compdef(args)
       else
         # Check for dynamically loaded builtins
         if @loaded_builtins.key?(name)
@@ -5273,6 +5277,173 @@ module Rubish
     # Accessor for source executor (set by REPL)
     class << self
       attr_accessor :source_executor
+    end
+
+    # ==========================================================================
+    # zsh completion system emulation
+    # ==========================================================================
+
+    @zsh_completion_initialized = false
+    @zsh_completions = {}  # Hash of command names to completion function names
+
+    class << self
+      attr_accessor :zsh_completion_initialized, :zsh_completions
+    end
+
+    # compinit - initialize the zsh completion system
+    # Usage: compinit [-u] [-d dumpfile] [-C]
+    # Options:
+    #   -u  use without checking for insecure directories
+    #   -d  specify dump file for caching
+    #   -C  skip checking for new completion functions
+    def self.run_compinit(args)
+      # Parse options (mostly ignored for compatibility)
+      i = 0
+      while i < args.length
+        arg = args[i]
+        case arg
+        when '-u', '-C'
+          # Ignored - always behave as if these were set
+        when '-d'
+          i += 1  # Skip dump file argument
+        when '-D'
+          # Ignore -D (delete dump file)
+        else
+          break unless arg.start_with?('-')
+        end
+        i += 1
+      end
+
+      # Initialize the zsh completion system
+      @zsh_completion_initialized = true
+
+      # Set up default completions for common commands
+      setup_zsh_default_completions
+
+      true
+    end
+
+    # Set up default zsh-style completions
+    def self.setup_zsh_default_completions
+      # Map common commands to their completion types
+      # These integrate with the existing bash-style completion system
+
+      # File/directory completions
+      %w[cat less more head tail vim vi nano emacs].each do |cmd|
+        @completions[cmd] ||= {files: true}
+      end
+
+      # Directory-only completions
+      %w[cd pushd].each do |cmd|
+        @completions[cmd] ||= {directories: true}
+      end
+
+      # Git completions (if _git function exists or we have builtin)
+      @completions['git'] ||= {function: '_git'}
+
+      # SSH completions
+      @completions['ssh'] ||= {function: '_ssh'}
+      @completions['scp'] ||= {function: '_ssh'}
+
+      # Make completions
+      @completions['make'] ||= {function: '_make'}
+
+      # Man completions
+      @completions['man'] ||= {function: '_man'}
+
+      # Kill completions (process IDs)
+      @completions['kill'] ||= {function: '_kill'}
+      @completions['killall'] ||= {signals: true, running: true}
+    end
+
+    # compdef - define zsh-style completion
+    # Usage: compdef function command...
+    #        compdef -n function command...  (don't override existing)
+    #        compdef -d command...           (delete completion)
+    #        compdef -p pattern function     (pattern-based completion)
+    def self.run_compdef(args)
+      return list_zsh_completions if args.empty?
+
+      no_override = false
+      delete_mode = false
+      pattern_mode = false
+      i = 0
+
+      while i < args.length
+        arg = args[i]
+        case arg
+        when '-n'
+          no_override = true
+        when '-d'
+          delete_mode = true
+        when '-p'
+          pattern_mode = true
+        when '-a'
+          # Ignored - autoload function (we autoload automatically)
+        else
+          break unless arg.start_with?('-')
+        end
+        i += 1
+      end
+
+      remaining = args[i..]
+      return true if remaining.empty?
+
+      if delete_mode
+        # Delete completions for specified commands
+        remaining.each do |cmd|
+          @completions.delete(cmd)
+          @zsh_completions.delete(cmd)
+        end
+        return true
+      end
+
+      if pattern_mode
+        # Pattern-based completion (simplified - just store the pattern)
+        # compdef -p 'pattern' function
+        if remaining.length >= 2
+          pattern = remaining[0]
+          func = remaining[1]
+          @zsh_completions["pattern:#{pattern}"] = func
+        end
+        return true
+      end
+
+      # Standard mode: first arg is function, rest are commands
+      func = remaining.shift
+      return true if remaining.empty?
+
+      remaining.each do |cmd|
+        # Skip if no_override and completion already exists
+        next if no_override && (@completions.key?(cmd) || @zsh_completions.key?(cmd))
+
+        # Register the completion
+        @zsh_completions[cmd] = func
+
+        # Also register with bash-style system for integration
+        # This allows the existing completion code to call the function
+        @completions[cmd] = {function: func}
+      end
+
+      true
+    end
+
+    # List all zsh-style completions
+    def self.list_zsh_completions
+      @zsh_completions.each do |cmd, func|
+        puts "#{cmd}: #{func}"
+      end
+      true
+    end
+
+    # Check if zsh completion is initialized
+    def self.zsh_completion_initialized?
+      @zsh_completion_initialized
+    end
+
+    # Get zsh completion function for a command
+    def self.get_zsh_completion(cmd)
+      @zsh_completions[cmd]
     end
 
     # List all currently enabled zsh options
@@ -10076,6 +10247,25 @@ module Rubish
           '-X filterpat' => 'remove completions matching pattern',
           '-P prefix' => 'add prefix to each completion',
           '-S suffix' => 'add suffix to each completion'
+        }
+      },
+      'compinit' => {
+        synopsis: 'compinit [-u] [-d dumpfile] [-C]',
+        description: 'Initialize the zsh completion system. Sets up default completions and enables programmable completion.',
+        options: {
+          '-u' => 'skip security check for insecure directories',
+          '-d dumpfile' => 'specify dump file for caching completions',
+          '-C' => 'skip checking for new completion functions'
+        }
+      },
+      'compdef' => {
+        synopsis: 'compdef [-and] function command...',
+        description: 'Define zsh-style completion. Associates a completion function with one or more commands.',
+        options: {
+          '-n' => 'do not override existing completion',
+          '-d' => 'delete completion for specified commands',
+          '-a' => 'autoload the completion function',
+          '-p pattern' => 'use pattern-based completion matching'
         }
       },
       'compopt' => {
