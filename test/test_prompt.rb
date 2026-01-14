@@ -706,6 +706,14 @@ class TestPrompt < Test::Unit::TestCase
     assert_equal '100%', result
   end
 
+  def test_zsh_privilege_indicator
+    ENV['PROMPT'] = '%# '
+    result = @repl.send(:prompt)
+    # Non-root users get %, root gets #
+    expected = Process.uid == 0 ? '# ' : '% '
+    assert_equal expected, result
+  end
+
   def test_zsh_foreground_color
     ENV['RPROMPT'] = '%F{red}red%f'
     result = @repl.send(:right_prompt)
