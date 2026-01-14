@@ -84,6 +84,16 @@ module Rubish
       Command.function_caller = ->(name, args) { call_function(name, args) }
       # Set up Builtins to call functions (for compgen -F)
       Builtins.function_caller = ->(name, args) { call_function(name, args) }
+      # Source executor for autoload: source a file or execute code string
+      Builtins.source_executor = ->(file, code = nil) {
+        if code
+          # Execute code string directly
+          execute(code)
+        elsif file
+          # Source a file
+          run_source([file])
+        end
+      }
     end
 
     attr_accessor :script_name, :positional_params, :functions, :lineno
@@ -1444,6 +1454,11 @@ module Rubish
           Builtins.clear_exit_blocked unless %w[exit logout].include?(builtin_name)
         end
         return
+      end
+
+      # Check for autoloaded functions that need to be loaded
+      if ast.is_a?(AST::Command) && Builtins.autoload_pending?(ast.name)
+        Builtins.load_autoload_function(ast.name)
       end
 
       # Check for user-defined functions (simple command only)

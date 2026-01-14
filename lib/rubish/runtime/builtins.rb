@@ -2,7 +2,7 @@
 
 module Rubish
   module Builtins
-    COMMANDS = %w(cd exit logout jobs fg bg export pwd history alias unalias source . shift set return read echo test [ break continue pushd popd dirs trap getopts local unset readonly declare typeset let printf type which true false : eval command builtin wait kill umask exec times hash disown ulimit suspend shopt enable caller complete compgen compopt bind bindkey help fc mapfile readarray basename dirname realpath _get_comp_words_by_ref _init_completion _filedir _have _split_longopt __ltrim_colon_completions _variables _tilde _quote_readline_by_ref _parse_help _upvars _usergroup setopt unsetopt).freeze
+    COMMANDS = %w(cd exit logout jobs fg bg export pwd history alias unalias source . shift set return read echo test [ break continue pushd popd dirs trap getopts local unset readonly declare typeset let printf type which true false : eval command builtin wait kill umask exec times hash disown ulimit suspend shopt enable caller complete compgen compopt bind bindkey help fc mapfile readarray basename dirname realpath _get_comp_words_by_ref _init_completion _filedir _have _split_longopt __ltrim_colon_completions _variables _tilde _quote_readline_by_ref _parse_help _upvars _usergroup setopt unsetopt autoload).freeze
 
     @aliases = {}
     @dir_stack = []
@@ -37,6 +37,7 @@ module Rubish
     @function_lister = nil  # Returns hash of all functions {name => {source:, file:}}
     @function_getter = nil  # Returns function info for a specific name
     @function_caller = nil  # Calls a function with args, returns success boolean
+    @autoload_functions = {}  # Hash of function names to {options:, loaded:}
     @heredoc_content_setter = nil
     @command_executor = nil  # Executor that bypasses functions/aliases
     @history_file_getter = nil  # Gets HISTFILE path
@@ -932,6 +933,8 @@ module Rubish
         run_unsetopt(args)
       when 'bindkey'
         run_bindkey(args)
+      when 'autoload'
+        run_autoload(args)
       else
         # Check for dynamically loaded builtins
         if @loaded_builtins.key?(name)
@@ -5125,6 +5128,151 @@ module Rubish
       when 'viins', 'vicmd', 'vi'
         apply_readline_variable('editing-mode', 'vi')
       end
+    end
+
+    # zsh autoload - mark functions for autoloading from fpath
+    # Usage: autoload [-UXktz] [+X] [name ...]
+    # Options:
+    #   -U  suppress alias expansion during loading
+    #   -z  use zsh-style autoloading (default)
+    #   -k  use ksh-style autoloading
+    #   -t  turn on tracing for the function
+    #   -X  immediately load the function (used inside function stub)
+    #   +X  load function immediately without executing
+    def self.run_autoload(args)
+      suppress_alias = false
+      zsh_style = true
+      ksh_style = false
+      trace = false
+      load_now = false
+      load_only = false
+      i = 0
+
+      while i < args.length
+        arg = args[i]
+        if arg.start_with?('-') || arg.start_with?('+')
+          arg.chars.each_with_index do |c, idx|
+            next if idx == 0 && (c == '-' || c == '+')
+            case c
+            when 'U'
+              suppress_alias = true
+            when 'z'
+              zsh_style = true
+              ksh_style = false
+            when 'k'
+              ksh_style = true
+              zsh_style = false
+            when 't'
+              trace = true
+            when 'X'
+              if arg.start_with?('+')
+                load_only = true
+              else
+                load_now = true
+              end
+            else
+              $stderr.puts "autoload: bad option: -#{c}"
+              return false
+            end
+          end
+        else
+          break
+        end
+        i += 1
+      end
+
+      func_names = args[i..]
+
+      # No function names - list all autoloaded functions
+      if func_names.empty?
+        @autoload_functions.each do |name, info|
+          if info[:loaded]
+            puts name
+          else
+            puts "#{name} (not yet loaded)"
+          end
+        end
+        return true
+      end
+
+      # Process each function name
+      func_names.each do |name|
+        if load_now || load_only
+          # Load the function immediately
+          success = load_autoload_function(name)
+          unless success
+            $stderr.puts "autoload: can't load function definition for '#{name}'"
+            return false
+          end
+        else
+          # Mark for autoloading
+          @autoload_functions[name] = {
+            suppress_alias: suppress_alias,
+            zsh_style: zsh_style,
+            ksh_style: ksh_style,
+            trace: trace,
+            loaded: false
+          }
+        end
+      end
+
+      true
+    end
+
+    # Check if a function is marked for autoloading
+    def self.autoload_pending?(name)
+      @autoload_functions.key?(name) && !@autoload_functions[name][:loaded]
+    end
+
+    # Get fpath - the function search path
+    def self.fpath
+      fpath_str = ENV['FPATH'] || ENV['fpath'] || ''
+      return [] if fpath_str.empty?
+
+      fpath_str.split(':').reject(&:empty?)
+    end
+
+    # Set fpath
+    def self.fpath=(paths)
+      ENV['FPATH'] = paths.is_a?(Array) ? paths.join(':') : paths.to_s
+    end
+
+    # Load a function from fpath
+    def self.load_autoload_function(name)
+      fpath.each do |dir|
+        func_file = File.join(dir, name)
+        next unless File.exist?(func_file)
+
+        begin
+          content = File.read(func_file)
+
+          # zsh-style: file contains function body directly
+          # ksh-style: file contains function definition "name() { ... }"
+          info = @autoload_functions[name] || {}
+
+          if info[:ksh_style]
+            # ksh-style: source the file directly
+            @source_executor&.call(func_file)
+          else
+            # zsh-style: wrap content in function definition
+            # The file contains just the function body
+            func_def = "#{name}() {\n#{content}\n}"
+            @source_executor&.call(nil, func_def)
+          end
+
+          @autoload_functions[name] = info.merge(loaded: true)
+          return true
+        rescue => e
+          $stderr.puts "autoload: error loading #{name}: #{e.message}" if ENV['RUBISH_DEBUG']
+        end
+      end
+
+      false
+    end
+
+    # Accessor for source executor (set by REPL)
+    class << self
+      attr_accessor :source_executor
     end
 
     # List all currently enabled zsh options
@@ -9510,6 +9658,18 @@ module Rubish
           '-c' => 'clear the history list',
           '-d offset' => 'delete the history entry at offset',
           'n' => 'list only the last n entries'
+        }
+      },
+      'autoload' => {
+        synopsis: 'autoload [-UXktz] [+X] [name ...]',
+        description: 'Mark functions for autoloading from FPATH. The function definition is loaded from a file in FPATH when first called.',
+        options: {
+          '-U' => 'suppress alias expansion during function loading',
+          '-z' => 'use zsh-style autoloading (file contains function body, default)',
+          '-k' => 'use ksh-style autoloading (file contains full function definition)',
+          '-t' => 'turn on execution tracing for the function',
+          '-X' => 'immediately load the function definition',
+          '+X' => 'load function immediately without executing'
         }
       },
       'alias' => {
