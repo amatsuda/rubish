@@ -118,6 +118,58 @@ class TestFunction < Test::Unit::TestCase
     assert_equal "one two three\n", File.read(output_file)
   end
 
+  def test_function_dollar_at_no_args_unquoted
+    # $@ with no args should expand to nothing, not empty string
+    # This tests that commands don't receive spurious empty arguments
+    execute('wrapper() { echo $#; }')
+    execute("wrapper > #{output_file}")
+    assert_equal "0\n", File.read(output_file)
+  end
+
+  def test_function_dollar_at_no_args_quoted
+    # "$@" with no args should also expand to nothing
+    execute('wrapper() { echo "$#"; }')
+    execute("wrapper > #{output_file}")
+    assert_equal "0\n", File.read(output_file)
+  end
+
+  def test_function_dollar_at_passes_args_to_inner
+    # $@ should pass all args correctly to inner function
+    execute('inner() { echo "got: $1 $2 $3"; }')
+    execute('outer() { inner "$@"; }')
+    execute("outer a b c > #{output_file}")
+    assert_equal "got: a b c\n", File.read(output_file)
+  end
+
+  def test_function_dollar_at_no_args_passes_nothing
+    # "$@" with no args should pass nothing to inner function
+    execute('inner() { echo "argc=$#"; }')
+    execute('outer() { inner "$@"; }')
+    execute("outer > #{output_file}")
+    assert_equal "argc=0\n", File.read(output_file)
+  end
+
+  def test_function_dollar_at_preserves_spaces_in_args
+    # "$@" should preserve argument boundaries (args with spaces)
+    execute('count_args() { echo $#; }')
+    execute("count_args \"hello world\" foo > #{output_file}")
+    assert_equal "2\n", File.read(output_file)
+  end
+
+  def test_function_dollar_at_in_string
+    # $@ embedded in a string should join with spaces
+    execute('show() { echo "args: $@"; }')
+    execute("show a b c > #{output_file}")
+    assert_equal "args: a b c\n", File.read(output_file)
+  end
+
+  def test_function_dollar_at_in_string_no_args
+    # $@ in string with no args should be empty string
+    execute('show() { echo "args: $@"; }')
+    execute("show > #{output_file}")
+    assert_equal "args: \n", File.read(output_file)
+  end
+
   def test_function_preserves_caller_params
     @repl.positional_params = ['outer1', 'outer2']
     execute('myfunc() { echo inner $1; }')

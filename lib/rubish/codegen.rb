@@ -101,6 +101,11 @@ module Rubish
     def generate_arg(arg)
       case arg
       when String
+        # Special case: $@ or "$@" as standalone arg should expand to array
+        # so it becomes nothing when empty (not an empty string argument)
+        if arg == '$@' || arg == '"$@"'
+          return '@positional_params'
+        end
         generate_string_arg_with_glob(arg)
       when AST::ArrayLiteral
         arg.value  # Already valid Ruby: [1, 2, 3]
