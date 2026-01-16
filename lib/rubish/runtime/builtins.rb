@@ -8274,12 +8274,12 @@ module Rubish
       result = keyseq.dup
 
       # Handle meta escape sequences first (\M-x)
-      result.gsub!(/\\M-\\C-([a-z@\[\]\\^_?])/) do |_|
+      result.gsub!(/\\M-\\C-([a-zA-Z@\[\]\\^_?])/) do |_|
         char = ::Regexp.last_match(1)
         if char == '?'
           (0x80 | 0x7F).chr  # Meta-DEL
         else
-          (0x80 | (char.ord - 'a'.ord + 1)).chr
+          (0x80 | (char.upcase.ord & 0x1F)).chr
         end
       end
 
@@ -8314,8 +8314,8 @@ module Rubish
 
       # Handle control characters \C-x format
       result.gsub!(/\\C-([a-zA-Z@\[\]\\^_])/) do |_|
-        char = ::Regexp.last_match(1).downcase
-        (char.ord - 'a'.ord + 1).chr
+        char = ::Regexp.last_match(1)
+        (char.upcase.ord & 0x1F).chr
       end
 
       # Handle control characters \C-? format for DEL
@@ -8327,7 +8327,7 @@ module Rubish
         if char == '?'
           "\x7F"  # DEL
         else
-          (char.downcase.ord - 'a'.ord + 1).chr
+          (char.upcase.ord & 0x1F).chr
         end
       end
 

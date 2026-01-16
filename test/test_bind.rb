@@ -240,10 +240,65 @@ class TestBind < Test::Unit::TestCase
     assert_equal "\C-z", Rubish::Builtins.unescape_keyseq('\\C-z')
   end
 
+  # Regression tests for non-letter control characters (issue: "-3 out of char range")
+  def test_unescape_control_bracket_chars
+    # \C-] is Ctrl+] = ASCII 29
+    assert_equal 29.chr, Rubish::Builtins.unescape_keyseq('\\C-]')
+    # \C-[ is Ctrl+[ = ESC = ASCII 27
+    assert_equal 27.chr, Rubish::Builtins.unescape_keyseq('\\C-[')
+    # \C-@ is Ctrl+@ = NUL = ASCII 0
+    assert_equal 0.chr, Rubish::Builtins.unescape_keyseq('\\C-@')
+    # \C-^ is Ctrl+^ = ASCII 30
+    assert_equal 30.chr, Rubish::Builtins.unescape_keyseq('\\C-^')
+    # \C-_ is Ctrl+_ = ASCII 31
+    assert_equal 31.chr, Rubish::Builtins.unescape_keyseq('\\C-_')
+    # \C-\ is Ctrl+\ = ASCII 28
+    assert_equal 28.chr, Rubish::Builtins.unescape_keyseq('\\C-\\')
+  end
+
+  def test_unescape_control_uppercase_letters
+    # Uppercase letters should work the same as lowercase
+    assert_equal "\C-a", Rubish::Builtins.unescape_keyseq('\\C-A')
+    assert_equal "\C-z", Rubish::Builtins.unescape_keyseq('\\C-Z')
+  end
+
   def test_unescape_caret_control_chars
     assert_equal "\C-a", Rubish::Builtins.unescape_keyseq('^a')
     assert_equal "\C-a", Rubish::Builtins.unescape_keyseq('^A')
     assert_equal "\x7F", Rubish::Builtins.unescape_keyseq('^?')
+  end
+
+  # Regression tests for non-letter caret control characters
+  def test_unescape_caret_bracket_chars
+    # ^] is Ctrl+] = ASCII 29
+    assert_equal 29.chr, Rubish::Builtins.unescape_keyseq('^]')
+    # ^[ is Ctrl+[ = ESC = ASCII 27
+    assert_equal 27.chr, Rubish::Builtins.unescape_keyseq('^[')
+    # ^@ is Ctrl+@ = NUL = ASCII 0
+    assert_equal 0.chr, Rubish::Builtins.unescape_keyseq('^@')
+    # ^^ is Ctrl+^ = ASCII 30
+    assert_equal 30.chr, Rubish::Builtins.unescape_keyseq('^^')
+    # ^_ is Ctrl+_ = ASCII 31
+    assert_equal 31.chr, Rubish::Builtins.unescape_keyseq('^_')
+  end
+
+  # Regression test for meta+control non-letter characters
+  def test_unescape_meta_control_bracket_chars
+    # \M-\C-] is Meta + Ctrl+] = 0x80 | 29 = 157
+    assert_equal 157.chr, Rubish::Builtins.unescape_keyseq('\\M-\\C-]')
+    # \M-\C-[ is Meta + ESC = 0x80 | 27 = 155
+    assert_equal 155.chr, Rubish::Builtins.unescape_keyseq('\\M-\\C-[')
+  end
+
+  # Test that bind -x works with non-letter control characters
+  def test_bind_x_with_ctrl_bracket
+    result = Rubish::Builtins.run('bind', ['-x', '\\C-]:my_command'])
+    assert result
+
+    binding = Rubish::Builtins.get_key_binding(29.chr)
+    assert_not_nil binding
+    assert_equal :command, binding[:type]
+    assert_equal 'my_command', binding[:value]
   end
 
   def test_unescape_escape_sequences
