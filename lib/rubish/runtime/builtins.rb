@@ -27,6 +27,7 @@ module Rubish
     @assoc_arrays = {}  # Hash of associative array names to their values (Hash)
     @namerefs = {}  # Hash of nameref variable names to their target variable names
     @coprocs = {}  # Hash of coproc names to {pid:, read_fd:, write_fd:, reader:, writer:}
+    @named_directories = {}  # Hash of names to paths for zsh-style ~name expansion
     @executor = nil
     @script_name_getter = nil
     @script_name_setter = nil
@@ -53,7 +54,7 @@ module Rubish
     @builtin_completion_functions = {}  # Hash of function names to lambdas for builtin completions
 
     class << self
-      attr_reader :aliases, :dir_stack, :traps, :local_scope_stack, :readonly_vars, :var_attributes, :command_hash, :shell_options, :zsh_options, :disabled_builtins, :call_stack, :completions, :completion_options, :key_bindings, :readline_variables, :arrays, :assoc_arrays, :namerefs, :coprocs, :builtin_completion_functions
+      attr_reader :aliases, :dir_stack, :traps, :local_scope_stack, :readonly_vars, :var_attributes, :command_hash, :shell_options, :zsh_options, :disabled_builtins, :call_stack, :completions, :completion_options, :key_bindings, :readline_variables, :arrays, :assoc_arrays, :namerefs, :coprocs, :builtin_completion_functions, :named_directories
       attr_accessor :current_trapsig
       attr_accessor :executor, :script_name_getter, :script_name_setter, :positional_params_getter, :positional_params_setter, :function_checker, :function_remover, :function_lister, :function_getter, :function_caller, :heredoc_content_setter, :command_executor, :current_completion_options
       attr_accessor :history_file_getter, :history_loader, :history_saver, :history_appender, :last_history_line, :history_timestamps
@@ -8363,10 +8364,15 @@ module Rubish
     def self.run_hash(args)
       # hash [-lr] [-p path] [-dt] [name ...]
       # -r: forget all cached paths
-      # -d: forget cached path for each name
+      # -d: named directories (zsh) or forget cached path (bash)
       # -l: list in reusable format
       # -p path: cache name with given path
       # -t: print cached path for each name
+      #
+      # zsh-style named directories (hash -d):
+      #   hash -d name=path  - define named directory (~name expands to path)
+      #   hash -d name       - show path for named directory
+      #   hash -d            - list all named directories
 
       if args.empty?
         # List all cached paths
@@ -8382,6 +8388,7 @@ module Rubish
 
       # Parse options
       clear_all = false
+      named_dir_mode = false
       delete_mode = false
       list_mode = false
       print_mode = false
@@ -8396,7 +8403,7 @@ module Rubish
           clear_all = true
           i += 1
         elsif arg == '-d' && names.empty?
-          delete_mode = true
+          named_dir_mode = true
           i += 1
         elsif arg == '-l' && names.empty?
           list_mode = true
@@ -8412,7 +8419,7 @@ module Rubish
           arg[1..].each_char do |c|
             case c
             when 'r' then clear_all = true
-            when 'd' then delete_mode = true
+            when 'd' then named_dir_mode = true
             when 'l' then list_mode = true
             when 't' then print_mode = true
             else
@@ -8425,6 +8432,11 @@ module Rubish
           names << arg
           i += 1
         end
+      end
+
+      # Handle named directories mode (zsh-style hash -d)
+      if named_dir_mode
+        return run_hash_named_directories(names, list_mode)
       end
 
       # Handle -r (clear all)
@@ -8512,6 +8524,100 @@ module Rubish
 
     def self.clear_hash
       @command_hash.clear
+    end
+
+    # Handle -d option: named directories (zsh) or delete from hash (bash)
+    # - hash -d           → list all named directories (zsh)
+    # - hash -d name=path → define named directory (zsh)
+    # - hash -d name      → if name is in command_hash, delete it (bash)
+    #                       if name is a named directory, show path (zsh)
+    #                       otherwise, error
+    def self.run_hash_named_directories(names, list_mode = false)
+      # No names: list all named directories
+      if names.empty?
+        if @named_directories.empty?
+          # Don't print anything when empty (zsh behavior)
+          return true
+        end
+        @named_directories.each do |name, path|
+          if list_mode
+            puts "hash -d #{name}=#{path}"
+          else
+            puts "#{name}=#{path}"
+          end
+        end
+        return true
+      end
+
+      all_success = true
+
+      # Process each name
+      names.each do |arg|
+        if arg.include?('=')
+          # Define named directory: name=path (zsh-style)
+          name, path = arg.split('=', 2)
+          if name.empty?
+            puts "hash: invalid argument: #{arg}"
+            all_success = false
+            next
+          end
+          # Expand ~ in path
+          path = File.expand_path(path) if path.start_with?('~')
+          @named_directories[name] = path
+        elsif @command_hash.key?(arg)
+          # Bash-style: delete from command hash
+          @command_hash.delete(arg)
+        elsif @named_directories.key?(arg)
+          # zsh-style: show named directory path
+          puts @named_directories[arg]
+        else
+          # Not found in either
+          puts "hash: #{arg}: not found"
+          all_success = false
+        end
+      end
+
+      all_success
+    end
+
+    # Get a named directory path
+    def self.get_named_directory(name)
+      @named_directories[name]
+    end
+
+    # Set a named directory
+    def self.set_named_directory(name, path)
+      @named_directories[name] = path
+    end
+
+    # Remove a named directory
+    def self.remove_named_directory(name)
+      @named_directories.delete(name)
+    end
+
+    # Expand ~name to the named directory path
+    # Returns nil if not a named directory
+    def self.expand_named_directory(str)
+      return nil unless str.start_with?('~')
+      return nil if str == '~' || str.start_with?('~/')
+
+      # Extract the name part (after ~ and before / or end)
+      if str.include?('/')
+        name = str[1...str.index('/')]
+        rest = str[str.index('/')..]
+      else
+        name = str[1..]
+        rest = ''
+      end
+
+      return nil if name.empty?
+
+      # Check for named directory
+      if @named_directories.key?(name)
+        @named_directories[name] + rest
+      else
+        nil  # Not a named directory, let normal expansion handle it
+      end
     end
 
     def self.run_times(_args)
@@ -10139,12 +10245,12 @@ module Rubish
       },
       'hash' => {
         synopsis: 'hash [-lr] [-p filename] [-dt] [name ...]',
-        description: 'Remember or report command locations.',
+        description: 'Remember or report command locations. With -d, manage named directories (zsh-style).',
         options: {
           '-r' => 'forget all remembered locations',
           '-l' => 'display in reusable format',
           '-p filename' => 'use filename as location for name',
-          '-d' => 'forget remembered location for name',
+          '-d' => 'named directories: hash -d name=path (define), hash -d name (show), hash -d (list)',
           '-t' => 'print location for name'
         }
       },

@@ -2457,15 +2457,23 @@ module Rubish
                 result << Dir.home
                 i = j
               else
-                # ~username
-                username = line[i + 1...j]
-                begin
-                  result << Dir.home(username)
-                rescue ArgumentError
-                  # Unknown user, keep literal
-                  result << line[i...j]
+                # ~name - could be named directory or username
+                name = line[i + 1...j]
+                # First check for named directory (zsh hash -d)
+                named_dir = Builtins.get_named_directory(name)
+                if named_dir
+                  result << named_dir
+                  i = j
+                else
+                  # Try as ~username
+                  begin
+                    result << Dir.home(name)
+                  rescue ArgumentError
+                    # Unknown user, keep literal
+                    result << line[i...j]
+                  end
+                  i = j
                 end
-                i = j
               end
             end
           else
