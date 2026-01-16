@@ -508,4 +508,47 @@ class TestFunction < Test::Unit::TestCase
     # Should include params array
     assert_match(/__define_function\("greet", "[^"]+", \["name"\]\)/, code)
   end
+
+  # Ruby-style splat params (*args)
+  def test_def_splat_param
+    execute('def log(*args); echo $args; end')
+    execute("log --oneline -3 > #{output_file}")
+    assert_equal "--oneline -3\n", File.read(output_file)
+  end
+
+  def test_def_splat_param_no_args
+    # Splat with no args should not pass empty string
+    execute('inner() { echo "argc=$#"; }')
+    execute('def outer(*args); inner $args; end')
+    execute("outer > #{output_file}")
+    assert_equal "argc=0\n", File.read(output_file)
+  end
+
+  def test_def_splat_param_passes_args_to_inner
+    execute('inner() { echo "got: $1 $2 $3"; }')
+    execute('def outer(*args); inner $args; end')
+    execute("outer a b c > #{output_file}")
+    assert_equal "got: a b c\n", File.read(output_file)
+  end
+
+  def test_def_splat_with_leading_params
+    execute('def greet(greeting, *names); echo $greeting $names; end')
+    execute("greet Hello Alice Bob > #{output_file}")
+    assert_equal "Hello Alice Bob\n", File.read(output_file)
+  end
+
+  def test_def_splat_in_string
+    # $args in string should join with spaces
+    execute('def show(*args); echo "args: $args"; end')
+    execute("show a b c > #{output_file}")
+    assert_equal "args: a b c\n", File.read(output_file)
+  end
+
+  def test_def_splat_codegen
+    tokens = Rubish::Lexer.new('def log(*args); echo $args; end').tokenize
+    ast = Rubish::Parser.new(tokens).parse
+    code = Rubish::Codegen.new.generate(ast)
+    # Should include splat param
+    assert_match(/__define_function\("log", "[^"]+", \["\*args"\]\)/, code)
+  end
 end

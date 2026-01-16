@@ -1628,7 +1628,13 @@ module Rubish
       # Set local variables from named parameters (Ruby-style def)
       if func_info[:params]
         func_info[:params].each_with_index do |param_name, i|
-          Builtins.set_local_from_param(param_name, args[i] || '')
+          if param_name.start_with?('*')
+            # Splat param: capture all remaining args as array
+            splat_name = param_name[1..]
+            Builtins.set_array(splat_name, args[i..] || [])
+          else
+            Builtins.set_local_from_param(param_name, args[i] || '')
+          end
         end
       end
 
@@ -3311,12 +3317,30 @@ module Rubish
       return Builtins.readline_point.to_s if var_name == 'READLINE_POINT'
       return Builtins.readline_mark.to_s if var_name == 'READLINE_MARK'
 
+      # Check if it's an array variable - join with space for string context
+      if Builtins.array?(var_name)
+        return Builtins.get_array(var_name).join(' ')
+      end
+
       # Fetch variable with nounset check
       if Builtins.set_option?('u') && !ENV.key?(var_name)
         $stderr.puts Builtins.format_error('unbound variable', command: var_name)
         raise NounsetError, "#{var_name}: unbound variable"
       end
       ENV.fetch(var_name, '')
+    end
+
+    # Fetch variable for use as command argument
+    # Returns array if variable is an array (for proper expansion)
+    # Returns string otherwise
+    def __fetch_var_for_arg(var_name)
+      # Check if it's an array variable first
+      if Builtins.array?(var_name)
+        return Builtins.get_array(var_name)
+      end
+
+      # Otherwise fetch as regular variable
+      __fetch_var(var_name)
     end
 
     def __run_subst(cmd)

@@ -283,7 +283,8 @@ module Rubish
       AST::Function.new(name, body, params)
     end
 
-    # Parse optional parameter list for def: (arg1, arg2, ...)
+    # Parse optional parameter list for def: (arg1, arg2, ...) or (*args)
+    # Splat param (*name) captures all remaining arguments
     def parse_def_params
       # Allow empty ()
       if peek(:PARENS)
@@ -312,6 +313,16 @@ module Rubish
 
       consume(:RPAREN) || raise('Expected ")" to close parameter list')
       params
+    end
+
+    # Check if param is a splat (*args)
+    def splat_param?(param)
+      param.start_with?('*')
+    end
+
+    # Get the name from a splat param (*args -> args)
+    def splat_param_name(param)
+      param[1..]
     end
 
     # Parse body of def (stops at end)

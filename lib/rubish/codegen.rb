@@ -106,6 +106,12 @@ module Rubish
         if arg == '$@' || arg == '"$@"'
           return '@positional_params'
         end
+        # Special case: $varname or "$varname" as standalone arg
+        # Check if it's an array and expand accordingly
+        if arg =~ /\A\$([a-zA-Z_][a-zA-Z0-9_]*)\z/ || arg =~ /\A"\$([a-zA-Z_][a-zA-Z0-9_]*)"\z/
+          var_name = $1
+          return "__fetch_var_for_arg(#{var_name.inspect})"
+        end
         generate_string_arg_with_glob(arg)
       when AST::ArrayLiteral
         arg.value  # Already valid Ruby: [1, 2, 3]
