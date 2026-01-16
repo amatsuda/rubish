@@ -100,6 +100,34 @@ class TestSource < Test::Unit::TestCase
     assert_equal 'worked', Rubish::Builtins.aliases['tilde_alias']
   end
 
+  # Regression test: tilde expansion in PATH inside if block with awk
+  # The { in awk commands was incorrectly counted as shell brace,
+  # causing lines to be accumulated and quote tracking to fail
+  def test_source_tilde_in_path_with_awk_in_if_block
+    script = create_script('path_tilde.sh', <<~SCRIPT)
+      if [ "$TERM" != "nonexistent_term_xyz" ]
+        def foo
+          awk '{ print $1 }'
+        end
+        export TESTPATH=~/bin:$PATH
+      end
+    SCRIPT
+
+    original_testpath = ENV['TESTPATH']
+    execute("source #{script}")
+
+    # Tilde should be expanded, not literal
+    assert_not_nil ENV['TESTPATH']
+    assert_not_match(/~\/bin/, ENV['TESTPATH'], 'Tilde should be expanded in PATH')
+    assert_match(%r{/.*bin}, ENV['TESTPATH'].split(':').first, 'First entry should be expanded home path')
+  ensure
+    if original_testpath
+      ENV['TESTPATH'] = original_testpath
+    else
+      ENV.delete('TESTPATH')
+    end
+  end
+
   def test_source_executes_commands
     output_file = File.join(@tempdir, 'output.txt')
     script = create_script('commands.sh', <<~SCRIPT)

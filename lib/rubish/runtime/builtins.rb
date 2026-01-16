@@ -3049,8 +3049,9 @@ module Rubish
           was_pending_function = pending_function_def
 
           # Track control structure depth
-          words = line.split(/\s+/)
-          words.each do |word|
+          # Extract keywords while respecting quotes (don't count { } inside quotes)
+          keywords = extract_unquoted_keywords(line)
+          keywords.each do |word|
             case word
             when 'if', 'unless', 'while', 'until', 'for', 'case', 'def'
               depth += 1
@@ -11375,6 +11376,51 @@ module Rubish
       end
 
       success
+    end
+
+    def self.extract_unquoted_keywords(line)
+      # Extract shell keywords and braces from a line while respecting quotes
+      # Returns array of keywords found outside of quoted sections
+      # This prevents counting { } inside awk scripts like: awk '{ print $1 }'
+      keywords = []
+      in_single_quotes = false
+      in_double_quotes = false
+      current_word = +''
+      i = 0
+
+      while i < line.length
+        char = line[i]
+
+        if char == "'" && !in_double_quotes
+          in_single_quotes = !in_single_quotes
+          i += 1
+        elsif char == '"' && !in_single_quotes
+          in_double_quotes = !in_double_quotes
+          i += 1
+        elsif char == '\\' && !in_single_quotes
+          # Skip escaped character
+          i += 2
+        elsif !in_single_quotes && !in_double_quotes
+          if char =~ /\s/
+            # End of word
+            keywords << current_word unless current_word.empty?
+            current_word = +''
+            i += 1
+          else
+            current_word << char
+            i += 1
+          end
+        else
+          # Inside quotes, skip
+          i += 1
+        end
+      end
+
+      # Don't forget the last word
+      keywords << current_word unless current_word.empty?
+
+      # Filter to only control structure keywords and braces
+      keywords.select { |w| %w[if unless while until for case def fi done esac end { }].include?(w) }
     end
 
     def self.detect_heredoc(line)
