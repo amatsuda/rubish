@@ -66,6 +66,20 @@ module Rubish
       attr_accessor :sourcing_file  # True when sourcing a file (disables history expansion)
     end
 
+    # Notify the terminal of the current working directory using OSC 7
+    # This enables features like "new tab opens in same directory" in terminal emulators
+    def self.notify_terminal_of_cwd
+      return unless $stdout.tty?
+
+      hostname = Socket.gethostname rescue 'localhost'
+      path = Dir.pwd
+      # URI-encode the path (spaces and special chars)
+      encoded_path = path.gsub(/[^a-zA-Z0-9\/_.-]/) { |c| '%%%02X' % c.ord }
+      # OSC 7: file://hostname/path
+      print "\e]7;file://#{hostname}#{encoded_path}\a"
+      $stdout.flush
+    end
+
     # Format error message based on gnu_errfmt setting
     # Standard format: "rubish: message"
     # GNU format: "rubish:source:lineno: message"
@@ -1037,6 +1051,9 @@ module Rubish
       # Print directory when found via CDPATH
       puts ENV['PWD'] if found_via_cdpath
 
+      # Notify terminal of new working directory (for "new tab in same dir" feature)
+      notify_terminal_of_cwd
+
       true
     rescue Errno::ENOENT => e
       $stderr.puts "cd: #{e.message}"
@@ -1188,6 +1205,7 @@ module Rubish
         unless no_cd
           begin
             Dir.chdir(target)
+            notify_terminal_of_cwd
           rescue Errno::ENOENT => e
             puts "pushd: #{e.message}"
             return false
@@ -1226,6 +1244,7 @@ module Rubish
         unless no_cd
           begin
             Dir.chdir(target)
+            notify_terminal_of_cwd
           rescue Errno::ENOENT => e
             puts "pushd: #{e.message}"
             return false
@@ -1248,6 +1267,7 @@ module Rubish
         unless no_cd
           begin
             Dir.chdir(dir)
+            notify_terminal_of_cwd
           rescue Errno::ENOENT => e
             puts "pushd: #{e.message}"
             return false
@@ -1312,6 +1332,7 @@ module Rubish
           unless no_cd
             begin
               Dir.chdir(target)
+              notify_terminal_of_cwd
             rescue Errno::ENOENT => e
               puts "popd: #{e.message}"
               return false
@@ -1333,6 +1354,7 @@ module Rubish
         unless no_cd
           begin
             Dir.chdir(target)
+            notify_terminal_of_cwd
           rescue Errno::ENOENT => e
             puts "popd: #{e.message}"
             return false

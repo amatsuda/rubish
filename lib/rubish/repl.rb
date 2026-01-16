@@ -103,6 +103,7 @@ module Rubish
       setup_reline
       setup_signals
       setup_terminal_title
+      Builtins.notify_terminal_of_cwd
       load_history
       setup_default_aliases
       load_config
