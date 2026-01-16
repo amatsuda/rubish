@@ -301,6 +301,32 @@ class TestBind < Test::Unit::TestCase
     assert_equal 'my_command', binding[:value]
   end
 
+  # Test that bind -x registers with Reline
+  def test_bind_x_registers_with_reline
+    result = Rubish::Builtins.run('bind', ['-x', '\\C-t:echo hello'])
+    assert result
+
+    binding = Rubish::Builtins.get_key_binding("\C-t")
+    assert_not_nil binding
+    assert_equal :command, binding[:type]
+    assert_not_nil binding[:method_name], 'Should have a method_name for Reline'
+    assert binding[:method_name].to_s.start_with?('__rubish_bind_x_')
+
+    # Verify the method was defined on Reline::LineEditor
+    assert Reline::LineEditor.method_defined?(binding[:method_name])
+  end
+
+  # Test that bind -x generates unique method names
+  def test_bind_x_unique_method_names
+    Rubish::Builtins.run('bind', ['-x', '\\C-q:echo first'])
+    Rubish::Builtins.run('bind', ['-x', '\\C-w:echo second'])
+
+    binding1 = Rubish::Builtins.get_key_binding("\C-q")
+    binding2 = Rubish::Builtins.get_key_binding("\C-w")
+
+    assert_not_equal binding1[:method_name], binding2[:method_name]
+  end
+
   def test_unescape_escape_sequences
     assert_equal "\e", Rubish::Builtins.unescape_keyseq('\\e')
     assert_equal "\e", Rubish::Builtins.unescape_keyseq('\\E')

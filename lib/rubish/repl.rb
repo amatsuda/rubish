@@ -74,6 +74,8 @@ module Rubish
       Builtins.readline_point_setter = ->(point) { @readline_point = point }
       Builtins.readline_mark_getter = -> { @readline_mark }
       Builtins.readline_mark_setter = ->(mark) { @readline_mark = mark }
+      # bind -x executor: execute shell commands from key bindings
+      Builtins.bind_x_executor = ->(command) { execute_bind_x_command(command) }
       # History callbacks
       Builtins.history_file_getter = -> { history_file }
       Builtins.history_loader = -> { load_history }
@@ -1335,6 +1337,49 @@ module Rubish
       # Ignore I/O errors from terminal control issues during job control
     rescue => e
       puts "rubish: #{e.message}"
+    end
+
+    # Execute a shell command from bind -x key binding
+    # This is called from within Reline's key handling, so we need to be careful
+    # about terminal state and output
+    def execute_bind_x_command(command)
+      begin
+        # Execute the command using the same mechanism as regular commands
+        # but skip history expansion and recording
+        line = Builtins.expand_alias(command)
+        line = expand_tilde(line)
+
+        # Strip comments if enabled
+        if Builtins.shopt_enabled?('interactive_comments')
+          line = strip_comment(line)
+          return if line.empty?
+        end
+
+        tokens = Lexer.new(line).tokenize
+        return if tokens.empty?
+
+        ast = Parser.new(tokens).parse
+        return unless ast
+
+        # Check for user-defined functions (like normal execute does)
+        if ast.is_a?(AST::Command) && @functions.key?(ast.name)
+          expanded_args = expand_args_for_builtin(ast.args)
+          call_function(ast.name, expanded_args)
+          return
+        end
+
+        # Generate and execute code using eval_in_context which handles
+        # running Command objects and function calls with redirects
+        code = Codegen.new.generate(ast)
+        eval_in_context(code)
+      rescue Interrupt
+        # User interrupted the command
+        puts
+      rescue => e
+        $stderr.puts "bind -x: #{e.message}" if ENV['RUBISH_DEBUG']
+      end
+
+      # Redraw the prompt - Reline will handle this when we return
     end
 
     def execute(line)

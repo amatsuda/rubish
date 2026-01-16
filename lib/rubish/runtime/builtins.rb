@@ -23,6 +23,8 @@ module Rubish
     @current_completion_options = Set.new  # Options for currently executing completion
     @key_bindings = {}  # Hash of keyseq to function/macro/command
     @readline_variables = {}  # Hash of readline variable names to values
+    @bind_x_counter = 0  # Counter for generating unique bind -x method names
+    @bind_x_executor = nil  # Callback to execute bind -x shell commands
     @arrays = {}  # Hash of array variable names to their values (Array)
     @assoc_arrays = {}  # Hash of associative array names to their values (Hash)
     @namerefs = {}  # Hash of nameref variable names to their target variable names
@@ -62,6 +64,8 @@ module Rubish
       attr_accessor :lineno_getter
       attr_accessor :bash_argv0_unsetter
       attr_accessor :readline_line_getter, :readline_line_setter, :readline_point_getter, :readline_point_setter, :readline_mark_getter, :readline_mark_setter
+      attr_accessor :readline_point_modified  # Track if READLINE_POINT was explicitly set during bind -x
+      attr_accessor :bind_x_executor
       attr_accessor :exit_blocked_by_jobs
       attr_accessor :sourcing_file  # True when sourcing a file (disables history expansion)
     end
@@ -5638,6 +5642,7 @@ module Rubish
 
     def self.readline_point=(value)
       @readline_point_setter&.call(value.to_i)
+      @readline_point_modified = true
     end
 
     # READLINE_MARK - mark position in READLINE_LINE during bind -x execution
@@ -8198,6 +8203,8 @@ module Rubish
           keyseq = unescape_keyseq(keyseq.delete('"'))
           command = command.delete('"').strip
           @key_bindings[keyseq] = {type: :command, value: command, keymap: keymap}
+          # Register with Reline for actual execution
+          register_bind_x_with_reline(keyseq, command, keymap)
         else
           puts "bind: #{shell_command_binding}: invalid key binding"
           return false
@@ -8341,6 +8348,77 @@ module Rubish
     def self.clear_key_bindings
       @key_bindings.clear
       @readline_variables.clear
+    end
+
+    # Register a bind -x shell command with Reline for actual execution
+    def self.register_bind_x_with_reline(keyseq, command, keymap)
+      return unless defined?(Reline)
+
+      # Generate a unique method name for this binding
+      method_name = :"__rubish_bind_x_#{@bind_x_counter}"
+      @bind_x_counter += 1
+
+      # Store the command in the binding for lookup
+      @key_bindings[keyseq][:method_name] = method_name
+
+      # Define the method on Reline::LineEditor
+      # We need to capture 'command' and 'self' (Builtins) in the closure
+      builtins = self
+      Reline::LineEditor.define_method(method_name) do |key = nil, **kwargs|
+        # Get current line and cursor position from the line editor
+        current_line = whole_buffer
+        current_point = byte_pointer
+
+        # Set READLINE_LINE, READLINE_POINT, READLINE_MARK
+        builtins.readline_line_setter&.call(current_line)
+        builtins.readline_point_setter&.call(current_point)
+        builtins.readline_mark_setter&.call(0)  # Mark is typically 0
+
+        # Track if READLINE_POINT is explicitly modified
+        builtins.readline_point_modified = false
+
+        # Execute the shell command
+        if builtins.bind_x_executor
+          begin
+            builtins.bind_x_executor.call(command)
+          rescue => e
+            $stderr.puts "bind -x: #{e.message}" if ENV['RUBISH_DEBUG']
+          end
+        end
+
+        # Check if READLINE_LINE was modified
+        new_line = builtins.readline_line_getter&.call || current_line
+        new_point = builtins.readline_point_getter&.call
+        point_was_modified = builtins.readline_point_modified
+
+        # Update the line buffer if it changed
+        if new_line != current_line
+          # Clear and replace the buffer
+          @buffer_of_lines = new_line.split("\n", -1)
+          @buffer_of_lines = [''] if @buffer_of_lines.empty?
+          @line_index = @buffer_of_lines.length - 1
+        end
+
+        # Update cursor position
+        if point_was_modified
+          # READLINE_POINT was explicitly set - use it
+          self.byte_pointer = [new_point, new_line.bytesize].min
+        elsif new_line != current_line
+          # Line changed but point not explicitly set - move to end
+          self.byte_pointer = new_line.bytesize
+        end
+      end
+
+      # Convert keymap name to Reline keymap symbol
+      reline_keymap = case keymap
+                      when 'vi', 'vi-command' then :vi_command
+                      when 'vi-insert' then :vi_insert
+                      else :emacs
+                      end
+
+      # Register the key binding with Reline
+      keystroke = keyseq.bytes.to_a
+      Reline.core.config.add_default_key_binding_by_keymap(reline_keymap, keystroke, method_name)
     end
 
     # Apply a readline variable to Reline (if applicable)
