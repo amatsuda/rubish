@@ -267,7 +267,9 @@ module Rubish
         if Command.function?(name)
           result = Command.call_function(name, cmd_args)
           exit(result ? 0 : 1)
-        elsif File.directory?(cmd_path)
+        elsif cmd_path.include?('/') && File.directory?(cmd_path)
+          # Only check for directory if path was explicitly given or resolved
+          # Don't check bare command names against current directory
           $stderr.puts "rubish: #{cmd_path}: Is a directory"
           exit(126)
         else

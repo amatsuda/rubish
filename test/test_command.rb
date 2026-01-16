@@ -124,4 +124,30 @@ class TestCommand < Test::Unit::TestCase
     assert_match(/command not found/, File.read(error_file))
     assert_equal 127, @repl.instance_variable_get(:@last_status)
   end
+
+  # Regression test: directory with same name as command in PATH should not
+  # cause "Is a directory" error when running the command
+  def test_command_with_same_name_directory_in_cwd
+    # Create a directory named 'ls' in temp directory
+    ls_dir = File.join(@tempdir, 'ls')
+    Dir.mkdir(ls_dir)
+
+    # Save current directory and change to tempdir
+    original_dir = Dir.pwd
+    Dir.chdir(@tempdir)
+
+    begin
+      output_file = File.join(@tempdir, 'stdout.txt')
+      error_file = File.join(@tempdir, 'stderr.txt')
+
+      # Running 'ls' should work, not give "Is a directory" error
+      execute("ls >#{output_file} 2>#{error_file}")
+
+      error_output = File.read(error_file)
+      assert_not_match(/Is a directory/, error_output, 'Should not get "Is a directory" error')
+      assert_equal 0, @repl.instance_variable_get(:@last_status)
+    ensure
+      Dir.chdir(original_dir)
+    end
+  end
 end
