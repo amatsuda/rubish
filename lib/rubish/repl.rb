@@ -1625,6 +1625,13 @@ module Rubish
       # Push a new local scope for this function
       Builtins.push_local_scope
 
+      # Set local variables from named parameters (Ruby-style def)
+      if func_info[:params]
+        func_info[:params].each_with_index do |param_name, i|
+          Builtins.set_local_from_param(param_name, args[i] || '')
+        end
+      end
+
       # If errtrace is not set, ERR trap is not inherited by functions
       saved_err_trap = nil
       unless Builtins.set_option?('E')
@@ -5785,8 +5792,8 @@ module Rubish
       lines.join("\n") + (lines.empty? ? '' : "\n")
     end
 
-    def __define_function(name, source_code = nil, lineno = nil, &block)
-      @functions[name] = {block: block, source: @current_source_file, source_code: source_code, lineno: lineno || @lineno}
+    def __define_function(name, source_code = nil, params = nil, &block)
+      @functions[name] = {block: block, source: @current_source_file, source_code: source_code, lineno: @lineno, params: params}
       nil
     end
 

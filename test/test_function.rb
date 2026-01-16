@@ -73,8 +73,8 @@ class TestFunction < Test::Unit::TestCase
     tokens = Rubish::Lexer.new('greet() { echo hello; }').tokenize
     ast = Rubish::Parser.new(tokens).parse
     code = Rubish::Codegen.new.generate(ast)
-    # Now includes source code as second parameter
-    assert_match(/__define_function\("greet", "echo hello"\)/, code)
+    # Includes source code as second parameter, params as third (nil for traditional syntax)
+    assert_match(/__define_function\("greet", "echo hello", nil\)/, code)
   end
 
   # Execution tests
@@ -411,5 +411,49 @@ class TestFunction < Test::Unit::TestCase
     execute('def shout; echo HELLO; end')
     execute("shout | tr A-Z a-z > #{output_file}")
     assert_equal "hello\n", File.read(output_file)
+  end
+
+  # Ruby-style def with named parameters
+  def test_def_with_named_param
+    execute('def greet(name); echo Hello $name; end')
+    execute("greet World > #{output_file}")
+    assert_equal "Hello World\n", File.read(output_file)
+  end
+
+  def test_def_with_multiple_named_params
+    execute('def greet(greeting, name); echo $greeting $name; end')
+    execute("greet Hello World > #{output_file}")
+    assert_equal "Hello World\n", File.read(output_file)
+  end
+
+  def test_def_named_params_are_local
+    execute('name=Outer')
+    execute('def greet(name); echo $name; end')
+    execute("greet Inner > #{output_file}")
+    # name should be restored after function returns
+    execute("echo $name >> #{output_file}")
+    assert_equal "Inner\nOuter\n", File.read(output_file)
+  end
+
+  def test_def_named_params_with_positional_still_work
+    # Both named params and $1, $2 should work
+    execute('def greet(name); echo Hello $name and $1; end')
+    execute("greet World > #{output_file}")
+    assert_equal "Hello World and World\n", File.read(output_file)
+  end
+
+  def test_def_named_params_empty_parens
+    # Empty parens should work like no parens
+    execute('def greet(); echo Hello $1; end')
+    execute("greet World > #{output_file}")
+    assert_equal "Hello World\n", File.read(output_file)
+  end
+
+  def test_def_named_params_codegen
+    tokens = Rubish::Lexer.new('def greet(name); echo $name; end').tokenize
+    ast = Rubish::Parser.new(tokens).parse
+    code = Rubish::Codegen.new.generate(ast)
+    # Should include params array
+    assert_match(/__define_function\("greet", "[^"]+", \["name"\]\)/, code)
   end
 end

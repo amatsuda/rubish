@@ -272,16 +272,46 @@ module Rubish
       parse_function_body(name)
     end
 
-    # Ruby-style function: def name ... end
+    # Ruby-style function: def name ... end or def name(arg1, arg2) ... end
     def parse_def
       consume(:DEF)
       name = consume(:WORD)&.value || raise('Expected function name after "def"')
-      # Allow optional () after name
-      consume(:PARENS) if peek(:PARENS)
+      params = parse_def_params
       skip_semicolon
       body = parse_def_body
       consume_word('end') || raise('Expected "end" to close def')
-      AST::Function.new(name, body)
+      AST::Function.new(name, body, params)
+    end
+
+    # Parse optional parameter list for def: (arg1, arg2, ...)
+    def parse_def_params
+      # Allow empty ()
+      if peek(:PARENS)
+        consume(:PARENS)
+        return []
+      end
+
+      # Check for ( with arguments
+      return nil unless peek(:LPAREN)
+
+      consume(:LPAREN)
+      params = []
+
+      until peek(:RPAREN)
+        word = consume(:WORD)&.value
+        break unless word
+
+        # Handle comma-separated params (comma may be attached to word)
+        if word.end_with?(',')
+          params << word.chomp(',')
+        else
+          params << word
+          break  # No comma means end of params
+        end
+      end
+
+      consume(:RPAREN) || raise('Expected ")" to close parameter list')
+      params
     end
 
     # Parse body of def (stops at end)
@@ -305,7 +335,7 @@ module Rubish
       consume(:LBRACE) || raise('Expected "{" for function body')
       body = parse_function_body_commands
       consume(:RBRACE) || raise('Expected "}" to close function body')
-      AST::Function.new(name, body)
+      AST::Function.new(name, body, nil)
     end
 
     # Parse commands inside function body (stops at })

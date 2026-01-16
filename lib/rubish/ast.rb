@@ -82,8 +82,9 @@ module Rubish
     # Select loop: select var in items; do body; done
     Select = Data.define(:variable, :items, :body)
 
-    # Function definition: function name { body } or name() { body }
-    Function = Data.define(:name, :body)
+    # Function definition: function name { body } or name() { body } or def name(params); body; end
+    # params is an optional array of parameter names for Ruby-style def with arguments
+    Function = Data.define(:name, :body, :params)
 
     # Case statement: case word in pattern1) body ;; pattern2|pattern3) body ;; esac
     # branches is array of [patterns, body, terminator] where:

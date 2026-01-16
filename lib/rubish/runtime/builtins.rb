@@ -1967,6 +1967,17 @@ module Rubish
       !@local_scope_stack.empty?
     end
 
+    # Set a local variable from a function parameter (for Ruby-style def with named args)
+    def self.set_local_from_param(name, value)
+      return unless in_function?
+
+      current_scope = @local_scope_stack.last
+      unless current_scope.key?(name)
+        current_scope[name] = ENV.key?(name) ? ENV[name] : :unset
+      end
+      ENV[name] = value.to_s
+    end
+
     def self.clear_local_scopes
       @local_scope_stack.clear
     end

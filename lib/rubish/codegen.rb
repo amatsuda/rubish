@@ -677,7 +677,9 @@ module Rubish
       body_code = generate_loop_body(node.body)
       # Also store shell source for declare -f
       source_code = to_shell(node.body)
-      "__define_function(#{node.name.inspect}, #{source_code.inspect}) { #{body_code} }"
+      # Pass params array for Ruby-style def with arguments
+      params_code = node.params ? node.params.inspect : 'nil'
+      "__define_function(#{node.name.inspect}, #{source_code.inspect}, #{params_code}) { #{body_code} }"
     end
 
     def generate_case(node)
