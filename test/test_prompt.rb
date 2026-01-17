@@ -793,4 +793,83 @@ class TestPrompt < Test::Unit::TestCase
     Rubish::Builtins.set_zsh_option('prompt_subst', false)
     ENV.delete('MY_DIR')
   end
+
+  # Test prompt_pwd with various expand_level values
+  def test_prompt_pwd_default_expand_level
+    # Create deep directory structure
+    deep_dir = File.join(@tempdir, 'src', 'github.com', 'amatsuda', 'rubish')
+    FileUtils.mkdir_p(deep_dir)
+    Dir.chdir(deep_dir)
+
+    result = @repl.send(:prompt_pwd)
+    # With expand_level: 1 (default), only last component is full
+    # /tmp/xxx/src/github.com/amatsuda/rubish => /t/x/s/g/a/rubish
+    assert_match(%r{/rubish$}, result)
+    assert_match(%r{/a/rubish$}, result)
+  end
+
+  def test_prompt_pwd_expand_level_2
+    deep_dir = File.join(@tempdir, 'src', 'github.com', 'amatsuda', 'rubish')
+    FileUtils.mkdir_p(deep_dir)
+    Dir.chdir(deep_dir)
+
+    result = @repl.send(:prompt_pwd, expand_level: 2)
+    # With expand_level: 2, last 2 components are full
+    assert_match(%r{/amatsuda/rubish$}, result)
+  end
+
+  def test_prompt_pwd_expand_level_3
+    deep_dir = File.join(@tempdir, 'src', 'github.com', 'amatsuda', 'rubish')
+    FileUtils.mkdir_p(deep_dir)
+    Dir.chdir(deep_dir)
+
+    result = @repl.send(:prompt_pwd, expand_level: 3)
+    # With expand_level: 3, last 3 components are full
+    assert_match(%r{/github\.com/amatsuda/rubish$}, result)
+  end
+
+  def test_prompt_pwd_with_home_tilde
+    # When in home subdirectory, should use ~
+    home = ENV['HOME']
+    skip 'HOME not set' unless home && Dir.exist?(home)
+
+    deep_dir = File.join(home, 'test_prompt_pwd_temp')
+    FileUtils.mkdir_p(deep_dir)
+    Dir.chdir(deep_dir)
+
+    result = @repl.send(:prompt_pwd)
+    assert_match(/\A~/, result)
+  ensure
+    FileUtils.rm_rf(deep_dir) if deep_dir && Dir.exist?(deep_dir)
+  end
+
+  def test_prompt_pwd_preserves_last_component
+    Dir.chdir(@tempdir)
+
+    result = @repl.send(:prompt_pwd, expand_level: 1)
+    # Last component should always be preserved in full
+    assert_match(/#{Regexp.escape(File.basename(@tempdir))}$/, result)
+  end
+
+  def test_prompt_escape_p_default
+    deep_dir = File.join(@tempdir, 'aaa', 'bbb', 'ccc')
+    FileUtils.mkdir_p(deep_dir)
+    Dir.chdir(deep_dir)
+
+    ENV['PS1'] = '%p$ '
+    prompt = @repl.send(:prompt)
+    # Should end with /a/b/ccc$
+    assert_match(%r{/a/b/ccc\$ $}, prompt)
+  end
+
+  def test_prompt_escape_p_with_level
+    deep_dir = File.join(@tempdir, 'aaa', 'bbb', 'ccc')
+    FileUtils.mkdir_p(deep_dir)
+    Dir.chdir(deep_dir)
+
+    ENV['PS1'] = '%p{2}$ '
+    prompt = @repl.send(:prompt)
+    # With expand_level 2, should end with /a/bbb/ccc$
+    assert_match(%r{/a/bbb/ccc\$ $}, prompt)
+  end
 end

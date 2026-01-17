@@ -1125,6 +1125,22 @@ module Rubish
           when 'g'
             # %g - git prompt info (branch, status)
             result << git_prompt_info
+          when 'p'
+            # %p or %p{N} - abbreviated path (like fish's prompt_pwd)
+            # N specifies expand_level (default 1)
+            expand_level = 1
+            if i + 1 < ps.length && ps[i + 1] == '{'
+              i += 2
+              level_end = ps.index('}', i)
+              if level_end
+                expand_level = ps[i...level_end].to_i
+                expand_level = 1 if expand_level < 1
+                i = level_end
+              else
+                i -= 2
+              end
+            end
+            result << prompt_pwd(expand_level: expand_level)
           when 'j'
             result << JobManager.instance.active.count.to_s
           when '?'
@@ -1219,6 +1235,32 @@ module Rubish
       else
         ''
       end
+    end
+
+    # Abbreviated path for prompts (like fish's prompt_pwd)
+    # expand_level: number of trailing path components to show in full
+    # Example with ~/src/github.com/amatsuda/rubish:
+    #   prompt_pwd(expand_level: 1) => "~/s/g/a/rubish"
+    #   prompt_pwd(expand_level: 2) => "~/s/g/amatsuda/rubish"
+    def prompt_pwd(expand_level: 1)
+      home = ENV['HOME'] || ''
+      cwd = Dir.pwd
+      path = home.empty? ? cwd : cwd.sub(/\A#{Regexp.escape(home)}/, '~')
+
+      components = path.split('/')
+      return path if components.length <= expand_level + 1
+
+      # Handle leading empty string from absolute path or ~
+      first = components.first
+      rest = components[1..]
+
+      # Number of components to abbreviate (all except the last expand_level)
+      abbrev_count = rest.length - expand_level
+
+      abbreviated = rest.take(abbrev_count).map { |c| c[0] || c }
+      full = rest.drop(abbrev_count)
+
+      ([first] + abbreviated + full).join('/')
     end
 
     # Git prompt info - returns formatted git status for use in prompts
