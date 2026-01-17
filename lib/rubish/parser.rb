@@ -310,7 +310,32 @@ module Rubish
           break if depth == 0
         end
 
-        val = current.value.to_s
+        # Handle shell tokens that have different meaning in Ruby
+        val = case current.type
+              when :HEREDOC
+                # << in Ruby is append operator, reconstruct it
+                raw = current.value.to_s
+                if raw.end_with?(':quoted')
+                  delimiter = raw.sub(/:quoted$/, '')
+                  "<< \"#{delimiter}\""
+                else
+                  "<< #{raw}"
+                end
+              when :HEREDOC_INDENT
+                # <<- in Ruby is heredoc, reconstruct it
+                raw = current.value.to_s
+                if raw.end_with?(':quoted')
+                  delimiter = raw.sub(/:quoted$/, '')
+                  "<<- \"#{delimiter}\""
+                else
+                  "<<- #{raw}"
+                end
+              when :HERESTRING
+                # <<< in shell, but unlikely in Ruby - preserve anyway
+                "<<< #{current.value}"
+              else
+                current.value.to_s
+              end
 
         # Determine if we need a space before this token
         need_space = !parts.empty? && prev_token &&

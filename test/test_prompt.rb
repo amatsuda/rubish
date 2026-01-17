@@ -953,6 +953,49 @@ class TestPrompt < Test::Unit::TestCase
     Rubish::REPL.prompt_proc = nil
   end
 
+  def test_def_rubish_prompt_with_append_operator
+    ENV.delete('PS1')
+    ENV.delete('PROMPT')
+
+    # Test that << in Ruby code is not interpreted as heredoc
+    code = <<~RUBY.strip
+      s = ""
+      s << "hello"
+      s << "> "
+    RUBY
+    @repl.send(:__define_function, 'rubish_prompt', code)
+    prompt = @repl.send(:prompt)
+    assert_equal 'hello> ', prompt
+  ensure
+    Rubish::REPL.prompt_proc = nil
+  end
+
+  def test_def_rubish_prompt_append_operator_parsing
+    ENV.delete('PS1')
+    ENV.delete('PROMPT')
+
+    # Test that << in prompt function is correctly parsed (not as heredoc)
+    input = <<~RUBISH
+      def rubish_prompt
+        s = ""
+        s << "parsed"
+        s << "> "
+      end
+    RUBISH
+
+    tokens = Rubish::Lexer.new(input).tokenize
+    ast = Rubish::Parser.new(tokens).parse
+
+    assert_instance_of Rubish::AST::Function, ast
+    assert_equal 'rubish_prompt', ast.name
+    assert_instance_of Rubish::AST::RubyCode, ast.body
+    # The body should contain << operators reconstructed properly
+    assert_match(/<</, ast.body.code)
+    assert_match(/"parsed"/, ast.body.code)
+  ensure
+    Rubish::REPL.prompt_proc = nil
+  end
+
   # Tests for git_prompt_info kwargs
   # These tests run in the rubish repo which is a git repo
 
