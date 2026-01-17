@@ -872,4 +872,72 @@ class TestPrompt < Test::Unit::TestCase
     # With expand_level 2, should end with /a/bbb/ccc$
     assert_match(%r{/a/bbb/ccc\$ $}, prompt)
   end
+
+  def test_prompt_falls_back_to_ps1
+    # When prompt_proc is nil, should use PS1
+    Rubish::REPL.prompt_proc = nil
+    ENV['PS1'] = 'fallback$ '
+    prompt = @repl.send(:prompt)
+    assert_equal 'fallback$ ', prompt
+  end
+
+  # Test def rubish_prompt syntax
+  def test_def_rubish_prompt
+    ENV.delete('PS1')
+    ENV.delete('PROMPT')
+
+    # Simulate defining rubish_prompt function
+    @repl.send(:__define_function, 'rubish_prompt', '"def_prompt> "')
+    prompt = @repl.send(:prompt)
+    assert_equal 'def_prompt> ', prompt
+  ensure
+    Rubish::REPL.prompt_proc = nil
+  end
+
+  def test_def_rubish_prompt_with_helpers
+    ENV.delete('PS1')
+    ENV.delete('PROMPT')
+    Dir.chdir(@tempdir)
+
+    @repl.send(:__define_function, 'rubish_prompt', 'prompt_pwd + "$ "')
+    prompt = @repl.send(:prompt)
+    assert_match(/\$ $/, prompt)
+  ensure
+    Rubish::REPL.prompt_proc = nil
+  end
+
+  def test_def_rubish_prompt_with_colors
+    ENV.delete('PS1')
+    ENV.delete('PROMPT')
+
+    @repl.send(:__define_function, 'rubish_prompt', 'cyan("test") + "> "')
+    prompt = @repl.send(:prompt)
+    assert_match(/\e\[36mtest\e\[39m> /, prompt)
+  ensure
+    Rubish::REPL.prompt_proc = nil
+  end
+
+  def test_def_rubish_right_prompt
+    @repl.send(:__define_function, 'rubish_right_prompt', '"[right]"')
+    rprompt = @repl.send(:right_prompt)
+    assert_equal '[right]', rprompt
+  ensure
+    Rubish::REPL.right_prompt_proc = nil
+  end
+
+  def test_def_rubish_prompt_multiline
+    ENV.delete('PS1')
+    ENV.delete('PROMPT')
+
+    # Multiline Ruby code
+    code = <<~RUBY.strip
+      path = prompt_pwd(expand_level: 2)
+      path + " % "
+    RUBY
+    @repl.send(:__define_function, 'rubish_prompt', code)
+    prompt = @repl.send(:prompt)
+    assert_match(/ % $/, prompt)
+  ensure
+    Rubish::REPL.prompt_proc = nil
+  end
 end

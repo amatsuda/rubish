@@ -5,6 +5,12 @@ module Rubish
   class FailglobError < StandardError; end
 
   class REPL
+    # Class-level prompt configuration (fish-style)
+    # Set via `def rubish_prompt` and `def rubish_right_prompt` in config
+    class << self
+      attr_accessor :prompt_proc, :right_prompt_proc
+    end
+
     def initialize(login_shell: false, no_profile: false, no_rc: false, restricted: false, rcfile: nil)
       @lexer_class = Lexer
       @parser_class = Parser
@@ -529,7 +535,16 @@ module Rubish
     end
 
     def prompt
-      # Support both bash (PS1) and zsh (PROMPT) environment variables
+      # First check for fish-style prompt function
+      if self.class.prompt_proc
+        begin
+          return instance_exec(&self.class.prompt_proc)
+        rescue => e
+          $stderr.puts "rubish: prompt error: #{e.message}"
+        end
+      end
+
+      # Fall back to bash/zsh-style environment variables
       ps1 = ENV['PS1'] || ENV['PROMPT']
       if ps1
         expand_prompt(ps1)
@@ -550,6 +565,17 @@ module Rubish
 
     # Right prompt (like zsh's RPROMPT)
     def right_prompt
+      # First check for fish-style right prompt function
+      if self.class.right_prompt_proc
+        begin
+          result = instance_exec(&self.class.right_prompt_proc)
+          return result unless result.nil? || result.empty?
+        rescue => e
+          $stderr.puts "rubish: right_prompt error: #{e.message}"
+        end
+      end
+
+      # Fall back to bash/zsh-style environment variables
       rprompt = ENV['RPROMPT'] || ENV['RPS1']
       return nil unless rprompt && !rprompt.empty?
 
@@ -1262,6 +1288,98 @@ module Rubish
 
       ([first] + abbreviated + full).join('/')
     end
+
+    # Color helper methods for fish-style prompts
+    # These wrap text in ANSI escape codes for colorized output
+    #
+    # Usage in def rubish_prompt:
+    #   def rubish_prompt
+    #     cyan(prompt_pwd) + " " + green(git_prompt_info) + "> "
+    #   end
+
+    def black(text);   "\e[30m#{text}\e[39m"; end
+    def red(text);     "\e[31m#{text}\e[39m"; end
+    def green(text);   "\e[32m#{text}\e[39m"; end
+    def yellow(text);  "\e[33m#{text}\e[39m"; end
+    def blue(text);    "\e[34m#{text}\e[39m"; end
+    def magenta(text); "\e[35m#{text}\e[39m"; end
+    def cyan(text);    "\e[36m#{text}\e[39m"; end
+    def white(text);   "\e[37m#{text}\e[39m"; end
+
+    # Bright/bold colors
+    def bright_black(text);   "\e[90m#{text}\e[39m"; end
+    def bright_red(text);     "\e[91m#{text}\e[39m"; end
+    def bright_green(text);   "\e[92m#{text}\e[39m"; end
+    def bright_yellow(text);  "\e[93m#{text}\e[39m"; end
+    def bright_blue(text);    "\e[94m#{text}\e[39m"; end
+    def bright_magenta(text); "\e[95m#{text}\e[39m"; end
+    def bright_cyan(text);    "\e[96m#{text}\e[39m"; end
+    def bright_white(text);   "\e[97m#{text}\e[39m"; end
+
+    # Text styles
+    def bold(text);      "\e[1m#{text}\e[22m"; end
+    def dim(text);       "\e[2m#{text}\e[22m"; end
+    def italic(text);    "\e[3m#{text}\e[23m"; end
+    def underline(text); "\e[4m#{text}\e[24m"; end
+
+    # Flexible color by name or number (0-255)
+    def fg(color, text)
+      code = color_to_code(color, :fg)
+      "#{code}#{text}\e[39m"
+    end
+
+    def bg(color, text)
+      code = color_to_code(color, :bg)
+      "#{code}#{text}\e[49m"
+    end
+
+    # Helper: hostname for prompts
+    def hostname(short: true)
+      short ? Socket.gethostname.split('.').first : Socket.gethostname
+    end
+
+    # Helper: username for prompts
+    def username
+      ENV['USER'] || Etc.getlogin || 'user'
+    end
+
+    # Helper: last command exit status
+    def last_status
+      @last_status
+    end
+
+    # Helper: current time formatted
+    def prompt_time(format = '%H:%M:%S')
+      Time.now.strftime(format)
+    end
+
+    private
+
+    def color_to_code(color, type)
+      base = type == :fg ? 30 : 40
+
+      case color
+      when Integer
+        if color < 8
+          "\e[#{base + color}m"
+        elsif color < 16
+          "\e[#{base + 60 + (color - 8)}m"
+        else
+          "\e[#{type == :fg ? 38 : 48};5;#{color}m"
+        end
+      when Symbol, String
+        name = color.to_s.downcase
+        if ZSH_COLORS.key?(name)
+          "\e[#{base + ZSH_COLORS[name]}m"
+        else
+          ''
+        end
+      else
+        ''
+      end
+    end
+
+    public
 
     # Git prompt info - returns formatted git status for use in prompts
     # Configurable via environment variables:
@@ -6004,8 +6122,39 @@ module Rubish
     end
 
     def __define_function(name, source_code = nil, params = nil, &block)
+      # Special handling for prompt functions - treat body as Ruby code
+      if name == 'rubish_prompt' || name == 'rubish_right_prompt'
+        define_prompt_function(name, source_code)
+        return nil
+      end
+
       @functions[name] = {block: block, source: @current_source_file, source_code: source_code, lineno: @lineno, params: params}
       nil
+    end
+
+    # Define a prompt function from Ruby code
+    # The source_code is evaluated as Ruby and should return a string
+    def define_prompt_function(name, source_code)
+      return unless source_code
+
+      # Extract the Ruby code from the function body
+      # Remove leading/trailing whitespace and any 'end' that might be included
+      code = source_code.strip
+
+      begin
+        # Create a proc that evaluates the Ruby code in REPL context
+        prompt_proc = eval("-> { #{code} }")
+
+        if name == 'rubish_prompt'
+          self.class.prompt_proc = prompt_proc
+        else
+          self.class.right_prompt_proc = prompt_proc
+        end
+      rescue SyntaxError => e
+        $stderr.puts "#{name}: syntax error: #{e.message}"
+      rescue => e
+        $stderr.puts "#{name}: error: #{e.message}"
+      end
     end
 
     # Builtins that must run in current process (affect shell state)
