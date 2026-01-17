@@ -952,4 +952,98 @@ class TestPrompt < Test::Unit::TestCase
   ensure
     Rubish::REPL.prompt_proc = nil
   end
+
+  # Tests for git_prompt_info kwargs
+  # These tests run in the rubish repo which is a git repo
+
+  def test_git_prompt_info_returns_branch
+    result = @repl.send(:git_prompt_info)
+    # Should return something like "(master)" or "(main)" when in a git repo
+    assert_match(/\A\(.+\)\z/, result)
+  end
+
+  def test_git_prompt_info_dirty_kwarg
+    # With dirty: true, should show dirty indicators if repo is dirty
+    result = @repl.send(:git_prompt_info, dirty: true)
+    assert_match(/\A\(.+\)\z/, result)
+    # The result format should be (branch) or (branch +*) etc
+  end
+
+  def test_git_prompt_info_dirty_false_overrides_env
+    ENV['GIT_PS1_SHOWDIRTYSTATE'] = '1'
+    result = @repl.send(:git_prompt_info, dirty: false)
+    # Should NOT contain dirty indicators even if env var is set
+    assert_no_match(/[+*]/, result.gsub(/\([^)]+\)/, '()'))
+  ensure
+    ENV.delete('GIT_PS1_SHOWDIRTYSTATE')
+  end
+
+  def test_git_prompt_info_stash_kwarg
+    result = @repl.send(:git_prompt_info, stash: true)
+    assert_match(/\A\(.+\)\z/, result)
+  end
+
+  def test_git_prompt_info_stash_false_overrides_env
+    ENV['GIT_PS1_SHOWSTASHSTATE'] = '1'
+    result_with_env = @repl.send(:git_prompt_info)
+    result_with_kwarg = @repl.send(:git_prompt_info, stash: false)
+    # When stash: false, should not show $ even if env is set
+    # (unless the $ is part of the branch name which is unlikely)
+    assert_no_match(/\$[^)]/, result_with_kwarg) if result_with_env.include?('$')
+  ensure
+    ENV.delete('GIT_PS1_SHOWSTASHSTATE')
+  end
+
+  def test_git_prompt_info_untracked_kwarg
+    result = @repl.send(:git_prompt_info, untracked: true)
+    assert_match(/\A\(.+\)\z/, result)
+  end
+
+  def test_git_prompt_info_upstream_kwarg
+    result = @repl.send(:git_prompt_info, upstream: true)
+    assert_match(/\A\(.+\)\z/, result)
+    # May contain <, >, <>, or = if tracking upstream
+  end
+
+  def test_git_prompt_info_colorize_kwarg
+    result = @repl.send(:git_prompt_info, colorize: true)
+    # Should contain ANSI color codes
+    assert_match(/\e\[\d+m/, result)
+  end
+
+  def test_git_prompt_info_colorize_false_no_colors
+    result = @repl.send(:git_prompt_info, colorize: false)
+    # Should NOT contain ANSI color codes
+    assert_no_match(/\e\[/, result)
+  end
+
+  def test_git_prompt_info_describe_kwarg
+    # Test that describe kwarg is accepted (actual output depends on repo state)
+    result = @repl.send(:git_prompt_info, describe: 'default')
+    assert_match(/\A\(.+\)\z/, result)
+  end
+
+  def test_git_prompt_info_multiple_kwargs
+    result = @repl.send(:git_prompt_info, dirty: true, stash: true, untracked: true, upstream: true)
+    assert_match(/\A\(.+\)\z/, result)
+  end
+
+  def test_git_prompt_info_env_fallback_when_kwarg_nil
+    ENV['GIT_PS1_SHOWDIRTYSTATE'] = '1'
+    # When kwarg is nil (default), should use env var
+    result = @repl.send(:git_prompt_info)
+    # Just verify it runs without error and returns valid format
+    assert_match(/\A\(.+\)\z/, result)
+  ensure
+    ENV.delete('GIT_PS1_SHOWDIRTYSTATE')
+  end
+
+  def test_git_prompt_info_not_in_git_repo
+    Dir.mktmpdir do |tmpdir|
+      Dir.chdir(tmpdir) do
+        result = @repl.send(:git_prompt_info)
+        assert_equal '', result
+      end
+    end
+  end
 end

@@ -1474,24 +1474,35 @@ module Rubish
     public
 
     # Git prompt info - returns formatted git status for use in prompts
-    # Configurable via environment variables:
-    #   GIT_PS1_SHOWDIRTYSTATE     - show * for unstaged, + for staged changes
-    #   GIT_PS1_SHOWSTASHSTATE     - show $ if stash is not empty
-    #   GIT_PS1_SHOWUNTRACKEDFILES - show % if there are untracked files
-    #   GIT_PS1_SHOWUPSTREAM       - show <, >, <>, = for behind, ahead, diverged, up-to-date
-    #   GIT_PS1_SHOWCOLORHINTS     - colorize the output
-    #   GIT_PS1_DESCRIBE_STYLE     - how to show detached HEAD (contains, branch, describe, tag, default)
-    def git_prompt_info
+    #
+    # Keyword arguments (default to corresponding GIT_PS1_* env vars if not specified):
+    #   dirty:      show * for unstaged, + for staged changes (GIT_PS1_SHOWDIRTYSTATE)
+    #   stash:      show $ if stash is not empty (GIT_PS1_SHOWSTASHSTATE)
+    #   untracked:  show % if there are untracked files (GIT_PS1_SHOWUNTRACKEDFILES)
+    #   upstream:   show <, >, <>, = for behind/ahead/diverged/up-to-date (GIT_PS1_SHOWUPSTREAM)
+    #   colorize:   colorize the output (GIT_PS1_SHOWCOLORHINTS)
+    #   describe:   how to show detached HEAD: contains, branch, tag, describe, default (GIT_PS1_DESCRIBE_STYLE)
+    #
+    # Example:
+    #   git_prompt_info(dirty: true, stash: true, untracked: true, upstream: true, colorize: true)
+    def git_prompt_info(dirty: nil, stash: nil, untracked: nil, upstream: nil, colorize: nil, describe: nil)
       # Check if we're in a git repo
       git_dir = `git rev-parse --git-dir 2>/dev/null`.chomp
       return '' if git_dir.empty?
+
+      # Resolve options: use kwarg if provided, otherwise fall back to env var
+      show_dirty = dirty.nil? ? ENV['GIT_PS1_SHOWDIRTYSTATE'] : dirty
+      show_stash = stash.nil? ? ENV['GIT_PS1_SHOWSTASHSTATE'] : stash
+      show_untracked = untracked.nil? ? ENV['GIT_PS1_SHOWUNTRACKEDFILES'] : untracked
+      show_upstream = upstream.nil? ? ENV['GIT_PS1_SHOWUPSTREAM'] : upstream
+      show_colorize = colorize.nil? ? ENV['GIT_PS1_SHOWCOLORHINTS'] : colorize
+      describe_style = describe || ENV['GIT_PS1_DESCRIBE_STYLE'] || 'default'
 
       # Get branch name or commit
       branch = `git symbolic-ref --short HEAD 2>/dev/null`.chomp
       if branch.empty?
         # Detached HEAD - show commit or tag
-        style = ENV['GIT_PS1_DESCRIBE_STYLE'] || 'default'
-        branch = case style
+        branch = case describe_style.to_s
                  when 'contains'
                    `git describe --contains HEAD 2>/dev/null`.chomp
                  when 'branch'
@@ -1508,10 +1519,9 @@ module Rubish
       return '' if branch.empty?
 
       state = +''
-      color_branch = branch
 
       # Show dirty state (* for unstaged, + for staged)
-      if ENV['GIT_PS1_SHOWDIRTYSTATE']
+      if show_dirty
         # Check for staged changes
         staged = !`git diff --cached --quiet 2>/dev/null; echo $?`.chomp.to_i.zero?
         # Check for unstaged changes
@@ -1521,49 +1531,48 @@ module Rubish
       end
 
       # Show stash state
-      if ENV['GIT_PS1_SHOWSTASHSTATE']
-        stash = `git stash list 2>/dev/null`.chomp
-        state << '$' unless stash.empty?
+      if show_stash
+        stash_list = `git stash list 2>/dev/null`.chomp
+        state << '$' unless stash_list.empty?
       end
 
       # Show untracked files
-      if ENV['GIT_PS1_SHOWUNTRACKEDFILES']
-        untracked = `git ls-files --others --exclude-standard 2>/dev/null`.chomp
-        state << '%' unless untracked.empty?
+      if show_untracked
+        untracked_files = `git ls-files --others --exclude-standard 2>/dev/null`.chomp
+        state << '%' unless untracked_files.empty?
       end
 
       # Show upstream status
-      upstream = ''
-      if ENV['GIT_PS1_SHOWUPSTREAM']
+      upstream_str = ''
+      if show_upstream
         counts = `git rev-list --left-right --count HEAD...@{upstream} 2>/dev/null`.chomp.split
         if counts.length == 2
           ahead, behind = counts.map(&:to_i)
           if ahead > 0 && behind > 0
-            upstream = '<>'
+            upstream_str = '<>'
           elsif ahead > 0
-            upstream = '>'
+            upstream_str = '>'
           elsif behind > 0
-            upstream = '<'
+            upstream_str = '<'
           else
-            upstream = '='
+            upstream_str = '='
           end
         end
       end
 
       # Format output
       state_str = state.empty? ? '' : " #{state}"
-      upstream_str = upstream.empty? ? '' : upstream
 
       # Apply colors if enabled
-      if ENV['GIT_PS1_SHOWCOLORHINTS']
+      if show_colorize
         # Green for clean, red for dirty, yellow for staged only
-        if state.include?('*')
-          color_branch = "\e[31m#{branch}\e[0m"  # Red for unstaged changes
-        elsif state.include?('+')
-          color_branch = "\e[33m#{branch}\e[0m"  # Yellow for staged only
-        else
-          color_branch = "\e[32m#{branch}\e[0m"  # Green for clean
-        end
+        color_branch = if state.include?('*')
+                         "\e[31m#{branch}\e[0m"  # Red for unstaged changes
+                       elsif state.include?('+')
+                         "\e[33m#{branch}\e[0m"  # Yellow for staged only
+                       else
+                         "\e[32m#{branch}\e[0m"  # Green for clean
+                       end
         "(#{color_branch}#{state_str}#{upstream_str})"
       else
         "(#{branch}#{state_str}#{upstream_str})"
