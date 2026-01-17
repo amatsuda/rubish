@@ -1333,24 +1333,116 @@ module Rubish
       "#{code}#{text}\e[49m"
     end
 
-    # Helper: hostname for prompts
-    def hostname(short: true)
-      short ? Socket.gethostname.split('.').first : Socket.gethostname
-    end
+    # Prompt helper methods - Ruby equivalents of % escape sequences
+    # These can be used in def rubish_prompt / def rubish_right_prompt
 
-    # Helper: username for prompts
-    def username
+    # %n - current username
+    def current_username
       ENV['USER'] || Etc.getlogin || 'user'
     end
 
-    # Helper: last command exit status
-    def last_status
+    # %m - short hostname (first component)
+    def short_hostname
+      Socket.gethostname.split('.').first
+    end
+
+    # %M - full hostname
+    def full_hostname
+      Socket.gethostname
+    end
+
+    # %~ - current directory with ~ substitution for home
+    def current_directory
+      home = ENV['HOME'] || ''
+      cwd = Dir.pwd
+      home.empty? ? cwd : cwd.sub(/\A#{Regexp.escape(home)}/, '~')
+    end
+
+    # %/ or %d - full current directory (no ~ substitution)
+    def full_directory
+      Dir.pwd
+    end
+
+    # %. - basename of current directory (~ if in home)
+    def directory_basename
+      cwd = Dir.pwd
+      home = ENV['HOME'] || ''
+      cwd == home ? '~' : File.basename(cwd)
+    end
+
+    # %j - number of background jobs
+    def job_count
+      JobManager.instance.active.count
+    end
+
+    # %? - exit status of last command
+    def last_exit_status
       @last_status
     end
 
-    # Helper: current time formatted
-    def prompt_time(format = '%H:%M:%S')
+    # %# - privilege indicator (# for root, % for normal user)
+    def privilege_indicator
+      Process.uid == 0 ? '#' : '%'
+    end
+
+    # %! - current history number
+    def history_number
+      Reline::HISTORY.length + 1
+    end
+
+    # %i or \# - command number in this session
+    def command_number
+      @command_number || 1
+    end
+
+    # %D{format} - formatted date/time (strftime)
+    def formatted_time(format = '%H:%M:%S')
       Time.now.strftime(format)
+    end
+
+    # %T - current time in 24-hour HH:MM format
+    def time_24h
+      Time.now.strftime('%H:%M')
+    end
+
+    # %t or %@ - current time in 12-hour with AM/PM
+    def time_12h
+      Time.now.strftime('%I:%M %p')
+    end
+
+    # %* - current time with seconds HH:MM:SS
+    def time_with_seconds
+      Time.now.strftime('%H:%M:%S')
+    end
+
+    # %D - current date in YY-MM-DD format
+    def current_date
+      Time.now.strftime('%y-%m-%d')
+    end
+
+    # %W - day of week (Sunday = 0)
+    def day_of_week
+      Time.now.wday
+    end
+
+    # %l - current tty
+    def current_tty
+      File.basename(`tty`.strip) rescue 'tty'
+    end
+
+    # %s - shell name
+    def shell_name
+      'rubish'
+    end
+
+    # %v - shell version
+    def shell_version
+      Rubish::VERSION
+    end
+
+    # Helper for superuser check
+    def superuser?
+      Process.uid == 0
     end
 
     private
