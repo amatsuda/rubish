@@ -147,5 +147,9 @@ module Rubish
     # var: the variable name with = or += (e.g., "arr=" or "arr+=")
     # elements: array of element strings
     ArrayAssign = Data.define(:var, :elements)
+
+    # RubyCode: raw Ruby code for prompt functions
+    # code: the Ruby code string to be evaluated
+    RubyCode = Data.define(:code)
   end
 end

@@ -940,4 +940,16 @@ class TestPrompt < Test::Unit::TestCase
   ensure
     Rubish::REPL.prompt_proc = nil
   end
+
+  def test_def_rubish_prompt_with_keyword_args
+    ENV.delete('PS1')
+    ENV.delete('PROMPT')
+
+    # This tests that keyword arguments like expand_level: 2 are preserved
+    @repl.send(:__define_function, 'rubish_prompt', 'prompt_pwd(expand_level: 2) + "> "')
+    prompt = @repl.send(:prompt)
+    assert_match(/> $/, prompt)
+  ensure
+    Rubish::REPL.prompt_proc = nil
+  end
 end

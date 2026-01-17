@@ -278,9 +278,53 @@ module Rubish
       name = consume(:WORD)&.value || raise('Expected function name after "def"')
       params = parse_def_params
       skip_semicolon
+
+      # Special handling for rubish_prompt and rubish_right_prompt
+      # Capture raw token values as Ruby code instead of parsing as shell
+      if name == 'rubish_prompt' || name == 'rubish_right_prompt'
+        raw_body = capture_raw_until_end
+        consume_word('end') || raise('Expected "end" to close def')
+        return AST::Function.new(name, AST::RubyCode.new(raw_body), params)
+      end
+
       body = parse_def_body
       consume_word('end') || raise('Expected "end" to close def')
       AST::Function.new(name, body, params)
+    end
+
+    # Capture raw token values until 'end' keyword for Ruby code blocks
+    # Preserves structure by not adding spaces between tokens that should be adjacent
+    def capture_raw_until_end
+      parts = []
+      depth = 1
+      prev_token = nil
+
+      while current && depth > 0
+        # Track nested def/if/while/etc for proper end matching
+        if current.type == :DEF || current.type == :IF || current.type == :WHILE ||
+           current.type == :UNTIL || current.type == :FOR || current.type == :CASE ||
+           current.type == :UNLESS
+          depth += 1
+        elsif current.value == 'end'
+          depth -= 1
+          break if depth == 0
+        end
+
+        val = current.value.to_s
+
+        # Determine if we need a space before this token
+        need_space = !parts.empty? && prev_token &&
+                     !prev_token.end_with?('(', '[', '{', '.', ':', "\n") &&
+                     !val.start_with?(')', ']', '}', ',', '.', ':', ';', "\n") &&
+                     !(prev_token =~ /\A\w+\z/ && val == '(')  # no space between name and (
+
+        parts << ' ' if need_space
+        parts << val
+        prev_token = val
+        consume
+      end
+
+      parts.join.strip
     end
 
     # Parse optional parameter list for def: (arg1, arg2, ...) or (*args)

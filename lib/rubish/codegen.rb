@@ -684,6 +684,11 @@ module Rubish
     end
 
     def generate_function(node)
+      # Special handling for prompt functions with raw Ruby code
+      if node.body.is_a?(AST::RubyCode)
+        return "__define_function(#{node.name.inspect}, #{node.body.code.inspect}, nil) { nil }"
+      end
+
       # Generate a function definition that stores a lambda
       body_code = generate_loop_body(node.body)
       # Also store shell source for declare -f
