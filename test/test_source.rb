@@ -100,6 +100,27 @@ class TestSource < Test::Unit::TestCase
     assert_equal 'worked', Rubish::Builtins.aliases['tilde_alias']
   end
 
+  # Regression test: inline comments with keywords should not affect depth tracking
+  # e.g., "echo foo # for" should not increment depth for "for"
+  def test_source_inline_comment_with_keyword
+    script = create_script('comment_keyword.sh', <<~SCRIPT)
+      echo foo # for
+      echo bar
+      export INLINE_COMMENT_TEST=success
+    SCRIPT
+
+    original_val = ENV['INLINE_COMMENT_TEST']
+    execute("source #{script}")
+
+    assert_equal 'success', ENV['INLINE_COMMENT_TEST']
+  ensure
+    if original_val
+      ENV['INLINE_COMMENT_TEST'] = original_val
+    else
+      ENV.delete('INLINE_COMMENT_TEST')
+    end
+  end
+
   # Regression test: tilde expansion in PATH inside if block with awk
   # The { in awk commands was incorrectly counted as shell brace,
   # causing lines to be accumulated and quote tracking to fail

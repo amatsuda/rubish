@@ -11382,6 +11382,7 @@ module Rubish
       # Extract shell keywords and braces from a line while respecting quotes
       # Returns array of keywords found outside of quoted sections
       # This prevents counting { } inside awk scripts like: awk '{ print $1 }'
+      # Also handles inline comments: echo foo # for  (the 'for' is in a comment)
       keywords = []
       in_single_quotes = false
       in_double_quotes = false
@@ -11401,7 +11402,11 @@ module Rubish
           # Skip escaped character
           i += 2
         elsif !in_single_quotes && !in_double_quotes
-          if char =~ /\s/
+          if char == '#'
+            # Start of comment - stop processing the rest of the line
+            keywords << current_word unless current_word.empty?
+            break
+          elsif char =~ /\s/
             # End of word
             keywords << current_word unless current_word.empty?
             current_word = +''
@@ -11416,7 +11421,7 @@ module Rubish
         end
       end
 
-      # Don't forget the last word
+      # Don't forget the last word (if we didn't hit a comment)
       keywords << current_word unless current_word.empty?
 
       # Filter to only control structure keywords and braces
