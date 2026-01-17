@@ -3016,13 +3016,20 @@ module Rubish
         buffer = +''
         depth = 0
         pending_function_def = false  # Track if we're waiting for { after ()
+        # Track open control structures for better error messages: [[keyword, line_number], ...]
+        open_structures = []
+        buffer_start_line = 0
         lines = File.readlines(file, chomp: true)
         i = 0
 
         while i < lines.length
           line = lines[i].strip
+          line_number = i + 1  # 1-based line number for error messages
           i += 1
           next if line.empty? || line.start_with?('#')
+
+          # Track where buffer starts for error messages
+          buffer_start_line = line_number if buffer.empty?
 
           # Check for heredoc in this line
           heredoc_info = detect_heredoc(line)
@@ -3055,17 +3062,21 @@ module Rubish
             case word
             when 'if', 'unless', 'while', 'until', 'for', 'case', 'def'
               depth += 1
+              open_structures << [word, line_number]
             when 'fi', 'done', 'esac', 'end'
               depth -= 1
+              open_structures.pop if open_structures.any?
             when '{'
               # If pending function def, don't double-count the depth
               if pending_function_def
                 pending_function_def = false
               else
                 depth += 1
+                open_structures << ['{', line_number]
               end
             when '}'
               depth -= 1
+              open_structures.pop if open_structures.any?
             end
           end
 
@@ -3073,10 +3084,12 @@ module Rubish
           # This handles: ( cmd ) but not: arr=( ... ) or $( ... )
           if line =~ /\A\s*\(/
             depth += 1
+            open_structures << ['(', line_number]
           end
           # Check if line is just ) or ends with ) not preceded by ( on same line
           if line =~ /\A\s*\)\s*\z/
             depth -= 1
+            open_structures.pop if open_structures.any?
           end
 
           # Detect function definition: line ends with () or "function name"
@@ -3084,6 +3097,7 @@ module Rubish
           if line =~ /\(\)\s*$/ || (line =~ /\Afunction\s+\w+\s*$/)
             pending_function_def = true
             depth += 1
+            open_structures << ['function', line_number]
           end
 
           # Accumulate lines - use newline for function definitions, semicolon otherwise
@@ -3102,7 +3116,7 @@ module Rubish
             begin
               @executor.call(buffer)
             rescue SyntaxError => e
-              puts "source: #{e.message}"
+              puts "source: #{file}:#{buffer_start_line}: syntax error: #{e.message}"
             end
             buffer = +''
           end
@@ -3110,10 +3124,27 @@ module Rubish
 
         # Execute any remaining buffer (incomplete statement)
         unless buffer.empty?
+          # If depth > 0, we have unclosed structures - report them
+          if depth > 0 && open_structures.any?
+            $stderr.puts "source: #{file}: warning: unclosed control structure(s):"
+            open_structures.each do |keyword, line_num|
+              closing = case keyword
+                        when 'if', 'unless' then 'end (or fi)'
+                        when 'while', 'until', 'for' then 'end (or done)'
+                        when 'case' then 'end (or esac)'
+                        when 'def', 'function' then 'end'
+                        when '{' then '}'
+                        when '(' then ')'
+                        else 'end'
+                        end
+              $stderr.puts "  '#{keyword}' opened at line #{line_num} - expected #{closing}"
+            end
+          end
+
           begin
             @executor.call(buffer)
           rescue SyntaxError => e
-            puts "source: #{e.message}"
+            puts "source: #{file}: syntax error (starting at line #{buffer_start_line}): #{e.message}"
           end
         end
 
@@ -10671,6 +10702,16 @@ module Rubish
       'unsetopt' => {
         synopsis: 'unsetopt [option ...]',
         description: 'Disable shell options (zsh-style). Option names are case-insensitive and underscores are ignored. Without arguments, lists all disabled options. Prefix option with "no" to enable (e.g., noautocd enables autocd).'
+      },
+      '__git_ps1' => {
+        synopsis: '__git_ps1 [format]',
+        description: 'Print git repository status for use in shell prompts. Compatible with bash git-prompt.sh. Shows branch name, detached HEAD state, and optional status indicators.',
+        options: {
+          'GIT_PS1_SHOWDIRTYSTATE' => 'show * for unstaged, + for staged changes',
+          'GIT_PS1_SHOWSTASHSTATE' => 'show $ if stash is not empty',
+          'GIT_PS1_SHOWUNTRACKEDFILES' => 'show % if there are untracked files',
+          'GIT_PS1_SHOWUPSTREAM' => 'show < behind, > ahead, = up-to-date, <> diverged'
+        }
       }
     }.freeze
 

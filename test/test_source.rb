@@ -235,4 +235,42 @@ class TestSource < Test::Unit::TestCase
 
     assert_equal "[][]\n", File.read(output_file)
   end
+
+  def test_source_unclosed_if_shows_helpful_error
+    script = create_script('unclosed_if.sh', <<~SCRIPT)
+      echo before
+      if [ 1 = 1 ]
+        echo inside
+    SCRIPT
+
+    output = capture_stderr { execute("source #{script}") }
+
+    assert_match(/unclosed control structure/, output)
+    assert_match(/'if' opened at line 2/, output)
+  end
+
+  def test_source_unclosed_def_shows_helpful_error
+    script = create_script('unclosed_def.sh', <<~SCRIPT)
+      def myfunc
+        echo hello
+    SCRIPT
+
+    output = capture_stderr { execute("source #{script}") }
+
+    assert_match(/unclosed control structure/, output)
+    assert_match(/'def' opened at line 1/, output)
+  end
+
+  def test_source_nested_unclosed_shows_all
+    script = create_script('nested_unclosed.sh', <<~SCRIPT)
+      if [ 1 = 1 ]
+        def inner
+          echo test
+    SCRIPT
+
+    output = capture_stderr { execute("source #{script}") }
+
+    assert_match(/'if' opened at line 1/, output)
+    assert_match(/'def' opened at line 2/, output)
+  end
 end
