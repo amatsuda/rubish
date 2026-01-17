@@ -17,9 +17,10 @@ class TestPrompt < Test::Unit::TestCase
     @original_env.each { |k, v| ENV[k] = v }
   end
 
-  # Test default prompt (no PS1)
+  # Test default prompt (no PS1 or PROMPT)
   def test_default_prompt
     ENV.delete('PS1')
+    ENV.delete('PROMPT')
     prompt = @repl.send(:prompt)
     assert_match(/\$\s*$/, prompt)
   end

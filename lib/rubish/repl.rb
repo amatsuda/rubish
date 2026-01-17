@@ -1122,6 +1122,9 @@ module Rubish
               i -= 1
               result << Time.now.strftime('%y-%m-%d')
             end
+          when 'g'
+            # %g - git prompt info (branch, status)
+            result << git_prompt_info
           when 'j'
             result << JobManager.instance.active.count.to_s
           when '?'
@@ -1215,6 +1218,103 @@ module Rubish
         "\e[#{base + ZSH_COLORS[color.downcase]}m"
       else
         ''
+      end
+    end
+
+    # Git prompt info - returns formatted git status for use in prompts
+    # Configurable via environment variables:
+    #   GIT_PS1_SHOWDIRTYSTATE     - show * for unstaged, + for staged changes
+    #   GIT_PS1_SHOWSTASHSTATE     - show $ if stash is not empty
+    #   GIT_PS1_SHOWUNTRACKEDFILES - show % if there are untracked files
+    #   GIT_PS1_SHOWUPSTREAM       - show <, >, <>, = for behind, ahead, diverged, up-to-date
+    #   GIT_PS1_SHOWCOLORHINTS     - colorize the output
+    #   GIT_PS1_DESCRIBE_STYLE     - how to show detached HEAD (contains, branch, describe, tag, default)
+    def git_prompt_info
+      # Check if we're in a git repo
+      git_dir = `git rev-parse --git-dir 2>/dev/null`.chomp
+      return '' if git_dir.empty?
+
+      # Get branch name or commit
+      branch = `git symbolic-ref --short HEAD 2>/dev/null`.chomp
+      if branch.empty?
+        # Detached HEAD - show commit or tag
+        style = ENV['GIT_PS1_DESCRIBE_STYLE'] || 'default'
+        branch = case style
+                 when 'contains'
+                   `git describe --contains HEAD 2>/dev/null`.chomp
+                 when 'branch'
+                   `git describe --contains --all HEAD 2>/dev/null`.chomp
+                 when 'tag'
+                   `git describe --tags HEAD 2>/dev/null`.chomp
+                 when 'describe'
+                   `git describe HEAD 2>/dev/null`.chomp
+                 else
+                   `git rev-parse --short HEAD 2>/dev/null`.chomp
+                 end
+        branch = "(#{branch})" unless branch.empty?
+      end
+      return '' if branch.empty?
+
+      state = +''
+      color_branch = branch
+
+      # Show dirty state (* for unstaged, + for staged)
+      if ENV['GIT_PS1_SHOWDIRTYSTATE']
+        # Check for staged changes
+        staged = !`git diff --cached --quiet 2>/dev/null; echo $?`.chomp.to_i.zero?
+        # Check for unstaged changes
+        unstaged = !`git diff --quiet 2>/dev/null; echo $?`.chomp.to_i.zero?
+        state << '+' if staged
+        state << '*' if unstaged
+      end
+
+      # Show stash state
+      if ENV['GIT_PS1_SHOWSTASHSTATE']
+        stash = `git stash list 2>/dev/null`.chomp
+        state << '$' unless stash.empty?
+      end
+
+      # Show untracked files
+      if ENV['GIT_PS1_SHOWUNTRACKEDFILES']
+        untracked = `git ls-files --others --exclude-standard 2>/dev/null`.chomp
+        state << '%' unless untracked.empty?
+      end
+
+      # Show upstream status
+      upstream = ''
+      if ENV['GIT_PS1_SHOWUPSTREAM']
+        counts = `git rev-list --left-right --count HEAD...@{upstream} 2>/dev/null`.chomp.split
+        if counts.length == 2
+          ahead, behind = counts.map(&:to_i)
+          if ahead > 0 && behind > 0
+            upstream = '<>'
+          elsif ahead > 0
+            upstream = '>'
+          elsif behind > 0
+            upstream = '<'
+          else
+            upstream = '='
+          end
+        end
+      end
+
+      # Format output
+      state_str = state.empty? ? '' : " #{state}"
+      upstream_str = upstream.empty? ? '' : upstream
+
+      # Apply colors if enabled
+      if ENV['GIT_PS1_SHOWCOLORHINTS']
+        # Green for clean, red for dirty, yellow for staged only
+        if state.include?('*')
+          color_branch = "\e[31m#{branch}\e[0m"  # Red for unstaged changes
+        elsif state.include?('+')
+          color_branch = "\e[33m#{branch}\e[0m"  # Yellow for staged only
+        else
+          color_branch = "\e[32m#{branch}\e[0m"  # Green for clean
+        end
+        "(#{color_branch}#{state_str}#{upstream_str})"
+      else
+        "(#{branch}#{state_str}#{upstream_str})"
       end
     end
 

@@ -2,7 +2,7 @@
 
 module Rubish
   module Builtins
-    COMMANDS = %w(cd exit logout jobs fg bg export pwd history alias unalias source . shift set return read echo test [ break continue pushd popd dirs trap getopts local unset readonly declare typeset let printf type which true false : eval command builtin wait kill umask exec times hash disown ulimit suspend shopt enable caller complete compgen compopt bind bindkey help fc mapfile readarray basename dirname realpath _get_comp_words_by_ref _init_completion _filedir _have _split_longopt __ltrim_colon_completions _variables _tilde _quote_readline_by_ref _parse_help _upvars _usergroup setopt unsetopt autoload compinit compdef).freeze
+    COMMANDS = %w(cd exit logout jobs fg bg export pwd history alias unalias source . shift set return read echo test [ break continue pushd popd dirs trap getopts local unset readonly declare typeset let printf type which true false : eval command builtin wait kill umask exec times hash disown ulimit suspend shopt enable caller complete compgen compopt bind bindkey help fc mapfile readarray basename dirname realpath _get_comp_words_by_ref _init_completion _filedir _have _split_longopt __ltrim_colon_completions _variables _tilde _quote_readline_by_ref _parse_help _upvars _usergroup setopt unsetopt autoload compinit compdef __git_ps1).freeze
 
     @aliases = {}
     @dir_stack = []
@@ -958,6 +958,8 @@ module Rubish
         run_compinit(args)
       when 'compdef'
         run_compdef(args)
+      when '__git_ps1'
+        run_git_ps1(args)
       else
         # Check for dynamically loaded builtins
         if @loaded_builtins.key?(name)
@@ -5495,6 +5497,104 @@ module Rubish
         @completions[cmd] = {function: func}
       end
 
+      true
+    end
+
+    # __git_ps1 - Git prompt string generator (compatible with bash's git-prompt.sh)
+    # Usage: __git_ps1 [format]
+    # If format is provided, it's used as printf format with branch info as %s
+    # Environment variables:
+    #   GIT_PS1_SHOWDIRTYSTATE     - show * for unstaged, + for staged changes
+    #   GIT_PS1_SHOWSTASHSTATE     - show $ if stash is not empty
+    #   GIT_PS1_SHOWUNTRACKEDFILES - show % if there are untracked files
+    #   GIT_PS1_SHOWUPSTREAM       - show <, >, <>, = for behind, ahead, diverged, up-to-date
+    #   GIT_PS1_SHOWCOLORHINTS     - colorize the output
+    #   GIT_PS1_DESCRIBE_STYLE     - how to show detached HEAD (contains, branch, describe, tag, default)
+    def self.run_git_ps1(args)
+      # Check if we're in a git repo
+      git_dir = `git rev-parse --git-dir 2>/dev/null`.chomp
+      return true if git_dir.empty?
+
+      # Get branch name or commit
+      branch = `git symbolic-ref --short HEAD 2>/dev/null`.chomp
+      if branch.empty?
+        # Detached HEAD - show commit or tag
+        style = ENV['GIT_PS1_DESCRIBE_STYLE'] || 'default'
+        branch = case style
+                 when 'contains'
+                   `git describe --contains HEAD 2>/dev/null`.chomp
+                 when 'branch'
+                   `git describe --contains --all HEAD 2>/dev/null`.chomp
+                 when 'tag'
+                   `git describe --tags HEAD 2>/dev/null`.chomp
+                 when 'describe'
+                   `git describe HEAD 2>/dev/null`.chomp
+                 else
+                   `git rev-parse --short HEAD 2>/dev/null`.chomp
+                 end
+        branch = "(#{branch})" unless branch.empty?
+      end
+      return true if branch.empty?
+
+      state = +''
+
+      # Show dirty state (* for unstaged, + for staged)
+      if ENV['GIT_PS1_SHOWDIRTYSTATE']
+        staged = !`git diff --cached --quiet 2>/dev/null; echo $?`.chomp.to_i.zero?
+        unstaged = !`git diff --quiet 2>/dev/null; echo $?`.chomp.to_i.zero?
+        state << '+' if staged
+        state << '*' if unstaged
+      end
+
+      # Show stash state
+      if ENV['GIT_PS1_SHOWSTASHSTATE']
+        stash = `git stash list 2>/dev/null`.chomp
+        state << '$' unless stash.empty?
+      end
+
+      # Show untracked files
+      if ENV['GIT_PS1_SHOWUNTRACKEDFILES']
+        untracked = `git ls-files --others --exclude-standard 2>/dev/null`.chomp
+        state << '%' unless untracked.empty?
+      end
+
+      # Show upstream status
+      upstream = ''
+      if ENV['GIT_PS1_SHOWUPSTREAM']
+        counts = `git rev-list --left-right --count HEAD...@{upstream} 2>/dev/null`.chomp.split
+        if counts.length == 2
+          ahead, behind = counts.map(&:to_i)
+          if ahead > 0 && behind > 0
+            upstream = '<>'
+          elsif ahead > 0
+            upstream = '>'
+          elsif behind > 0
+            upstream = '<'
+          else
+            upstream = '='
+          end
+        end
+      end
+
+      # Build the git info string
+      git_info = branch
+      git_info += " #{state}" unless state.empty?
+      git_info += upstream unless upstream.empty?
+
+      # Apply colors if enabled
+      if ENV['GIT_PS1_SHOWCOLORHINTS']
+        if state.include?('*')
+          git_info = "\e[31m#{git_info}\e[0m"  # Red for unstaged
+        elsif state.include?('+')
+          git_info = "\e[33m#{git_info}\e[0m"  # Yellow for staged only
+        else
+          git_info = "\e[32m#{git_info}\e[0m"  # Green for clean
+        end
+      end
+
+      # Format output
+      format = args.first || ' (%s)'
+      puts format.gsub('%s', git_info)
       true
     end
 
