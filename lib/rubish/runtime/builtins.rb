@@ -599,7 +599,7 @@ module Rubish
       'nullglob' => [false, 'patterns matching nothing expand to null'],
       'patsub_replacement' => [true, 'enable & replacement in pattern substitution'],
       'progcomp' => [true, 'enable programmable completion'],
-      'progcomp_alias' => [false, 'allow programmable completion for aliases'],
+      'progcomp_alias' => [true, 'allow programmable completion for aliases'],
       'promptvars' => [true, 'expand variables in prompt strings'],
       'restricted_shell' => [false, 'shell is restricted (read-only)'],
       'shift_verbose' => [false, 'print error if shift count exceeds positional parameters'],
