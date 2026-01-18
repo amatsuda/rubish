@@ -142,6 +142,8 @@ module Rubish
       # Rebind Ctrl-W to backward_kill_word which stops at non-word characters like /
       # Default em_kill_region only stops at whitespace
       Reline.core.config.add_default_key_binding_by_keymap(:emacs, [23], :backward_kill_word)
+      # Show completion menu on first TAB (like zsh/fish) instead of requiring two TABs (like bash)
+      Reline.core.config.show_all_if_ambiguous = true
     end
 
     # Set terminal title to "rubish" (or custom title via RUBISH_TITLE env var)
