@@ -7835,6 +7835,8 @@ module Rubish
       begin
         Dir.entries(dir).each do |entry|
           next if entry == '.' || entry == '..'
+          # Skip hidden files unless user explicitly typed a dot prefix
+          next if entry.start_with?('.') && !prefix.start_with?('.')
           next unless entry.start_with?(prefix) || prefix.empty?
 
           full_path = File.join(dir, entry)
