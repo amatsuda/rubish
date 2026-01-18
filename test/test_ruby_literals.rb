@@ -20,17 +20,27 @@ class TestRubyLiterals < Test::Unit::TestCase
   end
 
   def test_lexer_regexp
-    tokens = Rubish::Lexer.new('grep /pattern/ file.txt').tokenize
+    # Use pattern with metacharacters to ensure it's recognized as regexp
+    tokens = Rubish::Lexer.new('grep /pat+ern/ file.txt').tokenize
     assert_equal 3, tokens.length
     assert_equal :REGEXP, tokens[1].type
-    assert_equal '/pattern/', tokens[1].value
+    assert_equal '/pat+ern/', tokens[1].value
   end
 
   def test_lexer_regexp_with_flags
-    tokens = Rubish::Lexer.new('grep /pattern/i file.txt').tokenize
+    tokens = Rubish::Lexer.new('grep /pat+ern/i file.txt').tokenize
     assert_equal 3, tokens.length
     assert_equal :REGEXP, tokens[1].type
-    assert_equal '/pattern/i', tokens[1].value
+    assert_equal '/pat+ern/i', tokens[1].value
+  end
+
+  def test_lexer_simple_pattern_is_path
+    # Simple alphanumeric patterns without metacharacters are paths, not regexps
+    # This allows /bin/ to work as a directory path
+    tokens = Rubish::Lexer.new('ls /pattern/').tokenize
+    assert_equal 2, tokens.length
+    assert_equal :WORD, tokens[1].type
+    assert_equal '/pattern/', tokens[1].value
   end
 
   def test_lexer_path_not_regexp
@@ -68,7 +78,7 @@ class TestRubyLiterals < Test::Unit::TestCase
   end
 
   def test_parser_regexp_arg
-    tokens = Rubish::Lexer.new('grep /foo/ file').tokenize
+    tokens = Rubish::Lexer.new('grep /foo+/ file').tokenize
     ast = Rubish::Parser.new(tokens).parse
     assert_instance_of Rubish::AST::Command, ast
     assert_equal 'grep', ast.name
@@ -94,10 +104,10 @@ class TestRubyLiterals < Test::Unit::TestCase
   end
 
   def test_codegen_regexp
-    tokens = Rubish::Lexer.new('grep /foo/i file').tokenize
+    tokens = Rubish::Lexer.new('grep /foo+/i file').tokenize
     ast = Rubish::Parser.new(tokens).parse
     code = Rubish::Codegen.new.generate(ast)
-    assert_equal '__cmd("grep", *[/foo/i, "file"].flatten)', code
+    assert_equal '__cmd("grep", *[/foo+/i, "file"].flatten)', code
   end
 
   def test_codegen_block

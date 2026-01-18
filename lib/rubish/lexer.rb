@@ -328,7 +328,7 @@ module Rubish
     def read_regexp_or_word
       # Look ahead to see if this is a regexp or a path
       # Regexp: /pattern/ followed by whitespace, operator, or end
-      # Path: /foo/bar (continues after the closing /)
+      # Path: /foo/bar (continues after the closing /) or /bin/ (trailing slash)
       lookahead = @pos + 1
       while lookahead < @input.length
         char = @input[lookahead]
@@ -338,10 +338,18 @@ module Rubish
           after_slash = lookahead + 1
           # Skip optional regexp flags
           after_slash += 1 while after_slash < @input.length && @input[after_slash] =~ /[imxo]/
-          # If followed by whitespace, operator (except {), or end, it's a regexp
+          # If followed by whitespace, operator (except {), or end, it might be a regexp
           # Exclude { because it could be brace expansion in a path like /tmp/{a,b}
           next_char = @input[after_slash]
           if next_char.nil? || next_char =~ /[ \t]/ || (OPERATORS.key?(next_char) && next_char != '{')
+            # Check if content looks like a path (no regex metacharacters) or a regexp
+            # Paths like /bin/ or /opt/homebrew/ contain alphanumeric, underscore, dash, dot, slash
+            # Regexps typically have metacharacters like * + ? ^ $ [ ] ( ) | \
+            content = @input[@pos + 1...lookahead]
+            if content =~ /\A[a-zA-Z0-9_.\-\/]+\z/
+              # Looks like a path component, not a regexp - treat as word
+              break
+            end
             return read_regexp
           end
           # Otherwise continue - it's a path like /tmp/file
