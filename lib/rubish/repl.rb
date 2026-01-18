@@ -129,7 +129,10 @@ module Rubish
     private
 
     def setup_reline
-      Reline.completion_proc = ->(input) { complete(input) }
+      Reline.completion_proc = ->(input) {
+        result = complete(input)
+        result.is_a?(Array) ? result : []
+      }
       # Set up default completions for common commands
       Builtins.setup_default_completions
       # Load inputrc configuration

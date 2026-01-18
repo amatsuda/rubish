@@ -6323,7 +6323,7 @@ module Rubish
     def self.generate_completions(spec, word = '')
       results = []
 
-      spec[:actions].each do |action|
+      (spec[:actions] || []).each do |action|
         case action
         when :alias
           results.concat(@aliases.keys.select { |a| a.start_with?(word) })
@@ -6464,6 +6464,22 @@ module Rubish
       if spec[:filterpat]
         pattern = glob_to_regex(spec[:filterpat])
         results.reject! { |r| r.match?(pattern) }
+      end
+
+      # File completions (from -f option or zsh-style {files: true})
+      if spec[:files]
+        pattern = word.empty? ? '*' : "#{word}*"
+        Dir.glob(pattern).each do |entry|
+          results << (File.directory?(entry) ? "#{entry}/" : entry)
+        end
+      end
+
+      # Directory completions (from -d option or zsh-style {directories: true})
+      if spec[:directories]
+        pattern = word.empty? ? '*' : "#{word}*"
+        Dir.glob(pattern).each do |entry|
+          results << "#{entry}/" if File.directory?(entry)
+        end
       end
 
       # Add prefix/suffix (-P/-S)
