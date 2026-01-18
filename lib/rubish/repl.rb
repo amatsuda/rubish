@@ -142,8 +142,9 @@ module Rubish
       # Rebind Ctrl-W to backward_kill_word which stops at non-word characters like /
       # Default em_kill_region only stops at whitespace
       Reline.core.config.add_default_key_binding_by_keymap(:emacs, [23], :backward_kill_word)
-      # Show completion menu on first TAB (like zsh/fish) instead of requiring two TABs (like bash)
-      Reline.core.config.show_all_if_ambiguous = true
+      # Use autocompletion mode (fish-style inline suggestions)
+      # This also enables "cmd <TAB>" to show all files (default mode skips empty words)
+      Reline.autocompletion = true
     end
 
     # Set terminal title to "rubish" (or custom title via RUBISH_TITLE env var)
@@ -6400,9 +6401,14 @@ module Rubish
         return hostnames.map { |h| "@#{h}" } unless hostnames.empty?
       end
 
-      # Parse command line into words
-      words = split_completion_words(line)
-      is_first_word = words.length <= 1
+      # Parse command line into words up to cursor position
+      line_to_cursor = line[0, point]
+      words = split_completion_words(line_to_cursor)
+      # Check if we're completing the first word (command) or an argument
+      # If cursor is after a word break character, we're starting a new (empty) word
+      wordbreaks = Builtins.comp_wordbreaks
+      cursor_after_wordbreak = point > 0 && wordbreaks.include?(line[point - 1])
+      is_first_word = words.empty? || (words.length == 1 && !cursor_after_wordbreak)
 
       if is_first_word
         complete_command(input)
