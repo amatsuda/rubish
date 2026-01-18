@@ -1002,6 +1002,18 @@ module Rubish
 
       dir = remaining_args.first || ENV['HOME']
       found_via_cdpath = false
+      print_dir = false
+
+      # Handle cd - (switch to OLDPWD)
+      if dir == '-'
+        oldpwd = ENV['OLDPWD']
+        if oldpwd.nil? || oldpwd.empty?
+          $stderr.puts 'cd: OLDPWD not set'
+          return false
+        end
+        dir = oldpwd
+        print_dir = true
+      end
 
       # Handle cdable_vars: if directory doesn't exist and cdable_vars is set,
       # try treating the argument as a variable name
@@ -1054,8 +1066,8 @@ module Rubish
         ENV['PWD'] = Dir.pwd
       end
 
-      # Print directory when found via CDPATH
-      puts ENV['PWD'] if found_via_cdpath
+      # Print directory when found via CDPATH or cd -
+      puts ENV['PWD'] if found_via_cdpath || print_dir
 
       # Notify terminal of new working directory (for "new tab in same dir" feature)
       notify_terminal_of_cwd

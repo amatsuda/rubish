@@ -197,6 +197,105 @@ class TestCDPATH < Test::Unit::TestCase
     assert_equal real(File.join(@tempdir, 'search2', 'other')), real(Dir.pwd)
   end
 
+  # cd - tests (switch to OLDPWD)
+
+  def test_cd_dash_switches_to_oldpwd
+    Dir.chdir(@tempdir)
+    dir1 = File.join(@tempdir, 'dir1')
+    dir2 = File.join(@tempdir, 'dir2')
+
+    Dir.chdir(dir1)
+    ENV['OLDPWD'] = dir2
+
+    output = capture_output { Rubish::Builtins.run_cd(['-']) }
+
+    assert_equal real(dir2), real(Dir.pwd)
+    # cd - should print the new directory
+    assert_match(/dir2/, output)
+  end
+
+  def test_cd_dash_updates_oldpwd
+    Dir.chdir(@tempdir)
+    dir1 = File.join(@tempdir, 'dir1')
+    dir2 = File.join(@tempdir, 'dir2')
+
+    Dir.chdir(dir1)
+    ENV['PWD'] = Dir.pwd  # Ensure PWD is set correctly
+    ENV['OLDPWD'] = dir2
+
+    Rubish::Builtins.run_cd(['-'])
+
+    # OLDPWD should now be the previous directory (dir1)
+    assert_equal real(dir1), real(ENV['OLDPWD'])
+  end
+
+  def test_cd_dash_toggle
+    Dir.chdir(@tempdir)
+    dir1 = File.join(@tempdir, 'dir1')
+    dir2 = File.join(@tempdir, 'dir2')
+
+    Dir.chdir(dir1)
+    ENV['PWD'] = Dir.pwd  # Ensure PWD is set correctly
+    ENV['OLDPWD'] = dir2
+
+    # First cd - goes to dir2
+    Rubish::Builtins.run_cd(['-'])
+    assert_equal real(dir2), real(Dir.pwd)
+
+    # Second cd - goes back to dir1
+    Rubish::Builtins.run_cd(['-'])
+    assert_equal real(dir1), real(Dir.pwd)
+
+    # Third cd - goes back to dir2
+    Rubish::Builtins.run_cd(['-'])
+    assert_equal real(dir2), real(Dir.pwd)
+  end
+
+  def test_cd_dash_without_oldpwd_fails
+    Dir.chdir(@tempdir)
+    ENV.delete('OLDPWD')
+
+    stderr_output = capture_stderr { result = Rubish::Builtins.run_cd(['-']) }
+
+    assert_match(/OLDPWD not set/, stderr_output)
+  end
+
+  def test_cd_dash_with_empty_oldpwd_fails
+    Dir.chdir(@tempdir)
+    ENV['OLDPWD'] = ''
+
+    stderr_output = capture_stderr { Rubish::Builtins.run_cd(['-']) }
+
+    assert_match(/OLDPWD not set/, stderr_output)
+  end
+
+  def test_cd_dash_via_execute
+    Dir.chdir(@tempdir)
+    dir1 = File.join(@tempdir, 'dir1')
+    dir2 = File.join(@tempdir, 'dir2')
+
+    Dir.chdir(dir1)
+    ENV['OLDPWD'] = dir2
+
+    output = capture_output { execute('cd -') }
+
+    assert_equal real(dir2), real(Dir.pwd)
+    assert_match(/dir2/, output)
+  end
+
+  def test_cd_dash_with_physical_option
+    Dir.chdir(@tempdir)
+    dir1 = File.join(@tempdir, 'dir1')
+    dir2 = File.join(@tempdir, 'dir2')
+
+    Dir.chdir(dir1)
+    ENV['OLDPWD'] = dir2
+
+    Rubish::Builtins.run_cd(['-P', '-'])
+
+    assert_equal real(dir2), real(Dir.pwd)
+  end
+
   private
 
   # Helper to normalize paths (handle symlinks like /var -> /private/var on macOS)
