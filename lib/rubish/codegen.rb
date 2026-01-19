@@ -422,10 +422,16 @@ module Rubish
     end
 
     def generate_pipeline(node)
-      # Check if last command is 'each' with a block - handle specially
+      # Check if last command is 'each' or 'map' with a block - handle specially
+      # Also check for redirects wrapping each/map
       last_cmd = node.commands.last
-      if last_cmd.is_a?(AST::Command) && last_cmd.name == 'each' && last_cmd.block
+      unwrapped_last = unwrap_redirect(last_cmd)
+
+      if unwrapped_last.is_a?(AST::Command) && unwrapped_last.name == 'each' && unwrapped_last.block
         return generate_pipeline_with_each(node)
+      elsif unwrapped_last.is_a?(AST::Command) && unwrapped_last.name == 'map' && unwrapped_last.block
+        # map is just each with implicit echo - transform the block body
+        return generate_pipeline_with_each(node, implicit_echo: true)
       end
 
       # Handle pipe_types for |& (pipe both stdout and stderr)
@@ -444,10 +450,13 @@ module Rubish
       parts.join(' | ')
     end
 
-    def generate_pipeline_with_each(node)
+    def generate_pipeline_with_each(node, implicit_echo: false)
       # Generate code for: cmd1 | cmd2 | ... | each {|var| body}
-      # Extract the each command and the source pipeline
-      each_cmd = node.commands.last
+      # Also handles map (with implicit_echo: true)
+      # Extract the each/map command and the source pipeline
+      last_node = node.commands.last
+      redirect_info = extract_redirect_info(last_node)
+      each_cmd = unwrap_redirect(last_node)
       source_commands = node.commands[0...-1]
       source_pipe_types = node.pipe_types ? node.pipe_types[0...-1] : nil
 
@@ -462,6 +471,9 @@ module Rubish
       # Parse the block to extract variable and body
       var_name, body = parse_each_block(each_cmd.block)
 
+      # For map, wrap body in echo to implicitly output the result
+      body = "echo #{body}" if implicit_echo
+
       # Generate the each loop
       parts = []
       parts << '__loop_break = catch(:break_loop) do'
@@ -475,7 +487,22 @@ module Rubish
       parts << 'end'
       parts << 'nil; end'
       parts << 'throw(:break_loop, __loop_break - 1) if __loop_break.is_a?(Integer) && __loop_break > 1'
-      parts.join("\n")
+      each_code = parts.join("\n")
+
+      # If there's a redirect, wrap in subshell
+      if redirect_info
+        operator, target = redirect_info
+        target_code = generate_string_arg(target)
+        redirect_method = case operator
+                          when '>' then 'redirect_out'
+                          when '>>' then 'redirect_append'
+                          when '2>' then 'redirect_err'
+                          else 'redirect_out'
+                          end
+        "__subshell { #{each_code} }.#{redirect_method}(#{target_code})"
+      else
+        each_code
+      end
     end
 
     def parse_each_block(block)
@@ -500,6 +527,24 @@ module Rubish
         ['it', $1.strip]
       else
         ['it', block]
+      end
+    end
+
+    def unwrap_redirect(node)
+      # Unwrap Redirect nodes to get the underlying command
+      if node.is_a?(AST::Redirect)
+        node.command
+      else
+        node
+      end
+    end
+
+    def extract_redirect_info(node)
+      # Extract redirect info from a node (returns [operator, target] or nil)
+      if node.is_a?(AST::Redirect)
+        [node.operator, node.target]
+      else
+        nil
       end
     end
 

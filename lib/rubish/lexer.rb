@@ -217,8 +217,9 @@ module Rubish
           lookahead += 1 while lookahead < @input.length && @input[lookahead] =~ /\s/
           if @input[lookahead] == '|'
             read_block
-          elsif @last_word_value == 'each' || @last_word_value == '.each'
-            # Block after 'each' without explicit variable: each { body }
+          elsif @last_word_value == 'each' || @last_word_value == '.each' ||
+                @last_word_value == 'map' || @last_word_value == '.map'
+            # Block after 'each'/'map' without explicit variable: each { body }
             # Uses implicit 'it' variable (accessed as $it)
             read_block
           else
@@ -248,8 +249,9 @@ module Rubish
           lookahead += 1 while lookahead < @input.length && @input[lookahead] =~ /\s/
           if @input[lookahead] == '|'
             read_do_block
-          elsif @last_word_value == 'each' || @last_word_value == '.each'
-            # Block after 'each' without explicit variable: each do body end
+          elsif @last_word_value == 'each' || @last_word_value == '.each' ||
+                @last_word_value == 'map' || @last_word_value == '.map'
+            # Block after 'each'/'map' without explicit variable: each do body end
             # Uses implicit 'it' variable (accessed as $it)
             read_do_block
           else

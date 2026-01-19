@@ -181,4 +181,63 @@ class TestEach < Test::Unit::TestCase
     assert_equal :BLOCK, tokens.last.type
     assert_match(/do.*end/, tokens.last.value)
   end
+
+  # ==========================================================================
+  # Map method tests
+  # ==========================================================================
+
+  def test_map_simple
+    # map implicitly echoes the result of the block expression
+    execute("seq 1 3 | map { $(($it * 2)) } > #{output_file}")
+    content = File.read(output_file)
+    assert_match(/^2$/, content)
+    assert_match(/^4$/, content)
+    assert_match(/^6$/, content)
+  end
+
+  def test_map_with_explicit_variable
+    execute("seq 1 3 | map {|n| $(($n + 10)) } > #{output_file}")
+    content = File.read(output_file)
+    assert_match(/^11$/, content)
+    assert_match(/^12$/, content)
+    assert_match(/^13$/, content)
+  end
+
+  def test_map_method_chain
+    execute("seq(1, 3).map { $(($it * 2)) } > #{output_file}")
+    content = File.read(output_file)
+    assert_match(/^2$/, content)
+    assert_match(/^4$/, content)
+    assert_match(/^6$/, content)
+  end
+
+  def test_map_chained_with_each
+    execute("seq(1, 3).map { $(($it * 2)) }.each { echo \"val: $it\" >> #{output_file} }")
+    content = File.read(output_file)
+    assert_match(/val: 2/, content)
+    assert_match(/val: 4/, content)
+    assert_match(/val: 6/, content)
+  end
+
+  def test_map_do_end_syntax
+    execute("seq 1 3 | map do $(($it * 3)) end > #{output_file}")
+    content = File.read(output_file)
+    assert_match(/^3$/, content)
+    assert_match(/^6$/, content)
+    assert_match(/^9$/, content)
+  end
+
+  def test_map_lexer
+    tokens = Rubish::Lexer.new('ls | map { $it }').tokenize
+    assert_equal :BLOCK, tokens.last.type
+  end
+
+  def test_map_parsing
+    tokens = Rubish::Lexer.new('seq 1 3 | map { $(($it * 2)) }').tokenize
+    ast = Rubish::Parser.new(tokens).parse
+    assert_instance_of Rubish::AST::Pipeline, ast
+    assert_equal 'map', ast.commands.last.name
+    # Block should contain the expression, not echo
+    refute_match(/echo/, ast.commands.last.block)
+  end
 end

@@ -99,15 +99,17 @@ module Rubish
       commands = [first]
       pipe_types = []
       while peek(:PIPE) || peek(:PIPE_BOTH) || peek(:DOT) ||
-            (peek(:WORD) && current.value == '.each' && peek_at(1, :BLOCK))
+            (peek(:WORD) && current.value =~ /\A\.(each|map)\z/ && peek_at(1, :BLOCK))
         if peek(:PIPE_BOTH)
           consume(:PIPE_BOTH)
           pipe_types << :pipe_both
-        elsif peek(:WORD) && current.value == '.each' && peek_at(1, :BLOCK)
-          # .each {block} after FUNC_CALL - tokenized as single WORD
-          consume(:WORD)  # consume '.each'
+        elsif peek(:WORD) && current.value =~ /\A\.(each|map)\z/ && peek_at(1, :BLOCK)
+          # .each/.map {block} after FUNC_CALL - tokenized as single WORD
+          method_name = consume(:WORD).value[1..]  # remove leading '.'
           block = consume(:BLOCK).value
-          cmd = AST::Command.new(name: 'each', block: block)
+          cmd = AST::Command.new(name: method_name, block: block)
+          # Check for redirections after the block
+          cmd = parse_redirections(cmd)
           commands << cmd
           pipe_types << :pipe
           next
@@ -118,11 +120,13 @@ module Rubish
             cmd = parse_func_call
             commands << cmd if cmd
             pipe_types << :pipe
-          elsif peek(:WORD) && current.value == 'each' && peek_at(1, :BLOCK)
-            # .each {|var| body } - treat as regular command with block in pipeline
-            consume(:WORD)  # consume 'each'
+          elsif peek(:WORD) && current.value =~ /\A(each|map)\z/ && peek_at(1, :BLOCK)
+            # .each/.map {|var| body } - treat as regular command with block in pipeline
+            method_name = consume(:WORD).value
             block = consume(:BLOCK).value
-            cmd = AST::Command.new(name: 'each', block: block)
+            cmd = AST::Command.new(name: method_name, block: block)
+            # Check for redirections after the block
+            cmd = parse_redirections(cmd)
             commands << cmd
             pipe_types << :pipe
           else
