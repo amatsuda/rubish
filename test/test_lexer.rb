@@ -473,4 +473,18 @@ class TestLexer < Test::Unit::TestCase
     assert_equal :WORD, tokens[0].type
     assert_equal 'ls.sort', tokens[0].value
   end
+
+  # Positive integers in func call stay as-is (wrapper handles head/tail)
+  def test_func_call_positive_int_unchanged
+    tokens = tokenize('head(5)')
+    assert_equal :FUNC_CALL, tokens[0].type
+    assert_equal ['5'], tokens[0].value[:args]
+  end
+
+  # Negative integers stay as-is
+  def test_func_call_negative_int_stays
+    tokens = tokenize('head(-5)')
+    assert_equal :FUNC_CALL, tokens[0].type
+    assert_equal ['-5'], tokens[0].value[:args]
+  end
 end

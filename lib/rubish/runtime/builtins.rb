@@ -921,6 +921,10 @@ module Rubish
         run_dirname(args)
       when 'realpath'
         run_realpath(args)
+      when 'head'
+        run_head(args)
+      when 'tail'
+        run_tail(args)
       # Bash-completion helper functions
       when '_get_comp_words_by_ref'
         run__get_comp_words_by_ref(args)
@@ -11878,6 +11882,49 @@ module Rubish
       end
 
       success
+    end
+
+    # Wrapper for head command to support Ruby-like syntax: head(5) -> head -5
+    def self.run_head(args)
+      run_head_tail_wrapper('head', args)
+    end
+
+    # Wrapper for tail command to support Ruby-like syntax: tail(5) -> tail -5
+    def self.run_tail(args)
+      run_head_tail_wrapper('tail', args)
+    end
+
+    # Common wrapper for head/tail that converts bare positive integers to -n form
+    def self.run_head_tail_wrapper(cmd, args)
+      # Transform args: convert bare positive integers to -n form
+      # e.g., head(5) -> head -n 5, tail(10) -> tail -n 10
+      # But don't transform if preceded by -n or -c (already has the flag)
+      transformed_args = []
+      skip_transform = false
+
+      args.each do |arg|
+        if skip_transform
+          transformed_args << arg
+          skip_transform = false
+        elsif arg == '-n' || arg == '-c'
+          transformed_args << arg
+          skip_transform = true  # Next arg is already the value for this flag
+        elsif arg =~ /\A\d+\z/
+          # Bare positive integer -> -n <number>
+          transformed_args << '-n'
+          transformed_args << arg
+        else
+          transformed_args << arg
+        end
+      end
+
+      # Execute the external command with transformed args
+      pid = Process.spawn(cmd, *transformed_args)
+      _, status = Process.wait2(pid)
+      status.success?
+    rescue Errno::ENOENT
+      $stderr.puts "#{cmd}: command not found"
+      false
     end
 
     def self.extract_unquoted_keywords(line)
