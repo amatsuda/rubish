@@ -192,6 +192,9 @@ module Rubish
       # Check for array assignment: VAR=(a b c) or VAR+=(d e)
       return parse_array_assign if peek(:ARRAY_ASSIGN)
 
+      # Check for function call syntax: cmd(arg1, arg2)
+      return parse_func_call if peek(:FUNC_CALL)
+
       return nil unless peek(:WORD)
 
       # Collect prefix environment variable assignments (e.g., FOO=bar BAZ=qux cmd)
@@ -905,6 +908,22 @@ module Rubish
     def parse_array_assign
       token = consume(:ARRAY_ASSIGN)
       AST::ArrayAssign.new(var: token.value[:var], elements: token.value[:elements])
+    end
+
+    # Parse function call syntax: cmd(arg1, arg2)
+    def parse_func_call
+      token = consume(:FUNC_CALL)
+      name = token.value[:name]
+      args = token.value[:args]
+
+      # Check for trailing block
+      block = nil
+      if peek(:BLOCK)
+        block = consume(:BLOCK).value
+      end
+
+      cmd = AST::Command.new(name: name, args: args, block: block, env: [])
+      parse_redirections(cmd)
     end
 
     # Parse body of case branch (stops at ;;, ;&, ;;&, esac, or end)

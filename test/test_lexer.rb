@@ -253,4 +253,165 @@ class TestLexer < Test::Unit::TestCase
     assert_equal 2, tokens.length
     assert_equal :REGEXP, tokens[1].type
   end
+
+  # ==========================================================================
+  # Function call syntax: cmd(arg1, arg2)
+  # ==========================================================================
+
+  # Single argument function call
+  def test_func_call_single_arg
+    tokens = tokenize('ls(-l)')
+    assert_equal 1, tokens.length
+    assert_equal :FUNC_CALL, tokens[0].type
+    assert_equal 'ls', tokens[0].value[:name]
+    assert_equal ['-l'], tokens[0].value[:args]
+  end
+
+  # Multiple arguments function call
+  def test_func_call_multiple_args
+    tokens = tokenize('ls(-l, /tmp)')
+    assert_equal 1, tokens.length
+    assert_equal :FUNC_CALL, tokens[0].type
+    assert_equal 'ls', tokens[0].value[:name]
+    assert_equal ['-l', '/tmp'], tokens[0].value[:args]
+  end
+
+  # Function call with path argument
+  def test_func_call_path_arg
+    tokens = tokenize('cd(/opt/homebrew)')
+    assert_equal 1, tokens.length
+    assert_equal :FUNC_CALL, tokens[0].type
+    assert_equal 'cd', tokens[0].value[:name]
+    assert_equal ['/opt/homebrew'], tokens[0].value[:args]
+  end
+
+  # Function call with path with trailing slash
+  def test_func_call_path_with_trailing_slash
+    tokens = tokenize('cd(/opt/homebrew/)')
+    assert_equal 1, tokens.length
+    assert_equal :FUNC_CALL, tokens[0].type
+    assert_equal ['/opt/homebrew/'], tokens[0].value[:args]
+  end
+
+  # Function call with regex argument
+  def test_func_call_regex_arg
+    tokens = tokenize('grep(/pattern/)')
+    assert_equal 1, tokens.length
+    assert_equal :FUNC_CALL, tokens[0].type
+    assert_equal 'grep', tokens[0].value[:name]
+    assert_equal ['/pattern/'], tokens[0].value[:args]
+  end
+
+  # Function call with regex with metacharacters
+  def test_func_call_regex_metachar
+    tokens = tokenize('grep(/error.*fatal/)')
+    assert_equal 1, tokens.length
+    assert_equal :FUNC_CALL, tokens[0].type
+    assert_equal ['/error.*fatal/'], tokens[0].value[:args]
+  end
+
+  # Function call with regex and file arg
+  def test_func_call_regex_and_file
+    tokens = tokenize('grep(/error/, log.txt)')
+    assert_equal 1, tokens.length
+    assert_equal :FUNC_CALL, tokens[0].type
+    assert_equal ['/error/', 'log.txt'], tokens[0].value[:args]
+  end
+
+  # Function call with quoted string
+  def test_func_call_quoted_string
+    tokens = tokenize('echo("hello world")')
+    assert_equal 1, tokens.length
+    assert_equal :FUNC_CALL, tokens[0].type
+    assert_equal ['"hello world"'], tokens[0].value[:args]
+  end
+
+  # Function call with single-quoted string
+  def test_func_call_single_quoted
+    tokens = tokenize("echo('hello')")
+    assert_equal 1, tokens.length
+    assert_equal :FUNC_CALL, tokens[0].type
+    assert_equal ["'hello'"], tokens[0].value[:args]
+  end
+
+  # Function call vs subshell - space before paren means subshell
+  def test_func_call_vs_subshell
+    tokens = tokenize('ls (foo)')
+    assert_equal 4, tokens.length
+    assert_equal :WORD, tokens[0].type
+    assert_equal 'ls', tokens[0].value
+    assert_equal :LPAREN, tokens[1].type
+    assert_equal :WORD, tokens[2].type
+    assert_equal :RPAREN, tokens[3].type
+  end
+
+  # Empty parens should be function definition, not function call
+  def test_empty_parens_is_func_def
+    tokens = tokenize('foo()')
+    assert_equal 2, tokens.length
+    assert_equal :WORD, tokens[0].type
+    assert_equal :PARENS, tokens[1].type
+  end
+
+  # Function call with whitespace around args
+  def test_func_call_whitespace_args
+    tokens = tokenize('ls( -l , /tmp )')
+    assert_equal 1, tokens.length
+    assert_equal :FUNC_CALL, tokens[0].type
+    assert_equal ['-l', '/tmp'], tokens[0].value[:args]
+  end
+
+  # Function call with command substitution
+  def test_func_call_command_substitution
+    tokens = tokenize('echo($(date))')
+    assert_equal 1, tokens.length
+    assert_equal :FUNC_CALL, tokens[0].type
+    assert_equal ['$(date)'], tokens[0].value[:args]
+  end
+
+  # Function call with variable
+  def test_func_call_variable
+    tokens = tokenize('echo($HOME)')
+    assert_equal 1, tokens.length
+    assert_equal :FUNC_CALL, tokens[0].type
+    assert_equal ['$HOME'], tokens[0].value[:args]
+  end
+
+  # Function call followed by pipe
+  def test_func_call_with_pipe
+    tokens = tokenize('ls(-l) | grep foo')
+    assert_equal 4, tokens.length
+    assert_equal :FUNC_CALL, tokens[0].type
+    assert_equal :PIPE, tokens[1].type
+  end
+
+  # Function call followed by redirection
+  def test_func_call_with_redirect
+    tokens = tokenize('ls(-l) > out.txt')
+    assert_equal 3, tokens.length
+    assert_equal :FUNC_CALL, tokens[0].type
+    assert_equal :REDIRECT_OUT, tokens[1].type
+  end
+
+  # Ruby-style method calls with keyword args should NOT be func calls
+  def test_ruby_keyword_args_not_func_call
+    tokens = tokenize('cyan(prompt_pwd(expand_level: 2))')
+    # Should be separate tokens, not a single FUNC_CALL
+    assert_equal :WORD, tokens[0].type
+    assert_equal 'cyan', tokens[0].value
+    assert_equal :LPAREN, tokens[1].type
+  end
+
+  # Ruby-style method calls with multiple keyword args
+  def test_ruby_multiple_keyword_args_not_func_call
+    tokens = tokenize('method(foo: 1, bar: 2)')
+    assert_equal :WORD, tokens[0].type
+    assert_equal :LPAREN, tokens[1].type
+  end
+
+  # But simple shell args without colons should still be func calls
+  def test_func_call_without_colons
+    tokens = tokenize('cmd(arg1, arg2)')
+    assert_equal :FUNC_CALL, tokens[0].type
+  end
 end

@@ -57,6 +57,7 @@ module Rubish
     def initialize(input)
       @input = input
       @pos = 0
+      @last_token_type = nil
     end
 
     def tokenize
@@ -66,7 +67,10 @@ module Rubish
         break if @pos >= @input.length
 
         token = read_token
-        tokens << token if token
+        if token
+          tokens << token
+          @last_token_type = token.type
+        end
       end
       tokens
     end
@@ -503,6 +507,18 @@ module Rubish
         return read_array_assignment(value)
       end
 
+      # Check for function call syntax: cmd(arg1, arg2) - but not:
+      # - cmd() which is function def
+      # - extglob patterns like word?(pat), word*(pat), word+(pat), @(pat), !(pat)
+      # - after def/function keywords (where the word is a function name being defined)
+      # - words that don't look like command names (e.g., regex metacharacters like ^ or $)
+      # - Ruby-like code (contains keyword args with :, nested method calls, etc.)
+      if @input[@pos] == '(' && @input[@pos + 1] != ')' &&
+         !extglob_prefix?(value) && ![:DEF, :FUNCTION].include?(@last_token_type) &&
+         valid_func_call_name?(value) && !looks_like_ruby_call?
+        return read_func_call(value)
+      end
+
       # Check if word is a keyword
       if KEYWORDS.key?(value)
         Token.new(KEYWORDS[value], value)
@@ -554,6 +570,202 @@ module Rubish
       end
 
       @input[start...@pos]
+    end
+
+    def read_func_call(name)
+      # Read function call syntax: cmd(arg1, arg2, ...)
+      @pos += 1  # skip opening (
+      args = []
+
+      while @pos < @input.length
+        # Skip whitespace
+        @pos += 1 while @pos < @input.length && @input[@pos] =~ /[ \t]/
+
+        break if @input[@pos] == ')'
+
+        arg = read_func_call_arg
+        args << arg if arg && !arg.empty?
+
+        # Skip whitespace after arg
+        @pos += 1 while @pos < @input.length && @input[@pos] =~ /[ \t]/
+
+        # Check for comma or closing paren
+        if @input[@pos] == ','
+          @pos += 1  # skip comma
+        elsif @input[@pos] == ')'
+          break
+        else
+          # Unexpected character, stop parsing
+          break
+        end
+      end
+
+      @pos += 1 if @input[@pos] == ')'  # skip closing )
+
+      Token.new(:FUNC_CALL, {name: name, args: args})
+    end
+
+    def read_func_call_arg
+      start = @pos
+
+      # Check for special cases first
+      char = @input[@pos]
+
+      # Quoted strings
+      if char == '"'
+        read_double_quoted_string
+        return @input[start...@pos]
+      elsif char == "'"
+        read_single_quoted_string
+        return @input[start...@pos]
+      elsif char == '$' && @input[@pos + 1] == "'"
+        read_ansi_c_quoted_string
+        return @input[start...@pos]
+      end
+
+      # Check for regexp or path starting with /
+      if char == '/'
+        return read_func_call_slash_arg
+      end
+
+      # Check for array literal
+      if char == '['
+        read_array
+        return @input[start...@pos]
+      end
+
+      # Regular word argument
+      while @pos < @input.length
+        char = @input[@pos]
+
+        # Stop at comma, closing paren, or whitespace
+        break if char =~ /[ \t]/ || char == ',' || char == ')'
+
+        if char == '\\'
+          @pos += 2
+        elsif char == '"'
+          read_double_quoted_string
+        elsif char == "'"
+          read_single_quoted_string
+        elsif char == '$' && @input[@pos + 1] == '('
+          read_command_substitution
+        elsif char == '$' && @input[@pos + 1] == '{'
+          read_braced_variable
+        else
+          @pos += 1
+        end
+      end
+
+      @input[start...@pos]
+    end
+
+    def read_func_call_slash_arg
+      # Determine if /.../ is a path or regexp inside function call
+      # Path: contains only alphanumeric, _, ., -, /
+      # Regexp: contains metacharacters like *, +, ?, ^, $, [, ], (, ), |, \
+      start = @pos
+      @pos += 1  # skip opening /
+
+      has_metachar = false
+      closed = false
+
+      while @pos < @input.length
+        char = @input[@pos]
+
+        # Stop at comma, closing paren (without closing /), or whitespace
+        if char =~ /[ \t]/ || char == ',' || char == ')'
+          break
+        end
+
+        if char == '/'
+          # Check if this looks like end of regexp or middle of path
+          # If we've seen metacharacters, it's likely a regexp
+          # If content is path-like, continue as path
+          content = @input[start + 1...@pos]
+          if has_metachar || content !~ /\A[a-zA-Z0-9_.\-\/]*\z/
+            # Regexp - consume closing / and optional flags
+            @pos += 1
+            @pos += 1 while @pos < @input.length && @input[@pos] =~ /[imxo]/
+            closed = true
+            break
+          else
+            # Path - continue reading
+            @pos += 1
+          end
+        elsif char == '\\' && has_metachar
+          # Escape in regexp
+          @pos += 2
+        elsif char =~ /[*+?^$\[\]()|\\.]/
+          has_metachar = true
+          @pos += 1
+        else
+          @pos += 1
+        end
+      end
+
+      @input[start...@pos]
+    end
+
+    def extglob_prefix?(word)
+      # Check if word ends with extglob prefix: ?, *, +, @, !
+      # These form patterns like foo?(bar), *(pat), @(a|b), !(neg)
+      return true if word.empty?  # standalone @( or !( etc.
+      return true if word =~ /[?*+@!]\z/
+      # Also check for patterns that are entirely glob characters
+      return true if word =~ /\A[*?@!]+\z/
+      false
+    end
+
+    def valid_func_call_name?(name)
+      # Valid function/command names must start with letter, underscore, or be a path
+      # Not valid: regex metacharacters like ^, $, or single special chars
+      return false if name.empty?
+      # Must start with letter, underscore, digit, dot, or / (for paths like /bin/ls)
+      return false unless name =~ /\A[a-zA-Z_0-9.\/]/
+      # Must not be just special characters
+      return false if name =~ /\A[\^$]+\z/
+      true
+    end
+
+    def looks_like_ruby_call?
+      # Check if the content inside parens looks like Ruby code rather than shell args
+      # Look ahead from current position (which is at '(')
+      lookahead = @pos + 1
+      depth = 1
+      in_string = false
+      string_char = nil
+
+      while lookahead < @input.length && depth > 0
+        char = @input[lookahead]
+
+        # Track string state
+        if !in_string && (char == '"' || char == "'")
+          in_string = true
+          string_char = char
+        elsif in_string && char == string_char && @input[lookahead - 1] != '\\'
+          in_string = false
+        elsif !in_string
+          case char
+          when '('
+            depth += 1
+          when ')'
+            depth -= 1
+          when ':'
+            # Check for Ruby keyword arg syntax: identifier followed by : and space/value
+            # e.g., "foo: bar" or "foo:bar" but not ":/path" or "$:"
+            prev_char = lookahead > 0 ? @input[lookahead - 1] : nil
+            next_char = @input[lookahead + 1]
+            # If : follows a word character and precedes space or word, it's likely Ruby
+            if prev_char =~ /[a-zA-Z0-9_]/ && (next_char.nil? || next_char =~ /[\s\w]/)
+              return true
+            end
+          end
+        end
+
+        lookahead += 1
+      end
+
+      false
     end
 
     def read_double_quoted_string
