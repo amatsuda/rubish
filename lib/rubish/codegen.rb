@@ -480,17 +480,26 @@ module Rubish
 
     def parse_each_block(block)
       # Parse block to extract variable and body
-      # Supports two formats:
+      # Supports formats with explicit variable:
       #   {|x| body}      - curly brace format
       #   do |x| body end - do/end format
+      # Or implicit variable (defaults to 'it', accessed as $it):
+      #   { body }        - curly brace without variable
+      #   do body end     - do/end without variable
       if block =~ /\A\{\s*\|(\w+)\|\s*(.*)\s*\}\z/m
-        # Curly brace format: {|x| body}
+        # Curly brace format with variable: {|x| body}
         [$1, $2.strip]
+      elsif block =~ /\A\{\s*(.*)\s*\}\z/m
+        # Curly brace format without variable: { body } - use implicit 'it'
+        ['it', $1.strip]
       elsif block =~ /\Ado\s+\|(\w+)\|\s*(.*)\s+end\z/m
-        # Do/end format: do |x| body end
+        # Do/end format with variable: do |x| body end
         [$1, $2.strip]
+      elsif block =~ /\Ado\s+(.*)\s+end\z/m
+        # Do/end format without variable: do body end - use implicit 'it'
+        ['it', $1.strip]
       else
-        ['_', block]
+        ['it', block]
       end
     end
 

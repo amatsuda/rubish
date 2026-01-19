@@ -58,6 +58,7 @@ module Rubish
       @input = input
       @pos = 0
       @last_token_type = nil
+      @last_word_value = nil
     end
 
     def tokenize
@@ -70,6 +71,7 @@ module Rubish
         if token
           tokens << token
           @last_token_type = token.type
+          @last_word_value = token.value if token.type == :WORD
         end
       end
       tokens
@@ -215,6 +217,10 @@ module Rubish
           lookahead += 1 while lookahead < @input.length && @input[lookahead] =~ /\s/
           if @input[lookahead] == '|'
             read_block
+          elsif @last_word_value == 'each' || @last_word_value == '.each'
+            # Block after 'each' without explicit variable: each { body }
+            # Uses implicit 'it' variable (accessed as $it)
+            read_block
           else
             # Shell function body or standalone brace
             @pos += 1
@@ -234,13 +240,17 @@ module Rubish
           read_word
         end
       when 'd'
-        # Check for Ruby 'do' block (do |x| ... end)
+        # Check for Ruby 'do' block (do |x| ... end or do ... end after 'each')
         # Only treat as block if followed by space/| (not 'done' or other words)
         if @input[@pos, 2] == 'do' && @input[@pos + 2] =~ /[\s|]/
           # Look ahead to see if this has block args (|...|) - distinguishes from shell 'do'
           lookahead = @pos + 2
           lookahead += 1 while lookahead < @input.length && @input[lookahead] =~ /\s/
           if @input[lookahead] == '|'
+            read_do_block
+          elsif @last_word_value == 'each' || @last_word_value == '.each'
+            # Block after 'each' without explicit variable: each do body end
+            # Uses implicit 'it' variable (accessed as $it)
             read_do_block
           else
             read_word

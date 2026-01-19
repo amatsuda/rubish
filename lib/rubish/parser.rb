@@ -98,10 +98,19 @@ module Rubish
 
       commands = [first]
       pipe_types = []
-      while peek(:PIPE) || peek(:PIPE_BOTH) || peek(:DOT)
+      while peek(:PIPE) || peek(:PIPE_BOTH) || peek(:DOT) ||
+            (peek(:WORD) && current.value == '.each' && peek_at(1, :BLOCK))
         if peek(:PIPE_BOTH)
           consume(:PIPE_BOTH)
           pipe_types << :pipe_both
+        elsif peek(:WORD) && current.value == '.each' && peek_at(1, :BLOCK)
+          # .each {block} after FUNC_CALL - tokenized as single WORD
+          consume(:WORD)  # consume '.each'
+          block = consume(:BLOCK).value
+          cmd = AST::Command.new(name: 'each', block: block)
+          commands << cmd
+          pipe_types << :pipe
+          next
         elsif peek(:DOT)
           # Method chain syntax: cmd.method(args) is equivalent to cmd | method args
           consume(:DOT)

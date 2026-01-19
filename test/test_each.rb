@@ -139,4 +139,46 @@ class TestEach < Test::Unit::TestCase
     assert_match(/found: apricot/, content)
     refute_match(/found: banana/, content)
   end
+
+  # ==========================================================================
+  # Implicit $it variable tests
+  # ==========================================================================
+
+  def test_each_implicit_it_curly_brace
+    execute("seq 1 3 | each { echo \"val: $it\" >> #{output_file} }")
+    content = File.read(output_file)
+    assert_match(/val: 1/, content)
+    assert_match(/val: 2/, content)
+    assert_match(/val: 3/, content)
+  end
+
+  def test_each_implicit_it_do_end
+    execute("seq 1 3 | each do echo \"val: $it\" >> #{output_file} end")
+    content = File.read(output_file)
+    assert_match(/val: 1/, content)
+    assert_match(/val: 2/, content)
+    assert_match(/val: 3/, content)
+  end
+
+  def test_each_implicit_it_method_chain
+    execute("seq(1, 3).each { echo \"val: $it\" >> #{output_file} }")
+    content = File.read(output_file)
+    assert_match(/val: 1/, content)
+    assert_match(/val: 2/, content)
+    assert_match(/val: 3/, content)
+  end
+
+  def test_each_implicit_it_lexer
+    # Verify lexer produces BLOCK token for { body } after each
+    tokens = Rubish::Lexer.new('ls | each { echo $it }').tokenize
+    assert_equal :BLOCK, tokens.last.type
+    assert_equal '{ echo $it }', tokens.last.value
+  end
+
+  def test_each_implicit_it_do_end_lexer
+    # Verify lexer produces BLOCK token for do body end after each
+    tokens = Rubish::Lexer.new('ls | each do echo $it end').tokenize
+    assert_equal :BLOCK, tokens.last.type
+    assert_match(/do.*end/, tokens.last.value)
+  end
 end
