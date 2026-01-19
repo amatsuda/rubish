@@ -131,4 +131,102 @@ class TestParser < Test::Unit::TestCase
     assert_equal :cont, ast.branches[1][2]
     assert_equal :double_semi, ast.branches[2][2]
   end
+
+  # ==========================================================================
+  # Function call syntax: cmd(arg1, arg2)
+  # ==========================================================================
+
+  def test_func_call_simple
+    ast = parse('ls(-l)')
+    assert_instance_of Rubish::AST::Command, ast
+    assert_equal 'ls', ast.name
+    assert_equal ['-l'], ast.args
+  end
+
+  def test_func_call_multiple_args
+    ast = parse('grep(/error/, log.txt)')
+    assert_instance_of Rubish::AST::Command, ast
+    assert_equal 'grep', ast.name
+    assert_equal ['/error/', 'log.txt'], ast.args
+  end
+
+  # ==========================================================================
+  # Method chain syntax: cmd.method(args) -> pipeline
+  # ==========================================================================
+
+  def test_method_chain_simple
+    ast = parse('ls.grep(/foo/)')
+    assert_instance_of Rubish::AST::Pipeline, ast
+    assert_equal 2, ast.commands.length
+    assert_equal 'ls', ast.commands[0].name
+    assert_equal 'grep', ast.commands[1].name
+    assert_equal ['/foo/'], ast.commands[1].args
+  end
+
+  def test_method_chain_multiple
+    ast = parse('ls.grep(/foo/).head(-5)')
+    assert_instance_of Rubish::AST::Pipeline, ast
+    assert_equal 3, ast.commands.length
+    assert_equal 'ls', ast.commands[0].name
+    assert_equal 'grep', ast.commands[1].name
+    assert_equal 'head', ast.commands[2].name
+    assert_equal ['-5'], ast.commands[2].args
+  end
+
+  # ==========================================================================
+  # head/tail argument transformation: bare integers -> -n form
+  # ==========================================================================
+
+  def test_head_bare_integer_transformed
+    ast = parse('head(5)')
+    assert_instance_of Rubish::AST::Command, ast
+    assert_equal 'head', ast.name
+    assert_equal ['-n', '5'], ast.args
+  end
+
+  def test_tail_bare_integer_transformed
+    ast = parse('tail(10)')
+    assert_instance_of Rubish::AST::Command, ast
+    assert_equal 'tail', ast.name
+    assert_equal ['-n', '10'], ast.args
+  end
+
+  def test_head_negative_integer_unchanged
+    ast = parse('head(-5)')
+    assert_instance_of Rubish::AST::Command, ast
+    assert_equal 'head', ast.name
+    assert_equal ['-5'], ast.args
+  end
+
+  def test_head_with_explicit_n_flag
+    ast = parse('head(-n, 5)')
+    assert_instance_of Rubish::AST::Command, ast
+    assert_equal 'head', ast.name
+    assert_equal ['-n', '5'], ast.args
+  end
+
+  def test_head_with_c_flag
+    ast = parse('head(-c, 100)')
+    assert_instance_of Rubish::AST::Command, ast
+    assert_equal 'head', ast.name
+    assert_equal ['-c', '100'], ast.args
+  end
+
+  def test_method_chain_with_head_transform
+    ast = parse('ls.head(5)')
+    assert_instance_of Rubish::AST::Pipeline, ast
+    assert_equal 2, ast.commands.length
+    assert_equal 'ls', ast.commands[0].name
+    assert_equal 'head', ast.commands[1].name
+    assert_equal ['-n', '5'], ast.commands[1].args
+  end
+
+  def test_method_chain_with_tail_transform
+    ast = parse('ls.tail(1)')
+    assert_instance_of Rubish::AST::Pipeline, ast
+    assert_equal 2, ast.commands.length
+    assert_equal 'ls', ast.commands[0].name
+    assert_equal 'tail', ast.commands[1].name
+    assert_equal ['-n', '1'], ast.commands[1].args
+  end
 end

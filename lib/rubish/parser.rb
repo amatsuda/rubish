@@ -928,6 +928,12 @@ module Rubish
       name = token.value[:name]
       args = token.value[:args]
 
+      # Transform args for head/tail: convert bare positive integers to -n form
+      # e.g., head(5) -> head -n 5, tail(10) -> tail -n 10
+      if name == 'head' || name == 'tail'
+        args = transform_head_tail_args(args)
+      end
+
       # Check for trailing block
       block = nil
       if peek(:BLOCK)
@@ -936,6 +942,29 @@ module Rubish
 
       cmd = AST::Command.new(name: name, args: args, block: block, env: [])
       parse_redirections(cmd)
+    end
+
+    # Transform head/tail args: bare positive integers become -n <number>
+    def transform_head_tail_args(args)
+      transformed = []
+      skip_transform = false
+
+      args.each do |arg|
+        if skip_transform
+          transformed << arg
+          skip_transform = false
+        elsif arg == '-n' || arg == '-c'
+          transformed << arg
+          skip_transform = true
+        elsif arg =~ /\A\d+\z/
+          transformed << '-n'
+          transformed << arg
+        else
+          transformed << arg
+        end
+      end
+
+      transformed
     end
 
     # Parse body of case branch (stops at ;;, ;&, ;;&, esac, or end)
