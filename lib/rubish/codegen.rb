@@ -474,6 +474,9 @@ module Rubish
       # Parse the block to extract variable and body
       var_name, body = parse_each_block(each_cmd.block)
 
+      # Transform predicate methods (e.g., $var.empty? → test -z "$var")
+      body = transform_predicates(body)
+
       # For map, wrap body in echo to implicitly output the result
       body = "echo #{body}" if implicit_echo
 
@@ -534,6 +537,12 @@ module Rubish
       else
         ['it', block]
       end
+    end
+
+    def transform_predicates(body)
+      # Transform Ruby-like predicate methods to shell equivalents
+      # $var.empty? → test -z "$var"
+      body.gsub(/\$(\w+)\.empty\?/, 'test -z "$\1"')
     end
 
     def unwrap_redirect(node)

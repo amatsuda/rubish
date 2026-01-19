@@ -311,4 +311,57 @@ class TestEach < Test::Unit::TestCase
     assert_instance_of Rubish::AST::Pipeline, ast
     assert_equal 'select', ast.commands.last.name
   end
+
+  # ==========================================================================
+  # Predicate method tests
+  # ==========================================================================
+
+  def test_empty_predicate_select
+    # Create test file with empty lines
+    File.write("#{@tempdir}/lines.txt", "a\n\nb\n\nc\n")
+    execute("cat #{@tempdir}/lines.txt | select { $it.empty? } > #{output_file}")
+    content = File.read(output_file)
+    # Count newlines - each empty line selected produces one newline
+    assert_equal 2, content.count("\n")  # Two empty lines
+  end
+
+  def test_empty_predicate_select_negated
+    # Filter out empty lines
+    File.write("#{@tempdir}/lines.txt", "a\n\nb\n\nc\n")
+    execute("cat #{@tempdir}/lines.txt | select { ! $it.empty? } > #{output_file}")
+    content = File.read(output_file)
+    assert_match(/^a$/, content)
+    assert_match(/^b$/, content)
+    assert_match(/^c$/, content)
+    lines = content.strip.split("\n")
+    assert_equal 3, lines.length
+  end
+
+  def test_empty_predicate_with_explicit_variable
+    File.write("#{@tempdir}/lines.txt", "x\n\ny\n")
+    execute("cat #{@tempdir}/lines.txt | select {|line| ! $line.empty? } > #{output_file}")
+    content = File.read(output_file)
+    assert_match(/^x$/, content)
+    assert_match(/^y$/, content)
+    lines = content.strip.split("\n")
+    assert_equal 2, lines.length
+  end
+
+  def test_empty_predicate_in_each
+    # empty? can also be used in each blocks
+    File.write("#{@tempdir}/lines.txt", "a\n\nb\n")
+    execute("cat #{@tempdir}/lines.txt | each { if ! $it.empty?; then echo \"got: $it\"; fi } > #{output_file}")
+    content = File.read(output_file)
+    assert_match(/got: a/, content)
+    assert_match(/got: b/, content)
+    refute_match(/got: $/, content)  # No "got: " with empty value
+  end
+
+  def test_predicate_transform
+    # Verify the transformation at codegen level
+    codegen = Rubish::Codegen.new
+    assert_equal 'test -z "$it"', codegen.send(:transform_predicates, '$it.empty?')
+    assert_equal 'test -z "$foo"', codegen.send(:transform_predicates, '$foo.empty?')
+    assert_equal '! test -z "$it"', codegen.send(:transform_predicates, '! $it.empty?')
+  end
 end
