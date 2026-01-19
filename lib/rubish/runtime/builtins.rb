@@ -7570,7 +7570,19 @@ module Rubish
         return cached
       end
 
-      # Build list of help commands to try
+      parsed = nil
+
+      # Try zsh completion file first (for top-level commands only)
+      if subcommand.nil?
+        parsed = parse_zsh_completion_file(command)
+        if parsed && parsed[:subcommands].length >= 3
+          parsed[:timestamp] = Time.now
+          @help_completion_cache[cache_key] = parsed
+          return parsed
+        end
+      end
+
+      # Fall back to help output parsing
       help_commands = if subcommand
         ["#{command} #{subcommand} --help", "#{command} help #{subcommand}"]
       elsif HELP_COMMAND_SOURCES.key?(command)
@@ -7587,14 +7599,18 @@ module Rubish
         if $?.success? && output.length > 50
           help_output = output
           # Check if this output has good subcommand info
-          parsed = parse_help_output(output)
-          break if parsed[:subcommands].length >= 3
+          help_parsed = parse_help_output(output)
+          if help_parsed[:subcommands].length >= 3
+            parsed = help_parsed
+            break
+          elsif parsed.nil? || help_parsed[:subcommands].length > (parsed[:subcommands]&.length || 0)
+            parsed = help_parsed
+          end
         end
       end
 
-      return nil unless help_output
+      return nil unless parsed
 
-      parsed = parse_help_output(help_output)
       parsed[:timestamp] = Time.now
       @help_completion_cache[cache_key] = parsed
       parsed
@@ -7666,6 +7682,136 @@ module Rubish
       end
 
       {subcommands: subcommands.uniq, options: options.uniq}
+    end
+
+    # ==========================================================================
+    # Zsh completion file parsing
+    # ==========================================================================
+
+    # Find zsh completion file for a command
+    def self.find_zsh_completion_file(command)
+      zsh_fpath.each do |dir|
+        path = File.join(dir, "_#{command}")
+        return path if File.exist?(path)
+      end
+      nil
+    end
+
+    # Parse zsh completion file to extract subcommands and options
+    # First tries to find and execute the actual commands zsh uses,
+    # then falls back to static parsing
+    def self.parse_zsh_completion_file(command)
+      path = find_zsh_completion_file(command)
+      return nil unless path
+
+      content = File.read(path)
+      subcommands = []
+      options = []
+
+      # Strategy 1: Find and execute the commands that zsh completions use
+      # Look for patterns like: $(_call_program commands cargo --list)
+      # or: $(cargo --list) or `cargo --list`
+      extracted_cmds = extract_zsh_completion_commands(content, command)
+      extracted_cmds.each do |cmd|
+        output = run_with_timeout(cmd, 2)
+        next unless output && output.length > 10
+
+        # Parse the output for subcommands
+        output.each_line do |line|
+          line = line.strip
+          # Common formats:
+          # "    subcommand   description" (cargo --list)
+          # "subcommand" (simple list)
+          # "subcommand:description" (already parsed)
+          if line =~ /^\s{2,}(\S+)/ || line =~ /^([a-z][-a-z0-9_]+)(?:\s|$|:)/
+            sub = $1
+            subcommands << sub if sub.length < 30 && sub =~ /^[a-z]/
+          end
+        end
+      end
+
+      # Strategy 2: Parse inline subcommand definitions
+      # e.g., 'add:Add a dependency'
+      content.scan(/'([a-z][-a-z0-9_]*):[^']*'/).each do |match|
+        subcommands << match[0]
+      end
+
+      # Strategy 3: Parse array definitions
+      # commands=( 'add:desc' 'build:desc' ... ) or hardcoded arrays
+      content.scan(/(?:commands?|cmds|subcmds)\s*=\s*\(\s*([^)]+)\)/m).each do |match|
+        # Match 'subcommand:description' or 'subcommand' patterns
+        match[0].scan(/'([a-z][-a-z0-9_]+)(?::|')/).each do |cmd|
+          subcommands << cmd[0] if cmd[0].length < 25
+        end
+      end
+
+      # Strategy 4: Options from _arguments specs
+      content.scan(/'(-[a-zA-Z])['\[\s]/).each do |match|
+        options << match[0]
+      end
+      content.scan(/'(--[a-zA-Z][-a-zA-Z0-9_]*)['\[\s=]/).each do |match|
+        options << match[0]
+      end
+
+      return nil if subcommands.empty? && options.empty?
+
+      {
+        subcommands: subcommands.uniq.sort,
+        options: options.uniq.sort,
+        source: :zsh
+      }
+    rescue
+      nil
+    end
+
+    # Extract shell commands from zsh completion file that fetch subcommands
+    def self.extract_zsh_completion_commands(content, command)
+      cmds = []
+
+      # Pattern: _call_program <tag> <command>
+      # e.g., _call_program commands cargo --list
+      content.scan(/_call_program\s+(\w+)\s+([^)"'\n]+)/).each do |match|
+        tag, cmd = match[0], match[1].strip
+        # Only include commands that look like subcommand listing
+        next unless cmd.start_with?(command)
+        # Tag must indicate commands/subcommands
+        next unless tag =~ /^commands?$/i
+        cmds << cmd
+      end
+
+      # Pattern: $(<command>) command substitution for listing
+      # e.g., $(cargo --list) - must be simple "command --list" style
+      content.scan(/\$\(([^)]+)\)/).each do |match|
+        cmd = match[0].strip
+        next unless cmd.start_with?(command)
+        next if cmd.include?('_call_program')
+        # Only simple list commands: "cmd --list" or "cmd help"
+        next unless cmd =~ /^#{Regexp.escape(command)}\s+(--list|help|commands)$/
+        cmds << cmd
+      end
+
+      # Pattern: `<command>` backtick substitution
+      content.scan(/`([^`]+)`/).each do |match|
+        cmd = match[0].strip
+        next unless cmd.start_with?(command)
+        next unless cmd =~ /^#{Regexp.escape(command)}\s+(--list|help|commands)$/
+        cmds << cmd
+      end
+
+      cmds.uniq
+    end
+
+    # Execute a command with timeout, returns output or nil
+    def self.run_with_timeout(cmd, timeout = 2)
+      output = nil
+      begin
+        Timeout.timeout(timeout) do
+          output = `#{cmd} 2>/dev/null`
+        end
+      rescue Timeout::Error
+        output = nil
+      end
+      output
     end
 
     # Valid completion options for compopt

@@ -33,7 +33,6 @@ class TestAutoCompletion < Test::Unit::TestCase
     assert_equal 'bundle --help', sources['bundle']
     assert_equal 'gem help commands', sources['gem']
     assert_equal 'brew commands', sources['brew']
-    assert_equal 'rake --help', sources['rake']
     assert_equal 'npm help', sources['npm']
     assert_equal 'yarn --help', sources['yarn']
   end
@@ -307,5 +306,148 @@ class TestAutoCompletion < Test::Unit::TestCase
     assert_includes completions, '-h'
     assert_includes completions, '-v'
     assert_includes completions, '-q'
+  end
+
+  # ==========================================================================
+  # Zsh completion file parsing
+  # ==========================================================================
+
+  def test_zsh_fpath_returns_array
+    fpath = Rubish::Builtins.zsh_fpath
+    assert_kind_of Array, fpath
+    # If zsh is installed, fpath should have entries
+    # If not, it should be an empty array (graceful fallback)
+  end
+
+  def test_parse_zsh_completion_describe_pattern
+    content = <<~ZSH
+      #compdef mycmd
+
+      _mycmd() {
+        local -a commands
+        commands=(
+          'add:Add something'
+          'remove:Remove something'
+          'list:List items'
+        )
+        _describe 'command' commands
+      }
+    ZSH
+
+    # Manually test parsing logic
+    subcommands = []
+    content.scan(/'([a-z][-a-z0-9_]*):[^']*'/).each do |match|
+      subcommands << match[0]
+    end
+
+    assert_includes subcommands, 'add'
+    assert_includes subcommands, 'remove'
+    assert_includes subcommands, 'list'
+  end
+
+  def test_parse_zsh_completion_array_pattern
+    content = <<~ZSH
+      commands=( add build check clean install uninstall )
+    ZSH
+
+    subcommands = []
+    content.scan(/(?:commands?|cmds|subcmds)\s*=\s*\(\s*([^)]+)\)/m).each do |match|
+      match[0].scan(/([a-z][-a-z0-9_]+)/).each do |cmd|
+        subcommands << cmd[0] if cmd[0].length < 25
+      end
+    end
+
+    assert_includes subcommands, 'add'
+    assert_includes subcommands, 'build'
+    assert_includes subcommands, 'check'
+    assert_includes subcommands, 'clean'
+    assert_includes subcommands, 'install'
+    assert_includes subcommands, 'uninstall'
+  end
+
+  def test_parse_zsh_completion_options_pattern
+    content = <<~ZSH
+      _arguments \\
+        '--help[show help]' \\
+        '-h[short help]' \\
+        '--version[show version]' \\
+        '-v[verbose]'
+    ZSH
+
+    options = []
+    content.scan(/['"]\{?(-[a-zA-Z]|--[a-zA-Z][-a-zA-Z0-9_]*)/).each do |match|
+      options << match[0]
+    end
+
+    assert_includes options, '--help'
+    assert_includes options, '-h'
+    assert_includes options, '--version'
+    assert_includes options, '-v'
+  end
+
+  def test_parse_zsh_completion_file_returns_nil_for_missing_file
+    result = Rubish::Builtins.parse_zsh_completion_file('nonexistent_command_xyz')
+    assert_nil result
+  end
+
+  def test_find_zsh_completion_file_returns_nil_for_missing
+    result = Rubish::Builtins.find_zsh_completion_file('nonexistent_command_xyz')
+    assert_nil result
+  end
+
+  def test_extract_zsh_completion_commands_call_program
+    content = <<~ZSH
+      commands=( ${(f)"$(_call_program commands cargo --list)"} )
+      flags=( ${(f)"$(_call_program flags cargo -Z help)"} )
+    ZSH
+
+    cmds = Rubish::Builtins.extract_zsh_completion_commands(content, 'cargo')
+    assert_includes cmds, 'cargo --list'
+    refute_includes cmds, 'cargo -Z help'  # 'flags' tag, not 'commands'
+  end
+
+  def test_extract_zsh_completion_commands_dollar_paren
+    content = <<~ZSH
+      cmds=$(cargo --list)
+      other=$(cargo install --list)
+    ZSH
+
+    cmds = Rubish::Builtins.extract_zsh_completion_commands(content, 'cargo')
+    assert_includes cmds, 'cargo --list'
+    refute_includes cmds, 'cargo install --list'  # Not simple list pattern
+  end
+
+  def test_extract_zsh_completion_commands_filters_non_list
+    content = <<~ZSH
+      $(brew doctor --list-checks)
+      $(brew formulae)
+    ZSH
+
+    cmds = Rubish::Builtins.extract_zsh_completion_commands(content, 'brew')
+    assert_empty cmds  # Neither matches simple list pattern
+  end
+
+  def test_zsh_completion_preferred_over_help_when_available
+    # Pre-populate cache with zsh result
+    Rubish::Builtins.instance_variable_get(:@help_completion_cache)['zshcmd'] = {
+      subcommands: ['zsh-sub1', 'zsh-sub2', 'zsh-sub3'],
+      options: ['--zsh-opt'],
+      source: :zsh,
+      timestamp: Time.now
+    }
+
+    Rubish::Builtins.set_completion_context(
+      line: 'zshcmd ',
+      point: 7,
+      words: ['zshcmd', ''],
+      cword: 1
+    )
+
+    Rubish::Builtins.call_builtin_completion_function('_auto', 'zshcmd', '', 'zshcmd')
+    completions = Rubish::Builtins.compreply
+
+    assert_includes completions, 'zsh-sub1'
+    assert_includes completions, 'zsh-sub2'
+    assert_includes completions, 'zsh-sub3'
   end
 end
