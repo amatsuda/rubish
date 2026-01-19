@@ -224,6 +224,15 @@ module Rubish
       when '}'
         @pos += 1
         Token.new(:RBRACE, '}')
+      when '.'
+        # Check if this is a method chain: .identifier(
+        # Not: .hidden (hidden file), ./path (relative path)
+        if looks_like_method_chain_start?
+          @pos += 1
+          Token.new(:DOT, '.')
+        else
+          read_word
+        end
       when 'd'
         # Check for Ruby 'do' block (do |x| ... end)
         # Only treat as block if followed by space/| (not 'done' or other words)
@@ -475,6 +484,9 @@ module Rubish
         # At the start, [ might be a glob pattern like [abc]file
         # Exception: ${VAR} is a shell variable, not a Ruby block
         break if char == '[' && @pos == start && !looks_like_glob_bracket?
+        # Stop at . if it's a method chain (e.g., ls.grep(/foo/))
+        # But not for filenames like file.txt or paths like ./script
+        break if char == '.' && looks_like_method_chain_start?
 
         if char == '\\'
           # Backslash escape - skip the next character
@@ -713,6 +725,63 @@ module Rubish
       return true if word =~ /[?*+@!]\z/
       # Also check for patterns that are entirely glob characters
       return true if word =~ /\A[*?@!]+\z/
+      false
+    end
+
+    def looks_like_method_chain_start?
+      # Check if current position (at '.') starts a method chain: .identifier(
+      # Pattern: . followed by letter/underscore, then identifier chars, then (
+      return false unless @input[@pos] == '.'
+
+      lookahead = @pos + 1
+      # Must start with letter or underscore (not / for paths or digit for decimals)
+      return false unless lookahead < @input.length && @input[lookahead] =~ /[a-zA-Z_]/
+
+      # Read the identifier
+      lookahead += 1
+      lookahead += 1 while lookahead < @input.length && @input[lookahead] =~ /[a-zA-Z0-9_]/
+
+      # Must be followed by ( for method call
+      return false unless lookahead < @input.length && @input[lookahead] == '('
+
+      # Additional check: not Ruby keyword args inside (to avoid false positives)
+      !looks_like_ruby_method_chain?(lookahead)
+    end
+
+    def looks_like_ruby_method_chain?(paren_pos)
+      # Check if the content inside parens looks like Ruby code
+      # Similar to looks_like_ruby_call? but starting from a specific position
+      lookahead = paren_pos + 1
+      depth = 1
+      in_string = false
+      string_char = nil
+
+      while lookahead < @input.length && depth > 0
+        char = @input[lookahead]
+
+        if !in_string && (char == '"' || char == "'")
+          in_string = true
+          string_char = char
+        elsif in_string && char == string_char && @input[lookahead - 1] != '\\'
+          in_string = false
+        elsif !in_string
+          case char
+          when '('
+            depth += 1
+          when ')'
+            depth -= 1
+          when ':'
+            prev_char = lookahead > 0 ? @input[lookahead - 1] : nil
+            next_char = @input[lookahead + 1]
+            if prev_char =~ /[a-zA-Z0-9_]/ && (next_char.nil? || next_char =~ /[\s\w]/)
+              return true
+            end
+          end
+        end
+
+        lookahead += 1
+      end
+
       false
     end
 

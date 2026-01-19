@@ -94,10 +94,22 @@ module Rubish
 
       commands = [first]
       pipe_types = []
-      while peek(:PIPE) || peek(:PIPE_BOTH)
+      while peek(:PIPE) || peek(:PIPE_BOTH) || peek(:DOT)
         if peek(:PIPE_BOTH)
           consume(:PIPE_BOTH)
           pipe_types << :pipe_both
+        elsif peek(:DOT)
+          # Method chain syntax: cmd.method(args) is equivalent to cmd | method args
+          consume(:DOT)
+          if peek(:FUNC_CALL)
+            cmd = parse_func_call
+            commands << cmd if cmd
+            pipe_types << :pipe
+          else
+            # Unexpected token after DOT, break
+            break
+          end
+          next
         else
           consume(:PIPE)
           pipe_types << :pipe

@@ -414,4 +414,63 @@ class TestLexer < Test::Unit::TestCase
     tokens = tokenize('cmd(arg1, arg2)')
     assert_equal :FUNC_CALL, tokens[0].type
   end
+
+  # ==========================================================================
+  # Method chain syntax: cmd.method(args)
+  # ==========================================================================
+
+  # Simple method chain
+  def test_method_chain_simple
+    tokens = tokenize('ls.grep(/foo/)')
+    assert_equal 3, tokens.length
+    assert_equal :WORD, tokens[0].type
+    assert_equal 'ls', tokens[0].value
+    assert_equal :DOT, tokens[1].type
+    assert_equal :FUNC_CALL, tokens[2].type
+    assert_equal 'grep', tokens[2].value[:name]
+  end
+
+  # Multiple method chain
+  def test_method_chain_multiple
+    tokens = tokenize('ls.grep(/foo/).head(-5)')
+    assert_equal 5, tokens.length
+    assert_equal :WORD, tokens[0].type
+    assert_equal :DOT, tokens[1].type
+    assert_equal :FUNC_CALL, tokens[2].type
+    assert_equal :DOT, tokens[3].type
+    assert_equal :FUNC_CALL, tokens[4].type
+  end
+
+  # Filename with extension should not be method chain
+  def test_filename_not_method_chain
+    tokens = tokenize('cat file.txt')
+    assert_equal 2, tokens.length
+    assert_equal :WORD, tokens[0].type
+    assert_equal :WORD, tokens[1].type
+    assert_equal 'file.txt', tokens[1].value
+  end
+
+  # Relative path should not be method chain
+  def test_relative_path_not_method_chain
+    tokens = tokenize('./script')
+    assert_equal 1, tokens.length
+    assert_equal :WORD, tokens[0].type
+    assert_equal './script', tokens[0].value
+  end
+
+  # Hidden file should not be method chain
+  def test_hidden_file_not_method_chain
+    tokens = tokenize('.hidden')
+    assert_equal 1, tokens.length
+    assert_equal :WORD, tokens[0].type
+    assert_equal '.hidden', tokens[0].value
+  end
+
+  # Method without parens should be filename
+  def test_method_without_parens_is_filename
+    tokens = tokenize('ls.sort')
+    assert_equal 1, tokens.length
+    assert_equal :WORD, tokens[0].type
+    assert_equal 'ls.sort', tokens[0].value
+  end
 end
