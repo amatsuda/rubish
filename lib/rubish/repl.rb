@@ -3590,6 +3590,50 @@ module Rubish
       end
     end
 
+    def __each_loop(variable, source_lambda, body_code, &block)
+      # Each loop: cmd.each {|var| body }
+      # Captures output from source command and iterates over each line
+      read_io, write_io = IO.pipe
+
+      pid = fork do
+        read_io.close
+        $stdout.reopen(write_io)
+        write_io.close
+
+        # Call the lambda which creates a Command/Pipeline object
+        result = source_lambda.call
+
+        # Run the command if it's a Command or Pipeline
+        result.run if result.is_a?(Command) || result.is_a?(Pipeline)
+
+        exit(0)
+      end
+
+      write_io.close
+
+      # Read output line by line and yield to block
+      read_io.each_line do |line|
+        block.call(line.chomp)
+      end
+
+      read_io.close
+      Process.wait(pid)
+    end
+
+    def __eval_shell_code(code_string)
+      # Parse and execute shell code string
+      return if code_string.nil? || code_string.empty?
+
+      tokens = Lexer.new(code_string).tokenize
+      return if tokens.empty?
+
+      ast = Parser.new(tokens).parse
+      return unless ast
+
+      code = Codegen.new.generate(ast)
+      eval_in_context(code)
+    end
+
     def __arith_for_loop(init_expr, cond_expr, update_expr, &block)
       # C-style arithmetic for loop: for ((init; cond; update)); do body; done
       # Evaluate init expression once

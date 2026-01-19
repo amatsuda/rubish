@@ -729,8 +729,9 @@ module Rubish
     end
 
     def looks_like_method_chain_start?
-      # Check if current position (at '.') starts a method chain: .identifier(
-      # Pattern: . followed by letter/underscore, then identifier chars, then (
+      # Check if current position (at '.') starts a method chain:
+      # - .identifier(args) - method call with args
+      # - .identifier { block } - method call with block (like .each {|x| ...})
       return false unless @input[@pos] == '.'
 
       lookahead = @pos + 1
@@ -740,6 +741,18 @@ module Rubish
       # Read the identifier
       lookahead += 1
       lookahead += 1 while lookahead < @input.length && @input[lookahead] =~ /[a-zA-Z0-9_]/
+
+      # Skip optional whitespace
+      block_lookahead = lookahead
+      block_lookahead += 1 while block_lookahead < @input.length && @input[block_lookahead] =~ /[ \t]/
+
+      # Check for block: { followed by |
+      if block_lookahead < @input.length && @input[block_lookahead] == '{'
+        # Check if this is a Ruby block {|...| or { |...|
+        inner = block_lookahead + 1
+        inner += 1 while inner < @input.length && @input[inner] =~ /\s/
+        return true if inner < @input.length && @input[inner] == '|'
+      end
 
       # Must be followed by ( for method call
       return false unless lookahead < @input.length && @input[lookahead] == '('

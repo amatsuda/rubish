@@ -229,4 +229,38 @@ class TestParser < Test::Unit::TestCase
     assert_equal 'tail', ast.commands[1].name
     assert_equal ['-n', '1'], ast.commands[1].args
   end
+
+  # ==========================================================================
+  # Each method: cmd.each {|var| body } - parsed as pipeline with each command
+  # ==========================================================================
+
+  def test_each_simple
+    ast = parse('ls.each {|x| echo $x }')
+    # each is now a regular command in the pipeline
+    assert_instance_of Rubish::AST::Pipeline, ast
+    assert_equal 2, ast.commands.length
+    assert_equal 'ls', ast.commands[0].name
+    assert_equal 'each', ast.commands[1].name
+    assert_match(/\|x\|/, ast.commands[1].block)
+  end
+
+  def test_each_with_pipeline_source
+    ast = parse('ls.grep(/foo/).each {|line| echo $line }')
+    assert_instance_of Rubish::AST::Pipeline, ast
+    assert_equal 3, ast.commands.length
+    assert_equal 'ls', ast.commands[0].name
+    assert_equal 'grep', ast.commands[1].name
+    assert_equal 'each', ast.commands[2].name
+    assert_match(/\|line\|/, ast.commands[2].block)
+  end
+
+  def test_each_with_func_call_source
+    ast = parse('seq(1, 10).each {|n| echo $n }')
+    assert_instance_of Rubish::AST::Pipeline, ast
+    assert_equal 2, ast.commands.length
+    assert_equal 'seq', ast.commands[0].name
+    assert_equal ['1', '10'], ast.commands[0].args
+    assert_equal 'each', ast.commands[1].name
+    assert_match(/\|n\|/, ast.commands[1].block)
+  end
 end

@@ -422,6 +422,12 @@ module Rubish
     end
 
     def generate_pipeline(node)
+      # Check if last command is 'each' with a block - handle specially
+      last_cmd = node.commands.last
+      if last_cmd.is_a?(AST::Command) && last_cmd.name == 'each' && last_cmd.block
+        return generate_pipeline_with_each(node)
+      end
+
       # Handle pipe_types for |& (pipe both stdout and stderr)
       parts = []
       node.commands.each_with_index do |cmd, idx|
@@ -436,6 +442,49 @@ module Rubish
         end
       end
       parts.join(' | ')
+    end
+
+    def generate_pipeline_with_each(node)
+      # Generate code for: cmd1 | cmd2 | ... | each {|var| body}
+      # Extract the each command and the source pipeline
+      each_cmd = node.commands.last
+      source_commands = node.commands[0...-1]
+      source_pipe_types = node.pipe_types ? node.pipe_types[0...-1] : nil
+
+      # Generate source pipeline code
+      source_code = if source_commands.length == 1
+                      generate(source_commands.first)
+                    else
+                      source_pipeline = AST::Pipeline.new(commands: source_commands, pipe_types: source_pipe_types)
+                      generate_pipeline(source_pipeline)
+                    end
+
+      # Parse the block to extract variable and body
+      var_name, body = parse_each_block(each_cmd.block)
+
+      # Generate the each loop
+      parts = []
+      parts << '__loop_break = catch(:break_loop) do'
+      parts << "__each_loop(#{var_name.inspect}, -> { #{source_code} }, #{body.inspect}) do |__line|"
+      parts << '__loop_cont = catch(:continue_loop) do'
+      parts << "ENV[#{var_name.inspect}] = __line"
+      parts << "__eval_shell_code(#{body.inspect})"
+      parts << 'nil; end'
+      parts << 'throw(:continue_loop, __loop_cont - 1) if __loop_cont.is_a?(Integer) && __loop_cont > 1'
+      parts << 'next if __loop_cont'
+      parts << 'end'
+      parts << 'nil; end'
+      parts << 'throw(:break_loop, __loop_break - 1) if __loop_break.is_a?(Integer) && __loop_break > 1'
+      parts.join("\n")
+    end
+
+    def parse_each_block(block)
+      # Parse block like "{|x| echo $x }" to extract variable and body
+      if block =~ /\A\{\s*\|(\w+)\|\s*(.*)\s*\}\z/m
+        [$1, $2.strip]
+      else
+        ['_', block]
+      end
     end
 
     def generate_negation(node)

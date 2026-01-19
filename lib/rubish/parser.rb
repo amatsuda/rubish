@@ -27,6 +27,10 @@ module Rubish
       types.include?(current&.type)
     end
 
+    def peek_at(offset, type)
+      @tokens[@pos + offset]&.type == type
+    end
+
     def consume(type = nil)
       return nil if @pos >= @tokens.length
       return nil if type && current.type != type
@@ -104,6 +108,13 @@ module Rubish
           if peek(:FUNC_CALL)
             cmd = parse_func_call
             commands << cmd if cmd
+            pipe_types << :pipe
+          elsif peek(:WORD) && current.value == 'each' && peek_at(1, :BLOCK)
+            # .each {|var| body } - treat as regular command with block in pipeline
+            consume(:WORD)  # consume 'each'
+            block = consume(:BLOCK).value
+            cmd = AST::Command.new(name: 'each', block: block)
+            commands << cmd
             pipe_types << :pipe
           else
             # Unexpected token after DOT, break
