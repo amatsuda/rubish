@@ -479,8 +479,15 @@ module Rubish
     end
 
     def parse_each_block(block)
-      # Parse block like "{|x| echo $x }" to extract variable and body
+      # Parse block to extract variable and body
+      # Supports two formats:
+      #   {|x| body}      - curly brace format
+      #   do |x| body end - do/end format
       if block =~ /\A\{\s*\|(\w+)\|\s*(.*)\s*\}\z/m
+        # Curly brace format: {|x| body}
+        [$1, $2.strip]
+      elsif block =~ /\Ado\s+\|(\w+)\|\s*(.*)\s+end\z/m
+        # Do/end format: do |x| body end
         [$1, $2.strip]
       else
         ['_', block]

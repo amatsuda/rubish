@@ -100,4 +100,43 @@ class TestEach < Test::Unit::TestCase
     refute_match(/match: bar/, content)
     refute_match(/match: baz/, content)
   end
+
+  # ==========================================================================
+  # do...end block syntax tests
+  # ==========================================================================
+
+  def test_each_do_end_parsing
+    tokens = Rubish::Lexer.new('ls | each do |x| echo $x end').tokenize
+    ast = Rubish::Parser.new(tokens).parse
+    assert_instance_of Rubish::AST::Pipeline, ast
+    assert_equal 2, ast.commands.length
+    assert_equal 'ls', ast.commands[0].name
+    assert_equal 'each', ast.commands[1].name
+    assert_match(/do.*\|x\|.*end/m, ast.commands[1].block)
+  end
+
+  def test_each_do_end_codegen
+    tokens = Rubish::Lexer.new('ls | each do |x| echo $x end').tokenize
+    ast = Rubish::Parser.new(tokens).parse
+    code = Rubish::Codegen.new.generate(ast)
+    assert_match(/__each_loop/, code)
+    assert_match(/"x"/, code)  # variable name extracted
+  end
+
+  def test_each_do_end_execution
+    execute("seq 1 3 | each do |n| echo \"num: $n\" >> #{output_file} end")
+    content = File.read(output_file)
+    assert_match(/num: 1/, content)
+    assert_match(/num: 2/, content)
+    assert_match(/num: 3/, content)
+  end
+
+  def test_each_do_end_with_pipeline
+    File.write("#{@tempdir}/data.txt", "apple\nbanana\napricot\ncherry\n")
+    execute("cat #{@tempdir}/data.txt | grep ap | each do |fruit| echo \"found: $fruit\" >> #{output_file} end")
+    content = File.read(output_file)
+    assert_match(/found: apple/, content)
+    assert_match(/found: apricot/, content)
+    refute_match(/found: banana/, content)
+  end
 end
