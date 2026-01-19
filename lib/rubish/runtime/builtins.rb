@@ -6674,6 +6674,9 @@ module Rubish
 
       # _kill - Process completion
       @builtin_completion_functions['_kill'] = ->(cmd, cur, prev) { _kill_completion(cmd, cur, prev) }
+
+      # _auto - Fish-style auto-completion by parsing --help
+      @builtin_completion_functions['_auto'] = ->(cmd, cur, prev) { _auto_completion(cmd, cur, prev) }
     end
 
     # Initialize builtin completion functions on load
@@ -7481,6 +7484,188 @@ module Rubish
       end
 
       @compreply.sort!
+    end
+
+    # ==========================================================================
+    # Auto-completion by parsing --help output (fish-style)
+    # ==========================================================================
+
+    # Cache for parsed help output: { command => { subcommands: [...], options: [...], timestamp: Time } }
+    @help_completion_cache = {}
+    HELP_CACHE_TTL = 1800  # 30 minutes
+
+    # Get zsh's fpath for completion file directories
+    @zsh_fpath = nil
+    def self.zsh_fpath
+      return @zsh_fpath if @zsh_fpath
+
+      @zsh_fpath = `zsh -c 'print -l $fpath' 2>/dev/null`.split("\n").select { |d| Dir.exist?(d) }
+    rescue
+      @zsh_fpath = []
+    end
+
+    # Known help sources for popular commands (command => help invocation)
+    # Note: git, ssh, make, man, kill have dedicated completion functions
+    HELP_COMMAND_SOURCES = {
+      'bundle' => 'bundle --help',
+      'gem' => 'gem help commands',
+      'rails' => 'rails --help',
+      'brew' => 'brew commands',
+      'npm' => 'npm help',
+      'yarn' => 'yarn --help',
+      'cargo' => 'cargo --list',
+      'docker' => 'docker --help',
+      'go' => 'go help',
+      'pip' => 'pip --help',
+      'rustup' => 'rustup --help'
+    }.freeze
+
+    def self._auto_completion(cmd, cur, prev)
+      words = @comp_words
+      cword = @comp_cword
+      command = words[0]
+
+      # Parse help output for this command
+      parsed = parse_help_for_command(command)
+      return if parsed.nil?
+
+      # Find if we're completing a subcommand's arguments
+      subcommand = nil
+      words.each_with_index do |word, idx|
+        next if idx == 0
+        next if word.start_with?('-')
+        if parsed[:subcommands].include?(word)
+          subcommand = word
+          break
+        end
+      end
+
+      if subcommand && cword > 1
+        # Try to get help for the subcommand
+        sub_parsed = parse_help_for_command(command, subcommand)
+        if sub_parsed
+          if cur.start_with?('-')
+            @compreply = sub_parsed[:options].select { |o| o.start_with?(cur) }
+          else
+            @compreply = sub_parsed[:subcommands].select { |s| s.start_with?(cur) }
+          end
+          return
+        end
+      end
+
+      # Complete top-level
+      if cur.start_with?('-')
+        @compreply = parsed[:options].select { |o| o.start_with?(cur) }
+      else
+        @compreply = parsed[:subcommands].select { |s| s.start_with?(cur) }
+      end
+    end
+
+    def self.parse_help_for_command(command, subcommand = nil)
+      cache_key = subcommand ? "#{command} #{subcommand}" : command
+
+      # Check cache
+      cached = @help_completion_cache[cache_key]
+      if cached && (Time.now - cached[:timestamp]) < HELP_CACHE_TTL
+        return cached
+      end
+
+      # Build list of help commands to try
+      help_commands = if subcommand
+        ["#{command} #{subcommand} --help", "#{command} help #{subcommand}"]
+      elsif HELP_COMMAND_SOURCES.key?(command)
+        # Use known source for popular commands
+        [HELP_COMMAND_SOURCES[command]]
+      else
+        # Try common conventions for unknown commands
+        ["#{command} --help", "#{command} help", "#{command} -h"]
+      end
+
+      help_output = nil
+      help_commands.each do |help_cmd|
+        output = `#{help_cmd} 2>&1`
+        if $?.success? && output.length > 50
+          help_output = output
+          # Check if this output has good subcommand info
+          parsed = parse_help_output(output)
+          break if parsed[:subcommands].length >= 3
+        end
+      end
+
+      return nil unless help_output
+
+      parsed = parse_help_output(help_output)
+      parsed[:timestamp] = Time.now
+      @help_completion_cache[cache_key] = parsed
+      parsed
+    end
+
+    def self.parse_help_output(text)
+      subcommands = []
+      options = []
+
+      # Remove man page bold formatting (doubled characters like "bbuunnddllee")
+      text = text.gsub(/(.)\x08\1/, '\1')
+      # Remove ANSI escape codes
+      text = text.gsub(/\e\[[0-9;]*m/, '')
+
+      lines = text.lines.map(&:chomp)
+      in_commands_section = false
+      in_options_section = false
+
+      lines.each do |line|
+        # Detect section headers
+        if line =~ /^(Commands|COMMANDS|Subcommands|SUBCOMMANDS|Available commands):/i ||
+           line =~ /commands are:$/i ||
+           line =~ /^=+>\s*(Built-in\s+)?commands$/i ||
+           line =~ /^(PRIMARY|UTILITIES|BUNDLE)\s+COMMANDS$/i
+          in_commands_section = true
+          in_options_section = false
+          next
+        elsif line =~ /^(Options|OPTIONS|Flags|FLAGS|Global options):/i
+          in_commands_section = false
+          in_options_section = true
+          next
+        elsif line =~ /^[A-Z][a-z]+:$/ || line =~ /^[A-Z]+:$/
+          # New section header, reset
+          in_commands_section = false
+          in_options_section = false
+        end
+
+        # Parse subcommands in different formats:
+        # 1. Simple list: one command per line (brew commands)
+        # 2. Table format: "  command   description" (gem help commands)
+        # 3. Man page format: "bundle install(1)"
+        if in_commands_section
+          # Simple single-word per line (brew commands style)
+          if line =~ /^([a-z][-a-z0-9_]*)$/
+            subcommands << $1
+          # Table format with description
+          elsif line =~ /^\s{2,}([a-z][-a-z0-9_:]*)\s{2,}/
+            cmd = $1
+            subcommands << cmd if cmd.length < 30 && !cmd.include?('=')
+          # Man page format: "bundle install(1)"
+          elsif line =~ /^\s+\w+\s+([a-z][-a-z0-9_]*)\s*\(\d\)/
+            subcommands << $1
+          end
+        elsif !in_options_section
+          # Outside of explicit sections, try to detect command patterns
+          # Table format with description
+          if line =~ /^\s{2,4}([a-z][-a-z0-9_]*)\s{2,}\S/
+            cmd = $1
+            subcommands << cmd if cmd.length < 25 && !cmd.include?('=')
+          end
+        end
+
+        # Parse options - look for -x or --xxx patterns
+        if line =~ /(^|\s)(--?[a-zA-Z][-a-zA-Z0-9_]*)/
+          line.scan(/(?:^|\s)(--?[a-zA-Z][-a-zA-Z0-9_]*)(?:[,=\s\[]|$)/).flatten.each do |opt|
+            options << opt unless opt =~ /^-\d/  # Skip things like -1, -2
+          end
+        end
+      end
+
+      {subcommands: subcommands.uniq, options: options.uniq}
     end
 
     # Valid completion options for compopt

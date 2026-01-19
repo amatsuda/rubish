@@ -6472,6 +6472,31 @@ module Rubish
           # Use spec without function (wordlist, actions, etc.)
           return Builtins.generate_completions(spec, input)
         else
+          # Try auto-completion by parsing --help output (fish-style)
+          cword = calculate_comp_cword(line, point, words)
+          Builtins.set_completion_context(
+            line: line,
+            point: point,
+            words: words,
+            cword: cword,
+            type: 9,
+            key: 9
+          )
+
+          begin
+            prev = words[cword - 1] || ''
+            Builtins.call_builtin_completion_function('_auto', cmd, input, prev)
+            results = Builtins.compreply.dup
+
+            if results && !results.empty?
+              results.select! { |r| r.start_with?(input) } unless input.empty?
+              return results.uniq.sort
+            end
+          ensure
+            Builtins.clear_completion_context
+          end
+
+          # Fall back to file completion
           complete_file(input)
         end
       end
