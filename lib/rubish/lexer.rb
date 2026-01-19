@@ -71,7 +71,8 @@ module Rubish
         if token
           tokens << token
           @last_token_type = token.type
-          @last_word_value = token.value if token.type == :WORD
+          # Track word value for block detection (also SELECT for filtering select)
+          @last_word_value = token.value if token.type == :WORD || token.type == :SELECT
         end
       end
       tokens
@@ -218,8 +219,9 @@ module Rubish
           if @input[lookahead] == '|'
             read_block
           elsif @last_word_value == 'each' || @last_word_value == '.each' ||
-                @last_word_value == 'map' || @last_word_value == '.map'
-            # Block after 'each'/'map' without explicit variable: each { body }
+                @last_word_value == 'map' || @last_word_value == '.map' ||
+                @last_word_value == 'select' || @last_word_value == '.select'
+            # Block after 'each'/'map'/'select' without explicit variable: each { body }
             # Uses implicit 'it' variable (accessed as $it)
             read_block
           else
@@ -250,8 +252,9 @@ module Rubish
           if @input[lookahead] == '|'
             read_do_block
           elsif @last_word_value == 'each' || @last_word_value == '.each' ||
-                @last_word_value == 'map' || @last_word_value == '.map'
-            # Block after 'each'/'map' without explicit variable: each do body end
+                @last_word_value == 'map' || @last_word_value == '.map' ||
+                @last_word_value == 'select' || @last_word_value == '.select'
+            # Block after 'each'/'map'/'select' without explicit variable: each do body end
             # Uses implicit 'it' variable (accessed as $it)
             read_do_block
           else

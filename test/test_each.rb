@@ -240,4 +240,75 @@ class TestEach < Test::Unit::TestCase
     # Block should contain the expression, not echo
     refute_match(/echo/, ast.commands.last.block)
   end
+
+  # ==========================================================================
+  # Select method tests (filtering)
+  # ==========================================================================
+
+  def test_select_simple
+    # select filters lines where block condition is true
+    execute("seq 1 6 | select { test $(($it % 2)) -eq 0 } > #{output_file}")
+    content = File.read(output_file)
+    assert_match(/^2$/, content)
+    assert_match(/^4$/, content)
+    assert_match(/^6$/, content)
+    refute_match(/^1$/, content)
+    refute_match(/^3$/, content)
+    refute_match(/^5$/, content)
+  end
+
+  def test_select_with_explicit_variable
+    execute("seq 1 6 | select {|n| test $(($n % 2)) -eq 0 } > #{output_file}")
+    content = File.read(output_file)
+    assert_match(/^2$/, content)
+    assert_match(/^4$/, content)
+    assert_match(/^6$/, content)
+  end
+
+  def test_select_method_chain
+    execute("seq(1, 6).select { test $(($it % 2)) -eq 0 } > #{output_file}")
+    content = File.read(output_file)
+    assert_match(/^2$/, content)
+    assert_match(/^4$/, content)
+    assert_match(/^6$/, content)
+  end
+
+  def test_select_chained_with_map
+    # Filter even numbers, then double them
+    execute("seq(1, 6).select { test $(($it % 2)) -eq 0 }.map { $(($it * 2)) } > #{output_file}")
+    content = File.read(output_file)
+    assert_match(/^4$/, content)   # 2 * 2
+    assert_match(/^8$/, content)   # 4 * 2
+    assert_match(/^12$/, content)  # 6 * 2
+  end
+
+  def test_select_do_end_syntax
+    execute("seq 1 6 | select do test $(($it % 2)) -eq 0 end > #{output_file}")
+    content = File.read(output_file)
+    assert_match(/^2$/, content)
+    assert_match(/^4$/, content)
+    assert_match(/^6$/, content)
+  end
+
+  def test_select_with_grep_condition
+    File.write("#{@tempdir}/data.txt", "apple\nbanana\napricot\ncherry\n")
+    execute("cat #{@tempdir}/data.txt | select { echo $it | grep -q ap } > #{output_file}")
+    content = File.read(output_file)
+    assert_match(/^apple$/, content)
+    assert_match(/^apricot$/, content)
+    refute_match(/banana/, content)
+    refute_match(/cherry/, content)
+  end
+
+  def test_select_lexer
+    tokens = Rubish::Lexer.new('ls | select { test -f $it }').tokenize
+    assert_equal :BLOCK, tokens.last.type
+  end
+
+  def test_select_parsing
+    tokens = Rubish::Lexer.new('seq 1 10 | select { test $(($it % 2)) -eq 0 }').tokenize
+    ast = Rubish::Parser.new(tokens).parse
+    assert_instance_of Rubish::AST::Pipeline, ast
+    assert_equal 'select', ast.commands.last.name
+  end
 end

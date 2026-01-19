@@ -99,12 +99,12 @@ module Rubish
       commands = [first]
       pipe_types = []
       while peek(:PIPE) || peek(:PIPE_BOTH) || peek(:DOT) ||
-            (peek(:WORD) && current.value =~ /\A\.(each|map)\z/ && peek_at(1, :BLOCK))
+            (peek(:WORD) && current.value =~ /\A\.(each|map|select)\z/ && peek_at(1, :BLOCK))
         if peek(:PIPE_BOTH)
           consume(:PIPE_BOTH)
           pipe_types << :pipe_both
-        elsif peek(:WORD) && current.value =~ /\A\.(each|map)\z/ && peek_at(1, :BLOCK)
-          # .each/.map {block} after FUNC_CALL - tokenized as single WORD
+        elsif peek(:WORD) && current.value =~ /\A\.(each|map|select)\z/ && peek_at(1, :BLOCK)
+          # .each/.map/.select {block} after FUNC_CALL - tokenized as single WORD
           method_name = consume(:WORD).value[1..]  # remove leading '.'
           block = consume(:BLOCK).value
           cmd = AST::Command.new(name: method_name, block: block)
@@ -120,8 +120,8 @@ module Rubish
             cmd = parse_func_call
             commands << cmd if cmd
             pipe_types << :pipe
-          elsif peek(:WORD) && current.value =~ /\A(each|map)\z/ && peek_at(1, :BLOCK)
-            # .each/.map {|var| body } - treat as regular command with block in pipeline
+          elsif peek(:WORD) && current.value =~ /\A(each|map|select)\z/ && peek_at(1, :BLOCK)
+            # .each/.map/.select {|var| body } - treat as regular command with block in pipeline
             method_name = consume(:WORD).value
             block = consume(:BLOCK).value
             cmd = AST::Command.new(name: method_name, block: block)
@@ -137,6 +137,15 @@ module Rubish
         else
           consume(:PIPE)
           pipe_types << :pipe
+        end
+        # Check for select { block } - filtering select (not shell select loop)
+        if peek(:SELECT) && peek_at(1, :BLOCK)
+          consume(:SELECT)
+          block = consume(:BLOCK).value
+          cmd = AST::Command.new(name: 'select', block: block)
+          cmd = parse_redirections(cmd)
+          commands << cmd
+          next
         end
         cmd = parse_command
         commands << cmd if cmd

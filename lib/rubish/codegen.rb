@@ -432,6 +432,9 @@ module Rubish
       elsif unwrapped_last.is_a?(AST::Command) && unwrapped_last.name == 'map' && unwrapped_last.block
         # map is just each with implicit echo - transform the block body
         return generate_pipeline_with_each(node, implicit_echo: true)
+      elsif unwrapped_last.is_a?(AST::Command) && unwrapped_last.name == 'select' && unwrapped_last.block
+        # select filters lines where block condition is true
+        return generate_pipeline_with_each(node, filter: true)
       end
 
       # Handle pipe_types for |& (pipe both stdout and stderr)
@@ -450,10 +453,10 @@ module Rubish
       parts.join(' | ')
     end
 
-    def generate_pipeline_with_each(node, implicit_echo: false)
+    def generate_pipeline_with_each(node, implicit_echo: false, filter: false)
       # Generate code for: cmd1 | cmd2 | ... | each {|var| body}
-      # Also handles map (with implicit_echo: true)
-      # Extract the each/map command and the source pipeline
+      # Also handles map (with implicit_echo: true) and select (with filter: true)
+      # Extract the each/map/select command and the source pipeline
       last_node = node.commands.last
       redirect_info = extract_redirect_info(last_node)
       each_cmd = unwrap_redirect(last_node)
@@ -473,6 +476,9 @@ module Rubish
 
       # For map, wrap body in echo to implicitly output the result
       body = "echo #{body}" if implicit_echo
+
+      # For select, wrap body in conditional to filter lines
+      body = "if #{body}; then echo $#{var_name}; fi" if filter
 
       # Generate the each loop
       parts = []
