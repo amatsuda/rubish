@@ -754,8 +754,10 @@ module Rubish
       return false unless lookahead < @input.length && @input[lookahead] =~ /[a-zA-Z_]/
 
       # Read the identifier
+      id_start = lookahead
       lookahead += 1
       lookahead += 1 while lookahead < @input.length && @input[lookahead] =~ /[a-zA-Z0-9_]/
+      identifier = @input[id_start...lookahead]
 
       # Skip optional whitespace
       block_lookahead = lookahead
@@ -767,6 +769,8 @@ module Rubish
         inner = block_lookahead + 1
         inner += 1 while inner < @input.length && @input[inner] =~ /\s/
         return true if inner < @input.length && @input[inner] == '|'
+        # For each/map/select, also allow implicit 'it' blocks without |
+        return true if %w[each map select].include?(identifier)
       end
 
       # Must be followed by ( for method call

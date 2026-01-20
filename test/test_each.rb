@@ -175,6 +175,26 @@ class TestEach < Test::Unit::TestCase
     assert_equal '{ puts it }', tokens.last.value
   end
 
+  def test_select_implicit_it_method_chain
+    # select with implicit it using method chain syntax
+    execute("seq(1, 6).select { it.to_i.even? } > #{output_file}")
+    content = File.read(output_file)
+    assert_match(/^2$/, content)
+    assert_match(/^4$/, content)
+    assert_match(/^6$/, content)
+    refute_match(/^1$/, content)
+    refute_match(/^3$/, content)
+  end
+
+  def test_map_implicit_it_method_chain
+    # map with implicit it using method chain syntax
+    execute("seq(1, 3).map { it.to_i * 2 } > #{output_file}")
+    content = File.read(output_file)
+    assert_match(/^2$/, content)
+    assert_match(/^4$/, content)
+    assert_match(/^6$/, content)
+  end
+
   def test_each_implicit_it_do_end_lexer
     # Verify lexer produces BLOCK token for do body end after each
     tokens = Rubish::Lexer.new('ls | each do puts it end').tokenize
