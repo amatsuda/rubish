@@ -131,7 +131,10 @@ module Rubish
     def setup_reline
       Reline.completion_proc = ->(input) {
         result = complete(input)
-        result.is_a?(Array) ? result : []
+        candidates = result.is_a?(Array) ? result : []
+        # Append space to completions (except directories which end with /)
+        # This is needed because Reline's autocompletion mode doesn't use completion_append_character
+        candidates.map { |c| c.end_with?('/') ? c : "#{c} " }
       }
       # Set up default completions for common commands
       Builtins.setup_default_completions
