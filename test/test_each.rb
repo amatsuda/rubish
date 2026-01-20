@@ -388,4 +388,40 @@ class TestEach < Test::Unit::TestCase
     lines = content.strip.split("\n")
     assert_equal 2, lines.length
   end
+
+  def test_file_predicate_select
+    # Create files and directories
+    File.write("#{@tempdir}/file1.txt", 'content')
+    File.write("#{@tempdir}/file2.txt", 'content')
+    Dir.mkdir("#{@tempdir}/subdir")
+
+    # List all entries and select only files
+    execute("ls #{@tempdir} | each {|f| echo #{@tempdir}/$f } | select { $it.file? } > #{output_file}")
+    content = File.read(output_file)
+    assert_match(/file1\.txt/, content)
+    assert_match(/file2\.txt/, content)
+    refute_match(/subdir/, content)
+  end
+
+  def test_dir_predicate_select
+    # Create files and directories
+    File.write("#{@tempdir}/file1.txt", 'content')
+    Dir.mkdir("#{@tempdir}/dir1")
+    Dir.mkdir("#{@tempdir}/dir2")
+
+    # List all entries and select only directories
+    execute("ls #{@tempdir} | each {|f| echo #{@tempdir}/$f } | select { $it.dir? } > #{output_file}")
+    content = File.read(output_file)
+    assert_match(/dir1/, content)
+    assert_match(/dir2/, content)
+    refute_match(/file1\.txt/, content)
+  end
+
+  def test_file_and_dir_predicate_transform
+    codegen = Rubish::Codegen.new
+    assert_equal 'test -f "$it"', codegen.send(:transform_predicates, '$it.file?')
+    assert_equal 'test -d "$it"', codegen.send(:transform_predicates, '$it.dir?')
+    assert_equal 'test -f "$path"', codegen.send(:transform_predicates, '$path.file?')
+    assert_equal 'test -d "$path"', codegen.send(:transform_predicates, '$path.dir?')
+  end
 end
