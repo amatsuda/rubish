@@ -545,11 +545,15 @@ module Rubish
       # $var.any?   → test -n "$var"
       # $var.file?  → test -f "$var"
       # $var.dir?   → test -d "$var"
+      # $var == val → [ "$var" = val ]
+      # $var != val → [ "$var" != val ]
       body
         .gsub(/\$(\w+)\.empty\?/, 'test -z "$\1"')
         .gsub(/\$(\w+)\.any\?/, 'test -n "$\1"')
         .gsub(/\$(\w+)\.file\?/, 'test -f "$\1"')
         .gsub(/\$(\w+)\.dir\?/, 'test -d "$\1"')
+        .gsub(/\$(\w+)\s*==\s*("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|\$\w+|\S+)/, '[ "$\1" = \2 ]')
+        .gsub(/\$(\w+)\s*!=\s*("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|\$\w+|\S+)/, '[ "$\1" != \2 ]')
     end
 
     def unwrap_redirect(node)

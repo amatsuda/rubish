@@ -424,4 +424,38 @@ class TestEach < Test::Unit::TestCase
     assert_equal 'test -f "$path"', codegen.send(:transform_predicates, '$path.file?')
     assert_equal 'test -d "$path"', codegen.send(:transform_predicates, '$path.dir?')
   end
+
+  def test_equality_operator_select
+    # Select specific value with ==
+    execute('seq 1 5 | select { $it == 3 } > ' + output_file)
+    content = File.read(output_file).strip
+    assert_equal '3', content
+  end
+
+  def test_equality_operator_with_string
+    File.write("#{@tempdir}/words.txt", "apple\nbanana\napple\ncherry\n")
+    execute("cat #{@tempdir}/words.txt | select { $it == \"apple\" } > #{output_file}")
+    content = File.read(output_file)
+    lines = content.strip.split("\n")
+    assert_equal 2, lines.length
+    assert lines.all? { |l| l == 'apple' }
+  end
+
+  def test_inequality_operator_select
+    # Select values not equal to 3
+    execute('seq 1 5 | select { $it != 3 } > ' + output_file)
+    content = File.read(output_file).strip
+    lines = content.split("\n")
+    assert_equal 4, lines.length
+    refute_includes lines, '3'
+  end
+
+  def test_equality_operator_transform
+    codegen = Rubish::Codegen.new
+    assert_equal '[ "$it" = 3 ]', codegen.send(:transform_predicates, '$it == 3')
+    assert_equal '[ "$it" = "foo" ]', codegen.send(:transform_predicates, '$it == "foo"')
+    assert_equal '[ "$x" = $y ]', codegen.send(:transform_predicates, '$x == $y')
+    assert_equal '[ "$it" != 3 ]', codegen.send(:transform_predicates, '$it != 3')
+    assert_equal '[ "$it" != "bar" ]', codegen.send(:transform_predicates, '$it != "bar"')
+  end
 end
