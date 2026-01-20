@@ -50,17 +50,17 @@ class TestEach < Test::Unit::TestCase
 
   # Codegen tests
   def test_each_codegen
-    tokens = Rubish::Lexer.new('ls.each {|x| echo $x }').tokenize
+    tokens = Rubish::Lexer.new('ls.each {|x| puts x }').tokenize
     ast = Rubish::Parser.new(tokens).parse
     code = Rubish::Codegen.new.generate(ast)
     assert_match(/__each_loop/, code)
-    assert_match(/__eval_shell_code/, code)
+    assert_match(/puts x/, code)  # Ruby code is inlined directly
   end
 
   # Execution tests
   def test_each_iterates_over_lines
     # Test using printf as source (more portable than echo -e)
-    execute("printf 'alpha\\nbeta\\ngamma\\n'.each {|x| echo \"got: $x\" >> #{output_file} }")
+    execute("printf 'alpha\\nbeta\\ngamma\\n'.each {|x| File.write('#{output_file}', \"got: \#{x}\\n\", mode: 'a') }")
     content = File.read(output_file)
     assert_match(/got: alpha/, content)
     assert_match(/got: beta/, content)
@@ -69,7 +69,7 @@ class TestEach < Test::Unit::TestCase
 
   def test_each_with_seq
     # Test using seq as source
-    execute("seq(1, 3).each {|n| echo \"num: $n\" >> #{output_file} }")
+    execute("seq(1, 3).each {|n| File.write('#{output_file}', \"num: \#{n}\\n\", mode: 'a') }")
     content = File.read(output_file)
     assert_match(/num: 1/, content)
     assert_match(/num: 2/, content)
@@ -82,7 +82,7 @@ class TestEach < Test::Unit::TestCase
     File.write("#{@tempdir}/file2.txt", 'content2')
 
     # Use ls.each to iterate over files
-    execute("ls(#{@tempdir}).each {|f| echo \"file: $f\" >> #{output_file} }")
+    execute("ls(#{@tempdir}).each {|f| File.write('#{output_file}', \"file: \#{f}\\n\", mode: 'a') }")
     content = File.read(output_file)
     assert_match(/file: file1\.txt/, content)
     assert_match(/file: file2\.txt/, content)
@@ -93,7 +93,7 @@ class TestEach < Test::Unit::TestCase
     File.write("#{@tempdir}/data.txt", "foo\nbar\nfoo2\nbaz\n")
 
     # Use cat.grep as source (use string pattern, not regex literal for grep)
-    execute("cat(#{@tempdir}/data.txt).grep(foo).each {|line| echo \"match: $line\" >> #{output_file} }")
+    execute("cat(#{@tempdir}/data.txt).grep(foo).each {|line| File.write('#{output_file}', \"match: \#{line}\\n\", mode: 'a') }")
     content = File.read(output_file)
     assert_match(/match: foo/, content)
     assert_match(/match: foo2/, content)
@@ -124,7 +124,7 @@ class TestEach < Test::Unit::TestCase
   end
 
   def test_each_do_end_execution
-    execute("seq 1 3 | each do |n| echo \"num: $n\" >> #{output_file} end")
+    execute("seq 1 3 | each do |n| File.write('#{output_file}', \"num: \#{n}\\n\", mode: 'a') end")
     content = File.read(output_file)
     assert_match(/num: 1/, content)
     assert_match(/num: 2/, content)
@@ -133,7 +133,7 @@ class TestEach < Test::Unit::TestCase
 
   def test_each_do_end_with_pipeline
     File.write("#{@tempdir}/data.txt", "apple\nbanana\napricot\ncherry\n")
-    execute("cat #{@tempdir}/data.txt | grep ap | each do |fruit| echo \"found: $fruit\" >> #{output_file} end")
+    execute("cat #{@tempdir}/data.txt | grep ap | each do |fruit| File.write('#{output_file}', \"found: \#{fruit}\\n\", mode: 'a') end")
     content = File.read(output_file)
     assert_match(/found: apple/, content)
     assert_match(/found: apricot/, content)
@@ -141,11 +141,11 @@ class TestEach < Test::Unit::TestCase
   end
 
   # ==========================================================================
-  # Implicit $it variable tests
+  # Implicit it variable tests (Ruby's implicit block parameter)
   # ==========================================================================
 
   def test_each_implicit_it_curly_brace
-    execute("seq 1 3 | each { echo \"val: $it\" >> #{output_file} }")
+    execute("seq 1 3 | each { File.write('#{output_file}', \"val: \#{it}\\n\", mode: 'a') }")
     content = File.read(output_file)
     assert_match(/val: 1/, content)
     assert_match(/val: 2/, content)
@@ -153,7 +153,7 @@ class TestEach < Test::Unit::TestCase
   end
 
   def test_each_implicit_it_do_end
-    execute("seq 1 3 | each do echo \"val: $it\" >> #{output_file} end")
+    execute("seq 1 3 | each do File.write('#{output_file}', \"val: \#{it}\\n\", mode: 'a') end")
     content = File.read(output_file)
     assert_match(/val: 1/, content)
     assert_match(/val: 2/, content)
@@ -161,7 +161,7 @@ class TestEach < Test::Unit::TestCase
   end
 
   def test_each_implicit_it_method_chain
-    execute("seq(1, 3).each { echo \"val: $it\" >> #{output_file} }")
+    execute("seq(1, 3).each { File.write('#{output_file}', \"val: \#{it}\\n\", mode: 'a') }")
     content = File.read(output_file)
     assert_match(/val: 1/, content)
     assert_match(/val: 2/, content)
@@ -170,25 +170,25 @@ class TestEach < Test::Unit::TestCase
 
   def test_each_implicit_it_lexer
     # Verify lexer produces BLOCK token for { body } after each
-    tokens = Rubish::Lexer.new('ls | each { echo $it }').tokenize
+    tokens = Rubish::Lexer.new('ls | each { puts it }').tokenize
     assert_equal :BLOCK, tokens.last.type
-    assert_equal '{ echo $it }', tokens.last.value
+    assert_equal '{ puts it }', tokens.last.value
   end
 
   def test_each_implicit_it_do_end_lexer
     # Verify lexer produces BLOCK token for do body end after each
-    tokens = Rubish::Lexer.new('ls | each do echo $it end').tokenize
+    tokens = Rubish::Lexer.new('ls | each do puts it end').tokenize
     assert_equal :BLOCK, tokens.last.type
     assert_match(/do.*end/, tokens.last.value)
   end
 
   # ==========================================================================
-  # Map method tests
+  # Map method tests (map evaluates block as Ruby)
   # ==========================================================================
 
   def test_map_simple
-    # map implicitly echoes the result of the block expression
-    execute("seq 1 3 | map { $(($it * 2)) } > #{output_file}")
+    # map evaluates block as Ruby and outputs result
+    execute("seq 1 3 | map {|x| x.to_i * 2 } > #{output_file}")
     content = File.read(output_file)
     assert_match(/^2$/, content)
     assert_match(/^4$/, content)
@@ -196,7 +196,7 @@ class TestEach < Test::Unit::TestCase
   end
 
   def test_map_with_explicit_variable
-    execute("seq 1 3 | map {|n| $(($n + 10)) } > #{output_file}")
+    execute("seq 1 3 | map {|n| n.to_i + 10 } > #{output_file}")
     content = File.read(output_file)
     assert_match(/^11$/, content)
     assert_match(/^12$/, content)
@@ -204,7 +204,7 @@ class TestEach < Test::Unit::TestCase
   end
 
   def test_map_method_chain
-    execute("seq(1, 3).map { $(($it * 2)) } > #{output_file}")
+    execute("seq(1, 3).map {|x| x.to_i * 2 } > #{output_file}")
     content = File.read(output_file)
     assert_match(/^2$/, content)
     assert_match(/^4$/, content)
@@ -212,7 +212,7 @@ class TestEach < Test::Unit::TestCase
   end
 
   def test_map_chained_with_each
-    execute("seq(1, 3).map { $(($it * 2)) }.each { echo \"val: $it\" >> #{output_file} }")
+    execute("seq(1, 3).map {|x| x.to_i * 2 }.each {|x| File.write('#{output_file}', \"val: \#{x}\\n\", mode: 'a') }")
     content = File.read(output_file)
     assert_match(/val: 2/, content)
     assert_match(/val: 4/, content)
@@ -220,7 +220,7 @@ class TestEach < Test::Unit::TestCase
   end
 
   def test_map_do_end_syntax
-    execute("seq 1 3 | map do $(($it * 3)) end > #{output_file}")
+    execute("seq 1 3 | map do |x| x.to_i * 3 end > #{output_file}")
     content = File.read(output_file)
     assert_match(/^3$/, content)
     assert_match(/^6$/, content)
@@ -228,26 +228,24 @@ class TestEach < Test::Unit::TestCase
   end
 
   def test_map_lexer
-    tokens = Rubish::Lexer.new('ls | map { $it }').tokenize
+    tokens = Rubish::Lexer.new('ls | map {|x| x }').tokenize
     assert_equal :BLOCK, tokens.last.type
   end
 
   def test_map_parsing
-    tokens = Rubish::Lexer.new('seq 1 3 | map { $(($it * 2)) }').tokenize
+    tokens = Rubish::Lexer.new('seq 1 3 | map {|x| x.to_i * 2 }').tokenize
     ast = Rubish::Parser.new(tokens).parse
     assert_instance_of Rubish::AST::Pipeline, ast
     assert_equal 'map', ast.commands.last.name
-    # Block should contain the expression, not echo
-    refute_match(/echo/, ast.commands.last.block)
   end
 
   # ==========================================================================
-  # Select method tests (filtering)
+  # Select method tests (select evaluates block as Ruby)
   # ==========================================================================
 
   def test_select_simple
-    # select filters lines where block condition is true
-    execute("seq 1 6 | select { test $(($it % 2)) -eq 0 } > #{output_file}")
+    # select evaluates block as Ruby, outputs line if truthy
+    execute("seq 1 6 | select {|x| x.to_i.even? } > #{output_file}")
     content = File.read(output_file)
     assert_match(/^2$/, content)
     assert_match(/^4$/, content)
@@ -258,7 +256,7 @@ class TestEach < Test::Unit::TestCase
   end
 
   def test_select_with_explicit_variable
-    execute("seq 1 6 | select {|n| test $(($n % 2)) -eq 0 } > #{output_file}")
+    execute("seq 1 6 | select {|n| n.to_i.even? } > #{output_file}")
     content = File.read(output_file)
     assert_match(/^2$/, content)
     assert_match(/^4$/, content)
@@ -266,7 +264,7 @@ class TestEach < Test::Unit::TestCase
   end
 
   def test_select_method_chain
-    execute("seq(1, 6).select { test $(($it % 2)) -eq 0 } > #{output_file}")
+    execute("seq(1, 6).select {|x| x.to_i.even? } > #{output_file}")
     content = File.read(output_file)
     assert_match(/^2$/, content)
     assert_match(/^4$/, content)
@@ -275,7 +273,7 @@ class TestEach < Test::Unit::TestCase
 
   def test_select_chained_with_map
     # Filter even numbers, then double them
-    execute("seq(1, 6).select { test $(($it % 2)) -eq 0 }.map { $(($it * 2)) } > #{output_file}")
+    execute("seq(1, 6).select {|x| x.to_i.even? }.map {|x| x.to_i * 2 } > #{output_file}")
     content = File.read(output_file)
     assert_match(/^4$/, content)   # 2 * 2
     assert_match(/^8$/, content)   # 4 * 2
@@ -283,16 +281,16 @@ class TestEach < Test::Unit::TestCase
   end
 
   def test_select_do_end_syntax
-    execute("seq 1 6 | select do test $(($it % 2)) -eq 0 end > #{output_file}")
+    execute("seq 1 6 | select do |x| x.to_i.even? end > #{output_file}")
     content = File.read(output_file)
     assert_match(/^2$/, content)
     assert_match(/^4$/, content)
     assert_match(/^6$/, content)
   end
 
-  def test_select_with_grep_condition
+  def test_select_with_include_condition
     File.write("#{@tempdir}/data.txt", "apple\nbanana\napricot\ncherry\n")
-    execute("cat #{@tempdir}/data.txt | select { echo $it | grep -q ap } > #{output_file}")
+    execute("cat #{@tempdir}/data.txt | select {|x| x.include?(\"ap\") } > #{output_file}")
     content = File.read(output_file)
     assert_match(/^apple$/, content)
     assert_match(/^apricot$/, content)
@@ -301,34 +299,33 @@ class TestEach < Test::Unit::TestCase
   end
 
   def test_select_lexer
-    tokens = Rubish::Lexer.new('ls | select { test -f $it }').tokenize
+    tokens = Rubish::Lexer.new('ls | select {|x| File.file?(x) }').tokenize
     assert_equal :BLOCK, tokens.last.type
   end
 
   def test_select_parsing
-    tokens = Rubish::Lexer.new('seq 1 10 | select { test $(($it % 2)) -eq 0 }').tokenize
+    tokens = Rubish::Lexer.new('seq 1 10 | select {|x| x.to_i.even? }').tokenize
     ast = Rubish::Parser.new(tokens).parse
     assert_instance_of Rubish::AST::Pipeline, ast
     assert_equal 'select', ast.commands.last.name
   end
 
   # ==========================================================================
-  # Predicate method tests
+  # Ruby block evaluation tests (select/map use Ruby, each uses shell)
   # ==========================================================================
 
-  def test_empty_predicate_select
-    # Create test file with empty lines
+  def test_select_with_ruby_empty
+    # select evaluates block as Ruby - use String#empty?
     File.write("#{@tempdir}/lines.txt", "a\n\nb\n\nc\n")
-    execute("cat #{@tempdir}/lines.txt | select { $it.empty? } > #{output_file}")
+    execute("cat #{@tempdir}/lines.txt | select {|x| x.empty? } > #{output_file}")
     content = File.read(output_file)
-    # Count newlines - each empty line selected produces one newline
     assert_equal 2, content.count("\n")  # Two empty lines
   end
 
-  def test_empty_predicate_select_negated
-    # Filter out empty lines
+  def test_select_with_ruby_not_empty
+    # Filter out empty lines using Ruby
     File.write("#{@tempdir}/lines.txt", "a\n\nb\n\nc\n")
-    execute("cat #{@tempdir}/lines.txt | select { ! $it.empty? } > #{output_file}")
+    execute("cat #{@tempdir}/lines.txt | select {|x| !x.empty? } > #{output_file}")
     content = File.read(output_file)
     assert_match(/^a$/, content)
     assert_match(/^b$/, content)
@@ -337,125 +334,129 @@ class TestEach < Test::Unit::TestCase
     assert_equal 3, lines.length
   end
 
-  def test_empty_predicate_with_explicit_variable
-    File.write("#{@tempdir}/lines.txt", "x\n\ny\n")
-    execute("cat #{@tempdir}/lines.txt | select {|line| ! $line.empty? } > #{output_file}")
-    content = File.read(output_file)
-    assert_match(/^x$/, content)
-    assert_match(/^y$/, content)
-    lines = content.strip.split("\n")
-    assert_equal 2, lines.length
-  end
-
-  def test_empty_predicate_in_each
-    # empty? can also be used in each blocks
-    File.write("#{@tempdir}/lines.txt", "a\n\nb\n")
-    execute("cat #{@tempdir}/lines.txt | each { if ! $it.empty?; then echo \"got: $it\"; fi } > #{output_file}")
-    content = File.read(output_file)
-    assert_match(/got: a/, content)
-    assert_match(/got: b/, content)
-    refute_match(/got: $/, content)  # No "got: " with empty value
-  end
-
-  def test_predicate_transform
-    # Verify the transformation at codegen level
-    codegen = Rubish::Codegen.new
-    assert_equal 'test -z "$it"', codegen.send(:transform_predicates, '$it.empty?')
-    assert_equal 'test -z "$foo"', codegen.send(:transform_predicates, '$foo.empty?')
-    assert_equal '! test -z "$it"', codegen.send(:transform_predicates, '! $it.empty?')
-    assert_equal 'test -n "$it"', codegen.send(:transform_predicates, '$it.any?')
-    assert_equal 'test -n "$foo"', codegen.send(:transform_predicates, '$foo.any?')
-  end
-
-  def test_any_predicate_select
-    # Select non-empty lines using any?
-    File.write("#{@tempdir}/lines.txt", "a\n\nb\n\nc\n")
-    execute("cat #{@tempdir}/lines.txt | select { $it.any? } > #{output_file}")
-    content = File.read(output_file)
-    assert_match(/^a$/, content)
-    assert_match(/^b$/, content)
-    assert_match(/^c$/, content)
-    lines = content.strip.split("\n")
-    assert_equal 3, lines.length
-  end
-
-  def test_any_predicate_with_explicit_variable
-    File.write("#{@tempdir}/lines.txt", "x\n\ny\n")
-    execute("cat #{@tempdir}/lines.txt | select {|line| $line.any? } > #{output_file}")
-    content = File.read(output_file)
-    assert_match(/^x$/, content)
-    assert_match(/^y$/, content)
-    lines = content.strip.split("\n")
-    assert_equal 2, lines.length
-  end
-
-  def test_file_predicate_select
-    # Create files and directories
-    File.write("#{@tempdir}/file1.txt", 'content')
-    File.write("#{@tempdir}/file2.txt", 'content')
-    Dir.mkdir("#{@tempdir}/subdir")
-
-    # List all entries and select only files
-    execute("ls #{@tempdir} | each {|f| echo #{@tempdir}/$f } | select { $it.file? } > #{output_file}")
-    content = File.read(output_file)
-    assert_match(/file1\.txt/, content)
-    assert_match(/file2\.txt/, content)
-    refute_match(/subdir/, content)
-  end
-
-  def test_dir_predicate_select
-    # Create files and directories
-    File.write("#{@tempdir}/file1.txt", 'content')
-    Dir.mkdir("#{@tempdir}/dir1")
-    Dir.mkdir("#{@tempdir}/dir2")
-
-    # List all entries and select only directories
-    execute("ls #{@tempdir} | each {|f| echo #{@tempdir}/$f } | select { $it.dir? } > #{output_file}")
-    content = File.read(output_file)
-    assert_match(/dir1/, content)
-    assert_match(/dir2/, content)
-    refute_match(/file1\.txt/, content)
-  end
-
-  def test_file_and_dir_predicate_transform
-    codegen = Rubish::Codegen.new
-    assert_equal 'test -f "$it"', codegen.send(:transform_predicates, '$it.file?')
-    assert_equal 'test -d "$it"', codegen.send(:transform_predicates, '$it.dir?')
-    assert_equal 'test -f "$path"', codegen.send(:transform_predicates, '$path.file?')
-    assert_equal 'test -d "$path"', codegen.send(:transform_predicates, '$path.dir?')
-  end
-
-  def test_equality_operator_select
-    # Select specific value with ==
-    execute('seq 1 5 | select { $it == 3 } > ' + output_file)
+  def test_select_with_ruby_equality
+    # Select specific value with Ruby ==
+    execute('seq 1 5 | select {|x| x == "3" } > ' + output_file)
     content = File.read(output_file).strip
     assert_equal '3', content
   end
 
-  def test_equality_operator_with_string
-    File.write("#{@tempdir}/words.txt", "apple\nbanana\napple\ncherry\n")
-    execute("cat #{@tempdir}/words.txt | select { $it == \"apple\" } > #{output_file}")
-    content = File.read(output_file)
-    lines = content.strip.split("\n")
-    assert_equal 2, lines.length
-    assert lines.all? { |l| l == 'apple' }
-  end
-
-  def test_inequality_operator_select
+  def test_select_with_ruby_inequality
     # Select values not equal to 3
-    execute('seq 1 5 | select { $it != 3 } > ' + output_file)
+    execute('seq 1 5 | select {|x| x != "3" } > ' + output_file)
     content = File.read(output_file).strip
     lines = content.split("\n")
     assert_equal 4, lines.length
     refute_includes lines, '3'
   end
 
-  def test_equality_operator_transform
-    codegen = Rubish::Codegen.new
-    assert_equal '[ "$it" = 3 ]', codegen.send(:transform_predicates, '$it == 3')
-    assert_equal '[ "$it" = "foo" ]', codegen.send(:transform_predicates, '$it == "foo"')
-    assert_equal '[ "$x" = $y ]', codegen.send(:transform_predicates, '$x == $y')
-    assert_equal '[ "$it" != 3 ]', codegen.send(:transform_predicates, '$it != 3')
-    assert_equal '[ "$it" != "bar" ]', codegen.send(:transform_predicates, '$it != "bar"')
+  def test_select_with_ruby_include
+    # Use Ruby's include? method
+    File.write("#{@tempdir}/words.txt", "apple\nbanana\napricot\ncherry\n")
+    execute("cat #{@tempdir}/words.txt | select {|x| x.include?(\"ap\") } > #{output_file}")
+    content = File.read(output_file)
+    assert_match(/^apple$/, content)
+    assert_match(/^apricot$/, content)
+    refute_match(/banana/, content)
+    refute_match(/cherry/, content)
+  end
+
+  def test_select_with_ruby_start_with
+    # Use Ruby's start_with? method
+    File.write("#{@tempdir}/words.txt", "apple\nbanana\napricot\ncherry\n")
+    execute("cat #{@tempdir}/words.txt | select {|x| x.start_with?(\"a\") } > #{output_file}")
+    content = File.read(output_file)
+    assert_match(/^apple$/, content)
+    assert_match(/^apricot$/, content)
+    refute_match(/banana/, content)
+  end
+
+  def test_select_with_ruby_match
+    # Use Ruby's match? for regex
+    File.write("#{@tempdir}/words.txt", "apple\nbanana\napricot\ncherry\n")
+    execute("cat #{@tempdir}/words.txt | select {|x| x.match?(/^a/) } > #{output_file}")
+    content = File.read(output_file)
+    assert_match(/^apple$/, content)
+    assert_match(/^apricot$/, content)
+    refute_match(/banana/, content)
+  end
+
+  def test_select_with_ruby_numeric
+    # Use Ruby numeric comparison (convert to int)
+    execute('seq 1 10 | select {|x| x.to_i > 5 } > ' + output_file)
+    content = File.read(output_file).strip
+    lines = content.split("\n")
+    assert_equal 5, lines.length
+    assert_equal %w[6 7 8 9 10], lines
+  end
+
+  def test_select_with_ruby_even
+    # Use Ruby's even? method
+    execute('seq 1 10 | select {|x| x.to_i.even? } > ' + output_file)
+    content = File.read(output_file).strip
+    lines = content.split("\n")
+    assert_equal %w[2 4 6 8 10], lines
+  end
+
+  def test_select_with_file_exist
+    # Use Ruby's File.file?
+    File.write("#{@tempdir}/file1.txt", 'content')
+    File.write("#{@tempdir}/file2.txt", 'content')
+    Dir.mkdir("#{@tempdir}/subdir")
+
+    execute("ls #{@tempdir} | map {|f| '#{@tempdir}/' + f } | select {|x| File.file?(x) } > #{output_file}")
+    content = File.read(output_file)
+    assert_match(/file1\.txt/, content)
+    assert_match(/file2\.txt/, content)
+    refute_match(/subdir/, content)
+  end
+
+  def test_select_with_directory
+    # Use Ruby's File.directory?
+    File.write("#{@tempdir}/file1.txt", 'content')
+    Dir.mkdir("#{@tempdir}/dir1")
+    Dir.mkdir("#{@tempdir}/dir2")
+
+    execute("ls #{@tempdir} | map {|f| '#{@tempdir}/' + f } | select {|x| File.directory?(x) } > #{output_file}")
+    content = File.read(output_file)
+    assert_match(/dir1/, content)
+    assert_match(/dir2/, content)
+    refute_match(/file1\.txt/, content)
+  end
+
+  def test_map_with_ruby_upcase
+    # map evaluates block as Ruby and outputs result
+    File.write("#{@tempdir}/words.txt", "hello\nworld\n")
+    execute("cat #{@tempdir}/words.txt | map {|x| x.upcase } > #{output_file}")
+    content = File.read(output_file)
+    assert_match(/^HELLO$/, content)
+    assert_match(/^WORLD$/, content)
+  end
+
+  def test_map_with_ruby_arithmetic
+    # map with arithmetic
+    execute('seq 1 3 | map {|x| x.to_i * 2 } > ' + output_file)
+    content = File.read(output_file).strip
+    lines = content.split("\n")
+    assert_equal %w[2 4 6], lines
+  end
+
+  def test_map_with_ruby_string_manipulation
+    # map with string manipulation
+    File.write("#{@tempdir}/words.txt", "  hello  \n  world  \n")
+    execute("cat #{@tempdir}/words.txt | map {|x| x.strip } > #{output_file}")
+    content = File.read(output_file)
+    assert_match(/^hello$/, content)
+    assert_match(/^world$/, content)
+  end
+
+  def test_each_uses_ruby
+    # each evaluates block as Ruby code
+    File.write("#{@tempdir}/lines.txt", "a\nb\nc\n")
+    execute("cat #{@tempdir}/lines.txt | each {|x| puts \"got: \#{x}\" } > #{output_file}")
+    content = File.read(output_file)
+    assert_match(/got: a/, content)
+    assert_match(/got: b/, content)
+    assert_match(/got: c/, content)
   end
 end

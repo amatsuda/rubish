@@ -474,22 +474,24 @@ module Rubish
       # Parse the block to extract variable and body
       var_name, body = parse_each_block(each_cmd.block)
 
-      # Transform predicate methods (e.g., $var.empty? → test -z "$var")
-      body = transform_predicates(body)
-
-      # For map, wrap body in echo to implicitly output the result
-      body = "echo #{body}" if implicit_echo
-
-      # For select, wrap body in conditional to filter lines
-      body = "if #{body}; then echo $#{var_name}; fi" if filter
-
       # Generate the each loop
       parts = []
       parts << '__loop_break = catch(:break_loop) do'
       parts << "__each_loop(#{var_name.inspect}, -> { #{source_code} }, #{body.inspect}) do |__line|"
       parts << '__loop_cont = catch(:continue_loop) do'
-      parts << "ENV[#{var_name.inspect}] = __line"
-      parts << "__eval_shell_code(#{body.inspect})"
+      parts << "#{var_name} = __line"
+
+      if filter
+        # select: evaluate body as Ruby, output line if truthy
+        parts << "puts __line if (#{body})"
+      elsif implicit_echo
+        # map: evaluate body as Ruby, output result
+        parts << "puts(#{body})"
+      else
+        # each: evaluate body as Ruby
+        parts << body
+      end
+
       parts << 'nil; end'
       parts << 'throw(:continue_loop, __loop_cont - 1) if __loop_cont.is_a?(Integer) && __loop_cont > 1'
       parts << 'next if __loop_cont'
@@ -537,23 +539,6 @@ module Rubish
       else
         ['it', block]
       end
-    end
-
-    def transform_predicates(body)
-      # Transform Ruby-like predicate methods to shell equivalents
-      # $var.empty? → test -z "$var"
-      # $var.any?   → test -n "$var"
-      # $var.file?  → test -f "$var"
-      # $var.dir?   → test -d "$var"
-      # $var == val → [ "$var" = val ]
-      # $var != val → [ "$var" != val ]
-      body
-        .gsub(/\$(\w+)\.empty\?/, 'test -z "$\1"')
-        .gsub(/\$(\w+)\.any\?/, 'test -n "$\1"')
-        .gsub(/\$(\w+)\.file\?/, 'test -f "$\1"')
-        .gsub(/\$(\w+)\.dir\?/, 'test -d "$\1"')
-        .gsub(/\$(\w+)\s*==\s*("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|\$\w+|\S+)/, '[ "$\1" = \2 ]')
-        .gsub(/\$(\w+)\s*!=\s*("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|\$\w+|\S+)/, '[ "$\1" != \2 ]')
     end
 
     def unwrap_redirect(node)

@@ -120,9 +120,12 @@ module Rubish
             cmd = parse_func_call
             commands << cmd if cmd
             pipe_types << :pipe
-          elsif peek(:WORD) && current.value =~ /\A(each|map|select)\z/ && peek_at(1, :BLOCK)
+          elsif (peek(:WORD) && current.value =~ /\A(each|map)\z/ && peek_at(1, :BLOCK)) ||
+                (peek(:SELECT) && peek_at(1, :BLOCK))
             # .each/.map/.select {|var| body } - treat as regular command with block in pipeline
-            method_name = consume(:WORD).value
+            # Note: select is tokenized as :SELECT, not :WORD
+            method_name = current.value
+            consume  # consume WORD or SELECT
             block = consume(:BLOCK).value
             cmd = AST::Command.new(name: method_name, block: block)
             # Check for redirections after the block
