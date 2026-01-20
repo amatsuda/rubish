@@ -3360,6 +3360,11 @@ module Rubish
       end
     end
 
+    # Ruby methods for builtins - usable in blocks
+    def echo(*args)
+      Builtins.run_echo(args.map(&:to_s))
+    end
+
     def __cmd(name, *args, __prefix_env: nil, &block)
       cmd = Command.new(name, *args, &block)
       cmd.prefix_env = __prefix_env if __prefix_env

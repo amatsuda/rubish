@@ -451,9 +451,9 @@ class TestEach < Test::Unit::TestCase
   end
 
   def test_each_uses_ruby
-    # each evaluates block as Ruby code
+    # each evaluates block as Ruby code - can use echo builtin
     File.write("#{@tempdir}/lines.txt", "a\nb\nc\n")
-    execute("cat #{@tempdir}/lines.txt | each {|x| puts \"got: \#{x}\" } > #{output_file}")
+    execute("cat #{@tempdir}/lines.txt | each {|x| echo \"got: \#{x}\" } > #{output_file}")
     content = File.read(output_file)
     assert_match(/got: a/, content)
     assert_match(/got: b/, content)
