@@ -868,7 +868,10 @@ module Rubish
     def read_double_quoted_string
       @pos += 1 # skip opening "
       while @pos < @input.length && @input[@pos] != '"'
-        @pos += 2 if @input[@pos] == '\\' # skip escaped char
+        if @input[@pos] == '\\'
+          @pos += 2 # skip escaped char
+          next
+        end
         @pos += 1
       end
       @pos += 1 # skip closing "

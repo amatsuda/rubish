@@ -459,4 +459,13 @@ class TestEach < Test::Unit::TestCase
     assert_match(/got: b/, content)
     assert_match(/got: c/, content)
   end
+
+  def test_each_with_printf
+    # each can use printf builtin
+    execute("seq(1, 3).each {|n| printf \"%02d\\n\", n.to_i } > #{output_file}")
+    content = File.read(output_file)
+    assert_match(/^01$/, content)
+    assert_match(/^02$/, content)
+    assert_match(/^03$/, content)
+  end
 end
