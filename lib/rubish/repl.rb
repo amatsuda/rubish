@@ -6853,6 +6853,14 @@ module Rubish
     end
 
     def complete_command(input)
+      # If input contains /, complete as file path (e.g., ./script, ../bin/cmd, /usr/bin/ruby)
+      # Only show directories and executable files since we're completing a command
+      if input.include?('/')
+        return complete_file(input).select do |f|
+          f.end_with?('/') || File.executable?(f.chomp(' '))
+        end
+      end
+
       results = []
 
       # Builtins
