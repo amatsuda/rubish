@@ -542,7 +542,10 @@ module Rubish
     def transform_predicates(body)
       # Transform Ruby-like predicate methods to shell equivalents
       # $var.empty? → test -z "$var"
-      body.gsub(/\$(\w+)\.empty\?/, 'test -z "$\1"')
+      # $var.any?   → test -n "$var"
+      body
+        .gsub(/\$(\w+)\.empty\?/, 'test -z "$\1"')
+        .gsub(/\$(\w+)\.any\?/, 'test -n "$\1"')
     end
 
     def unwrap_redirect(node)

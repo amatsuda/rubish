@@ -363,5 +363,29 @@ class TestEach < Test::Unit::TestCase
     assert_equal 'test -z "$it"', codegen.send(:transform_predicates, '$it.empty?')
     assert_equal 'test -z "$foo"', codegen.send(:transform_predicates, '$foo.empty?')
     assert_equal '! test -z "$it"', codegen.send(:transform_predicates, '! $it.empty?')
+    assert_equal 'test -n "$it"', codegen.send(:transform_predicates, '$it.any?')
+    assert_equal 'test -n "$foo"', codegen.send(:transform_predicates, '$foo.any?')
+  end
+
+  def test_any_predicate_select
+    # Select non-empty lines using any?
+    File.write("#{@tempdir}/lines.txt", "a\n\nb\n\nc\n")
+    execute("cat #{@tempdir}/lines.txt | select { $it.any? } > #{output_file}")
+    content = File.read(output_file)
+    assert_match(/^a$/, content)
+    assert_match(/^b$/, content)
+    assert_match(/^c$/, content)
+    lines = content.strip.split("\n")
+    assert_equal 3, lines.length
+  end
+
+  def test_any_predicate_with_explicit_variable
+    File.write("#{@tempdir}/lines.txt", "x\n\ny\n")
+    execute("cat #{@tempdir}/lines.txt | select {|line| $line.any? } > #{output_file}")
+    content = File.read(output_file)
+    assert_match(/^x$/, content)
+    assert_match(/^y$/, content)
+    lines = content.strip.split("\n")
+    assert_equal 2, lines.length
   end
 end
