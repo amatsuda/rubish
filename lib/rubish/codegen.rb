@@ -183,6 +183,12 @@ module Rubish
         end
       end
 
+      # Check for abbreviated path (contains / but not a glob)
+      # Route through __glob which handles abbreviated path expansion
+      if str.include?('/') && !str.start_with?('/') && !str.include?('$')
+        return "__glob(#{str.inspect})"
+      end
+
       # No glob or brace chars - use normal string arg generation
       generate_string_arg(str)
     end

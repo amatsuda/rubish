@@ -129,13 +129,14 @@ module Rubish
     private
 
     def setup_reline
+      repl = self
+
       Reline.completion_proc = ->(input) {
-        result = complete(input)
+        result = repl.send(:complete, input)
         candidates = result.is_a?(Array) ? result : []
-        # Append space to completions (except directories which end with /)
-        # This is needed because Reline's autocompletion mode doesn't use completion_append_character
         candidates.map { |c| c.end_with?('/') ? c : "#{c} " }
       }
+
       # Set up default completions for common commands
       Builtins.setup_default_completions
       # Load inputrc configuration
@@ -149,8 +150,70 @@ module Rubish
       # Default em_kill_region only stops at whitespace
       Reline.core.config.add_default_key_binding_by_keymap(:emacs, [23], :backward_kill_word)
       # Use autocompletion mode (fish-style inline suggestions)
-      # This also enables "cmd <TAB>" to show all files (default mode skips empty words)
       Reline.autocompletion = true
+
+      # Add abbreviated path expansion as a dialog proc
+      # This expands l/r/re to lib/rubish/repl.rb inline when Tab is pressed
+      setup_abbreviated_path_expansion
+    end
+
+    # Set up abbreviated path expansion (like zsh)
+    # When Tab is pressed on an abbreviated path, expand it directly in the line
+    def setup_abbreviated_path_expansion
+      repl = self
+
+      # Define a custom method on LineEditor to handle abbreviated path expansion
+      Reline::LineEditor.prepend(Module.new do
+        define_method(:complete) do |*args|
+          # Get current line and cursor position
+          line = whole_buffer
+          point = @byte_pointer
+
+          # Find the current word
+          line_to_cursor = line.byteslice(0, point) || ''
+          word_start = line_to_cursor.rindex(/[ \t]/)
+          word_start = word_start ? word_start + 1 : 0
+          word = line_to_cursor.byteslice(word_start..-1) || ''
+
+          # Check if it's an abbreviated path that needs expansion
+          if word.include?('/') && !word.start_with?('/') && !Dir.glob("#{word}*").any?
+            expanded_paths = repl.send(:expand_abbreviated_path_for_completion_full, word)
+            if expanded_paths && expanded_paths.length == 1
+              # Single match - expand inline
+              expanded = expanded_paths.first
+              # Replace the word in the buffer
+              new_line = line.byteslice(0, word_start).to_s + expanded + (line.byteslice(point..-1) || '')
+              @buffer_of_lines = [new_line]
+              @byte_pointer = word_start + expanded.bytesize
+              @cursor = word_start + expanded.length
+              @cursor_max = new_line.length
+              return
+            elsif expanded_paths && expanded_paths.length > 1
+              # Multiple matches - find common prefix and expand to that
+              common = expanded_paths.first
+              expanded_paths[1..].each do |path|
+                common = common.chars.zip(path.chars).take_while { |a, b| a == b }.map(&:first).join
+              end
+              if common.length > word.length
+                new_line = line.byteslice(0, word_start).to_s + common + (line.byteslice(point..-1) || '')
+                @buffer_of_lines = [new_line]
+                @byte_pointer = word_start + common.bytesize
+                @cursor = word_start + common.length
+                @cursor_max = new_line.length
+                return
+              end
+            end
+          end
+
+          # Fall back to normal completion
+          super(*args)
+        end
+      end)
+    end
+
+    # Expand abbreviated path returning full paths: l/r/re -> ["lib/rubish/repl.rb"]
+    def expand_abbreviated_path_for_completion_full(input)
+      Builtins.expand_abbreviated_path_for_completion(input, full_paths: true)
     end
 
     # Set terminal title to "rubish" (or custom title via RUBISH_TITLE env var)
@@ -4858,6 +4921,12 @@ module Rubish
       matches = apply_globsort(matches)
 
       if matches.empty?
+        # Try abbreviated path expansion: l/r/repl.rb -> lib/rubish/repl.rb
+        if pattern.include?('/') && !pattern.match?(/[*?\[\]]/)
+          expanded = expand_abbreviated_path(pattern)
+          return [expanded] if expanded && File.exist?(expanded)
+        end
+
         if Builtins.shopt_enabled?('failglob')
           # failglob: patterns matching nothing cause an error
           $stderr.puts Builtins.format_error("no match: #{pattern}")
@@ -4871,6 +4940,11 @@ module Rubish
       else
         matches
       end
+    end
+
+    # Expand abbreviated path: l/r/repl.rb -> lib/rubish/repl.rb
+    def expand_abbreviated_path(path)
+      Builtins.expand_abbreviated_path(path)
     end
 
     # Apply GLOBIGNORE filtering to glob results
@@ -6902,6 +6976,13 @@ module Rubish
         File.directory?(f) ? "#{f}/" : f
       end.sort
 
+      # Partial path expansion: l/r/re -> l/r/repl.rb (abbreviated form for Reline)
+      # Try to expand each path segment if no direct matches
+      if candidates.empty? && expanded_input.include?('/')
+        abbrev_candidates = expand_abbreviated_path_for_completion(expanded_input)
+        candidates = abbrev_candidates if abbrev_candidates && !abbrev_candidates.empty?
+      end
+
       # dirspell: if no matches and dirspell is enabled, try to correct directory spelling
       if candidates.empty? && Builtins.shopt_enabled?('dirspell')
         corrected = correct_completion_path(input)
@@ -6946,6 +7027,16 @@ module Rubish
       end
 
       candidates
+    end
+
+    # Expand abbreviated path for completion: l/r/re -> ["l/r/repl.rb"]
+    def expand_abbreviated_path_for_completion(input)
+      Builtins.expand_abbreviated_path_for_completion(input)
+    end
+
+    # Expand abbreviated directory path: l/r -> lib/rubish
+    def expand_abbreviated_dir(dir_path)
+      Builtins.expand_abbreviated_dir(dir_path)
     end
 
     # Quote shell metacharacters in completion results

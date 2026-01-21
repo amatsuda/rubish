@@ -6473,9 +6473,16 @@ module Rubish
       # File completions (from -f option or zsh-style {files: true})
       if spec[:files]
         pattern = word.empty? ? '*' : "#{word}*"
-        Dir.glob(pattern).each do |entry|
-          results << (File.directory?(entry) ? "#{entry}/" : entry)
+        file_results = Dir.glob(pattern).map do |entry|
+          File.directory?(entry) ? "#{entry}/" : entry
         end
+
+        # Try abbreviated path expansion if no matches and word contains /
+        if file_results.empty? && word.include?('/')
+          file_results = expand_abbreviated_path_for_completion(word) || []
+        end
+
+        results.concat(file_results)
       end
 
       # Directory completions (from -d option or zsh-style {directories: true})
@@ -6494,6 +6501,96 @@ module Rubish
       end
 
       results.uniq.sort
+    end
+
+    # Expand abbreviated path for completion: l/r/re -> ["l/r/repl.rb"]
+    # Returns abbreviated form that starts with the user's input (for Reline filtering)
+    def self.expand_abbreviated_path_for_completion(input, full_paths: false)
+      # Split into directory part and filename part
+      if input.end_with?('/')
+        dir_part = input.chomp('/')
+        file_prefix = ''
+        abbreviated_prefix = input
+      else
+        dir_part = File.dirname(input)
+        file_prefix = File.basename(input)
+        abbreviated_prefix = dir_part == '.' ? '' : "#{dir_part}/"
+      end
+
+      # Expand the directory part
+      expanded_dir = expand_abbreviated_dir(dir_part)
+      return nil unless expanded_dir
+
+      # Get completions from the expanded directory
+      search_pattern = File.join(expanded_dir, "#{file_prefix}*")
+      full_candidates = Dir.glob(search_pattern).map do |f|
+        File.directory?(f) ? "#{f}/" : f
+      end
+
+      return nil if full_candidates.empty?
+
+      # Return full paths or abbreviated form
+      if full_paths
+        full_candidates.sort
+      else
+        full_candidates.map do |full|
+          filename = File.basename(full)
+          filename = "#{filename}/" if full.end_with?('/')
+          "#{abbreviated_prefix}#{filename}"
+        end.sort
+      end
+    end
+
+    # Expand abbreviated path: l/r/repl.rb -> lib/rubish/repl.rb
+    # Returns single expanded path or nil
+    def self.expand_abbreviated_path(path)
+      return path if File.exist?(path)
+
+      dir = File.dirname(path)
+      filename = File.basename(path)
+
+      expanded_dir = expand_abbreviated_dir(dir)
+      return nil unless expanded_dir
+
+      expanded_path = File.join(expanded_dir, filename)
+      File.exist?(expanded_path) ? expanded_path : nil
+    end
+
+    # Expand abbreviated directory path: l/r -> lib/rubish
+    def self.expand_abbreviated_dir(dir_path)
+      return '.' if dir_path == '.'
+      return dir_path if Dir.exist?(dir_path)
+
+      segments = dir_path.split('/')
+      return nil if segments.empty?
+
+      # Handle absolute paths
+      if dir_path.start_with?('/')
+        current = '/'
+        segments.shift if segments.first.empty?
+      else
+        current = '.'
+      end
+
+      segments.each do |segment|
+        next if segment.empty?
+
+        search_pattern = current == '.' ? "#{segment}*" : "#{current}/#{segment}*"
+        matches = Dir.glob(search_pattern).select { |f| File.directory?(f) }
+
+        if matches.length == 1
+          current = matches.first
+        elsif matches.empty?
+          return nil
+        else
+          # Multiple matches - take the first one that starts with the segment
+          match = matches.find { |m| File.basename(m).start_with?(segment) }
+          return nil unless match
+          current = match
+        end
+      end
+
+      current == '.' ? nil : current
     end
 
     # Generate completions by calling a function (-F)
