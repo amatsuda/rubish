@@ -441,6 +441,9 @@ module Rubish
       elsif unwrapped_last.is_a?(AST::Command) && unwrapped_last.name == 'select' && unwrapped_last.block
         # select filters lines where block condition is true
         return generate_pipeline_with_each(node, filter: true)
+      elsif unwrapped_last.is_a?(AST::Command) && unwrapped_last.name == 'detect' && unwrapped_last.block
+        # detect finds the first line where block condition is true
+        return generate_pipeline_with_each(node, find_first: true)
       end
 
       # Handle pipe_types for |& (pipe both stdout and stderr)
@@ -459,9 +462,9 @@ module Rubish
       parts.join(' | ')
     end
 
-    def generate_pipeline_with_each(node, implicit_echo: false, filter: false)
+    def generate_pipeline_with_each(node, implicit_echo: false, filter: false, find_first: false)
       # Generate code for: cmd1 | cmd2 | ... | each {|var| body}
-      # Also handles map (with implicit_echo: true) and select (with filter: true)
+      # Also handles map (with implicit_echo: true), select (with filter: true), and detect (with find_first: true)
       # Extract the each/map/select command and the source pipeline
       last_node = node.commands.last
       redirect_info = extract_redirect_info(last_node)
@@ -487,7 +490,13 @@ module Rubish
       parts << '__loop_cont = catch(:continue_loop) do'
       parts << "#{var_name} = __line"
 
-      if filter
+      if find_first
+        # detect: evaluate body as Ruby, output first line where truthy and break
+        parts << "if (#{body})"
+        parts << '  puts __line'
+        parts << '  throw(:break_loop)'
+        parts << 'end'
+      elsif filter
         # select: evaluate body as Ruby, output line if truthy
         parts << "puts __line if (#{body})"
       elsif implicit_echo

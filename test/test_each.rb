@@ -488,4 +488,65 @@ class TestEach < Test::Unit::TestCase
     assert_match(/^02$/, content)
     assert_match(/^03$/, content)
   end
+
+  # ==========================================================================
+  # Detect method tests (detect finds first matching element)
+  # ==========================================================================
+
+  def test_detect_simple
+    # detect finds first line where block is truthy
+    execute("seq 1 10 | detect {|x| x.to_i > 5 } > #{output_file}")
+    content = File.read(output_file).strip
+    assert_equal '6', content
+  end
+
+  def test_detect_with_explicit_variable
+    execute("seq 1 10 | detect {|n| n.to_i.even? && n.to_i > 5 } > #{output_file}")
+    content = File.read(output_file).strip
+    assert_equal '6', content
+  end
+
+  def test_detect_method_chain
+    execute("seq(1, 10).detect {|x| x.to_i > 7 } > #{output_file}")
+    content = File.read(output_file).strip
+    assert_equal '8', content
+  end
+
+  def test_detect_with_string_condition
+    File.write("#{@tempdir}/words.txt", "apple\nbanana\ncherry\ndate\n")
+    execute("cat #{@tempdir}/words.txt | detect {|x| x.include?(\"an\") } > #{output_file}")
+    content = File.read(output_file).strip
+    assert_equal 'banana', content
+  end
+
+  def test_detect_no_match
+    # detect with no match should output nothing
+    execute("seq 1 5 | detect {|x| x.to_i > 10 } > #{output_file}")
+    content = File.read(output_file).strip
+    assert_equal '', content
+  end
+
+  def test_detect_do_end_syntax
+    execute("seq 1 10 | detect do |x| x.to_i > 5 end > #{output_file}")
+    content = File.read(output_file).strip
+    assert_equal '6', content
+  end
+
+  def test_detect_implicit_it
+    execute("seq(1, 10).detect { it.to_i > 5 } > #{output_file}")
+    content = File.read(output_file).strip
+    assert_equal '6', content
+  end
+
+  def test_detect_lexer
+    tokens = Rubish::Lexer.new('ls | detect {|x| File.file?(x) }').tokenize
+    assert_equal :BLOCK, tokens.last.type
+  end
+
+  def test_detect_parsing
+    tokens = Rubish::Lexer.new('seq 1 10 | detect {|x| x.to_i > 5 }').tokenize
+    ast = Rubish::Parser.new(tokens).parse
+    assert_instance_of Rubish::AST::Pipeline, ast
+    assert_equal 'detect', ast.commands.last.name
+  end
 end

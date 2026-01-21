@@ -220,8 +220,9 @@ module Rubish
             read_block
           elsif @last_word_value == 'each' || @last_word_value == '.each' ||
                 @last_word_value == 'map' || @last_word_value == '.map' ||
-                @last_word_value == 'select' || @last_word_value == '.select'
-            # Block after 'each'/'map'/'select' without explicit variable: each { body }
+                @last_word_value == 'select' || @last_word_value == '.select' ||
+                @last_word_value == 'detect' || @last_word_value == '.detect'
+            # Block after 'each'/'map'/'select'/'detect' without explicit variable: each { body }
             # Uses implicit 'it' variable (accessed as $it)
             read_block
           else
@@ -253,8 +254,9 @@ module Rubish
             read_do_block
           elsif @last_word_value == 'each' || @last_word_value == '.each' ||
                 @last_word_value == 'map' || @last_word_value == '.map' ||
-                @last_word_value == 'select' || @last_word_value == '.select'
-            # Block after 'each'/'map'/'select' without explicit variable: each do body end
+                @last_word_value == 'select' || @last_word_value == '.select' ||
+                @last_word_value == 'detect' || @last_word_value == '.detect'
+            # Block after 'each'/'map'/'select'/'detect' without explicit variable: each do body end
             # Uses implicit 'it' variable (accessed as $it)
             read_do_block
           else
@@ -769,8 +771,8 @@ module Rubish
         inner = block_lookahead + 1
         inner += 1 while inner < @input.length && @input[inner] =~ /\s/
         return true if inner < @input.length && @input[inner] == '|'
-        # For each/map/select, also allow implicit 'it' blocks without |
-        return true if %w[each map select].include?(identifier)
+        # For each/map/select/detect, also allow implicit 'it' blocks without |
+        return true if %w[each map select detect].include?(identifier)
       end
 
       # Must be followed by ( for method call

@@ -99,12 +99,12 @@ module Rubish
       commands = [first]
       pipe_types = []
       while peek(:PIPE) || peek(:PIPE_BOTH) || peek(:DOT) ||
-            (peek(:WORD) && current.value =~ /\A\.(each|map|select)\z/ && peek_at(1, :BLOCK))
+            (peek(:WORD) && current.value =~ /\A\.(each|map|select|detect)\z/ && peek_at(1, :BLOCK))
         if peek(:PIPE_BOTH)
           consume(:PIPE_BOTH)
           pipe_types << :pipe_both
-        elsif peek(:WORD) && current.value =~ /\A\.(each|map|select)\z/ && peek_at(1, :BLOCK)
-          # .each/.map/.select {block} after FUNC_CALL - tokenized as single WORD
+        elsif peek(:WORD) && current.value =~ /\A\.(each|map|select|detect)\z/ && peek_at(1, :BLOCK)
+          # .each/.map/.select/.detect {block} after FUNC_CALL - tokenized as single WORD
           method_name = consume(:WORD).value[1..]  # remove leading '.'
           block = consume(:BLOCK).value
           cmd = AST::Command.new(name: method_name, block: block)
@@ -120,9 +120,9 @@ module Rubish
             cmd = parse_func_call
             commands << cmd if cmd
             pipe_types << :pipe
-          elsif (peek(:WORD) && current.value =~ /\A(each|map)\z/ && peek_at(1, :BLOCK)) ||
+          elsif (peek(:WORD) && current.value =~ /\A(each|map|detect)\z/ && peek_at(1, :BLOCK)) ||
                 (peek(:SELECT) && peek_at(1, :BLOCK))
-            # .each/.map/.select {|var| body } - treat as regular command with block in pipeline
+            # .each/.map/.select/.detect {|var| body } - treat as regular command with block in pipeline
             # Note: select is tokenized as :SELECT, not :WORD
             method_name = current.value
             consume  # consume WORD or SELECT
