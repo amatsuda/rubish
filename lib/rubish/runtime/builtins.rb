@@ -2,7 +2,7 @@
 
 module Rubish
   module Builtins
-    COMMANDS = %w(cd exit logout jobs fg bg export pwd history alias unalias source . shift set return read echo test [ break continue pushd popd dirs trap getopts local unset readonly declare typeset let printf type which true false : eval command builtin wait kill umask exec times hash disown ulimit suspend shopt enable caller complete compgen compopt bind bindkey help fc mapfile readarray basename dirname realpath _get_comp_words_by_ref _init_completion _filedir _have _split_longopt __ltrim_colon_completions _variables _tilde _quote_readline_by_ref _parse_help _upvars _usergroup setopt unsetopt autoload compinit compdef __git_ps1).freeze
+    COMMANDS = %w(cd exit logout jobs fg bg export pwd history alias unalias source . shift set return read echo test [ break continue pushd popd dirs trap getopts local unset readonly declare typeset let printf type which true false : eval command builtin wait kill umask exec times hash disown ulimit suspend shopt enable caller complete compgen compopt bind bindkey help fc mapfile readarray basename dirname realpath _get_comp_words_by_ref _init_completion _filedir _have _split_longopt __ltrim_colon_completions _variables _tilde _quote_readline_by_ref _parse_help _upvars _usergroup setopt unsetopt autoload compinit compdef __git_ps1 require).freeze
 
     @aliases = {}
     @dir_stack = []
@@ -964,6 +964,8 @@ module Rubish
         run_compdef(args)
       when '__git_ps1'
         run_git_ps1(args)
+      when 'require'
+        run_require(args)
       else
         # Check for dynamically loaded builtins
         if @loaded_builtins.key?(name)
@@ -11274,6 +11276,10 @@ module Rubish
           'GIT_PS1_SHOWUNTRACKEDFILES' => 'show % if there are untracked files',
           'GIT_PS1_SHOWUPSTREAM' => 'show < behind, > ahead, = up-to-date, <> diverged'
         }
+      },
+      'require' => {
+        synopsis: 'require name',
+        description: 'Load Ruby library using Ruby\'s require method.'
       }
     }.freeze
 
@@ -11979,6 +11985,27 @@ module Rubish
       end
 
       success
+    end
+
+    def self.run_require(args)
+      # require NAME
+      # Calls Ruby's require method to load a library
+      if args.empty?
+        $stderr.puts 'require: missing operand'
+        return false
+      end
+
+      name = args.first
+      begin
+        require name
+        true
+      rescue LoadError => e
+        $stderr.puts "require: #{e.message}"
+        false
+      rescue => e
+        $stderr.puts "require: #{name}: #{e.message}"
+        false
+      end
     end
 
     # Wrapper for head command to support Ruby-like syntax: head(5) -> head -5
