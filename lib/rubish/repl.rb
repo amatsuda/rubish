@@ -1851,6 +1851,23 @@ module Rubish
       # xtrace: print commands before execution (after expansion)
       xtrace(line) if Builtins.set_option?('x')
 
+      # Check if input looks like a Ruby expression (starts with capital letter)
+      # UNIX commands rarely start with capitals, but Ruby constants/classes do
+      # Exclude shell variable assignments (VAR=value, VAR+=value, VAR[n]=value)
+      if line =~ /\A[A-Z]/ && line !~ /\A[A-Z_][A-Z0-9_]*(\[[^\]]*\])?\+?=/
+        begin
+          result = binding.eval(line)
+          p result
+        rescue SyntaxError, StandardError => e
+          $stderr.puts "rubish: #{e.message}"
+          @last_status = 1
+          return
+        end
+        @last_status = 0
+        Builtins.clear_exit_blocked
+        return
+      end
+
       # Check for array assignment before tokenizing (arr=(a b c) pattern)
       if (array_assignments = extract_array_assignments(line))
         handle_bare_assignments(array_assignments)
