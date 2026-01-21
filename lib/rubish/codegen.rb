@@ -64,6 +64,13 @@ module Rubish
     private
 
     def generate_command(node)
+      # Handle Ruby's p method specially - prints inspect result
+      # Wrap in __subshell to support redirects
+      if node.name == 'p' && !node.args.empty?
+        args = node.args.map { |a| generate_arg(a) }.join(', ')
+        return "__subshell { p(#{args}) }"
+      end
+
       args = node.args.map { |a| generate_arg(a) }.join(', ')
       name = generate_string_arg(node.name)
 
@@ -444,6 +451,9 @@ module Rubish
       elsif unwrapped_last.is_a?(AST::Command) && unwrapped_last.name == 'detect' && unwrapped_last.block
         # detect finds the first line where block condition is true
         return generate_pipeline_with_each(node, find_first: true)
+      elsif unwrapped_last.is_a?(AST::Command) && unwrapped_last.name == 'p' && unwrapped_last.args.empty?
+        # p prints each line with .inspect (Ruby-style debug output)
+        return generate_pipeline_with_each(node, inspect_output: true)
       end
 
       # Handle pipe_types for |& (pipe both stdout and stderr)
@@ -462,9 +472,10 @@ module Rubish
       parts.join(' | ')
     end
 
-    def generate_pipeline_with_each(node, implicit_echo: false, filter: false, find_first: false)
+    def generate_pipeline_with_each(node, implicit_echo: false, filter: false, find_first: false, inspect_output: false)
       # Generate code for: cmd1 | cmd2 | ... | each {|var| body}
-      # Also handles map (with implicit_echo: true), select (with filter: true), and detect (with find_first: true)
+      # Also handles map (with implicit_echo: true), select (with filter: true), detect (with find_first: true),
+      # and p (with inspect_output: true)
       # Extract the each/map/select command and the source pipeline
       last_node = node.commands.last
       redirect_info = extract_redirect_info(last_node)
@@ -480,8 +491,12 @@ module Rubish
                       generate_pipeline(source_pipeline)
                     end
 
-      # Parse the block to extract variable and body
-      var_name, body = parse_each_block(each_cmd.block)
+      # Parse the block to extract variable and body (not needed for p)
+      var_name, body = if inspect_output
+                         ['line', nil]  # p doesn't use a block
+                       else
+                         parse_each_block(each_cmd.block)
+                       end
 
       # Generate the each loop
       parts = []
@@ -490,7 +505,10 @@ module Rubish
       parts << '__loop_cont = catch(:continue_loop) do'
       parts << "#{var_name} = __line"
 
-      if find_first
+      if inspect_output
+        # p: print line with .inspect (Ruby-style debug output)
+        parts << 'p __line'
+      elsif find_first
         # detect: evaluate body as Ruby, output first line where truthy and break
         parts << "if (#{body})"
         parts << '  puts __line'
