@@ -1872,6 +1872,8 @@ module Rubish
       if line =~ /\A->/
         begin
           result = binding.eval(line)
+          # Auto-call lambdas with no required arguments
+          result = result.call if result.is_a?(Proc) && result.arity <= 0
           p result
         rescue SyntaxError, StandardError => e
           $stderr.puts "rubish: #{e.message}"
