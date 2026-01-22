@@ -7665,6 +7665,9 @@ module Rubish
     end
 
     def self.parse_help_for_command(command, subcommand = nil)
+      # Skip commands that look like shell operators or Ruby syntax
+      return nil if command =~ /\A[-+:=<>|&!]\z/
+
       cache_key = subcommand ? "#{command} #{subcommand}" : command
 
       # Check cache
