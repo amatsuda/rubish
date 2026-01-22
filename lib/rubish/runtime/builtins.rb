@@ -7701,8 +7701,14 @@ module Rubish
 
       help_output = nil
       help_commands.each do |help_cmd|
-        output = `#{help_cmd} 2>&1`
-        if $?.success? && output.length > 50
+        begin
+          # Use Open3 to capture stderr at Ruby level, preventing shell errors from leaking to terminal
+          output, status = Open3.capture2e(help_cmd)
+        rescue Errno::ENOENT
+          # Command not found
+          next
+        end
+        if status.success? && output.length > 50
           help_output = output
           # Check if this output has good subcommand info
           help_parsed = parse_help_output(output)
