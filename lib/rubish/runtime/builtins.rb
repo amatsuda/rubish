@@ -8260,6 +8260,30 @@ module Rubish
       true
     end
 
+    # Get list of system users for ~username completion
+    # Only returns users with home directories in typical user locations
+    def self.get_system_users
+      users = []
+      # Try /etc/passwd (works on most Unix-like systems)
+      if File.exist?('/etc/passwd')
+        File.readlines('/etc/passwd').each do |line|
+          next if line.start_with?('#') || line.strip.empty?
+          user = line.split(':').first
+          users << user if user && !user.empty?
+        end
+      end
+      # On macOS, also check Open Directory for regular users
+      if RUBY_PLATFORM.include?('darwin')
+        output = `dscl . -list /Users 2>/dev/null`
+        output.lines.each { |line| users << line.strip }
+      end
+      # Filter to users with home directories in /Users or /home
+      users.uniq.select do |user|
+        home = File.expand_path("~#{user}") rescue nil
+        home && File.directory?(home) && (home.start_with?('/Users/') || home.start_with?('/home/'))
+      end.sort
+    end
+
     # _filedir - Complete filenames, optionally filtering by extension/type
     # Arguments: [extension_pattern]
     # Options:
@@ -8277,6 +8301,16 @@ module Rubish
       end
 
       cur = ENV['cur'] || ''
+
+      # Username completion: ~prefix without /
+      if cur.start_with?('~') && !cur.include?('/')
+        prefix = cur[1..]  # Remove leading ~
+        users = get_system_users.select { |u| u.start_with?(prefix) }
+        @compreply = users.map { |u| "~#{u}/" }
+        # Add ~/ at the top if prefix is empty
+        @compreply.unshift('~/') if prefix.empty?
+        return true
+      end
 
       # Expand tilde (may fail if ~username refers to non-existent user)
       expanded_cur = cur.start_with?('~') ? (File.expand_path(cur) rescue cur) : cur
