@@ -1737,27 +1737,32 @@ module Rubish
       # Reset EOF counter when user types a command
       @eof_count = 0
 
-      # Add to history based on HISTCONTROL and HISTIGNORE settings
-      add_to_history(line)
+      # Expand history BEFORE adding to history (so !! doesn't expand to itself)
+      expanded_line, was_expanded, failed = expand_history(line)
+      return if failed
+      return unless expanded_line
 
-      # histverify: check for history expansion and let user verify before executing
-      if Builtins.shopt_enabled?('histverify')
-        expanded_line, was_expanded, _failed = expand_history_only(line)
-        if was_expanded && expanded_line
-          # Pre-fill the expanded command for user to verify/edit
-          Reline.pre_input_hook = -> {
-            Reline.insert_text(expanded_line)
-            Reline.pre_input_hook = nil  # Clear after use
-          }
-          return  # Don't execute, let user verify on next prompt
-        end
+      # histverify: if history expansion occurred, let user verify before executing
+      if was_expanded && Builtins.shopt_enabled?('histverify')
+        # Pre-fill the expanded command for user to verify/edit
+        Reline.pre_input_hook = -> {
+          Reline.insert_text(expanded_line)
+          Reline.pre_input_hook = nil  # Clear after use
+        }
+        return  # Don't execute, let user verify on next prompt
       end
+
+      # Print expanded command if history expansion occurred
+      puts expanded_line if was_expanded
+
+      # Add the EXPANDED command to history (like bash does)
+      add_to_history(expanded_line)
 
       # Print PS0 before executing command (bash 4.4+ feature)
       print_ps0
 
-      @last_line = line
-      execute(line)
+      @last_line = expanded_line
+      execute(expanded_line, skip_history_expansion: true)
 
       # checkwinsize: update LINES and COLUMNS after each command
       check_window_size if Builtins.shopt_enabled?('checkwinsize')
@@ -1815,26 +1820,28 @@ module Rubish
       # Redraw the prompt - Reline will handle this when we return
     end
 
-    def execute(line)
+    def execute(line, skip_history_expansion: false)
       # verbose: print input lines as read (before any processing)
       $stderr.puts line if Builtins.set_option?('v')
 
-      original_line = line
-      line, expanded, failed = expand_history(line)
+      unless skip_history_expansion
+        original_line = line
+        line, expanded, failed = expand_history(line)
 
-      # histreedit: if history expansion failed, reload line for editing
-      if failed && Builtins.shopt_enabled?('histreedit')
-        Reline.pre_input_hook = -> {
-          Reline.insert_text(original_line)
-          Reline.pre_input_hook = nil  # Clear after use
-        }
-        return
+        # histreedit: if history expansion failed, reload line for editing
+        if failed && Builtins.shopt_enabled?('histreedit')
+          Reline.pre_input_hook = -> {
+            Reline.insert_text(original_line)
+            Reline.pre_input_hook = nil  # Clear after use
+          }
+          return
+        end
+
+        return unless line
+
+        # Print expanded command if history expansion occurred
+        puts line if expanded
       end
-
-      return unless line
-
-      # Print expanded command if history expansion occurred
-      puts line if expanded
 
       line = Builtins.expand_alias(line)
       line = expand_tilde(line)
