@@ -37,6 +37,7 @@ module Rubish
       'then' => :THEN,
       'else' => :ELSE,
       'elif' => :ELIF,
+      'elsif' => :ELSIF,
       'fi' => :FI,
       'while' => :WHILE,
       'until' => :UNTIL,

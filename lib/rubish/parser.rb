@@ -291,9 +291,9 @@ module Rubish
       body = parse_if_body
       branches << [condition, body]
 
-      # Parse elif branches
-      while peek(:ELIF)
-        consume(:ELIF)
+      # Parse elif/elsif branches
+      while peek(:ELIF) || peek(:ELSIF)
+        consume(:ELIF) || consume(:ELSIF)
         elif_condition = parse_conditional_for_if
         skip_semicolon
         # 'then' is optional for Ruby-style syntax
@@ -378,12 +378,12 @@ module Rubish
       left
     end
 
-    # Parse body of if/elif/else (stops at elif/else/fi/end)
+    # Parse body of if/elif/elsif/else (stops at elif/elsif/else/fi/end)
     def parse_if_body
       commands = []
       skip_semicolon
 
-      while !peek(:ELIF) && !peek(:ELSE) && !peek(:FI) && !peek_end && current
+      while !peek(:ELIF) && !peek(:ELSIF) && !peek(:ELSE) && !peek(:FI) && !peek_end && current
         cmd = parse_conditional
         break unless cmd
 

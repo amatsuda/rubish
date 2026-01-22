@@ -153,6 +153,40 @@ class TestIf < Test::Unit::TestCase
     assert_equal "default\n", File.read(output_file)
   end
 
+  # Execution tests - elsif (Ruby-style)
+  def test_elsif_is_keyword
+    tokens = Rubish::Lexer.new('elsif').tokenize
+    assert_equal :ELSIF, tokens.first.type
+  end
+
+  def test_if_elsif_parsing
+    tokens = Rubish::Lexer.new('if test -z x; then echo a; elsif test -n x; then echo b; end').tokenize
+    ast = Rubish::Parser.new(tokens).parse
+    assert_instance_of Rubish::AST::If, ast
+    assert_equal 2, ast.branches.length
+    assert_nil ast.else_body
+  end
+
+  def test_elsif_first_matches
+    execute("if test 1 -eq 1; then echo first > #{output_file}; elsif test 2 -eq 2; then echo second > #{output_file}; end")
+    assert_equal "first\n", File.read(output_file)
+  end
+
+  def test_elsif_second_matches
+    execute("if test 1 -eq 2; then echo first > #{output_file}; elsif test 2 -eq 2; then echo second > #{output_file}; end")
+    assert_equal "second\n", File.read(output_file)
+  end
+
+  def test_elsif_with_else
+    execute("if test 1 -eq 2; then echo first > #{output_file}; elsif test 3 -eq 4; then echo second > #{output_file}; else echo default > #{output_file}; end")
+    assert_equal "default\n", File.read(output_file)
+  end
+
+  def test_elsif_multiple_branches
+    execute("if test 1 -eq 2; then echo first > #{output_file}; elsif test 2 -eq 3; then echo second > #{output_file}; elsif test 3 -eq 3; then echo third > #{output_file}; end")
+    assert_equal "third\n", File.read(output_file)
+  end
+
   # Execution tests - file tests
   def test_if_file_exists
     test_file = File.join(@tempdir, 'exists.txt')
