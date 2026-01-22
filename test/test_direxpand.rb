@@ -107,17 +107,15 @@ class TestDirexpand < Test::Unit::TestCase
   end
 
   # Test complete_file behavior with direxpand
-  def test_complete_file_without_direxpand_no_expansion
+  def test_complete_file_without_direxpand_shows_tilde
     # Create a directory in home
     test_subdir = File.join(Dir.home, '.rubish_test_direxpand_temp')
     FileUtils.mkdir_p(test_subdir)
 
     begin
-      # Without direxpand, tilde paths don't get expanded
-      # Ruby's Dir.glob doesn't expand ~ natively
+      # Without direxpand, ~ is expanded for globbing but results show ~/... form
       candidates = complete_file('~/.rubish_test_direxpand')
-      # Should return empty because ~ is not expanded
-      assert_equal [], candidates
+      assert_includes candidates, '~/.rubish_test_direxpand_temp/'
     ensure
       FileUtils.rm_rf(test_subdir)
     end

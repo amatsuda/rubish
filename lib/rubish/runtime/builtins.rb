@@ -6754,6 +6754,7 @@ module Rubish
     def self.call_builtin_completion_function(name, cmd, cur, prev)
       func = @builtin_completion_functions[name]
       return false unless func
+      ENV['cur'] = cur
       func.call(cmd, cur, prev)
       true
     end
@@ -8277,11 +8278,15 @@ module Rubish
 
       cur = ENV['cur'] || ''
 
-      # Expand tilde
-      expanded_cur = cur.start_with?('~') ? File.expand_path(cur) : cur
+      # Expand tilde (may fail if ~username refers to non-existent user)
+      expanded_cur = cur.start_with?('~') ? (File.expand_path(cur) rescue cur) : cur
 
       # Get directory and prefix
-      if cur.include?('/')
+      if cur.end_with?('/')
+        # Path ends with / - list contents of that directory
+        dir = expanded_cur
+        prefix = ''
+      elsif cur.include?('/')
         dir = File.dirname(expanded_cur)
         prefix = File.basename(expanded_cur)
       else
@@ -8310,7 +8315,9 @@ module Rubish
           end
 
           # Build the completion string
-          if cur.include?('/')
+          if cur.end_with?('/')
+            result = "#{cur}#{entry}"
+          elsif cur.include?('/')
             result = File.join(File.dirname(cur), entry)
           else
             result = entry

@@ -7000,20 +7000,21 @@ module Rubish
     end
 
     def complete_file(input)
-      # direxpand: expand directory names during word completion
-      expanded_input = input
+      # Always expand ~ for globbing (Dir.glob doesn't expand tilde)
+      glob_input = input.sub(/^~(?=\/|$)/, Dir.home)
+      # direxpand: also expand $VAR when enabled
       if Builtins.shopt_enabled?('direxpand')
-        expanded_input = expand_for_completion(input)
+        glob_input = expand_for_completion(glob_input)
       end
 
-      candidates = Dir.glob("#{expanded_input}*").map do |f|
+      candidates = Dir.glob("#{glob_input}*").map do |f|
         File.directory?(f) ? "#{f}/" : f
       end.sort
 
       # Partial path expansion: l/r/re -> l/r/repl.rb (abbreviated form for Reline)
       # Try to expand each path segment if no direct matches
-      if candidates.empty? && expanded_input.include?('/')
-        abbrev_candidates = expand_abbreviated_path_for_completion(expanded_input)
+      if candidates.empty? && glob_input.include?('/')
+        abbrev_candidates = expand_abbreviated_path_for_completion(glob_input)
         candidates = abbrev_candidates if abbrev_candidates && !abbrev_candidates.empty?
       end
 
@@ -7058,6 +7059,11 @@ module Rubish
       # complete_fullquote: quote shell metacharacters in completion results
       if Builtins.shopt_enabled?('complete_fullquote')
         candidates = candidates.map { |c| quote_completion_metacharacters(c) }
+      end
+
+      # Convert paths back to ~/... form after quoting (so tilde isn't escaped)
+      if input.start_with?('~/') && !Builtins.shopt_enabled?('direxpand')
+        candidates = candidates.map { |c| c.sub(/^#{Regexp.escape(Dir.home)}/, '~') }
       end
 
       candidates
