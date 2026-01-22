@@ -1868,6 +1868,21 @@ module Rubish
         return
       end
 
+      # Check if input is a Ruby lambda literal (-> { ... } or ->(args) { ... })
+      if line =~ /\A->/
+        begin
+          result = binding.eval(line)
+          p result
+        rescue SyntaxError, StandardError => e
+          $stderr.puts "rubish: #{e.message}"
+          @last_status = 1
+          return
+        end
+        @last_status = 0
+        Builtins.clear_exit_blocked
+        return
+      end
+
       # Check for array assignment before tokenizing (arr=(a b c) pattern)
       if (array_assignments = extract_array_assignments(line))
         handle_bare_assignments(array_assignments)
