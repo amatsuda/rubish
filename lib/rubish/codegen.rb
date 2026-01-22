@@ -56,6 +56,8 @@ module Rubish
         generate_arithmetic_command(node)
       when AST::ArrayAssign
         generate_array_assign(node)
+      when AST::RubyCondition
+        generate_ruby_condition(node)
       else
         raise "Unknown AST node: #{node.class}"
       end
@@ -691,7 +693,12 @@ module Rubish
 
       node.branches.each_with_index do |(condition, body), i|
         keyword = i == 0 ? 'if' : 'elsif'
-        parts << "#{keyword} __condition { #{generate(condition)} }"
+        # RubyCondition returns boolean directly, no need for __condition wrapper
+        if condition.is_a?(AST::RubyCondition)
+          parts << "#{keyword} #{generate(condition)}"
+        else
+          parts << "#{keyword} __condition { #{generate(condition)} }"
+        end
         # Use generate_loop_body to wrap single commands in __run_cmd
         # This ensures commands are executed immediately within the if block
         parts << generate_loop_body(body)
@@ -704,6 +711,11 @@ module Rubish
 
       parts << 'end'
       parts.join("\n")
+    end
+
+    def generate_ruby_condition(node)
+      # Generate code that evaluates Ruby expression with shell variables bound as locals
+      "__ruby_condition(#{node.expression.inspect})"
     end
 
     def generate_unless(node)

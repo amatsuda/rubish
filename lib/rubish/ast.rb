@@ -51,6 +51,11 @@ module Rubish
     # direction: :in for <(cmd), :out for >(cmd)
     ProcessSubstitution = Data.define(:command, :direction)
 
+    # Ruby block condition: { ruby_expression }
+    # Used in if/while/until with Ruby expression as condition
+    # Shell variables are bound as Ruby locals (VAR -> var)
+    RubyCondition = Data.define(:expression)
+
     # If statement: if cond; then body; elif cond; then body; else body; fi
     # branches is array of [condition, body] pairs, else_body is optional
     If = Data.define(:branches, :else_body) do

@@ -569,6 +569,11 @@ module Rubish
 
     # Parse condition for if/elif (stops at then/do)
     def parse_conditional_for_if
+      # Check for Ruby block condition: { expression }
+      if peek(:RUBY_CONDITION)
+        return parse_ruby_condition
+      end
+
       left = parse_pipeline
       return nil unless left
 
@@ -583,6 +588,35 @@ module Rubish
       end
 
       left
+    end
+
+    # Parse Ruby block condition: { expression }
+    def parse_ruby_condition
+      if peek(:RUBY_CONDITION)
+        token = consume(:RUBY_CONDITION)
+        return AST::RubyCondition.new(expression: token.value)
+      end
+
+      # Fallback for compatibility (shouldn't normally be reached)
+      consume(:LBRACE)
+      expression = +''
+      brace_depth = 1
+
+      while current && brace_depth > 0
+        if current.type == :LBRACE
+          brace_depth += 1
+          expression << '{'
+        elsif current.type == :RBRACE
+          brace_depth -= 1
+          expression << '}' if brace_depth > 0
+        else
+          expression << current.value.to_s
+          expression << ' '
+        end
+        consume
+      end
+
+      AST::RubyCondition.new(expression: expression.strip)
     end
 
     # Parse body of if/elif/elsif/else (stops at elif/elsif/else/fi/end)

@@ -225,6 +225,9 @@ module Rubish
             # Block after 'each'/'map'/'select'/'detect' without explicit variable: each { body }
             # Uses implicit 'it' variable (accessed as $it)
             read_block
+          elsif %i[IF WHILE UNTIL ELIF ELSIF UNLESS].include?(@last_token_type)
+            # Ruby condition block after if/while/until/elif/elsif/unless: { expression }
+            read_ruby_condition
           else
             # Shell function body or standalone brace
             @pos += 1
@@ -438,6 +441,35 @@ module Rubish
         @pos += 1
       end
       Token.new(:BLOCK, @input[start...@pos])
+    end
+
+    # Read Ruby condition block: { expression }
+    # Returns raw expression content without braces
+    def read_ruby_condition
+      @pos += 1  # skip opening {
+      start = @pos
+      depth = 1
+
+      while @pos < @input.length && depth > 0
+        char = @input[@pos]
+        if char == '{'
+          depth += 1
+        elsif char == '}'
+          depth -= 1
+          break if depth == 0
+        elsif char == '"'
+          read_double_quoted_string
+          next
+        elsif char == "'"
+          read_single_quoted_string
+          next
+        end
+        @pos += 1
+      end
+
+      content = @input[start...@pos].strip
+      @pos += 1  # skip closing }
+      Token.new(:RUBY_CONDITION, content)
     end
 
     def read_do_block

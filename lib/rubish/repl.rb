@@ -3703,6 +3703,32 @@ module Rubish
       end
     end
 
+    def __ruby_condition(expression)
+      # Evaluate Ruby expression with shell variables bound as locals
+      # VAR=foo becomes var = 'foo' in the Ruby binding
+      # Use __binding__ to avoid conflicts with shell variable names
+      __binding__ = binding
+      __bound_vars__ = Set.new
+
+      # First bind shell variables (these take precedence, includes function-local vars)
+      Builtins.shell_vars.each do |key, value|
+        var_name = key.downcase
+        next unless var_name =~ /\A[a-z_][a-z0-9_]*\z/
+        __binding__.local_variable_set(var_name.to_sym, value)
+        __bound_vars__ << var_name
+      end
+
+      # Then bind ENV variables (inherited environment, unless already bound from shell_vars)
+      ENV.each do |key, value|
+        var_name = key.downcase
+        next unless var_name =~ /\A[a-z_][a-z0-9_]*\z/
+        next if __bound_vars__.include?(var_name)
+        __binding__.local_variable_set(var_name.to_sym, value)
+      end
+
+      __binding__.eval(expression)
+    end
+
     def __for_loop(variable, items, &block)
       items.each do |item|
         Builtins.set_var(variable, item)
