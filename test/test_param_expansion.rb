@@ -67,7 +67,7 @@ class TestParamExpansion < Test::Unit::TestCase
     ENV.delete('UNSET_VAR')
     execute("echo ${UNSET_VAR:=assigned} > #{output_file}")
     assert_equal "assigned\n", File.read(output_file)
-    assert_equal 'assigned', ENV['UNSET_VAR']
+    assert_equal 'assigned', get_shell_var('UNSET_VAR')
   end
 
   # ${var:+value} - use value if set and non-null

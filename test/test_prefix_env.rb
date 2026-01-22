@@ -65,7 +65,7 @@ class TestPrefixEnv < Test::Unit::TestCase
   def test_prefix_env_does_not_leak
     ENV.delete('PREFIX_TEST')
     execute("PREFIX_TEST=leaked echo ignored > #{output_file}")
-    assert_nil ENV['PREFIX_TEST']
+    assert_nil get_shell_var('PREFIX_TEST')
   end
 
   def test_prefix_env_in_pipeline
@@ -78,7 +78,7 @@ class TestPrefixEnv < Test::Unit::TestCase
     execute("OVERRIDE_ME=overridden printenv OVERRIDE_ME > #{output_file}")
     assert_equal "overridden\n", File.read(output_file)
     # Original value should be preserved in shell
-    assert_equal 'original', ENV['OVERRIDE_ME']
+    assert_equal 'original', get_shell_var('OVERRIDE_ME')
   end
 
   def test_prefix_env_empty_value
@@ -88,14 +88,14 @@ class TestPrefixEnv < Test::Unit::TestCase
 
   def test_bare_assignment_still_works
     execute('BARE_ASSIGN=value')
-    assert_equal 'value', ENV['BARE_ASSIGN']
+    assert_equal 'value', get_shell_var('BARE_ASSIGN')
   end
 
   def test_multiple_bare_assignments
     execute('A=1 B=2 C=3')
-    assert_equal '1', ENV['A']
-    assert_equal '2', ENV['B']
-    assert_equal '3', ENV['C']
+    assert_equal '1', get_shell_var('A')
+    assert_equal '2', get_shell_var('B')
+    assert_equal '3', get_shell_var('C')
   end
 
   def test_prefix_env_with_variable_expansion

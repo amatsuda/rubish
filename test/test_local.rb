@@ -101,13 +101,13 @@ class TestLocal < Test::Unit::TestCase
     ENV['a'] = 'A'
     Rubish::Builtins.push_local_scope
     Rubish::Builtins.run('local', ['a=1', 'b=2', 'c=3'])
-    assert_equal '1', ENV['a']
-    assert_equal '2', ENV['b']
-    assert_equal '3', ENV['c']
+    assert_equal '1', get_shell_var('a')
+    assert_equal '2', get_shell_var('b')
+    assert_equal '3', get_shell_var('c')
     Rubish::Builtins.pop_local_scope
     assert_equal 'A', ENV['a']
-    assert_nil ENV['b']
-    assert_nil ENV['c']
+    assert_nil get_shell_var('b')
+    assert_nil get_shell_var('c')
   end
 
   # Test nested scopes

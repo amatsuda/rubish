@@ -26,50 +26,50 @@ class TestDeclare < Test::Unit::TestCase
   # Test declare without attributes
   def test_declare_simple
     Rubish::Builtins.run('declare', ['MYVAR=hello'])
-    assert_equal 'hello', ENV['MYVAR']
+    assert_equal 'hello', get_shell_var('MYVAR')
   end
 
   # Test declare -i (integer)
   def test_declare_integer
     Rubish::Builtins.run('declare', ['-i', 'NUM=5+3'])
-    assert_equal '8', ENV['NUM']
+    assert_equal '8', get_shell_var('NUM')
   end
 
   def test_declare_integer_with_vars
     ENV['X'] = '10'
     Rubish::Builtins.run('declare', ['-i', 'NUM=X+5'])
-    assert_equal '15', ENV['NUM']
+    assert_equal '15', get_shell_var('NUM')
   end
 
   # Test declare -l (lowercase)
   def test_declare_lowercase
     Rubish::Builtins.run('declare', ['-l', 'LOWER=HELLO'])
-    assert_equal 'hello', ENV['LOWER']
+    assert_equal 'hello', get_shell_var('LOWER')
   end
 
   def test_declare_lowercase_persists
     Rubish::Builtins.run('declare', ['-l', 'LOWER'])
     Rubish::Builtins.run('declare', ['LOWER=WORLD'])
-    assert_equal 'world', ENV['LOWER']
+    assert_equal 'world', get_shell_var('LOWER')
   end
 
   # Test declare -u (uppercase)
   def test_declare_uppercase
     Rubish::Builtins.run('declare', ['-u', 'UPPER=hello'])
-    assert_equal 'HELLO', ENV['UPPER']
+    assert_equal 'HELLO', get_shell_var('UPPER')
   end
 
   def test_declare_uppercase_persists
     Rubish::Builtins.run('declare', ['-u', 'UPPER'])
     Rubish::Builtins.run('declare', ['UPPER=world'])
-    assert_equal 'WORLD', ENV['UPPER']
+    assert_equal 'WORLD', get_shell_var('UPPER')
   end
 
   # Test declare -r (readonly)
   def test_declare_readonly
     Rubish::Builtins.run('declare', ['-r', 'CONST=value'])
     assert Rubish::Builtins.readonly?('CONST')
-    assert_equal 'value', ENV['CONST']
+    assert_equal 'value', get_shell_var('CONST')
   end
 
   def test_declare_readonly_blocks_change
@@ -78,44 +78,44 @@ class TestDeclare < Test::Unit::TestCase
       Rubish::Builtins.run('declare', ['CONST=second'])
     end
     assert_match(/readonly variable/, output)
-    assert_equal 'first', ENV['CONST']
+    assert_equal 'first', get_shell_var('CONST')
   end
 
   # Test declare -x (export)
   def test_declare_export
     Rubish::Builtins.run('declare', ['-x', 'EXPORTED=value'])
     assert Rubish::Builtins.has_attribute?('EXPORTED', :export)
-    assert_equal 'value', ENV['EXPORTED']
+    assert_equal 'value', get_shell_var('EXPORTED')
   end
 
   # Test combined attributes
   def test_declare_combined_attrs
     Rubish::Builtins.run('declare', ['-lu', 'VAR=MixedCase'])
     # lowercase takes precedence
-    assert_equal 'mixedcase', ENV['VAR']
+    assert_equal 'mixedcase', get_shell_var('VAR')
   end
 
   def test_declare_integer_and_readonly
     Rubish::Builtins.run('declare', ['-ir', 'CONST=5+5'])
-    assert_equal '10', ENV['CONST']
+    assert_equal '10', get_shell_var('CONST')
     assert Rubish::Builtins.readonly?('CONST')
   end
 
   # Test removing attributes with +
   def test_declare_remove_lowercase
     Rubish::Builtins.run('declare', ['-l', 'VAR=hello'])
-    assert_equal 'hello', ENV['VAR']
+    assert_equal 'hello', get_shell_var('VAR')
 
     Rubish::Builtins.run('declare', ['+l', 'VAR'])
     Rubish::Builtins.run('declare', ['VAR=HELLO'])
-    assert_equal 'HELLO', ENV['VAR']
+    assert_equal 'HELLO', get_shell_var('VAR')
   end
 
   def test_declare_remove_uppercase
     Rubish::Builtins.run('declare', ['-u', 'VAR=HELLO'])
     Rubish::Builtins.run('declare', ['+u', 'VAR'])
     Rubish::Builtins.run('declare', ['VAR=hello'])
-    assert_equal 'hello', ENV['VAR']
+    assert_equal 'hello', get_shell_var('VAR')
   end
 
   # Test declare -p (print)
@@ -137,27 +137,27 @@ class TestDeclare < Test::Unit::TestCase
   # Test typeset alias
   def test_typeset_alias
     Rubish::Builtins.run('typeset', ['-i', 'NUM=10'])
-    assert_equal '10', ENV['NUM']
+    assert_equal '10', get_shell_var('NUM')
     assert Rubish::Builtins.has_attribute?('NUM', :integer)
   end
 
   # Test declare via REPL
   def test_declare_via_repl
     execute('declare -u MYVAR=hello')
-    assert_equal 'HELLO', ENV['MYVAR']
+    assert_equal 'HELLO', get_shell_var('MYVAR')
   end
 
   def test_declare_integer_via_repl
     execute('declare -i COUNT=1+2+3')
-    assert_equal '6', ENV['COUNT']
+    assert_equal '6', get_shell_var('COUNT')
   end
 
   # Test multiple variables
   def test_declare_multiple_vars
     Rubish::Builtins.run('declare', ['-l', 'A=ONE', 'B=TWO', 'C=THREE'])
-    assert_equal 'one', ENV['A']
-    assert_equal 'two', ENV['B']
-    assert_equal 'three', ENV['C']
+    assert_equal 'one', get_shell_var('A')
+    assert_equal 'two', get_shell_var('B')
+    assert_equal 'three', get_shell_var('C')
   end
 
   # Test declare without value
@@ -165,7 +165,7 @@ class TestDeclare < Test::Unit::TestCase
     ENV['EXISTING'] = 'value'
     Rubish::Builtins.run('declare', ['-l', 'EXISTING'])
     # Value unchanged, but attribute set
-    assert_equal 'value', ENV['EXISTING']
+    assert_equal 'value', get_shell_var('EXISTING')
     assert Rubish::Builtins.has_attribute?('EXISTING', :lowercase)
   end
 

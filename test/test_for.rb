@@ -55,7 +55,7 @@ class TestFor < Test::Unit::TestCase
   def test_for_sets_loop_variable
     ENV.delete('myvar')
     execute('for myvar in first second third; do true; done')
-    assert_equal 'third', ENV['myvar']
+    assert_equal 'third', get_shell_var('myvar')
   end
 
   def test_in_as_argument

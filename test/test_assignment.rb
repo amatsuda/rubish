@@ -22,74 +22,74 @@ class TestAssignment < Test::Unit::TestCase
   # Simple assignments
   def test_simple_assignment
     execute('X=hello')
-    assert_equal 'hello', ENV['X']
+    assert_equal 'hello', get_shell_var('X')
   end
 
   def test_assignment_with_numbers
     execute('NUM=42')
-    assert_equal '42', ENV['NUM']
+    assert_equal '42', get_shell_var('NUM')
   end
 
   def test_empty_assignment
     execute('EMPTY=')
-    assert_equal '', ENV['EMPTY']
+    assert_equal '', get_shell_var('EMPTY')
   end
 
   # Multiple assignments
   def test_multiple_assignments
     execute('A=1 B=2 C=3')
-    assert_equal '1', ENV['A']
-    assert_equal '2', ENV['B']
-    assert_equal '3', ENV['C']
+    assert_equal '1', get_shell_var('A')
+    assert_equal '2', get_shell_var('B')
+    assert_equal '3', get_shell_var('C')
   end
 
   # Variable expansion
   def test_assignment_with_variable
     ENV['SRC'] = 'source'
     execute('DST=$SRC')
-    assert_equal 'source', ENV['DST']
+    assert_equal 'source', get_shell_var('DST')
   end
 
   def test_assignment_with_braced_variable
     ENV['VAR'] = 'value'
     execute('COPY=${VAR}')
-    assert_equal 'value', ENV['COPY']
+    assert_equal 'value', get_shell_var('COPY')
   end
 
   # Arithmetic expansion
   def test_assignment_with_arithmetic
     execute('RESULT=$((10 + 5))')
-    assert_equal '15', ENV['RESULT']
+    assert_equal '15', get_shell_var('RESULT')
   end
 
   def test_assignment_with_complex_arithmetic
     ENV['X'] = '3'
     execute('Y=$((X * X))')
-    assert_equal '9', ENV['Y']
+    assert_equal '9', get_shell_var('Y')
   end
 
   # Command substitution
   def test_assignment_with_command_substitution
     execute('PWD_VAR=$(pwd)')
-    assert_equal Dir.pwd, ENV['PWD_VAR']
+    assert_equal Dir.pwd, get_shell_var('PWD_VAR')
   end
 
   # Quoted values
   def test_assignment_single_quoted
     execute("MSG='hello world'")
-    assert_equal 'hello world', ENV['MSG']
+    assert_equal 'hello world', get_shell_var('MSG')
   end
 
   def test_assignment_double_quoted
     ENV['NAME'] = 'Ruby'
     execute('GREETING="Hello $NAME"')
-    assert_equal 'Hello Ruby', ENV['GREETING']
+    assert_equal 'Hello Ruby', get_shell_var('GREETING')
   end
 
   def test_assignment_single_quoted_no_expansion
     ENV['VAR'] = 'value'
     execute("LITERAL='$VAR'")
-    assert_equal '$VAR', ENV['LITERAL']
+    assert_equal '$VAR', get_shell_var('LITERAL')
   end
 
   # Used in echo
@@ -102,24 +102,24 @@ class TestAssignment < Test::Unit::TestCase
   # Underscore in variable names
   def test_underscore_variable
     execute('MY_VAR=test')
-    assert_equal 'test', ENV['MY_VAR']
+    assert_equal 'test', get_shell_var('MY_VAR')
   end
 
   def test_leading_underscore
     execute('_PRIVATE=secret')
-    assert_equal 'secret', ENV['_PRIVATE']
+    assert_equal 'secret', get_shell_var('_PRIVATE')
   end
 
   # Path-like values
   def test_path_value
     execute('MY_PATH=/usr/local/bin')
-    assert_equal '/usr/local/bin', ENV['MY_PATH']
+    assert_equal '/usr/local/bin', get_shell_var('MY_PATH')
   end
 
   # Overwrite existing
   def test_overwrite_variable
     ENV['OVERWRITE'] = 'old'
     execute('OVERWRITE=new')
-    assert_equal 'new', ENV['OVERWRITE']
+    assert_equal 'new', get_shell_var('OVERWRITE')
   end
 end

@@ -24,7 +24,7 @@ class TestReadonly < Test::Unit::TestCase
   # Test readonly with value
   def test_readonly_with_value
     Rubish::Builtins.run('readonly', ['MYCONST=hello'])
-    assert_equal 'hello', ENV['MYCONST']
+    assert_equal 'hello', get_shell_var('MYCONST')
     assert Rubish::Builtins.readonly?('MYCONST')
   end
 
@@ -33,15 +33,15 @@ class TestReadonly < Test::Unit::TestCase
     ENV['EXISTVAR'] = 'value'
     Rubish::Builtins.run('readonly', ['EXISTVAR'])
     assert Rubish::Builtins.readonly?('EXISTVAR')
-    assert_equal 'value', ENV['EXISTVAR']
+    assert_equal 'value', get_shell_var('EXISTVAR')
   end
 
   # Test readonly multiple variables
   def test_readonly_multiple
     Rubish::Builtins.run('readonly', ['A=1', 'B=2', 'C=3'])
-    assert_equal '1', ENV['A']
-    assert_equal '2', ENV['B']
-    assert_equal '3', ENV['C']
+    assert_equal '1', get_shell_var('A')
+    assert_equal '2', get_shell_var('B')
+    assert_equal '3', get_shell_var('C')
     assert Rubish::Builtins.readonly?('A')
     assert Rubish::Builtins.readonly?('B')
     assert Rubish::Builtins.readonly?('C')
@@ -54,7 +54,7 @@ class TestReadonly < Test::Unit::TestCase
       Rubish::Builtins.run('export', ['MYCONST=modified'])
     end
     assert_match(/readonly variable/, output)
-    assert_equal 'original', ENV['MYCONST']
+    assert_equal 'original', get_shell_var('MYCONST')
   end
 
   # Test cannot unset readonly variable
@@ -64,7 +64,7 @@ class TestReadonly < Test::Unit::TestCase
       Rubish::Builtins.run('unset', ['MYCONST'])
     end
     assert_match(/readonly variable/, output)
-    assert_equal 'value', ENV['MYCONST']
+    assert_equal 'value', get_shell_var('MYCONST')
   end
 
   # Test cannot modify readonly with local
@@ -75,7 +75,7 @@ class TestReadonly < Test::Unit::TestCase
       Rubish::Builtins.run('local', ['MYCONST=modified'])
     end
     assert_match(/readonly variable/, output)
-    assert_equal 'original', ENV['MYCONST']
+    assert_equal 'original', get_shell_var('MYCONST')
     Rubish::Builtins.pop_local_scope
   end
 
@@ -98,7 +98,7 @@ class TestReadonly < Test::Unit::TestCase
   # Test readonly via REPL
   def test_readonly_via_repl
     execute('readonly SHELLCONST=constvalue')
-    assert_equal 'constvalue', ENV['SHELLCONST']
+    assert_equal 'constvalue', get_shell_var('SHELLCONST')
     assert Rubish::Builtins.readonly?('SHELLCONST')
   end
 
@@ -109,14 +109,14 @@ class TestReadonly < Test::Unit::TestCase
       Rubish::Builtins.run('readonly', ['MYCONST=second'])
     end
     assert_match(/readonly variable/, output)
-    assert_equal 'first', ENV['MYCONST']
+    assert_equal 'first', get_shell_var('MYCONST')
   end
 
   # Test readonly without value for unset variable
   def test_readonly_unset_var
     Rubish::Builtins.run('readonly', ['UNSETVAR'])
     assert Rubish::Builtins.readonly?('UNSETVAR')
-    assert_nil ENV['UNSETVAR']
+    assert_nil get_shell_var('UNSETVAR')
   end
 
   # Test clear_readonly_vars helper

@@ -221,25 +221,25 @@ class TestPrintf < Test::Unit::TestCase
   def test_printf_v_option_basic
     output = capture_output { Rubish::Builtins.run('printf', ['-v', 'myvar', '%s', 'hello']) }
     assert_equal '', output  # No output to stdout
-    assert_equal 'hello', ENV['myvar']
+    assert_equal 'hello', get_shell_var('myvar')
   end
 
   def test_printf_v_option_formatted
     output = capture_output { Rubish::Builtins.run('printf', ['-v', 'result', '%05d', '42']) }
     assert_equal '', output
-    assert_equal '00042', ENV['result']
+    assert_equal '00042', get_shell_var('result')
   end
 
   def test_printf_v_option_multiple_args
     output = capture_output { Rubish::Builtins.run('printf', ['-v', 'msg', '%s %s!', 'hello', 'world']) }
     assert_equal '', output
-    assert_equal 'hello world!', ENV['msg']
+    assert_equal 'hello world!', get_shell_var('msg')
   end
 
   def test_printf_v_option_with_newline
     output = capture_output { Rubish::Builtins.run('printf', ['-v', 'lines', 'line1\\nline2']) }
     assert_equal '', output
-    assert_equal "line1\nline2", ENV['lines']
+    assert_equal "line1\nline2", get_shell_var('lines')
   end
 
   def test_printf_v_option_missing_varname
@@ -273,24 +273,24 @@ class TestPrintf < Test::Unit::TestCase
 
   def test_printf_v_via_repl
     execute("printf -v greeting '%s %s' hello world")
-    assert_equal 'hello world', ENV['greeting']
+    assert_equal 'hello world', get_shell_var('greeting')
   end
 
   def test_printf_v_overwrites_existing
     ENV['existing'] = 'old value'
     capture_output { Rubish::Builtins.run('printf', ['-v', 'existing', '%s', 'new value']) }
-    assert_equal 'new value', ENV['existing']
+    assert_equal 'new value', get_shell_var('existing')
   end
 
   def test_printf_v_underscore_varname
     capture_output { Rubish::Builtins.run('printf', ['-v', '_private', '%d', '99']) }
-    assert_equal '99', ENV['_private']
+    assert_equal '99', get_shell_var('_private')
   end
 
   def test_printf_v_with_double_dash
     output = capture_output { Rubish::Builtins.run('printf', ['-v', 'var', '--', '%s', 'test']) }
     assert_equal '', output
-    assert_equal 'test', ENV['var']
+    assert_equal 'test', get_shell_var('var')
   end
 
   def test_printf_invalid_option
@@ -382,7 +382,7 @@ class TestPrintf < Test::Unit::TestCase
 
   def test_printf_q_with_v_option
     capture_output { Rubish::Builtins.run('printf', ['-v', 'quoted', '%q', 'hello world']) }
-    assert_match(/^'hello world'$|^hello\\ world$/, ENV['quoted'])
+    assert_match(/^'hello world'$|^hello\\ world$/, get_shell_var('quoted'))
   end
 
   def test_printf_q_semicolon
@@ -473,9 +473,9 @@ class TestPrintf < Test::Unit::TestCase
 
   def test_printf_T_with_v_option
     capture_output { Rubish::Builtins.run('printf', ['-v', 'timevar', '%(%Y)T', '-1']) }
-    assert_equal Time.now.year.to_s, ENV['timevar']
+    assert_equal Time.now.year.to_s, get_shell_var('timevar')
   ensure
-    ENV.delete('timevar')
+    Rubish::Builtins.delete_var('timevar')
   end
 
   def test_printf_T_with_other_specifiers
@@ -614,9 +614,9 @@ class TestPrintf < Test::Unit::TestCase
   # Test with -v option
   def test_printf_dynamic_width_with_v_option
     capture_output { Rubish::Builtins.run('printf', ['-v', 'padded', '%*s', '10', 'test']) }
-    assert_equal '      test', ENV['padded']
+    assert_equal '      test', get_shell_var('padded')
   ensure
-    ENV.delete('padded')
+    Rubish::Builtins.delete_var('padded')
   end
 
   # Test missing arguments

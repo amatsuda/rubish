@@ -31,7 +31,7 @@ class TestENVVariable < Test::Unit::TestCase
     repl = Rubish::REPL.new
     repl.send(:load_config)
 
-    assert_equal 'from_env_file', ENV['MY_ENV_VAR']
+    assert_equal 'from_env_file', Rubish::Builtins.get_var('MY_ENV_VAR')
   end
 
   def test_env_variable_defines_function
@@ -108,7 +108,7 @@ class TestENVVariable < Test::Unit::TestCase
     repl = Rubish::REPL.new
     repl.send(:load_config)
 
-    assert_equal 'expanded', ENV['TILDE_TEST']
+    assert_equal 'expanded', Rubish::Builtins.get_var('TILDE_TEST')
   end
 
   # ENV sourced before rubishrc
@@ -138,7 +138,7 @@ class TestENVVariable < Test::Unit::TestCase
     repl.send(:load_config)
 
     # ENV should be sourced first, then rubishrc
-    assert_equal 'env_rubishrc', ENV['LOAD_ORDER']
+    assert_equal 'env_rubishrc', Rubish::Builtins.get_var('LOAD_ORDER')
   end
 
   # ENV with multiple commands
@@ -157,9 +157,9 @@ class TestENVVariable < Test::Unit::TestCase
     repl = Rubish::REPL.new
     repl.send(:load_config)
 
-    assert_equal 'one', ENV['VAR1']
-    assert_equal 'two', ENV['VAR2']
-    assert_equal 'three', ENV['VAR3']
+    assert_equal 'one', Rubish::Builtins.get_var('VAR1')
+    assert_equal 'two', Rubish::Builtins.get_var('VAR2')
+    assert_equal 'three', Rubish::Builtins.get_var('VAR3')
   end
 
   # ENV with shopt settings

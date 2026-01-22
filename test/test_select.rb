@@ -138,7 +138,7 @@ class TestSelect < Test::Unit::TestCase
     $stdout = old_stdout
     $stdin = old_stdin
 
-    assert_equal '1', ENV['REPLY']
+    assert_equal '1', get_shell_var('REPLY')
   end
 
   def test_select_loop_sets_variable_for_valid_selection
@@ -153,7 +153,7 @@ class TestSelect < Test::Unit::TestCase
     $stdout = old_stdout
     $stdin = old_stdin
 
-    assert_equal 'banana', ENV['choice']
+    assert_equal 'banana', get_shell_var('choice')
   end
 
   def test_select_loop_sets_empty_for_invalid_selection
@@ -168,7 +168,7 @@ class TestSelect < Test::Unit::TestCase
     $stdout = old_stdout
     $stdin = old_stdin
 
-    assert_equal '', ENV['choice']
+    assert_equal '', get_shell_var('choice')
   end
 
   def test_select_loop_sets_empty_for_non_numeric
@@ -183,7 +183,7 @@ class TestSelect < Test::Unit::TestCase
     $stdout = old_stdout
     $stdin = old_stdin
 
-    assert_equal '', ENV['choice']
+    assert_equal '', get_shell_var('choice')
   end
 
   def test_select_loop_uses_ps3_prompt
@@ -258,7 +258,7 @@ class TestSelect < Test::Unit::TestCase
     $stdout = StringIO.new
 
     selections = []
-    @repl.send(:__select_loop, 'choice', %w[a b c]) { selections << ENV['choice'] }
+    @repl.send(:__select_loop, 'choice', %w[a b c]) { selections << get_shell_var('choice') }
     $stdout = old_stdout
     $stdin = old_stdin
 
@@ -276,7 +276,7 @@ class TestSelect < Test::Unit::TestCase
     $stdout = old_stdout
     $stdin = old_stdin
 
-    assert_equal 'first', ENV['choice']
+    assert_equal 'first', get_shell_var('choice')
   end
 
   def test_select_zero_is_invalid
@@ -291,6 +291,6 @@ class TestSelect < Test::Unit::TestCase
     $stdout = old_stdout
     $stdin = old_stdin
 
-    assert_equal '', ENV['choice']
+    assert_equal '', get_shell_var('choice')
   end
 end

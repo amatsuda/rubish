@@ -111,7 +111,7 @@ class TestStartupFiles < Test::Unit::TestCase
     # Manually call load_config since run() would start the REPL loop
     repl.send(:load_config)
 
-    assert_equal 'yes', ENV['PROFILE_SOURCED']
+    assert_equal 'yes', Rubish::Builtins.get_var('PROFILE_SOURCED')
   end
 
   def test_login_shell_sources_bash_profile_first
@@ -123,8 +123,8 @@ class TestStartupFiles < Test::Unit::TestCase
     repl.send(:load_config)
 
     # .bash_profile should be sourced, not .profile
-    assert_equal 'yes', ENV['BASH_PROFILE_SOURCED']
-    assert_nil ENV['PROFILE_SOURCED']
+    assert_equal 'yes', Rubish::Builtins.get_var('BASH_PROFILE_SOURCED')
+    assert_nil Rubish::Builtins.get_var('PROFILE_SOURCED')
   end
 
   def test_login_shell_sources_bash_login_if_no_bash_profile
@@ -136,8 +136,8 @@ class TestStartupFiles < Test::Unit::TestCase
     repl.send(:load_config)
 
     # .bash_login should be sourced, not .profile
-    assert_equal 'yes', ENV['BASH_LOGIN_SOURCED']
-    assert_nil ENV['PROFILE_SOURCED']
+    assert_equal 'yes', Rubish::Builtins.get_var('BASH_LOGIN_SOURCED')
+    assert_nil Rubish::Builtins.get_var('PROFILE_SOURCED')
   end
 
   def test_login_shell_sources_rubish_profile
@@ -147,7 +147,7 @@ class TestStartupFiles < Test::Unit::TestCase
     repl = create_test_repl(login_shell: true)
     repl.send(:load_config)
 
-    assert_equal 'yes', ENV['RUBISH_PROFILE_SOURCED']
+    assert_equal 'yes', Rubish::Builtins.get_var('RUBISH_PROFILE_SOURCED')
   end
 
   def test_login_shell_rubish_profile_takes_priority_over_bash_profile
@@ -159,8 +159,8 @@ class TestStartupFiles < Test::Unit::TestCase
     repl.send(:load_config)
 
     # Only rubish_profile should be sourced (rubish config takes priority)
-    assert_nil ENV['BASH_PROFILE_SOURCED']
-    assert_equal 'yes', ENV['RUBISH_PROFILE_SOURCED']
+    assert_nil Rubish::Builtins.get_var('BASH_PROFILE_SOURCED')
+    assert_equal 'yes', Rubish::Builtins.get_var('RUBISH_PROFILE_SOURCED')
   end
 
   def test_noprofile_skips_profile_files
@@ -169,7 +169,7 @@ class TestStartupFiles < Test::Unit::TestCase
     repl = create_test_repl(login_shell: true, no_profile: true)
     repl.send(:load_config)
 
-    assert_nil ENV['PROFILE_SOURCED']
+    assert_nil Rubish::Builtins.get_var('PROFILE_SOURCED')
   end
 
   # ==========================================================================
@@ -182,7 +182,7 @@ class TestStartupFiles < Test::Unit::TestCase
     repl = create_test_repl(login_shell: false)
     repl.send(:load_config)
 
-    assert_equal 'yes', ENV['BASHRC_SOURCED']
+    assert_equal 'yes', Rubish::Builtins.get_var('BASHRC_SOURCED')
   end
 
   def test_non_login_shell_sources_rubishrc
@@ -191,7 +191,7 @@ class TestStartupFiles < Test::Unit::TestCase
     repl = create_test_repl(login_shell: false)
     repl.send(:load_config)
 
-    assert_equal 'yes', ENV['RUBISHRC_SOURCED']
+    assert_equal 'yes', Rubish::Builtins.get_var('RUBISHRC_SOURCED')
   end
 
   def test_non_login_shell_rubishrc_takes_priority_over_bashrc
@@ -202,8 +202,8 @@ class TestStartupFiles < Test::Unit::TestCase
     repl.send(:load_config)
 
     # Only rubishrc should be sourced (rubish config takes priority)
-    assert_nil ENV['BASHRC_SOURCED']
-    assert_equal 'yes', ENV['RUBISHRC_SOURCED']
+    assert_nil Rubish::Builtins.get_var('BASHRC_SOURCED')
+    assert_equal 'yes', Rubish::Builtins.get_var('RUBISHRC_SOURCED')
   end
 
   def test_non_login_shell_does_not_source_profile
@@ -214,8 +214,8 @@ class TestStartupFiles < Test::Unit::TestCase
     repl.send(:load_config)
 
     # Profile files should not be sourced for non-login shells
-    assert_nil ENV['PROFILE_SOURCED']
-    assert_nil ENV['BASH_PROFILE_SOURCED']
+    assert_nil Rubish::Builtins.get_var('PROFILE_SOURCED')
+    assert_nil Rubish::Builtins.get_var('BASH_PROFILE_SOURCED')
   end
 
   def test_norc_skips_rc_files
@@ -225,8 +225,8 @@ class TestStartupFiles < Test::Unit::TestCase
     repl = create_test_repl(login_shell: false, no_rc: true)
     repl.send(:load_config)
 
-    assert_nil ENV['BASHRC_SOURCED']
-    assert_nil ENV['RUBISHRC_SOURCED']
+    assert_nil Rubish::Builtins.get_var('BASHRC_SOURCED')
+    assert_nil Rubish::Builtins.get_var('RUBISHRC_SOURCED')
   end
 
   # ==========================================================================
@@ -241,7 +241,7 @@ class TestStartupFiles < Test::Unit::TestCase
     repl = create_test_repl(login_shell: false)
     repl.send(:load_config)
 
-    assert_equal 'yes', ENV['ENV_FILE_SOURCED']
+    assert_equal 'yes', Rubish::Builtins.get_var('ENV_FILE_SOURCED')
   end
 
   # ==========================================================================
@@ -259,8 +259,8 @@ class TestStartupFiles < Test::Unit::TestCase
       repl = create_test_repl(login_shell: true)
       repl.send(:load_config)
 
-      assert_nil ENV['PROFILE_SOURCED']
-      assert_nil ENV['BASHRC_SOURCED']
+      assert_nil Rubish::Builtins.get_var('PROFILE_SOURCED')
+      assert_nil Rubish::Builtins.get_var('BASHRC_SOURCED')
     ensure
       Rubish::Builtins.instance_variable_get(:@set_options)['p'] = false
     end
@@ -276,7 +276,7 @@ class TestStartupFiles < Test::Unit::TestCase
     repl = create_test_repl(login_shell: true)
     repl.send(:load_logout_config)
 
-    assert_equal 'yes', ENV['BASH_LOGOUT_SOURCED']
+    assert_equal 'yes', Rubish::Builtins.get_var('BASH_LOGOUT_SOURCED')
   end
 
   def test_login_shell_sources_rubish_logout
@@ -285,7 +285,7 @@ class TestStartupFiles < Test::Unit::TestCase
     repl = create_test_repl(login_shell: true)
     repl.send(:load_logout_config)
 
-    assert_equal 'yes', ENV['RUBISH_LOGOUT_SOURCED']
+    assert_equal 'yes', Rubish::Builtins.get_var('RUBISH_LOGOUT_SOURCED')
   end
 
   def test_login_shell_rubish_logout_takes_priority_over_bash_logout
@@ -296,8 +296,8 @@ class TestStartupFiles < Test::Unit::TestCase
     repl.send(:load_logout_config)
 
     # Only rubish_logout should be sourced (rubish config takes priority)
-    assert_nil ENV['BASH_LOGOUT_SOURCED']
-    assert_equal 'yes', ENV['RUBISH_LOGOUT_SOURCED']
+    assert_nil Rubish::Builtins.get_var('BASH_LOGOUT_SOURCED')
+    assert_equal 'yes', Rubish::Builtins.get_var('RUBISH_LOGOUT_SOURCED')
   end
 
   def test_non_login_shell_does_not_source_logout_files
@@ -307,8 +307,8 @@ class TestStartupFiles < Test::Unit::TestCase
     repl = create_test_repl(login_shell: false)
     repl.send(:load_logout_config)
 
-    assert_nil ENV['BASH_LOGOUT_SOURCED']
-    assert_nil ENV['RUBISH_LOGOUT_SOURCED']
+    assert_nil Rubish::Builtins.get_var('BASH_LOGOUT_SOURCED')
+    assert_nil Rubish::Builtins.get_var('RUBISH_LOGOUT_SOURCED')
   end
 
   # ==========================================================================
@@ -354,9 +354,9 @@ class TestStartupFiles < Test::Unit::TestCase
     repl.send(:load_interactive_config)
 
     # Only custom rc should be sourced
-    assert_equal 'yes', ENV['CUSTOM_RC_SOURCED']
-    assert_nil ENV['BASHRC_SOURCED']
-    assert_nil ENV['RUBISHRC_SOURCED']
+    assert_equal 'yes', Rubish::Builtins.get_var('CUSTOM_RC_SOURCED')
+    assert_nil Rubish::Builtins.get_var('BASHRC_SOURCED')
+    assert_nil Rubish::Builtins.get_var('RUBISHRC_SOURCED')
   end
 
   def test_rcfile_with_tilde_expansion
@@ -367,7 +367,7 @@ class TestStartupFiles < Test::Unit::TestCase
     repl = Rubish::REPL.new(rcfile: '~/.myrc')
     repl.send(:load_interactive_config)
 
-    assert_equal 'yes', ENV['MYRC_SOURCED']
+    assert_equal 'yes', Rubish::Builtins.get_var('MYRC_SOURCED')
   end
 
   def test_no_rc_overrides_rcfile
@@ -378,7 +378,7 @@ class TestStartupFiles < Test::Unit::TestCase
     repl = Rubish::REPL.new(rcfile: custom_rc, no_rc: true)
     repl.send(:load_interactive_config)
 
-    assert_nil ENV['CUSTOM_RC_SOURCED']
+    assert_nil Rubish::Builtins.get_var('CUSTOM_RC_SOURCED')
   end
 
   # ==========================================================================
@@ -394,7 +394,7 @@ class TestStartupFiles < Test::Unit::TestCase
     repl = create_test_repl(login_shell: false)
     repl.send(:load_interactive_config)
 
-    assert_equal 'yes', ENV['XDG_CONFIG_SOURCED']
+    assert_equal 'yes', Rubish::Builtins.get_var('XDG_CONFIG_SOURCED')
   end
 
   def test_xdg_profile_sourced_for_login_shell
@@ -406,7 +406,7 @@ class TestStartupFiles < Test::Unit::TestCase
     repl = create_test_repl(login_shell: true)
     repl.send(:load_config)
 
-    assert_equal 'yes', ENV['XDG_PROFILE_SOURCED']
+    assert_equal 'yes', Rubish::Builtins.get_var('XDG_PROFILE_SOURCED')
   end
 
   def test_xdg_logout_sourced_for_login_shell
@@ -418,7 +418,7 @@ class TestStartupFiles < Test::Unit::TestCase
     repl = create_test_repl(login_shell: true)
     repl.send(:load_logout_config)
 
-    assert_equal 'yes', ENV['XDG_LOGOUT_SOURCED']
+    assert_equal 'yes', Rubish::Builtins.get_var('XDG_LOGOUT_SOURCED')
   end
 
   def test_xdg_config_home_respected
@@ -433,7 +433,7 @@ class TestStartupFiles < Test::Unit::TestCase
     repl = create_test_repl(login_shell: false)
     repl.send(:load_interactive_config)
 
-    assert_equal 'yes', ENV['CUSTOM_XDG_HOME_SOURCED']
+    assert_equal 'yes', Rubish::Builtins.get_var('CUSTOM_XDG_HOME_SOURCED')
   ensure
     ENV.delete('XDG_CONFIG_HOME')
   end
@@ -448,6 +448,6 @@ class TestStartupFiles < Test::Unit::TestCase
     repl = create_test_repl(login_shell: false)
     repl.send(:load_interactive_config)
 
-    assert_equal 'xdg_rubishrc', ENV['LOAD_ORDER']
+    assert_equal 'xdg_rubishrc', Rubish::Builtins.get_var('LOAD_ORDER')
   end
 end

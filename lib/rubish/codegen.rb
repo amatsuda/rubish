@@ -244,7 +244,7 @@ module Rubish
       when '$!'
         '(@last_bg_pid ? @last_bg_pid.to_s : "")'
       when '$0'
-        '((a0 = ENV["RUBISH_ARGV0"]) && !a0.empty? ? a0 : @script_name)'
+        '((a0 = Builtins.get_var("RUBISH_ARGV0")) && !a0.empty? ? a0 : @script_name)'
       when /\A\$([1-9])\z/
         "(@positional_params[#{$1.to_i - 1}] || '')"
       when '$#'
@@ -380,7 +380,7 @@ module Rubish
       when '$!'
         return ['(@last_bg_pid ? @last_bg_pid.to_s : "")', 2]
       when '$0'
-        return ['((a0 = ENV["RUBISH_ARGV0"]) && !a0.empty? ? a0 : @script_name)', 2]
+        return ['((a0 = Builtins.get_var("RUBISH_ARGV0")) && !a0.empty? ? a0 : @script_name)', 2]
       when '$#'
         return ['@positional_params.length.to_s', 2]
       when '$@'

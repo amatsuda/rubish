@@ -81,7 +81,7 @@ class TestArithmeticCommand < Test::Unit::TestCase
   # Variable assignment
   def test_simple_assignment
     execute('(( x = 5 ))')
-    assert_equal '5', ENV['x']
+    assert_equal '5', get_shell_var('x')
   end
 
   def test_assignment_returns_value_status
@@ -93,35 +93,35 @@ class TestArithmeticCommand < Test::Unit::TestCase
   def test_post_increment
     ENV['x'] = '5'
     status = execute('(( x++ ))')
-    assert_equal '6', ENV['x']
+    assert_equal '6', get_shell_var('x')
     assert_equal 0, status  # returns old value (5)
   end
 
   def test_post_increment_zero
     ENV['x'] = '0'
     status = execute('(( x++ ))')
-    assert_equal '1', ENV['x']
+    assert_equal '1', get_shell_var('x')
     assert_equal 1, status  # returns old value (0)
   end
 
   def test_pre_increment
     ENV['x'] = '5'
     status = execute('(( ++x ))')
-    assert_equal '6', ENV['x']
+    assert_equal '6', get_shell_var('x')
     assert_equal 0, status  # returns new value (6)
   end
 
   def test_post_decrement
     ENV['x'] = '5'
     status = execute('(( x-- ))')
-    assert_equal '4', ENV['x']
+    assert_equal '4', get_shell_var('x')
     assert_equal 0, status  # returns old value (5)
   end
 
   def test_pre_decrement
     ENV['x'] = '5'
     status = execute('(( --x ))')
-    assert_equal '4', ENV['x']
+    assert_equal '4', get_shell_var('x')
     assert_equal 0, status  # returns new value (4)
   end
 
@@ -129,80 +129,80 @@ class TestArithmeticCommand < Test::Unit::TestCase
   def test_add_assign
     ENV['x'] = '5'
     execute('(( x += 3 ))')
-    assert_equal '8', ENV['x']
+    assert_equal '8', get_shell_var('x')
   end
 
   def test_subtract_assign
     ENV['x'] = '5'
     execute('(( x -= 2 ))')
-    assert_equal '3', ENV['x']
+    assert_equal '3', get_shell_var('x')
   end
 
   def test_multiply_assign
     ENV['x'] = '5'
     execute('(( x *= 2 ))')
-    assert_equal '10', ENV['x']
+    assert_equal '10', get_shell_var('x')
   end
 
   def test_divide_assign
     ENV['x'] = '6'
     execute('(( x /= 2 ))')
-    assert_equal '3', ENV['x']
+    assert_equal '3', get_shell_var('x')
   end
 
   def test_modulo_assign
     ENV['x'] = '7'
     execute('(( x %= 3 ))')
-    assert_equal '1', ENV['x']
+    assert_equal '1', get_shell_var('x')
   end
 
   def test_left_shift_assign
     ENV['x'] = '2'
     execute('(( x <<= 2 ))')
-    assert_equal '8', ENV['x']
+    assert_equal '8', get_shell_var('x')
   end
 
   def test_right_shift_assign
     ENV['x'] = '8'
     execute('(( x >>= 2 ))')
-    assert_equal '2', ENV['x']
+    assert_equal '2', get_shell_var('x')
   end
 
   def test_and_assign
     ENV['x'] = '7'
     execute('(( x &= 3 ))')
-    assert_equal '3', ENV['x']
+    assert_equal '3', get_shell_var('x')
   end
 
   def test_or_assign
     ENV['x'] = '5'
     execute('(( x |= 2 ))')
-    assert_equal '7', ENV['x']
+    assert_equal '7', get_shell_var('x')
   end
 
   def test_xor_assign
     ENV['x'] = '5'
     execute('(( x ^= 3 ))')
-    assert_equal '6', ENV['x']
+    assert_equal '6', get_shell_var('x')
   end
 
   # Variable references
   def test_variable_reference
     ENV['x'] = '5'
     execute('(( y = x + 1 ))')
-    assert_equal '6', ENV['y']
+    assert_equal '6', get_shell_var('y')
   end
 
   def test_dollar_variable_reference
     ENV['x'] = '5'
     execute('(( y = $x + 1 ))')
-    assert_equal '6', ENV['y']
+    assert_equal '6', get_shell_var('y')
   end
 
   def test_unset_variable_defaults_to_zero
     ENV.delete('unset_var')
     execute('(( y = unset_var + 1 ))')
-    assert_equal '1', ENV['y']
+    assert_equal '1', get_shell_var('y')
   end
 
   # Arithmetic operations
@@ -233,57 +233,57 @@ class TestArithmeticCommand < Test::Unit::TestCase
   # Operator precedence
   def test_precedence_mul_before_add
     execute('(( x = 2 + 3 * 4 ))')
-    assert_equal '14', ENV['x']
+    assert_equal '14', get_shell_var('x')
   end
 
   def test_parentheses_override_precedence
     execute('(( x = (2 + 3) * 4 ))')
-    assert_equal '20', ENV['x']
+    assert_equal '20', get_shell_var('x')
   end
 
   # Bitwise operators
   def test_bitwise_and
     execute('(( x = 5 & 3 ))')
-    assert_equal '1', ENV['x']
+    assert_equal '1', get_shell_var('x')
   end
 
   def test_bitwise_or
     execute('(( x = 5 | 3 ))')
-    assert_equal '7', ENV['x']
+    assert_equal '7', get_shell_var('x')
   end
 
   def test_bitwise_xor
     execute('(( x = 5 ^ 3 ))')
-    assert_equal '6', ENV['x']
+    assert_equal '6', get_shell_var('x')
   end
 
   def test_left_shift
     execute('(( x = 2 << 3 ))')
-    assert_equal '16', ENV['x']
+    assert_equal '16', get_shell_var('x')
   end
 
   def test_right_shift
     execute('(( x = 16 >> 2 ))')
-    assert_equal '4', ENV['x']
+    assert_equal '4', get_shell_var('x')
   end
 
   # Ternary operator
   def test_ternary_true
     execute('(( x = 5 > 3 ? 1 : 0 ))')
-    assert_equal '1', ENV['x']
+    assert_equal '1', get_shell_var('x')
   end
 
   def test_ternary_false
     execute('(( x = 3 > 5 ? 1 : 0 ))')
-    assert_equal '0', ENV['x']
+    assert_equal '0', get_shell_var('x')
   end
 
   # Comma operator (multiple expressions)
   def test_comma_operator
     execute('(( x = 1, y = 2, z = x + y ))')
-    assert_equal '1', ENV['x']
-    assert_equal '2', ENV['y']
-    assert_equal '3', ENV['z']
+    assert_equal '1', get_shell_var('x')
+    assert_equal '2', get_shell_var('y')
+    assert_equal '3', get_shell_var('z')
   end
 
   def test_comma_operator_returns_last
@@ -318,18 +318,18 @@ class TestArithmeticCommand < Test::Unit::TestCase
   # This is a known limitation
   def test_logical_not
     execute('(( x = !5 ))')  # !truthy = 0
-    assert_equal '0', ENV['x']
+    assert_equal '0', get_shell_var('x')
   end
 
   def test_bitwise_not
     execute('(( x = ~0 ))')
-    assert_equal '-1', ENV['x']
+    assert_equal '-1', get_shell_var('x')
   end
 
   # Unary minus
   def test_unary_minus
     execute('(( x = -5 ))')
-    assert_equal '-5', ENV['x']
+    assert_equal '-5', get_shell_var('x')
   end
 
   # Used in control flow (common pattern)
@@ -344,7 +344,7 @@ class TestArithmeticCommand < Test::Unit::TestCase
     ENV['count'] = '3'
     ENV['sum'] = '0'
     @repl.send(:execute, 'while (( count > 0 )); do (( sum += count )); (( count-- )); done')
-    assert_equal '6', ENV['sum']  # 3 + 2 + 1
-    assert_equal '0', ENV['count']
+    assert_equal '6', get_shell_var('sum')  # 3 + 2 + 1
+    assert_equal '0', get_shell_var('count')
   end
 end

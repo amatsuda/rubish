@@ -26,7 +26,7 @@ class TestTextdomain < Test::Unit::TestCase
 
   def test_textdomain_can_be_set
     execute('TEXTDOMAIN=myapp')
-    assert_equal 'myapp', ENV['TEXTDOMAIN']
+    assert_equal 'myapp', get_shell_var('TEXTDOMAIN')
   end
 
   def test_textdomain_can_be_exported
@@ -52,7 +52,7 @@ class TestTextdomain < Test::Unit::TestCase
 
   def test_textdomaindir_can_be_set
     execute('TEXTDOMAINDIR=/usr/share/locale')
-    assert_equal '/usr/share/locale', ENV['TEXTDOMAINDIR']
+    assert_equal '/usr/share/locale', get_shell_var('TEXTDOMAINDIR')
   end
 
   def test_textdomaindir_can_be_exported
@@ -127,8 +127,8 @@ class TestTextdomain < Test::Unit::TestCase
   def test_both_variables_can_be_set
     execute('TEXTDOMAIN=myapp')
     execute('TEXTDOMAINDIR=/usr/share/locale')
-    assert_equal 'myapp', ENV['TEXTDOMAIN']
-    assert_equal '/usr/share/locale', ENV['TEXTDOMAINDIR']
+    assert_equal 'myapp', get_shell_var('TEXTDOMAIN')
+    assert_equal '/usr/share/locale', get_shell_var('TEXTDOMAINDIR')
   end
 
   def test_export_both_variables

@@ -110,7 +110,7 @@ class TestRestricted < Test::Unit::TestCase
   def test_normal_variable_works_in_restricted_mode
     execute('set -r')
     execute('MYVAR=hello')
-    assert_equal 'hello', ENV['MYVAR']
+    assert_equal 'hello', get_shell_var('MYVAR')
   end
 
   # ==========================================================================
@@ -195,7 +195,7 @@ class TestRestricted < Test::Unit::TestCase
     execute('set -r')
     # This should work since filename has no slash
     Rubish::Builtins.run('source', ['simple_script'])
-    assert_equal 'yes', ENV['SOURCED']
+    assert_equal 'yes', get_shell_var('SOURCED')
   end
 
   # ==========================================================================

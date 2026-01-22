@@ -148,7 +148,7 @@ class TestExtquote < Test::Unit::TestCase
     execute("echo \"${UNSET_VAR:=\$'default\\nvalue'}\" > #{output_file}")
     assert_equal "default\nvalue\n", File.read(output_file)
     # Variable should now be set with expanded value
-    assert_equal "default\nvalue", ENV['UNSET_VAR']
+    assert_equal "default\nvalue", get_shell_var('UNSET_VAR')
   end
 
   # Test shopt output

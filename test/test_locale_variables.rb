@@ -225,7 +225,7 @@ class TestLocaleVariables < Test::Unit::TestCase
 
   def test_c_locale
     execute('LC_ALL=C')
-    assert_equal 'C', ENV['LC_ALL']
+    assert_equal 'C', get_shell_var('LC_ALL')
   end
 
   def test_posix_locale

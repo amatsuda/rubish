@@ -1893,38 +1893,38 @@ module Rubish
             # Create a local nameref
             # Save original nameref state if not already in this scope
             unless current_scope.key?(name)
-              warn_shadow(name) if shopt_enabled?('localvar_warning') && (ENV.key?(name) || nameref?(name))
-              # Store both the original ENV value and nameref state
+              warn_shadow(name) if shopt_enabled?('localvar_warning') && (var_set?(name) || nameref?(name))
+              # Store both the original value and nameref state
               current_scope[name] = {
-                env_value: ENV.key?(name) ? ENV[name] : :unset,
+                var_value: var_set?(name) ? get_var(name) : :unset,
                 nameref_target: nameref?(name) ? get_nameref_target(name) : nil
               }
             end
             # Set up the nameref
             set_nameref(name, value)
-            # Don't set ENV for nameref - the nameref points to target
+            # Don't set var for nameref - the nameref points to target
           else
             # Save original value if not already in this scope
             unless current_scope.key?(name)
               # Warn if shadowing a variable from outer scope
-              warn_shadow(name) if shopt_enabled?('localvar_warning') && ENV.key?(name)
-              current_scope[name] = ENV.key?(name) ? ENV[name] : :unset
+              warn_shadow(name) if shopt_enabled?('localvar_warning') && var_set?(name)
+              current_scope[name] = var_set?(name) ? get_var(name) : :unset
             end
-            ENV[name] = value
+            set_var(name, value)
           end
         else
           # Just declare as local without value
           name = arg
           unless current_scope.key?(name)
             # Warn if shadowing a variable from outer scope
-            warn_shadow(name) if shopt_enabled?('localvar_warning') && (ENV.key?(name) || (nameref_mode && nameref?(name)))
+            warn_shadow(name) if shopt_enabled?('localvar_warning') && (var_set?(name) || (nameref_mode && nameref?(name)))
             if nameref_mode
               current_scope[name] = {
-                env_value: ENV.key?(name) ? ENV[name] : :unset,
+                var_value: var_set?(name) ? get_var(name) : :unset,
                 nameref_target: nameref?(name) ? get_nameref_target(name) : nil
               }
             else
-              current_scope[name] = ENV.key?(name) ? ENV[name] : :unset
+              current_scope[name] = var_set?(name) ? get_var(name) : :unset
             end
           end
 
@@ -1936,13 +1936,13 @@ module Rubish
           else
             # localvar_inherit: inherit value and attributes from outer scope
             if shopt_enabled?('localvar_inherit')
-              # Keep the inherited value (already in ENV if it exists)
+              # Keep the inherited value (already in shell_vars if it exists)
               # Also inherit variable attributes if present
               # (attributes are already global, so nothing more to do for value)
             else
               # Without localvar_inherit, local var without value creates unset variable
               # This is standard bash behavior
-              ENV.delete(name)
+              delete_var(name)
             end
           end
         end
@@ -1962,18 +1962,18 @@ module Rubish
       # Restore original values
       scope.each do |name, original_value|
         if original_value.is_a?(Hash)
-          # This was a local nameref - restore both ENV and nameref state
-          env_val = original_value[:env_value]
+          # This was a local nameref - restore both var and nameref state
+          var_val = original_value[:var_value]
           nameref_target = original_value[:nameref_target]
 
           # First, remove the current nameref
           unset_nameref(name)
 
-          # Restore original ENV value
-          if env_val == :unset
-            ENV.delete(name)
+          # Restore original value
+          if var_val == :unset
+            delete_var(name)
           else
-            ENV[name] = env_val
+            set_var(name, var_val)
           end
 
           # Restore original nameref if there was one
@@ -1981,9 +1981,9 @@ module Rubish
             set_nameref(name, nameref_target)
           end
         elsif original_value == :unset
-          ENV.delete(name)
+          delete_var(name)
         else
-          ENV[name] = original_value
+          set_var(name, original_value)
         end
       end
     end
@@ -1998,9 +1998,9 @@ module Rubish
 
       current_scope = @local_scope_stack.last
       unless current_scope.key?(name)
-        current_scope[name] = ENV.key?(name) ? ENV[name] : :unset
+        current_scope[name] = var_set?(name) ? get_var(name) : :unset
       end
-      ENV[name] = value.to_s
+      set_var(name, value.to_s)
     end
 
     def self.clear_local_scopes

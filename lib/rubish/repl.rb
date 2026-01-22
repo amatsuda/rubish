@@ -2346,9 +2346,11 @@ module Rubish
             # BASH_ARGV0: Assigning a value also sets $0 to the same value
             # Unless it has been unset, in which case it loses special properties
             unless @bash_argv0_unset
+              # Store in both shell_vars and ENV so child processes can inherit
+              Builtins.set_var('RUBISH_ARGV0', expanded_value)
               ENV['RUBISH_ARGV0'] = expanded_value
             else
-              ENV[var_name] = expanded_value
+              Builtins.set_var(var_name, expanded_value)
             end
           elsif var_name == 'BASH_COMPAT'
             # BASH_COMPAT: Set shell compatibility level
@@ -2825,11 +2827,11 @@ module Rubish
       return Builtins.readline_point.to_s if var_name == 'READLINE_POINT'
       return Builtins.readline_mark.to_s if var_name == 'READLINE_MARK'
 
-      if Builtins.set_option?('u') && !ENV.key?(var_name)
+      if Builtins.set_option?('u') && !Builtins.var_set?(var_name)
         $stderr.puts Builtins.format_error('unbound variable', command: var_name)
         raise NounsetError, "#{var_name}: unbound variable"
       end
-      ENV.fetch(var_name, '')
+      Builtins.get_var(var_name) || ''
     end
 
     # SECONDS - returns elapsed time since shell start (or last reset)
@@ -4468,7 +4470,7 @@ module Rubish
       # Returns the same value as $0 (the shell or script name)
       # BASH_ARGV0 expands to the name of the shell or shell script
       # RUBISH_ARGV0 overrides @script_name if set (even if empty)
-      ENV.key?('RUBISH_ARGV0') ? ENV['RUBISH_ARGV0'] : @script_name
+      Builtins.var_set?('RUBISH_ARGV0') ? Builtins.get_var('RUBISH_ARGV0') : @script_name
     end
 
     def __rubish_path

@@ -68,14 +68,14 @@ class TestDeclareNameref < Test::Unit::TestCase
   def test_nameref_writes_to_target
     execute('declare -n ref=target')
     Rubish::Builtins.set_var_through_nameref('ref', 'world')
-    assert_equal 'world', ENV['target']
+    assert_equal 'world', get_shell_var('target')
   end
 
   def test_set_var_with_attributes_follows_nameref
     ENV['target'] = 'old'
     execute('declare -n ref=target')
     Rubish::Builtins.set_var_with_attributes('ref', 'new')
-    assert_equal 'new', ENV['target']
+    assert_equal 'new', get_shell_var('target')
   end
 
   # Nameref chains
@@ -186,7 +186,7 @@ class TestDeclareNameref < Test::Unit::TestCase
 
   def test_set_var_through_nameref_regular_var
     Rubish::Builtins.set_var_through_nameref('normal', 'test')
-    assert_equal 'test', ENV['normal']
+    assert_equal 'test', get_shell_var('normal')
   end
 
   # clear_namerefs

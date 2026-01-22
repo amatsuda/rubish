@@ -42,12 +42,12 @@ class TestLocalvarInherit < Test::Unit::TestCase
     Rubish::Builtins.run('local', ['MYVAR'])
 
     # Without localvar_inherit, MYVAR should be unset
-    assert_nil ENV['MYVAR']
+    assert_nil get_shell_var('MYVAR')
 
     Rubish::Builtins.pop_local_scope
 
     # After popping scope, original value is restored
-    assert_equal 'outer_value', ENV['MYVAR']
+    assert_equal 'outer_value', get_shell_var('MYVAR')
   end
 
   # With localvar_inherit, local var without value inherits the value
@@ -59,12 +59,12 @@ class TestLocalvarInherit < Test::Unit::TestCase
     Rubish::Builtins.run('local', ['MYVAR'])
 
     # With localvar_inherit, MYVAR should keep its value
-    assert_equal 'outer_value', ENV['MYVAR']
+    assert_equal 'outer_value', get_shell_var('MYVAR')
 
     Rubish::Builtins.pop_local_scope
 
     # After popping scope, original value is still there
-    assert_equal 'outer_value', ENV['MYVAR']
+    assert_equal 'outer_value', get_shell_var('MYVAR')
   end
 
   # local var=value always sets the value regardless of localvar_inherit
@@ -74,11 +74,11 @@ class TestLocalvarInherit < Test::Unit::TestCase
     Rubish::Builtins.push_local_scope
     Rubish::Builtins.run('local', ['MYVAR=local_value'])
 
-    assert_equal 'local_value', ENV['MYVAR']
+    assert_equal 'local_value', get_shell_var('MYVAR')
 
     Rubish::Builtins.pop_local_scope
 
-    assert_equal 'outer_value', ENV['MYVAR']
+    assert_equal 'outer_value', get_shell_var('MYVAR')
   end
 
   def test_local_with_value_sets_value_with_inherit
@@ -88,11 +88,11 @@ class TestLocalvarInherit < Test::Unit::TestCase
     Rubish::Builtins.push_local_scope
     Rubish::Builtins.run('local', ['MYVAR=local_value'])
 
-    assert_equal 'local_value', ENV['MYVAR']
+    assert_equal 'local_value', get_shell_var('MYVAR')
 
     Rubish::Builtins.pop_local_scope
 
-    assert_equal 'outer_value', ENV['MYVAR']
+    assert_equal 'outer_value', get_shell_var('MYVAR')
   end
 
   # Without localvar_inherit, local var for unset variable stays unset
@@ -102,11 +102,11 @@ class TestLocalvarInherit < Test::Unit::TestCase
     Rubish::Builtins.push_local_scope
     Rubish::Builtins.run('local', ['NEWVAR'])
 
-    assert_nil ENV['NEWVAR']
+    assert_nil get_shell_var('NEWVAR')
 
     Rubish::Builtins.pop_local_scope
 
-    assert_nil ENV['NEWVAR']
+    assert_nil get_shell_var('NEWVAR')
   end
 
   # With localvar_inherit, local var for unset variable stays unset
@@ -118,11 +118,11 @@ class TestLocalvarInherit < Test::Unit::TestCase
     Rubish::Builtins.run('local', ['NEWVAR'])
 
     # Nothing to inherit, so still unset
-    assert_nil ENV['NEWVAR']
+    assert_nil get_shell_var('NEWVAR')
 
     Rubish::Builtins.pop_local_scope
 
-    assert_nil ENV['NEWVAR']
+    assert_nil get_shell_var('NEWVAR')
   end
 
   # Test multiple variables in one local call
@@ -134,13 +134,13 @@ class TestLocalvarInherit < Test::Unit::TestCase
     Rubish::Builtins.run('local', ['VAR1', 'VAR2'])
 
     # Both should be unset
-    assert_nil ENV['VAR1']
-    assert_nil ENV['VAR2']
+    assert_nil get_shell_var('VAR1')
+    assert_nil get_shell_var('VAR2')
 
     Rubish::Builtins.pop_local_scope
 
-    assert_equal 'value1', ENV['VAR1']
-    assert_equal 'value2', ENV['VAR2']
+    assert_equal 'value1', get_shell_var('VAR1')
+    assert_equal 'value2', get_shell_var('VAR2')
   end
 
   def test_local_multiple_variables_with_inherit
@@ -152,13 +152,13 @@ class TestLocalvarInherit < Test::Unit::TestCase
     Rubish::Builtins.run('local', ['VAR1', 'VAR2'])
 
     # Both should inherit values
-    assert_equal 'value1', ENV['VAR1']
-    assert_equal 'value2', ENV['VAR2']
+    assert_equal 'value1', get_shell_var('VAR1')
+    assert_equal 'value2', get_shell_var('VAR2')
 
     Rubish::Builtins.pop_local_scope
 
-    assert_equal 'value1', ENV['VAR1']
-    assert_equal 'value2', ENV['VAR2']
+    assert_equal 'value1', get_shell_var('VAR1')
+    assert_equal 'value2', get_shell_var('VAR2')
   end
 
   # Test mixed local declarations (some with value, some without)
@@ -170,14 +170,14 @@ class TestLocalvarInherit < Test::Unit::TestCase
     Rubish::Builtins.run('local', ['VAR1', 'VAR2=new_value'])
 
     # VAR1 should be unset (no value provided)
-    assert_nil ENV['VAR1']
+    assert_nil get_shell_var('VAR1')
     # VAR2 should have new value
-    assert_equal 'new_value', ENV['VAR2']
+    assert_equal 'new_value', get_shell_var('VAR2')
 
     Rubish::Builtins.pop_local_scope
 
-    assert_equal 'outer1', ENV['VAR1']
-    assert_equal 'outer2', ENV['VAR2']
+    assert_equal 'outer1', get_shell_var('VAR1')
+    assert_equal 'outer2', get_shell_var('VAR2')
   end
 
   def test_local_mixed_declarations_with_inherit
@@ -189,14 +189,14 @@ class TestLocalvarInherit < Test::Unit::TestCase
     Rubish::Builtins.run('local', ['VAR1', 'VAR2=new_value'])
 
     # VAR1 should inherit value
-    assert_equal 'outer1', ENV['VAR1']
+    assert_equal 'outer1', get_shell_var('VAR1')
     # VAR2 should have new value (explicit assignment overrides inherit)
-    assert_equal 'new_value', ENV['VAR2']
+    assert_equal 'new_value', get_shell_var('VAR2')
 
     Rubish::Builtins.pop_local_scope
 
-    assert_equal 'outer1', ENV['VAR1']
-    assert_equal 'outer2', ENV['VAR2']
+    assert_equal 'outer1', get_shell_var('VAR1')
+    assert_equal 'outer2', get_shell_var('VAR2')
   end
 
   # Test modifying local variable after declaration
@@ -208,16 +208,16 @@ class TestLocalvarInherit < Test::Unit::TestCase
     Rubish::Builtins.run('local', ['MYVAR'])
 
     # Should inherit
-    assert_equal 'outer_value', ENV['MYVAR']
+    assert_equal 'outer_value', get_shell_var('MYVAR')
 
     # Now modify it
     ENV['MYVAR'] = 'modified_value'
-    assert_equal 'modified_value', ENV['MYVAR']
+    assert_equal 'modified_value', get_shell_var('MYVAR')
 
     Rubish::Builtins.pop_local_scope
 
     # Original value restored
-    assert_equal 'outer_value', ENV['MYVAR']
+    assert_equal 'outer_value', get_shell_var('MYVAR')
   end
 
   # Test nested scopes with localvar_inherit
@@ -227,22 +227,22 @@ class TestLocalvarInherit < Test::Unit::TestCase
 
     Rubish::Builtins.push_local_scope
     Rubish::Builtins.run('local', ['MYVAR'])
-    assert_equal 'global', ENV['MYVAR']
+    assert_equal 'global', get_shell_var('MYVAR')
 
     ENV['MYVAR'] = 'level1'
 
     Rubish::Builtins.push_local_scope
     Rubish::Builtins.run('local', ['MYVAR'])
     # Should inherit from level1
-    assert_equal 'level1', ENV['MYVAR']
+    assert_equal 'level1', get_shell_var('MYVAR')
 
     ENV['MYVAR'] = 'level2'
 
     Rubish::Builtins.pop_local_scope
-    assert_equal 'level1', ENV['MYVAR']
+    assert_equal 'level1', get_shell_var('MYVAR')
 
     Rubish::Builtins.pop_local_scope
-    assert_equal 'global', ENV['MYVAR']
+    assert_equal 'global', get_shell_var('MYVAR')
   end
 
   # Test that toggling localvar_inherit mid-function works
@@ -253,7 +253,7 @@ class TestLocalvarInherit < Test::Unit::TestCase
 
     # First local without inherit
     Rubish::Builtins.run('local', ['MYVAR'])
-    assert_nil ENV['MYVAR']
+    assert_nil get_shell_var('MYVAR')
 
     ENV['MYVAR'] = 'set_in_scope'
 
@@ -264,11 +264,11 @@ class TestLocalvarInherit < Test::Unit::TestCase
     ENV['OTHER'] = 'other_outer'
     Rubish::Builtins.run('local', ['OTHER'])
     # OTHER should inherit since localvar_inherit is now on
-    assert_equal 'other_outer', ENV['OTHER']
+    assert_equal 'other_outer', get_shell_var('OTHER')
 
     Rubish::Builtins.pop_local_scope
 
-    assert_equal 'outer', ENV['MYVAR']
+    assert_equal 'outer', get_shell_var('MYVAR')
   end
 
   # Test local outside function

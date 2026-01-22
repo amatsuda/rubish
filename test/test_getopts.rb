@@ -16,51 +16,51 @@ class TestGetopts < Test::Unit::TestCase
   def test_simple_option
     result = Rubish::Builtins.run('getopts', ['abc', 'opt', '-a'])
     assert result
-    assert_equal 'a', ENV['opt']
+    assert_equal 'a', get_shell_var('opt')
   end
 
   def test_multiple_options_separate
     Rubish::Builtins.run('getopts', ['abc', 'opt', '-a', '-b'])
-    assert_equal 'a', ENV['opt']
-    assert_equal '2', ENV['OPTIND']
+    assert_equal 'a', get_shell_var('opt')
+    assert_equal '2', get_shell_var('OPTIND')
 
     Rubish::Builtins.run('getopts', ['abc', 'opt', '-a', '-b'])
-    assert_equal 'b', ENV['opt']
-    assert_equal '3', ENV['OPTIND']
+    assert_equal 'b', get_shell_var('opt')
+    assert_equal '3', get_shell_var('OPTIND')
   end
 
   def test_grouped_options
     Rubish::Builtins.run('getopts', ['abc', 'opt', '-abc'])
-    assert_equal 'a', ENV['opt']
+    assert_equal 'a', get_shell_var('opt')
 
     Rubish::Builtins.run('getopts', ['abc', 'opt', '-abc'])
-    assert_equal 'b', ENV['opt']
+    assert_equal 'b', get_shell_var('opt')
 
     Rubish::Builtins.run('getopts', ['abc', 'opt', '-abc'])
-    assert_equal 'c', ENV['opt']
+    assert_equal 'c', get_shell_var('opt')
   end
 
   def test_option_with_argument_separate
     result = Rubish::Builtins.run('getopts', ['a:bc', 'opt', '-a', 'value'])
     assert result
-    assert_equal 'a', ENV['opt']
-    assert_equal 'value', ENV['OPTARG']
-    assert_equal '3', ENV['OPTIND']
+    assert_equal 'a', get_shell_var('opt')
+    assert_equal 'value', get_shell_var('OPTARG')
+    assert_equal '3', get_shell_var('OPTIND')
   end
 
   def test_option_with_argument_attached
     result = Rubish::Builtins.run('getopts', ['a:bc', 'opt', '-avalue'])
     assert result
-    assert_equal 'a', ENV['opt']
-    assert_equal 'value', ENV['OPTARG']
-    assert_equal '2', ENV['OPTIND']
+    assert_equal 'a', get_shell_var('opt')
+    assert_equal 'value', get_shell_var('OPTARG')
+    assert_equal '2', get_shell_var('OPTIND')
   end
 
   def test_invalid_option
     output = capture_output do
       Rubish::Builtins.run('getopts', ['abc', 'opt', '-x'])
     end
-    assert_equal '?', ENV['opt']
+    assert_equal '?', get_shell_var('opt')
     assert_match(/illegal option/, output)
   end
 
@@ -68,8 +68,8 @@ class TestGetopts < Test::Unit::TestCase
     output = capture_output do
       Rubish::Builtins.run('getopts', [':abc', 'opt', '-x'])
     end
-    assert_equal '?', ENV['opt']
-    assert_equal 'x', ENV['OPTARG']
+    assert_equal '?', get_shell_var('opt')
+    assert_equal 'x', get_shell_var('OPTARG')
     assert_equal '', output  # Silent mode
   end
 
@@ -77,7 +77,7 @@ class TestGetopts < Test::Unit::TestCase
     output = capture_output do
       Rubish::Builtins.run('getopts', ['a:', 'opt', '-a'])
     end
-    assert_equal '?', ENV['opt']
+    assert_equal '?', get_shell_var('opt')
     assert_match(/requires an argument/, output)
   end
 
@@ -85,37 +85,37 @@ class TestGetopts < Test::Unit::TestCase
     output = capture_output do
       Rubish::Builtins.run('getopts', [':a:', 'opt', '-a'])
     end
-    assert_equal ':', ENV['opt']
-    assert_equal 'a', ENV['OPTARG']
+    assert_equal ':', get_shell_var('opt')
+    assert_equal 'a', get_shell_var('OPTARG')
     assert_equal '', output  # Silent mode
   end
 
   def test_end_of_options
     result = Rubish::Builtins.run('getopts', ['abc', 'opt', 'nonoption'])
     assert_false result
-    assert_equal '?', ENV['opt']
+    assert_equal '?', get_shell_var('opt')
   end
 
   def test_double_dash_ends_options
     Rubish::Builtins.run('getopts', ['abc', 'opt', '--', '-a'])
-    assert_equal '?', ENV['opt']
+    assert_equal '?', get_shell_var('opt')
   end
 
   def test_single_dash_is_not_option
     result = Rubish::Builtins.run('getopts', ['abc', 'opt', '-'])
     assert_false result
-    assert_equal '?', ENV['opt']
+    assert_equal '?', get_shell_var('opt')
   end
 
   def test_optind_advances
     Rubish::Builtins.run('getopts', ['abc', 'opt', '-a', '-b', '-c'])
-    assert_equal '2', ENV['OPTIND']
+    assert_equal '2', get_shell_var('OPTIND')
 
     Rubish::Builtins.run('getopts', ['abc', 'opt', '-a', '-b', '-c'])
-    assert_equal '3', ENV['OPTIND']
+    assert_equal '3', get_shell_var('OPTIND')
 
     Rubish::Builtins.run('getopts', ['abc', 'opt', '-a', '-b', '-c'])
-    assert_equal '4', ENV['OPTIND']
+    assert_equal '4', get_shell_var('OPTIND')
   end
 
   def test_no_more_options
@@ -134,18 +134,18 @@ class TestGetopts < Test::Unit::TestCase
   def test_reset_getopts
     Rubish::Builtins.run('getopts', ['abc', 'opt', '-a', '-b'])
     Rubish::Builtins.run('getopts', ['abc', 'opt', '-a', '-b'])
-    assert_equal '3', ENV['OPTIND']
+    assert_equal '3', get_shell_var('OPTIND')
 
     Rubish::Builtins.reset_getopts
-    assert_equal '1', ENV['OPTIND']
+    assert_equal '1', get_shell_var('OPTIND')
   end
 
   def test_optarg_cleared_for_no_arg_option
     Rubish::Builtins.run('getopts', ['a:b', 'opt', '-a', 'value', '-b'])
-    assert_equal 'value', ENV['OPTARG']
+    assert_equal 'value', get_shell_var('OPTARG')
 
     Rubish::Builtins.run('getopts', ['a:b', 'opt', '-a', 'value', '-b'])
-    assert_nil ENV['OPTARG']
+    assert_nil get_shell_var('OPTARG')
   end
 
   # OPTERR tests
@@ -172,7 +172,7 @@ class TestGetopts < Test::Unit::TestCase
     output = capture_output do
       Rubish::Builtins.run('getopts', ['abc', 'opt', '-x'])
     end
-    assert_equal '?', ENV['opt']
+    assert_equal '?', get_shell_var('opt')
     assert_equal '', output  # Error suppressed
   end
 
@@ -181,7 +181,7 @@ class TestGetopts < Test::Unit::TestCase
     output = capture_output do
       Rubish::Builtins.run('getopts', ['a:', 'opt', '-a'])
     end
-    assert_equal '?', ENV['opt']
+    assert_equal '?', get_shell_var('opt')
     assert_equal '', output  # Error suppressed
   end
 
@@ -190,16 +190,16 @@ class TestGetopts < Test::Unit::TestCase
     ENV['OPTERR'] = '0'
     ENV.delete('OPTARG')
     Rubish::Builtins.run('getopts', ['abc', 'opt', '-x'])
-    assert_equal '?', ENV['opt']
-    assert_nil ENV['OPTARG']  # Not set (unlike silent mode)
+    assert_equal '?', get_shell_var('opt')
+    assert_nil get_shell_var('OPTARG')  # Not set (unlike silent mode)
   end
 
   def test_opterr_0_does_not_affect_missing_arg_behavior
     # Unlike silent mode (: prefix), OPTERR=0 sets opt to '?' not ':'
     ENV['OPTERR'] = '0'
     Rubish::Builtins.run('getopts', ['a:', 'opt', '-a'])
-    assert_equal '?', ENV['opt']  # '?' not ':'
-    assert_nil ENV['OPTARG']  # Not set (unlike silent mode)
+    assert_equal '?', get_shell_var('opt')  # '?' not ':'
+    assert_nil get_shell_var('OPTARG')  # Not set (unlike silent mode)
   end
 
   def test_silent_mode_overrides_opterr
@@ -208,8 +208,8 @@ class TestGetopts < Test::Unit::TestCase
     output = capture_output do
       Rubish::Builtins.run('getopts', [':abc', 'opt', '-x'])
     end
-    assert_equal '?', ENV['opt']
-    assert_equal 'x', ENV['OPTARG']  # Silent mode sets OPTARG
+    assert_equal '?', get_shell_var('opt')
+    assert_equal 'x', get_shell_var('OPTARG')  # Silent mode sets OPTARG
     assert_equal '', output  # Silent mode suppresses errors
   end
 end
