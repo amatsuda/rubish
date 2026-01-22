@@ -12,6 +12,8 @@ module Rubish
     end
 
     def initialize(login_shell: false, no_profile: false, no_rc: false, restricted: false, rcfile: nil)
+      # Clear shell variables from previous REPL instance (shell vars are per-instance)
+      Builtins.clear_shell_vars
       @lexer_class = Lexer
       @parser_class = Parser
       @codegen = Codegen.new
@@ -2364,10 +2366,10 @@ module Rubish
           elsif var_name == 'PPID' || var_name == 'UID' || var_name == 'EUID' || var_name == 'GROUPS' || var_name == 'HOSTNAME' || var_name == 'RUBISHPID' || var_name == 'BASHPID' || var_name == 'HISTCMD' || var_name == 'EPOCHSECONDS' || var_name == 'EPOCHREALTIME' || var_name == 'SRANDOM' || var_name == 'RUBISH_MONOSECONDS' || var_name == 'BASH_MONOSECONDS' || var_name == 'RUBISH_VERSION' || var_name == 'BASH_VERSION' || var_name == 'RUBISH_VERSINFO' || var_name == 'BASH_VERSINFO' || var_name == 'OSTYPE' || var_name == 'HOSTTYPE' || var_name == 'MACHTYPE' || var_name == 'PIPESTATUS' || var_name == 'RUBISH_COMMAND' || var_name == 'BASH_COMMAND' || var_name == 'FUNCNAME' || var_name == 'RUBISH_LINENO' || var_name == 'BASH_LINENO' || var_name == 'RUBISH_SOURCE' || var_name == 'BASH_SOURCE' || var_name == 'RUBISH_ARGC' || var_name == 'BASH_ARGC' || var_name == 'RUBISH_ARGV' || var_name == 'BASH_ARGV' || var_name == 'RUBISH_SUBSHELL' || var_name == 'BASH_SUBSHELL' || var_name == 'DIRSTACK' || var_name == 'COLUMNS' || var_name == 'LINES' || var_name == 'RUBISH_ALIASES' || var_name == 'BASH_ALIASES' || var_name == 'RUBISH_CMDS' || var_name == 'BASH_CMDS' || var_name == 'COMP_CWORD' || var_name == 'COMP_LINE' || var_name == 'COMP_POINT' || var_name == 'COMP_TYPE' || var_name == 'COMP_KEY' || var_name == 'COMP_WORDS' || var_name == 'RUBISH_EXECUTION_STRING' || var_name == 'BASH_EXECUTION_STRING' || var_name == 'RUBISH_REMATCH' || var_name == 'BASH_REMATCH' || var_name == 'RUBISH' || var_name == 'BASH' || var_name == 'RUBISH_TRAPSIG' || var_name == 'BASH_TRAPSIG'
             # These variables are read-only, silently ignore assignment
           else
-            ENV[var_name] = expanded_value
+            Builtins.set_var(var_name, expanded_value)
           end
           # allexport: mark variable as exported when set -a is enabled
-          Builtins.mark_exported(var_name) if Builtins.set_option?('a')
+          Builtins.export_var(var_name) if Builtins.set_option?('a')
         end
       end
     end
@@ -3541,7 +3543,7 @@ module Rubish
       fd_num = allocate_varname_fd
 
       # Store the FD number in the variable
-      ENV[varname] = fd_num.to_s
+      Builtins.set_var(varname, fd_num.to_s)
 
       # Track this FD for potential auto-closing
       @varname_fds[varname] = {fd: fd_num, target: target, operator: operator}
@@ -3701,7 +3703,7 @@ module Rubish
 
     def __for_loop(variable, items, &block)
       items.each do |item|
-        ENV[variable] = item
+        Builtins.set_var(variable, item)
         block.call
       end
     end
@@ -3789,18 +3791,18 @@ module Rubish
         break unless reply  # EOF
 
         reply = reply.chomp
-        ENV['REPLY'] = reply
+        Builtins.set_var('REPLY', reply)
 
         # Parse selection
         if reply =~ /\A\d+\z/
           num = reply.to_i
           if num >= 1 && num <= items.length
-            ENV[variable] = items[num - 1]
+            Builtins.set_var(variable, items[num - 1])
           else
-            ENV[variable] = ''
+            Builtins.set_var(variable, '')
           end
         else
-          ENV[variable] = ''
+          Builtins.set_var(variable, '')
         end
 
         # Execute body
@@ -3895,11 +3897,11 @@ module Rubish
       end
 
       # Fetch variable with nounset check
-      if Builtins.set_option?('u') && !ENV.key?(var_name)
+      if Builtins.set_option?('u') && !Builtins.var_set?(var_name)
         $stderr.puts Builtins.format_error('unbound variable', command: var_name)
         raise NounsetError, "#{var_name}: unbound variable"
       end
-      ENV.fetch(var_name, '')
+      Builtins.get_var(var_name) || ''
     end
 
     # Fetch variable for use as command argument
@@ -4001,8 +4003,8 @@ module Rubish
       elsif var_name == 'BASH_ARGV0'
         if @bash_argv0_unset
           # After unset, BASH_ARGV0 is a regular variable
-          value = ENV[var_name]
-          is_set = ENV.key?(var_name)
+          value = Builtins.get_var(var_name)
+          is_set = Builtins.var_set?(var_name)
           is_null = value.nil? || value.empty?
         else
           value = __bash_argv0
@@ -4102,8 +4104,8 @@ module Rubish
         is_set = true
         is_null = false
       else
-        value = ENV[var_name]
-        is_set = ENV.key?(var_name)
+        value = Builtins.get_var(var_name)
+        is_set = Builtins.var_set?(var_name)
         is_null = value.nil? || value.empty?
       end
 
@@ -4121,7 +4123,7 @@ module Rubish
             $stderr.puts "rubish: #{var_name}: readonly variable"
             ''
           else
-            ENV[var_name] = operand
+            Builtins.set_var(var_name, operand)
             operand
           end
         else
@@ -4136,7 +4138,7 @@ module Rubish
             $stderr.puts "rubish: #{var_name}: readonly variable"
             ''
           else
-            ENV[var_name] = operand
+            Builtins.set_var(var_name, operand)
             operand
           end
         end
@@ -4187,13 +4189,13 @@ module Rubish
 
     def __param_length(var_name)
       # ${#var} - length of variable value
-      value = __get_special_var(var_name) || ENV[var_name] || ''
+      value = __get_special_var(var_name) || Builtins.get_var(var_name) || ''
       value.length.to_s
     end
 
     def __param_substring(var_name, offset, length)
       # ${var:offset} or ${var:offset:length}
-      value = __get_special_var(var_name) || ENV[var_name] || ''
+      value = __get_special_var(var_name) || Builtins.get_var(var_name) || ''
       offset = offset.to_i
       if length
         length = length.to_i
@@ -4210,7 +4212,7 @@ module Rubish
 
     def __param_transform(var_name, operator)
       # ${var@operator} - transformation operators
-      value = __get_special_var(var_name) || ENV[var_name]
+      value = __get_special_var(var_name) || Builtins.get_var(var_name)
 
       case operator
       when 'Q'
@@ -4310,7 +4312,7 @@ module Rubish
 
     def __param_replace(var_name, operator, pattern, replacement)
       # ${var/pattern/replacement} or ${var//pattern/replacement}
-      value = __get_special_var(var_name) || ENV[var_name] || ''
+      value = __get_special_var(var_name) || Builtins.get_var(var_name) || ''
       return '' if value.empty?
 
       # Convert shell pattern to regex
@@ -4365,7 +4367,7 @@ module Rubish
 
     def __param_case(var_name, operator, pattern)
       # Case modification operators
-      value = ENV[var_name] || ''
+      value = Builtins.get_var(var_name) || ''
       return '' if value.empty?
 
       case operator
@@ -4420,9 +4422,9 @@ module Rubish
 
     def __param_indirect(var_name)
       # ${!var} - get value of variable whose name is in var
-      indirect_name = ENV[var_name]
+      indirect_name = Builtins.get_var(var_name)
       return '' if indirect_name.nil? || indirect_name.empty?
-      ENV[indirect_name] || ''
+      Builtins.get_var(indirect_name) || ''
     end
 
     def __rubish_versinfo
@@ -6013,37 +6015,37 @@ module Rubish
       # Handle pre-increment/decrement: ++var, --var
       if expr =~ /\A\+\+([a-zA-Z_][a-zA-Z0-9_]*)\z/
         var = $1
-        val = (ENV[var] || '0').to_i + 1
-        ENV[var] = val.to_s
+        val = (Builtins.get_var(var) || '0').to_i + 1
+        Builtins.set_var(var, val.to_s)
         return val
       end
 
       if expr =~ /\A--([a-zA-Z_][a-zA-Z0-9_]*)\z/
         var = $1
-        val = (ENV[var] || '0').to_i - 1
-        ENV[var] = val.to_s
+        val = (Builtins.get_var(var) || '0').to_i - 1
+        Builtins.set_var(var, val.to_s)
         return val
       end
 
       # Handle post-increment/decrement: var++, var--
       if expr =~ /\A([a-zA-Z_][a-zA-Z0-9_]*)\+\+\z/
         var = $1
-        old_val = (ENV[var] || '0').to_i
-        ENV[var] = (old_val + 1).to_s
+        old_val = (Builtins.get_var(var) || '0').to_i
+        Builtins.set_var(var, (old_val + 1).to_s)
         return old_val
       end
 
       if expr =~ /\A([a-zA-Z_][a-zA-Z0-9_]*)--\z/
         var = $1
-        old_val = (ENV[var] || '0').to_i
-        ENV[var] = (old_val - 1).to_s
+        old_val = (Builtins.get_var(var) || '0').to_i
+        Builtins.set_var(var, (old_val - 1).to_s)
         return old_val
       end
 
       # Handle compound assignments: var+=, var-=, var*=, var/=, var%=, var<<=, var>>=, var&=, var|=, var^=
       if expr =~ /\A([a-zA-Z_][a-zA-Z0-9_]*)\s*(\+|-|\*|\/|%|<<|>>|&|\||\^)=\s*(.+)\z/
         var, op, rhs = $1, $2, $3
-        lhs_val = (ENV[var] || '0').to_i
+        lhs_val = (Builtins.get_var(var) || '0').to_i
         rhs_val = eval_single_arithmetic(rhs)
         result = case op
                  when '+' then lhs_val + rhs_val
@@ -6057,7 +6059,7 @@ module Rubish
                  when '|' then lhs_val | rhs_val
                  when '^' then lhs_val ^ rhs_val
                  end
-        ENV[var] = result.to_s
+        Builtins.set_var(var, result.to_s)
         return result
       end
 
@@ -6065,7 +6067,7 @@ module Rubish
       if expr =~ /\A([a-zA-Z_][a-zA-Z0-9_]*)\s*=\s*(?!=)(.+)\z/
         var, rhs = $1, $2
         result = eval_single_arithmetic(rhs)
-        ENV[var] = result.to_s
+        Builtins.set_var(var, result.to_s)
         return result
       end
 
@@ -6076,7 +6078,7 @@ module Rubish
           n = $2.to_i
           (@positional_params[n - 1] || '0')
         elsif (var_name = $1 || $3 || $4)
-          __get_special_var(var_name) || ENV.fetch(var_name, '0')
+          __get_special_var(var_name) || Builtins.get_var(var_name) || '0'
         else
           match
         end
@@ -7124,10 +7126,10 @@ module Rubish
         end
       end
 
-      # Expand environment variables $VAR or ${VAR}
+      # Expand shell variables $VAR or ${VAR}
       result = result.gsub(/\$\{([^}]+)\}|\$([A-Za-z_][A-Za-z0-9_]*)/) do
         var_name = $1 || $2
-        ENV[var_name] || $&
+        Builtins.get_var(var_name) || $&
       end
 
       result

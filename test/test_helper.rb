@@ -5,6 +5,16 @@ require_relative '../lib/rubish'
 
 # Common test helper methods
 module TestHelper
+  # Get a shell variable value (from shell_vars or ENV)
+  def get_shell_var(name)
+    Rubish::Builtins.get_var(name)
+  end
+
+  # Set a shell variable (via the shell's variable store)
+  def set_shell_var(name, value)
+    Rubish::Builtins.set_var(name, value)
+  end
+
   # Capture stdout during block execution
   def capture_stdout
     original_stdout = $stdout

@@ -116,8 +116,8 @@ class TestVarnameRedirect < Test::Unit::TestCase
     execute('exec {myfd}>' + output_file)
 
     # The variable should be set to an FD number >= 10
-    assert_not_nil ENV['myfd']
-    fd_num = ENV['myfd'].to_i
+    assert_not_nil get_shell_var('myfd')
+    fd_num = get_shell_var('myfd').to_i
     assert fd_num >= 10, "FD number should be >= 10, got #{fd_num}"
   end
 
@@ -126,10 +126,10 @@ class TestVarnameRedirect < Test::Unit::TestCase
     file2 = File.join(@tempdir, 'file2.txt')
 
     execute("exec {fd1}>#{file1}")
-    fd1 = ENV['fd1'].to_i
+    fd1 = get_shell_var('fd1').to_i
 
     execute("exec {fd2}>#{file2}")
-    fd2 = ENV['fd2'].to_i
+    fd2 = get_shell_var('fd2').to_i
 
     assert fd1 != fd2, 'FD numbers should be unique'
     assert fd1 >= 10

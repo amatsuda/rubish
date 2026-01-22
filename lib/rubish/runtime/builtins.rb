@@ -30,6 +30,7 @@ module Rubish
     @namerefs = {}  # Hash of nameref variable names to their target variable names
     @coprocs = {}  # Hash of coproc names to {pid:, read_fd:, write_fd:, reader:, writer:}
     @named_directories = {}  # Hash of names to paths for zsh-style ~name expansion
+    @shell_vars = {}  # Hash of shell variable names to values (non-exported variables)
     @executor = nil
     @script_name_getter = nil
     @script_name_setter = nil
@@ -56,7 +57,7 @@ module Rubish
     @builtin_completion_functions = {}  # Hash of function names to lambdas for builtin completions
 
     class << self
-      attr_reader :aliases, :dir_stack, :traps, :local_scope_stack, :readonly_vars, :var_attributes, :command_hash, :shell_options, :zsh_options, :disabled_builtins, :call_stack, :completions, :completion_options, :key_bindings, :readline_variables, :arrays, :assoc_arrays, :namerefs, :coprocs, :builtin_completion_functions, :named_directories
+      attr_reader :aliases, :dir_stack, :traps, :local_scope_stack, :readonly_vars, :var_attributes, :command_hash, :shell_options, :zsh_options, :disabled_builtins, :call_stack, :completions, :completion_options, :key_bindings, :readline_variables, :arrays, :assoc_arrays, :namerefs, :coprocs, :builtin_completion_functions, :named_directories, :shell_vars
       attr_accessor :current_trapsig
       attr_accessor :executor, :script_name_getter, :script_name_setter, :positional_params_getter, :positional_params_setter, :function_checker, :function_remover, :function_lister, :function_getter, :function_caller, :heredoc_content_setter, :command_executor, :current_completion_options
       attr_accessor :history_file_getter, :history_loader, :history_saver, :history_appender, :last_history_line, :history_timestamps
@@ -243,10 +244,10 @@ module Rubish
         elsif assoc_array?(target)
           return get_assoc_array(target).values.join(' ')
         else
-          return ENV[target] || ''
+          return get_var(target) || ''
         end
       end
-      ENV[name] || ''
+      get_var(name) || ''
     end
 
     def self.set_var_through_nameref(name, value)
@@ -261,11 +262,11 @@ module Rubish
           $stderr.puts format_error('cannot assign to associative array through nameref', command: name)
           return false
         else
-          ENV[target] = value
+          set_var(target, value)
         end
         return true
       end
-      ENV[name] = value
+      set_var(name, value)
       true
     end
 
@@ -2061,9 +2062,9 @@ module Rubish
               # Remove from local scope and restore original value
               original_value = current_scope.delete(name)
               if original_value == :unset
-                ENV.delete(name)
+                delete_var(name)
               else
-                ENV[name] = original_value
+                set_var(name, original_value)
               end
               next
             end
@@ -2074,8 +2075,8 @@ module Rubish
             @bash_argv0_unsetter&.call
           end
 
-          # Standard behavior: just remove from environment
-          ENV.delete(name)
+          # Standard behavior: remove from shell_vars and ENV (if exported)
+          delete_var(name)
         end
       end
 
@@ -2089,7 +2090,7 @@ module Rubish
       if args.empty? || args == ['-p']
         # List all readonly variables
         @readonly_vars.each do |name, _|
-          value = ENV[name]
+          value = get_var(name)
           if value
             puts "readonly #{name}=#{value.inspect}"
           else
@@ -2131,6 +2132,50 @@ module Rubish
 
     def self.exported?(name)
       @var_attributes[name]&.include?(:export)
+    end
+
+    # Get a shell variable's value
+    # Checks shell_vars first (for variables set in this shell),
+    # then falls back to ENV (for inherited environment variables)
+    def self.get_var(name)
+      if @shell_vars.key?(name)
+        @shell_vars[name]
+      else
+        ENV[name]
+      end
+    end
+
+    # Set a shell variable's value
+    # If the variable is exported or already exists in ENV (inherited), also updates ENV
+    def self.set_var(name, value)
+      @shell_vars[name] = value
+      # If variable is exported or was inherited from parent env, also update ENV
+      ENV[name] = value if exported?(name) || ENV.key?(name)
+    end
+
+    # Delete a shell variable (from both shell_vars and ENV)
+    def self.delete_var(name)
+      @shell_vars.delete(name)
+      ENV.delete(name)
+      @var_attributes.delete(name)
+    end
+
+    # Check if a shell variable is set (in shell_vars or ENV)
+    def self.var_set?(name)
+      @shell_vars.key?(name) || ENV.key?(name)
+    end
+
+    # Clear all shell variables (for testing)
+    def self.clear_shell_vars
+      @shell_vars.clear
+    end
+
+    # Export a variable (add to ENV if it has a value)
+    def self.export_var(name)
+      @var_attributes[name] ||= Set.new
+      @var_attributes[name] << :export
+      # If variable has a value in shell_vars, copy to ENV
+      ENV[name] = @shell_vars[name] if @shell_vars.key?(name)
     end
 
     def self.run_declare(args)
@@ -2659,7 +2704,7 @@ module Rubish
 
     def self.run_export(args)
       if args.empty?
-        # List all environment variables
+        # List all exported variables (from ENV, which contains only exported vars)
         ENV.each { |k, v| puts "#{k}=#{v}" }
       else
         args.each do |arg|
@@ -2677,14 +2722,15 @@ module Rubish
             value = strip_quotes(value)
             # Apply attributes if any
             value = apply_attributes(key, value)
+            # Store in shell_vars and ENV (since we're exporting)
+            @shell_vars[key] = value
             ENV[key] = value
             # Mark as exported
             @var_attributes[key] ||= Set.new
             @var_attributes[key] << :export
           else
-            # Just export existing variable (silently, like bash)
-            @var_attributes[arg] ||= Set.new
-            @var_attributes[arg] << :export
+            # Just export existing variable - copy from shell_vars to ENV if it exists
+            export_var(arg)
           end
         end
       end
