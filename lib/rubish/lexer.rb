@@ -225,8 +225,9 @@ module Rubish
             # Block after 'each'/'map'/'select'/'detect' without explicit variable: each { body }
             # Uses implicit 'it' variable (accessed as $it)
             read_block
-          elsif %i[IF WHILE UNTIL ELIF ELSIF UNLESS].include?(@last_token_type)
-            # Ruby condition block after if/while/until/elif/elsif/unless: { expression }
+          elsif %i[IF WHILE UNTIL ELIF ELSIF UNLESS CASE].include?(@last_token_type)
+            # Ruby expression block after if/while/until/elif/elsif/unless: { condition }
+            # Or after case: case { expression } in ...
             read_ruby_condition
           else
             # Shell function body or standalone brace

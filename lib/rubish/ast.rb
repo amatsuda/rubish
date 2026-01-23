@@ -92,6 +92,9 @@ module Rubish
     Function = Data.define(:name, :body, :params)
 
     # Case statement: case word in pattern1) body ;; pattern2|pattern3) body ;; esac
+    # word: the value to match against patterns (string or RubyCondition)
+    #   - string: shell variable/word to match (e.g., "$VAR")
+    #   - RubyCondition: Ruby expression whose result is matched (e.g., { var.downcase })
     # branches is array of [patterns, body, terminator] where:
     #   - patterns is array of pattern strings
     #   - body is the AST for the branch body

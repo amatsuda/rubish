@@ -866,12 +866,19 @@ module Rubish
 
     def generate_case(node)
       parts = []
-      word_expr = generate_string_arg(node.word)
-      parts << "__case_word = #{word_expr}"
+
+      # Check if word is a Ruby expression or a regular shell word
+      if node.word.is_a?(AST::RubyCondition)
+        # case { ruby_expr } in ... - evaluate Ruby expression to get value
+        parts << "__case_word = __ruby_condition(#{node.word.expression.inspect}).to_s"
+      else
+        word_expr = generate_string_arg(node.word)
+        parts << "__case_word = #{word_expr}"
+      end
 
       node.branches.each_with_index do |(patterns, body), i|
         keyword = i == 0 ? 'if' : 'elsif'
-        # Build condition: check if any pattern matches
+        # Pattern matching
         conditions = patterns.map { |p| generate_case_pattern_match(p) }
         parts << "#{keyword} #{conditions.join(' || ')}"
         parts << generate_loop_body(body)

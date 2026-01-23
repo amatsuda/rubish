@@ -783,7 +783,13 @@ module Rubish
     def parse_case
       consume(:CASE)
 
-      word = consume(:WORD)&.value || raise('Expected word after "case"')
+      # Check if case value is a Ruby expression block or a regular word
+      if peek(:RUBY_CONDITION)
+        # case { ruby_expr } in ... esac
+        word = parse_ruby_condition
+      else
+        word = consume(:WORD)&.value || raise('Expected word or { expression } after "case"')
+      end
       skip_semicolon
 
       # Check if using Ruby-style (when) or shell-style (in)
@@ -809,7 +815,7 @@ module Rubish
           branches << [patterns, body, nil]
         end
 
-        # Parse optional else branch (becomes * pattern)
+        # Parse optional else branch
         if peek(:ELSE)
           consume(:ELSE)
           skip_semicolon
@@ -818,6 +824,7 @@ module Rubish
         end
       else
         # Shell-style: case value in pattern) ... ;; esac
+
         while !peek(:ESAC) && !peek_end && current
           # Parse patterns (separated by |)
           patterns = []
@@ -864,6 +871,7 @@ module Rubish
       AST::Case.new(word, branches)
     end
 
+    # Parse switch statement with Ruby conditions
     # Parse patterns for Ruby-style when (separated by , or |)
     def parse_when_patterns
       patterns = []

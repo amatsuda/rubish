@@ -137,4 +137,79 @@ class TestRubyCondition < Test::Unit::TestCase
     execute('myfunc')
     assert_equal "yes\n", File.read(output_file)
   end
+
+  # =========================================
+  # Case with Ruby expression tests
+  # case { ruby_expr } in pattern) ... ;; esac
+  # =========================================
+
+  # Parser tests for case with Ruby expression
+  def test_parse_case_ruby_expr
+    tokens = Rubish::Lexer.new('case { "hello" } in hello) echo yes ;; esac').tokenize
+    ast = Rubish::Parser.new(tokens).parse
+    assert_instance_of Rubish::AST::Case, ast
+    assert_instance_of Rubish::AST::RubyCondition, ast.word
+  end
+
+  def test_parse_case_ruby_expr_with_shell_var
+    tokens = Rubish::Lexer.new('case { name.downcase } in foo) echo yes ;; esac').tokenize
+    ast = Rubish::Parser.new(tokens).parse
+    assert_instance_of Rubish::AST::Case, ast
+    assert_equal 'name.downcase', ast.word.expression
+  end
+
+  # Execution tests for case with Ruby expression
+  def test_case_ruby_expr_simple
+    execute("case { 'hello' } in hello) echo yes > #{output_file} ;; esac")
+    assert_equal "yes\n", File.read(output_file)
+  end
+
+  def test_case_ruby_expr_downcase
+    ENV['NAME'] = 'HELLO'
+    execute("case { name.downcase } in hello) echo yes > #{output_file} ;; esac")
+    assert_equal "yes\n", File.read(output_file)
+  end
+
+  def test_case_ruby_expr_upcase
+    ENV['NAME'] = 'hello'
+    execute("case { name.upcase } in HELLO) echo yes > #{output_file} ;; esac")
+    assert_equal "yes\n", File.read(output_file)
+  end
+
+  def test_case_ruby_expr_strip
+    ENV['INPUT'] = '  foo  '
+    execute("case { input.strip } in foo) echo yes > #{output_file} ;; esac")
+    assert_equal "yes\n", File.read(output_file)
+  end
+
+  def test_case_ruby_expr_multiple_patterns
+    ENV['VALUE'] = 'BAR'
+    execute("case { value.downcase } in foo) echo first > #{output_file} ;; bar) echo second > #{output_file} ;; esac")
+    assert_equal "second\n", File.read(output_file)
+  end
+
+  def test_case_ruby_expr_default
+    ENV['VALUE'] = 'other'
+    execute("case { value } in foo) echo first > #{output_file} ;; *) echo default > #{output_file} ;; esac")
+    assert_equal "default\n", File.read(output_file)
+  end
+
+  def test_case_ruby_expr_with_calculation
+    ENV['A'] = '10'
+    ENV['B'] = '20'
+    execute("case { (a.to_i + b.to_i).to_s } in 30) echo yes > #{output_file} ;; esac")
+    assert_equal "yes\n", File.read(output_file)
+  end
+
+  def test_case_ruby_expr_shell_var
+    execute('MYVAR=test')
+    execute("case { myvar } in test) echo yes > #{output_file} ;; esac")
+    assert_equal "yes\n", File.read(output_file)
+  end
+
+  def test_case_ruby_expr_no_match
+    File.write(output_file, 'original')
+    execute("case { 'baz' } in foo) echo yes > #{output_file} ;; esac")
+    assert_equal 'original', File.read(output_file)
+  end
 end
