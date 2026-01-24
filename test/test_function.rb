@@ -551,4 +551,31 @@ class TestFunction < Test::Unit::TestCase
     # Should include splat param
     assert_match(/__define_function\("log", "[^"]+", \["\*args"\]\)/, code)
   end
+
+  # Test that functions are available in command substitution
+  # Regression test: previously $(func) would spawn /bin/sh which didn't have the function
+  def test_function_in_command_substitution
+    execute('greet() { echo hello; }')
+    execute('result=$(greet)')
+    assert_equal 'hello', get_shell_var('result')
+  end
+
+  def test_function_with_args_in_command_substitution
+    execute('say() { echo "saying: $1"; }')
+    execute('result=$(say world)')
+    assert_equal 'saying: world', get_shell_var('result')
+  end
+
+  def test_function_in_nested_command_substitution
+    execute('inner() { echo nested; }')
+    execute('outer() { echo $(inner); }')
+    execute('result=$(outer)')
+    assert_equal 'nested', get_shell_var('result')
+  end
+
+  def test_function_in_backtick_substitution
+    execute('greet() { echo hello; }')
+    execute('result=`greet`')
+    assert_equal 'hello', get_shell_var('result')
+  end
 end

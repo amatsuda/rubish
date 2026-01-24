@@ -3426,6 +3426,11 @@ module Rubish
         # Call user-defined function, handling redirects
         call_function_with_redirects(result)
         @pipestatus = [@last_status]
+      elsif result.is_a?(Command) && bare_assignment?(result.name) && result.args.all? { |a| bare_assignment?(a) }
+        # Handle bare variable assignments (e.g., x=$(echo hello) after expansion)
+        handle_bare_assignments([result.name] + result.args)
+        @last_status = 0
+        @pipestatus = [0]
       elsif result.is_a?(Command) || result.is_a?(Pipeline) || result.is_a?(Subshell) || result.is_a?(HeredocCommand)
         result.run
         # Update PIPESTATUS array
@@ -3947,43 +3952,54 @@ module Rubish
     end
 
     def __run_subst(cmd)
-      # Run command substitution with proper inherit_errexit handling
-      # Export shell variables and local variables so they're available in the subshell
-      exports = []
+      # Run command substitution within rubish itself (not external shell)
+      # This allows user-defined functions to be available in $() substitution
+      reader, writer = IO.pipe
 
-      # First, export shell variables
-      Builtins.shell_vars.each do |name, value|
-        # Skip if already in ENV (will be inherited automatically)
-        next if ENV.key?(name)
-        # Escape single quotes in value
-        escaped_value = value.to_s.gsub("'", "'\\''")
-        exports << "#{name}='#{escaped_value}'"
-      end
+      # Check inherit_errexit before forking - if disabled, child should not inherit errexit
+      inherit_errexit = Builtins.shopt_enabled?('inherit_errexit')
+      errexit_enabled = Builtins.set_option?('e')
 
-      # Then, export local variables (these take precedence over shell vars)
-      Builtins.local_scope_stack.each do |scope|
-        scope.each do |name, value|
-          next if value == :unset
-          # Escape single quotes in value
-          escaped_value = value.to_s.gsub("'", "'\\''")
-          exports << "#{name}='#{escaped_value}'"
+      pid = fork do
+        reader.close
+
+        # Redirect stdout to the pipe using the constant STDOUT
+        # This works even if $stdout has been redirected to a StringIO (for testing)
+        STDOUT.reopen(writer)
+        $stdout = STDOUT
+
+        # Suppress stderr during completion to avoid spurious output on terminal
+        # (e.g., "Usage: rbenv completions" when rbenv completions fails)
+        if Builtins.in_completion_context?
+          STDERR.reopen(File.open(File::NULL, 'w'))
+          $stderr = STDERR
+        end
+
+        # Command substitution only inherits errexit when inherit_errexit is enabled
+        # Without inherit_errexit, disable errexit in the subshell
+        unless inherit_errexit
+          Builtins.set_options['e'] = false
+        end
+
+        # Execute the command through rubish's full execution path
+        # This properly handles errexit (set -e) with inherit_errexit
+        begin
+          exit_code = catch(:exit) do
+            execute(cmd, skip_history_expansion: true)
+            @last_status
+          end
+          exit(exit_code || 0)
+        rescue => e
+          $stderr.puts "rubish: #{e.message}" unless Builtins.in_completion_context?
+          exit(1)
         end
       end
 
-      prefix = exports.empty? ? '' : "#{exports.join('; ')}; "
+      writer.close
+      output = reader.read.chomp
+      reader.close
 
-      # Suppress stderr during completion to avoid spurious output on terminal
-      # (e.g., "Usage: rbenv completions" when rbenv completions fails)
-      stderr_redirect = Builtins.in_completion_context? ? ' 2>/dev/null' : ''
-
-      # If inherit_errexit is enabled and errexit (set -e) is active,
-      # run the command with errexit enabled in the subshell
-      if Builtins.shopt_enabled?('inherit_errexit') && Builtins.set_option?('e')
-        output = `set -e; #{prefix}#{cmd}#{stderr_redirect}`.chomp
-      else
-        output = `#{prefix}#{cmd}#{stderr_redirect}`.chomp
-      end
-      # Update @last_status with the command substitution's exit status
+      Process.wait(pid)
       @last_status = $?.exitstatus || 0
       output
     end
@@ -6552,6 +6568,7 @@ module Rubish
         success = Builtins.run(result.name, result.args)
         @last_status = success ? 0 : 1
         run_err_trap_if_failed
+        check_errexit
         # Return ExitStatus to prevent eval_in_context from trying to run command again
         ExitStatus.new(@last_status)
       elsif result.is_a?(Command) && Builtins.builtin?(result.name) && !result.stdout && !result.stderr
@@ -6560,12 +6577,14 @@ module Rubish
         success = Builtins.run(result.name, result.args)
         @last_status = success ? 0 : 1
         run_err_trap_if_failed
+        check_errexit
         # Return ExitStatus so callers (like Subshell) know the real exit status
         ExitStatus.new(@last_status)
       elsif result.is_a?(Command) && @functions.key?(result.name)
         # Call user-defined function with redirects
         call_function_with_redirects(result)
         # Don't run ERR trap here - it was already handled inside the function
+        check_errexit
         result
       elsif result.is_a?(Command) && bare_assignment?(result.name) && result.args.all? { |a| bare_assignment?(a) }
         # Handle bare variable assignments in lists (VAR=value)
@@ -6583,11 +6602,13 @@ module Rubish
             @pipestatus = [@last_status]
           end
           run_err_trap_if_failed
+          check_errexit
         elsif result.respond_to?(:exitstatus)
           # Handle ExitStatus objects (from __cond_test, etc.)
           @last_status = result.exitstatus || 0
           @pipestatus = [@last_status]
           run_err_trap_if_failed
+          check_errexit
         end
         result
       end

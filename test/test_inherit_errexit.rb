@@ -43,7 +43,7 @@ class TestInheritErrexit < Test::Unit::TestCase
     # Create a script that should run completely without inherit_errexit
     execute('x=$(false; echo after)')
     # Without inherit_errexit, 'echo after' should run even after false fails
-    assert_equal 'after', ENV['x']
+    assert_equal 'after', get_shell_var('x')
   end
 
   # With inherit_errexit + errexit: command substitution stops at first failure
@@ -53,7 +53,7 @@ class TestInheritErrexit < Test::Unit::TestCase
 
     execute('x=$(false; echo after)')
     # With inherit_errexit and errexit, 'false' causes exit before 'echo after'
-    assert_equal '', ENV['x']
+    assert_equal '', get_shell_var('x')
   end
 
   # Backtick substitution also respects inherit_errexit
@@ -63,7 +63,7 @@ class TestInheritErrexit < Test::Unit::TestCase
 
     execute('x=`false; echo after`')
     # With inherit_errexit and errexit, 'false' causes exit before 'echo after'
-    assert_equal '', ENV['x']
+    assert_equal '', get_shell_var('x')
   end
 
   # Without errexit, inherit_errexit has no effect
@@ -73,7 +73,7 @@ class TestInheritErrexit < Test::Unit::TestCase
 
     execute('x=$(false; echo after)')
     # Without errexit, inherit_errexit has no effect - all commands run
-    assert_equal 'after', ENV['x']
+    assert_equal 'after', get_shell_var('x')
   end
 
   # Multiple commands in substitution with inherit_errexit
@@ -83,7 +83,7 @@ class TestInheritErrexit < Test::Unit::TestCase
 
     # First command succeeds, second fails, third should not run
     execute('x=$(echo first; false; echo third)')
-    assert_equal 'first', ENV['x']
+    assert_equal 'first', get_shell_var('x')
   end
 
   # Successful command substitution with inherit_errexit
@@ -92,7 +92,7 @@ class TestInheritErrexit < Test::Unit::TestCase
     execute('set -e')
 
     execute('x=$(echo hello)')
-    assert_equal 'hello', ENV['x']
+    assert_equal 'hello', get_shell_var('x')
   end
 
   # Nested command substitution with inherit_errexit
@@ -102,7 +102,7 @@ class TestInheritErrexit < Test::Unit::TestCase
 
     # Inner substitution fails, outer should get empty result
     execute('x=$(echo $(false; echo inner))')
-    assert_equal '', ENV['x']
+    assert_equal '', get_shell_var('x')
   end
 
   # Command substitution with failing command
@@ -112,7 +112,7 @@ class TestInheritErrexit < Test::Unit::TestCase
 
     # With inherit_errexit and errexit, false causes empty output
     execute('x=$(false)')
-    assert_equal '', ENV['x']
+    assert_equal '', get_shell_var('x')
   end
 
   # Command substitution with successful command
@@ -121,7 +121,7 @@ class TestInheritErrexit < Test::Unit::TestCase
     execute('set -e')
 
     execute('x=$(true; echo done)')
-    assert_equal 'done', ENV['x']
+    assert_equal 'done', get_shell_var('x')
   end
 
   # Command substitution in echo with inherit_errexit
@@ -139,7 +139,7 @@ class TestInheritErrexit < Test::Unit::TestCase
     execute('set -e')
 
     execute('x=$(echo hello | tr a-z A-Z)')
-    assert_equal 'HELLO', ENV['x']
+    assert_equal 'HELLO', get_shell_var('x')
   end
 
   # Verify that disabling inherit_errexit restores default behavior
@@ -150,7 +150,7 @@ class TestInheritErrexit < Test::Unit::TestCase
 
     # With inherit_errexit disabled, even with errexit, substitution doesn't inherit it
     execute('x=$(false; echo after)')
-    assert_equal 'after', ENV['x']
+    assert_equal 'after', get_shell_var('x')
   end
 
   # Test with $(...) syntax specifically
@@ -159,7 +159,7 @@ class TestInheritErrexit < Test::Unit::TestCase
     execute('set -e')
 
     execute('x=$(false; echo should_not_appear)')
-    assert_equal '', ENV['x']
+    assert_equal '', get_shell_var('x')
   end
 
   # Test with complex command that fails mid-stream
@@ -169,7 +169,7 @@ class TestInheritErrexit < Test::Unit::TestCase
 
     # With inherit_errexit, exit 42 stops execution before echo end
     execute('x=$(echo start; exit 42; echo end)')
-    assert_equal 'start', ENV['x']
+    assert_equal 'start', get_shell_var('x')
   end
 
   # Test that regular commands still work
