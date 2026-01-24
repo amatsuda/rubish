@@ -205,6 +205,45 @@ module Rubish
       self
     end
 
+    def dup_out(target)
+      # >&N - duplicate stdout to file descriptor N
+      # >&- - close stdout
+      # >&file - redirect stdout to file (same as >file)
+      case target
+      when '1'
+        # >&1 - no-op, stdout already goes to stdout
+        self
+      when '2'
+        # >&2 - redirect stdout to stderr
+        @stdout = :stderr
+        self
+      when '-'
+        # >&- - close stdout
+        @stdout = :closed
+        self
+      else
+        # >&file - redirect to file
+        redirect_out(target)
+      end
+    end
+
+    def dup_in(target)
+      # <&N - duplicate stdin from file descriptor N
+      # <&- - close stdin
+      case target
+      when '0'
+        # <&0 - no-op
+        self
+      when '-'
+        # <&- - close stdin
+        @stdin = :closed
+        self
+      else
+        # <&N - not commonly used, treat as redirect
+        redirect_in(target)
+      end
+    end
+
     private
 
     def expand_args(args)
@@ -249,11 +288,29 @@ module Rubish
           trap('TTOU', 'DEFAULT')
         end
 
-        $stdin.reopen(@stdin) if @stdin
-        $stdout.reopen(@stdout) if @stdout
+        # Handle stdin redirection
+        if @stdin == :closed
+          $stdin.close
+        elsif @stdin
+          $stdin.reopen(@stdin)
+        end
+
+        # Handle stdout redirection
+        if @stdout == :stderr
+          # >&2 - redirect stdout to stderr
+          $stdout.reopen($stderr)
+        elsif @stdout == :closed
+          $stdout.close
+        elsif @stdout
+          $stdout.reopen(@stdout)
+        end
+
+        # Handle stderr redirection
         if @stderr == :stdout
-          # |& - redirect stderr to stdout
+          # |& or 2>&1 - redirect stderr to stdout
           $stderr.reopen($stdout)
+        elsif @stderr == :closed
+          $stderr.close
         elsif @stderr
           $stderr.reopen(@stderr)
         end
@@ -278,8 +335,8 @@ module Rubish
         end
       end
 
-      @stdin&.close unless @stdin == $stdin
-      @stdout&.close unless @stdout == $stdout
+      @stdin&.close unless @stdin == $stdin || @stdin.is_a?(Symbol)
+      @stdout&.close unless @stdout == $stdout || @stdout.is_a?(Symbol)
 
       if job_control
         # Set process group in parent too (race condition protection)
@@ -359,7 +416,7 @@ module Rubish
       end
 
       writer.close
-      @stdin&.close unless @stdin == $stdin
+      @stdin&.close unless @stdin == $stdin || @stdin.is_a?(Symbol)
 
       # Yield each line to block
       reader.each_line do |line|
@@ -487,6 +544,16 @@ module Rubish
 
     def redirect_err_to_out
       @commands.last.redirect_err_to_out
+      self
+    end
+
+    def dup_out(target)
+      @commands.last.dup_out(target)
+      self
+    end
+
+    def dup_in(target)
+      @commands.last.dup_in(target)
       self
     end
 
@@ -825,8 +892,8 @@ module Rubish
         exit(exit_code)
       end
 
-      @stdin&.close unless @stdin == $stdin
-      @stdout&.close unless @stdout == $stdout
+      @stdin&.close unless @stdin == $stdin || @stdin.is_a?(Symbol)
+      @stdout&.close unless @stdout == $stdout || @stdout.is_a?(Symbol)
 
       Process.wait(pid)
       @status = $?
@@ -890,6 +957,23 @@ module Rubish
     def redirect_err_to_out
       @stderr = :stdout
       self
+    end
+
+    def dup_out(target)
+      case target
+      when '1' then self
+      when '2' then @stdout = :stderr; self
+      when '-' then @stdout = :closed; self
+      else redirect_out(target)
+      end
+    end
+
+    def dup_in(target)
+      case target
+      when '0' then self
+      when '-' then @stdin = :closed; self
+      else redirect_in(target)
+      end
     end
   end
 
@@ -1007,6 +1091,23 @@ module Rubish
     def redirect_err_to_out
       @stderr = :stdout
       self
+    end
+
+    def dup_out(target)
+      case target
+      when '1' then self
+      when '2' then @stdout = :stderr; self
+      when '-' then @stdout = :closed; self
+      else redirect_out(target)
+      end
+    end
+
+    def dup_in(target)
+      case target
+      when '0' then self
+      when '-' then @stdin = :closed; self
+      else redirect_in(target)
+      end
     end
   end
 end
