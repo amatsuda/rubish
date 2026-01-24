@@ -93,7 +93,7 @@ module Rubish
       exit(126)
     end
 
-    def initialize(name, *args, &block)
+    def initialize(name, *args, skip_functions: false, &block)
       @name = name
       @args = expand_args(args)
       @stdin = nil
@@ -101,6 +101,7 @@ module Rubish
       @stderr = nil
       @block = block
       @ran = false
+      @skip_functions = skip_functions
     end
 
     def args
@@ -263,8 +264,8 @@ module Rubish
         # Set prefix environment variables (e.g., FOO=bar cmd)
         @prefix_env&.each { |k, v| ENV[k] = v }
 
-        # Check if this is a user-defined function
-        if Command.function?(name)
+        # Check if this is a user-defined function (unless skip_functions is set)
+        if !@skip_functions && Command.function?(name)
           result = Command.call_function(name, cmd_args)
           exit(result ? 0 : 1)
         elsif cmd_path.include?('/') && File.directory?(cmd_path)

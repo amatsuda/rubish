@@ -190,12 +190,9 @@ elsif script_file && !force_interactive
   # Enable restricted mode AFTER sourcing env file
   Rubish::Builtins.enable_restricted_mode if restricted
 
-  # Use the same repl to execute the script
-  File.readlines(script_file, chomp: true).each do |line|
-    next if line.strip.empty? || line.strip.start_with?('#')
-
-    repl.send(:execute, line)
-  end
+  # Use run_source to execute the script (handles multi-line strings properly)
+  # Pass script_args so they become positional params in the script
+  Rubish::Builtins.run_source([script_file] + script_args)
   last_status = repl.instance_variable_get(:@last_status) || 0
   exit(last_status)
 elsif script_file && force_interactive
@@ -213,12 +210,8 @@ elsif script_file && force_interactive
   # Enable restricted mode AFTER startup files
   Rubish::Builtins.enable_restricted_mode if restricted
 
-  # Execute the script
-  File.readlines(script_file, chomp: true).each do |line|
-    next if line.strip.empty? || line.strip.start_with?('#')
-
-    repl.send(:execute, line)
-  end
+  # Use run_source to execute the script (handles multi-line strings properly)
+  Rubish::Builtins.run_source([script_file] + script_args)
 
   last_status = repl.instance_variable_get(:@last_status) || 0
   exit(last_status)

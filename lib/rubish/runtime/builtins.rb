@@ -3166,11 +3166,12 @@ module Rubish
             open_structures << ['function', line_number]
           end
 
-          # Accumulate lines - use newline for function definitions, semicolon otherwise
+          # Accumulate lines - use newline for function definitions or multi-line strings, semicolon otherwise
           if buffer.empty?
             buffer = line
-          elsif was_pending_function
+          elsif was_pending_function || has_unclosed_quotes(buffer)
             # Function definitions need newline between () and {
+            # Multi-line strings need actual newlines preserved
             buffer = "#{buffer}\n#{line}"
           else
             # Other statements can be joined with semicolon
@@ -3178,7 +3179,11 @@ module Rubish
           end
 
           # Execute when we have a complete statement
-          if depth == 0 && !pending_function_def
+          # A statement is complete when:
+          # - depth is 0 (no unclosed control structures)
+          # - not waiting for function body
+          # - no unclosed quotes in the buffer
+          if depth == 0 && !pending_function_def && !has_unclosed_quotes(buffer)
             begin
               @executor.call(buffer)
             rescue SyntaxError => e
@@ -3205,6 +3210,11 @@ module Rubish
                         end
               $stderr.puts "  '#{keyword}' opened at line #{line_num} - expected #{closing}"
             end
+          end
+
+          # Check for unclosed quotes
+          if has_unclosed_quotes(buffer)
+            $stderr.puts "source: #{file}: warning: unclosed quote starting at line #{buffer_start_line}"
           end
 
           begin
@@ -12195,6 +12205,33 @@ module Rubish
 
       # Filter to only control structure keywords and braces
       keywords.select { |w| %w[if unless while until for case def fi done esac end { }].include?(w) }
+    end
+
+    def self.has_unclosed_quotes(text)
+      # Check if the text has unclosed single or double quotes
+      # Returns true if there are unclosed quotes (meaning we need more input)
+      in_single_quotes = false
+      in_double_quotes = false
+      i = 0
+
+      while i < text.length
+        char = text[i]
+
+        if char == "'" && !in_double_quotes
+          in_single_quotes = !in_single_quotes
+          i += 1
+        elsif char == '"' && !in_single_quotes
+          in_double_quotes = !in_double_quotes
+          i += 1
+        elsif char == '\\' && !in_single_quotes
+          # Skip escaped character (backslash only escapes in double quotes or unquoted)
+          i += 2
+        else
+          i += 1
+        end
+      end
+
+      in_single_quotes || in_double_quotes
     end
 
     def self.detect_heredoc(line)

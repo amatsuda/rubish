@@ -1086,7 +1086,8 @@ module Rubish
       end
 
       # Handle ${var:-default}, ${var:=default}, ${var:+value}, ${var:?message}
-      if content =~ /\A([a-zA-Z_][a-zA-Z0-9_]*)(:-|:=|:\+|:\?)(.*)?\z/
+      # Also handles positional parameters: ${1:-default}, ${2:=value}, etc.
+      if content =~ /\A([a-zA-Z_][a-zA-Z0-9_]*|\d+|[@*#?$!-])(:-|:=|:\+|:\?)(.*)?\z/
         var_name = $1
         operator = $2
         operand = $3 || ''
@@ -1094,7 +1095,8 @@ module Rubish
       end
 
       # Handle ${var-default}, ${var=default}, ${var+value}, ${var?message} (unset only, not null)
-      if content =~ /\A([a-zA-Z_][a-zA-Z0-9_]*)(-|=|\+|\?)(.*)?\z/
+      # Also handles positional parameters: ${1-default}, ${2=value}, etc.
+      if content =~ /\A([a-zA-Z_][a-zA-Z0-9_]*|\d+|[@*#?$!-])(-|=|\+|\?)(.*)?\z/
         var_name = $1
         operator = $2
         operand = $3 || ''

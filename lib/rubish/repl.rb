@@ -2093,6 +2093,7 @@ module Rubish
 
     def execute_command_directly(args)
       # Execute a command directly without checking functions or aliases
+      # This is used by the 'command' builtin to bypass functions
       return true if args.empty?
 
       name = args.first
@@ -2102,8 +2103,8 @@ module Rubish
       if Builtins.builtin?(name)
         Builtins.run(name, cmd_args)
       else
-        # Run as external command
-        cmd = Command.new(name, *cmd_args)
+        # Run as external command, skipping function lookup
+        cmd = Command.new(name, *cmd_args, skip_functions: true)
         cmd.run
         @last_status = cmd.success? ? 0 : 1
         cmd.success?
@@ -2325,8 +2326,8 @@ module Rubish
             # Indexed array element
             Builtins.set_array_element(var_name, expanded_key, expanded_value)
           end
-        elsif assignment =~ /\A([a-zA-Z_][a-zA-Z0-9_]*)=(.*)\z/
-          # Regular variable assignment
+        elsif assignment =~ /\A([a-zA-Z_][a-zA-Z0-9_]*)=(.*)\z/m
+          # Regular variable assignment (use /m to match newlines in value)
           var_name = $1
           value = $2
           # Restricted mode: cannot modify restricted variables
@@ -3947,13 +3948,36 @@ module Rubish
 
     def __run_subst(cmd)
       # Run command substitution with proper inherit_errexit handling
+      # Export shell variables and local variables so they're available in the subshell
+      exports = []
+
+      # First, export shell variables
+      Builtins.shell_vars.each do |name, value|
+        # Skip if already in ENV (will be inherited automatically)
+        next if ENV.key?(name)
+        # Escape single quotes in value
+        escaped_value = value.to_s.gsub("'", "'\\''")
+        exports << "#{name}='#{escaped_value}'"
+      end
+
+      # Then, export local variables (these take precedence over shell vars)
+      Builtins.local_scope_stack.each do |scope|
+        scope.each do |name, value|
+          next if value == :unset
+          # Escape single quotes in value
+          escaped_value = value.to_s.gsub("'", "'\\''")
+          exports << "#{name}='#{escaped_value}'"
+        end
+      end
+
+      prefix = exports.empty? ? '' : "#{exports.join('; ')}; "
+
       # If inherit_errexit is enabled and errexit (set -e) is active,
       # run the command with errexit enabled in the subshell
       if Builtins.shopt_enabled?('inherit_errexit') && Builtins.set_option?('e')
-        # Prefix with set -e so the subshell inherits errexit
-        output = `set -e; #{cmd}`.chomp
+        output = `set -e; #{prefix}#{cmd}`.chomp
       else
-        output = `#{cmd}`.chomp
+        output = `#{prefix}#{cmd}`.chomp
       end
       # Update @last_status with the command substitution's exit status
       @last_status = $?.exitstatus || 0
@@ -4131,6 +4155,47 @@ module Rubish
         value = Builtins.readline_mark.to_s
         is_set = true
         is_null = false
+      elsif var_name =~ /\A\d+\z/
+        # Positional parameters: $1, $2, etc.
+        n = var_name.to_i
+        if n == 0
+          value = __bash_argv0
+          is_set = true
+          is_null = value.empty?
+        else
+          value = @positional_params[n - 1]
+          is_set = n <= @positional_params.length
+          is_null = value.nil? || value.empty?
+          value ||= ''
+        end
+      elsif var_name == '#'
+        value = @positional_params.length.to_s
+        is_set = true
+        is_null = false
+      elsif var_name == '@'
+        value = @positional_params.join(' ')
+        is_set = true
+        is_null = @positional_params.empty?
+      elsif var_name == '*'
+        value = Builtins.join_by_ifs(@positional_params)
+        is_set = true
+        is_null = @positional_params.empty?
+      elsif var_name == '?'
+        value = @last_status.to_s
+        is_set = true
+        is_null = false
+      elsif var_name == '$'
+        value = Process.pid.to_s
+        is_set = true
+        is_null = false
+      elsif var_name == '!'
+        value = @last_bg_pid ? @last_bg_pid.to_s : ''
+        is_set = !@last_bg_pid.nil?
+        is_null = @last_bg_pid.nil?
+      elsif var_name == '-'
+        value = Builtins.current_options
+        is_set = true
+        is_null = value.empty?
       else
         value = Builtins.get_var(var_name)
         is_set = Builtins.var_set?(var_name)
