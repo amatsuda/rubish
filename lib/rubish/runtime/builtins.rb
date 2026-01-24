@@ -2054,6 +2054,28 @@ module Rubish
           # Remove function
           @function_remover&.call(name)
         else
+          # Check for array element reference: arr[index] or arr[key]
+          if name =~ /\A([a-zA-Z_][a-zA-Z0-9_]*)\[(.+)\]\z/
+            var_name = $1
+            key = $2
+
+            # Check if readonly
+            if readonly?(var_name)
+              puts "unset: #{var_name}: readonly variable"
+              next
+            end
+
+            # Unset the specific array element
+            if assoc_array?(var_name)
+              # Associative array: delete by key
+              unset_assoc_element(var_name, key)
+            elsif indexed_array?(var_name)
+              # Indexed array: set element to nil (bash behavior - creates sparse array)
+              unset_array_element(var_name, key)
+            end
+            next
+          end
+
           # Check if readonly
           if readonly?(name)
             puts "unset: #{name}: readonly variable"

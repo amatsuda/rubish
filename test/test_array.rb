@@ -178,4 +178,44 @@ class TestArray < Test::Unit::TestCase
     assert_nil arr[1]
     assert_equal 'c', arr[2]
   end
+
+  # Tests for unset "arr[index]" shell syntax (used by bash completion scripts)
+  def test_unset_array_element_shell_syntax
+    execute('arr=(a b c)')
+    execute('unset "arr[1]"')
+    arr = Rubish::Builtins.get_array('arr')
+    assert_equal 'a', arr[0]
+    assert_nil arr[1]
+    assert_equal 'c', arr[2]
+  end
+
+  def test_unset_array_element_shell_syntax_first
+    execute('arr=(a b c)')
+    execute('unset "arr[0]"')
+    execute("echo \"${arr[@]}\" > #{output_file}")
+    assert_equal "b c\n", File.read(output_file)
+  end
+
+  def test_unset_array_element_shell_syntax_last
+    execute('arr=(a b c)')
+    execute('unset "arr[2]"')
+    execute("echo \"${arr[@]}\" > #{output_file}")
+    assert_equal "a b\n", File.read(output_file)
+  end
+
+  def test_unset_array_element_with_variable_index
+    execute('arr=(a b c d e)')
+    execute('idx=2')
+    execute('unset "arr[$idx]"')
+    execute("echo \"${arr[@]}\" > #{output_file}")
+    assert_equal "a b d e\n", File.read(output_file)
+  end
+
+  def test_unset_multiple_array_elements
+    execute('arr=(a b c d e)')
+    execute('unset "arr[1]"')
+    execute('unset "arr[3]"')
+    execute("echo \"${arr[@]}\" > #{output_file}")
+    assert_equal "a c e\n", File.read(output_file)
+  end
 end

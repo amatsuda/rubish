@@ -172,4 +172,23 @@ class TestAssocArray < Test::Unit::TestCase
     assert_equal '1', Rubish::Builtins.get_assoc_element('map1', 'x')
     assert_equal '2', Rubish::Builtins.get_assoc_element('map2', 'x')
   end
+
+  # Tests for unset "map[key]" shell syntax
+  def test_unset_assoc_element_shell_syntax
+    execute('declare -A map')
+    execute('map=([a]=1 [b]=2 [c]=3)')
+    execute('unset "map[b]"')
+    assert_equal '1', Rubish::Builtins.get_assoc_element('map', 'a')
+    assert_equal '', Rubish::Builtins.get_assoc_element('map', 'b')
+    assert_equal '3', Rubish::Builtins.get_assoc_element('map', 'c')
+  end
+
+  def test_unset_assoc_element_shell_syntax_with_variable_key
+    execute('declare -A map')
+    execute('map=([foo]=1 [bar]=2)')
+    execute('key=foo')
+    execute('unset "map[$key]"')
+    assert_equal '', Rubish::Builtins.get_assoc_element('map', 'foo')
+    assert_equal '2', Rubish::Builtins.get_assoc_element('map', 'bar')
+  end
 end
