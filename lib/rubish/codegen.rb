@@ -198,6 +198,13 @@ module Rubish
         return "__glob(#{str.inspect})"
       end
 
+      # Check for VAR="value" or VAR='value' patterns with simple literal values
+      # Route through __glob which handles quote stripping for these
+      # Exclude values with $ (variable expansion) which need different handling
+      if str =~ /\A[a-zA-Z_][a-zA-Z0-9_]*=["'][^$]*["']\z/
+        return "__glob(#{str.inspect})"
+      end
+
       # No glob or brace chars - use normal string arg generation
       generate_string_arg(str)
     end

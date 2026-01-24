@@ -157,4 +157,72 @@ class TestGlob < Test::Unit::TestCase
     assert_match(/file1\.txt/, content)
     assert_match(/file2\.txt/, content)
   end
+
+  # Quote stripping tests for VAR="value" patterns
+  # Regression test: env VAR="value" cmd should pass VAR=value (without quotes)
+  def test_glob_strips_double_quotes_from_var_assignment
+    matches = @repl.send(:__glob, 'FOO="bar"')
+    assert_equal ['FOO=bar'], matches
+  end
+
+  def test_glob_strips_single_quotes_from_var_assignment
+    matches = @repl.send(:__glob, "FOO='bar'")
+    assert_equal ['FOO=bar'], matches
+  end
+
+  def test_glob_strips_quotes_with_path_value
+    matches = @repl.send(:__glob, 'PATH_HELPER_ROOT="/opt/homebrew"')
+    assert_equal ['PATH_HELPER_ROOT=/opt/homebrew'], matches
+  end
+
+  def test_glob_preserves_spaces_in_quoted_value
+    matches = @repl.send(:__glob, 'MSG="hello world"')
+    assert_equal ['MSG=hello world'], matches
+  end
+
+  def test_glob_does_not_strip_mismatched_quotes
+    # Mismatched quotes should not be stripped
+    matches = @repl.send(:__glob, 'FOO="bar\'')
+    # This won't match the pattern, so it goes through normal glob processing
+    # which returns the pattern as-is since there's no glob match
+    assert_equal ['FOO="bar\''], matches
+  end
+
+  def test_glob_does_not_affect_non_assignment_patterns
+    # Regular patterns should still work
+    matches = @repl.send(:__glob, '"hello"')
+    # This is just a quoted string, not a VAR= pattern
+    assert_equal ['"hello"'], matches
+  end
+
+  # Execution tests for env with quoted variable assignments
+  def test_env_with_double_quoted_var_value
+    execute('env FOO="bar" printenv FOO > ' + output_file)
+    assert_equal "bar\n", File.read(output_file)
+  end
+
+  def test_env_with_single_quoted_var_value
+    execute("env FOO='bar' printenv FOO > " + output_file)
+    assert_equal "bar\n", File.read(output_file)
+  end
+
+  def test_env_with_path_in_quoted_value
+    execute('env TEST_PATH="/opt/homebrew/bin" printenv TEST_PATH > ' + output_file)
+    assert_equal "/opt/homebrew/bin\n", File.read(output_file)
+  end
+
+  def test_env_with_space_in_quoted_value
+    execute('env MSG="hello world" printenv MSG > ' + output_file)
+    assert_equal "hello world\n", File.read(output_file)
+  end
+
+  # Regression test for brew shellenv nested eval pattern
+  # The key issue was: env PATH_HELPER_ROOT="/opt/homebrew" cmd
+  # was passing PATH_HELPER_ROOT="/opt/homebrew" (with quotes) instead of
+  # PATH_HELPER_ROOT=/opt/homebrew (without quotes)
+  def test_env_var_assignment_in_command_substitution
+    # Simulates what brew shellenv does with path_helper
+    execute('result=$(/usr/bin/env TEST_VAR="/some/path" /usr/bin/printenv TEST_VAR)')
+    assert_equal '/some/path', get_shell_var('result')
+  end
 end

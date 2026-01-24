@@ -7697,6 +7697,104 @@ module Rubish
       @zsh_fpath = []
     end
 
+    # Timeout for help command execution (seconds)
+    HELP_COMMAND_TIMEOUT = 2
+
+    # macOS sandbox profile for running help commands safely
+    # Denies network access, allows reads and writes only to safe locations
+    SANDBOX_PROFILE = <<~PROFILE
+      (version 1)
+      (deny default)
+      (allow process-fork process-exec)
+      (allow file-read*)
+      (allow file-read-metadata)
+      (allow sysctl-read)
+      (allow mach-lookup)
+      (allow signal (target self))
+      (deny network*)
+      ; Allow writes to /dev/null and temp directories (needed by man, etc.)
+      (allow file-write* (subpath "/dev"))
+      (allow file-write* (subpath "/tmp"))
+      (allow file-write* (subpath "/private/tmp"))
+      (allow file-write* (subpath "/var/folders"))
+      (allow file-write* (subpath "/private/var/folders"))
+      ; Deny writes everywhere else
+      (deny file-write* (subpath "/Users"))
+      (deny file-write* (subpath "/System"))
+      (deny file-write* (subpath "/Applications"))
+    PROFILE
+
+    # Run a help command in a sandboxed environment with timeout
+    # Returns [output, success] or [nil, false] on failure/timeout
+    def self.run_sandboxed_help_command(help_cmd)
+      require 'open3'
+      require 'tempfile'
+
+      pid = nil
+      output = nil
+      success = false
+
+      begin
+        if RUBY_PLATFORM.include?('darwin')
+          # macOS: use sandbox-exec for additional isolation
+          profile_file = Tempfile.new(['sandbox', '.sb'])
+          begin
+            profile_file.write(SANDBOX_PROFILE)
+            profile_file.close
+
+            stdin, stdout_err, wait_thr = Open3.popen2e('sandbox-exec', '-f', profile_file.path, 'sh', '-c', help_cmd)
+            pid = wait_thr.pid
+            stdin.close
+
+            # Use select with timeout to read output
+            ready = IO.select([stdout_err], nil, nil, HELP_COMMAND_TIMEOUT)
+            if ready
+              output = stdout_err.read
+              wait_thr.join(HELP_COMMAND_TIMEOUT)
+              success = wait_thr.value&.success? || false
+            else
+              # Timeout - kill the process
+              Process.kill('TERM', pid) rescue nil
+              Process.kill('KILL', pid) rescue nil
+              success = false
+            end
+            stdout_err.close
+          ensure
+            profile_file.unlink
+          end
+        else
+          # Other platforms: run with timeout protection
+          stdin, stdout_err, wait_thr = Open3.popen2e(help_cmd)
+          pid = wait_thr.pid
+          stdin.close
+
+          ready = IO.select([stdout_err], nil, nil, HELP_COMMAND_TIMEOUT)
+          if ready
+            output = stdout_err.read
+            wait_thr.join(HELP_COMMAND_TIMEOUT)
+            success = wait_thr.value&.success? || false
+          else
+            Process.kill('TERM', pid) rescue nil
+            Process.kill('KILL', pid) rescue nil
+            success = false
+          end
+          stdout_err.close
+        end
+
+        [output, success]
+      rescue Errno::ENOENT
+        # Command not found
+        [nil, false]
+      rescue => e
+        # Kill process if still running
+        if pid
+          Process.kill('TERM', pid) rescue nil
+          Process.kill('KILL', pid) rescue nil
+        end
+        [nil, false]
+      end
+    end
+
     # Known help sources for popular commands (command => help invocation)
     # Note: git, ssh, make, man, kill have dedicated completion functions
     HELP_COMMAND_SOURCES = {
@@ -7779,35 +7877,33 @@ module Rubish
       end
 
       # Fall back to help output parsing
+      # Note: We only try "command help" for known commands that support it,
+      # because for unknown commands like "touch", "touch help" would create a file!
       help_commands = if subcommand
         ["#{command} #{subcommand} --help", "#{command} help #{subcommand}"]
       elsif HELP_COMMAND_SOURCES.key?(command)
         # Use known source for popular commands
         [HELP_COMMAND_SOURCES[command]]
       else
-        # Try common conventions for unknown commands
-        ["#{command} --help", "#{command} help", "#{command} -h"]
+        # For unknown commands, only try --help and -h (not bare "help" subcommand)
+        # to avoid side effects like "touch help" creating a file named "help"
+        ["#{command} --help", "#{command} -h"]
       end
 
       help_output = nil
       help_commands.each do |help_cmd|
-        begin
-          # Use Open3 to capture stderr at Ruby level, preventing shell errors from leaking to terminal
-          output, status = Open3.capture2e(help_cmd)
-        rescue Errno::ENOENT
-          # Command not found
-          next
-        end
-        if status.success? && output.length > 50
-          help_output = output
-          # Check if this output has good subcommand info
-          help_parsed = parse_help_output(output)
-          if help_parsed[:subcommands].length >= 3
-            parsed = help_parsed
-            break
-          elsif parsed.nil? || help_parsed[:subcommands].length > (parsed[:subcommands]&.length || 0)
-            parsed = help_parsed
-          end
+        # Run help command in sandbox with timeout for safety
+        output, success = run_sandboxed_help_command(help_cmd)
+        next unless success && output && output.length > 50
+
+        help_output = output
+        # Check if this output has good subcommand info
+        help_parsed = parse_help_output(output)
+        if help_parsed[:subcommands].length >= 3
+          parsed = help_parsed
+          break
+        elsif parsed.nil? || help_parsed[:subcommands].length > (parsed[:subcommands]&.length || 0)
+          parsed = help_parsed
         end
       end
 

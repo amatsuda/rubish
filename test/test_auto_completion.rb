@@ -450,4 +450,87 @@ class TestAutoCompletion < Test::Unit::TestCase
     assert_includes completions, 'zsh-sub2'
     assert_includes completions, 'zsh-sub3'
   end
+
+  # ==========================================================================
+  # Sandbox security tests
+  # ==========================================================================
+
+  def test_sandbox_timeout
+    # Verify timeout works (command should fail, not hang)
+    start = Time.now
+    output, success = Rubish::Builtins.run_sandboxed_help_command('sleep 10')
+    elapsed = Time.now - start
+
+    assert_false success
+    assert elapsed < 5, "Timeout should have triggered in ~2 seconds, took #{elapsed}s"
+  end
+
+  def test_sandbox_blocks_network
+    # Verify network access is blocked
+    output, success = Rubish::Builtins.run_sandboxed_help_command('curl -s --max-time 1 https://example.com')
+    assert_false success
+  end
+
+  # Regression test: completion should not create files
+  # Before the sandbox, typing "touch[space]" would execute "touch --help"
+  # which on some systems creates a file named "--help" or has other side effects
+  def test_sandbox_touch_completion_does_not_create_files
+    Dir.mktmpdir do |tmpdir|
+      Dir.chdir(tmpdir) do
+        # Clear cache to force help command execution
+        Rubish::Builtins.instance_variable_set(:@help_completion_cache, {})
+
+        # Record files before completion
+        files_before = Dir.glob('*', base: tmpdir)
+
+        # Trigger completion for touch command (simulates typing "touch ")
+        Rubish::Builtins.set_completion_context(
+          line: 'touch ',
+          point: 6,
+          words: ['touch', ''],
+          cword: 1
+        )
+        Rubish::Builtins.call_builtin_completion_function('_auto', 'touch', '', 'touch')
+
+        # Also directly test the sandboxed help command
+        Rubish::Builtins.run_sandboxed_help_command('touch --help')
+
+        # Record files after completion
+        files_after = Dir.glob('*', base: tmpdir)
+
+        # No new files should have been created
+        new_files = files_after - files_before
+        assert_empty new_files, "Completion created unexpected files: #{new_files.inspect}"
+      end
+    end
+  end
+
+  # Regression test: completion should not delete files
+  def test_sandbox_rm_completion_does_not_delete_files
+    Dir.mktmpdir do |tmpdir|
+      # Create a test file
+      test_file = File.join(tmpdir, 'testfile.txt')
+      File.write(test_file, 'test content')
+
+      Dir.chdir(tmpdir) do
+        # Clear cache to force help command execution
+        Rubish::Builtins.instance_variable_set(:@help_completion_cache, {})
+
+        # Trigger completion for rm command (simulates typing "rm ")
+        Rubish::Builtins.set_completion_context(
+          line: 'rm ',
+          point: 3,
+          words: ['rm', ''],
+          cword: 1
+        )
+        Rubish::Builtins.call_builtin_completion_function('_auto', 'rm', '', 'rm')
+
+        # Also directly test the sandboxed help command
+        Rubish::Builtins.run_sandboxed_help_command('rm --help')
+
+        # Test file should still exist
+        assert File.exist?(test_file), 'Completion deleted the test file!'
+      end
+    end
+  end
 end

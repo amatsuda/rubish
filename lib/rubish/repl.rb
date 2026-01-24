@@ -5035,6 +5035,14 @@ module Rubish
       # If noglob is set, return pattern as-is (no expansion)
       return [pattern] if Builtins.set_option?('f')
 
+      # Handle VAR="value" or VAR='value' patterns: strip quotes from value
+      # This is needed for commands like: env VAR="value" cmd
+      if pattern =~ /\A([a-zA-Z_][a-zA-Z0-9_]*)=(["'])(.*)\2\z/
+        var_name = $1
+        value = $3
+        return ["#{var_name}=#{value}"]
+      end
+
       # Handle globstar: ** matches directories recursively only when enabled
       # When disabled, treat ** as * (non-recursive)
       glob_pattern = if pattern.include?('**') && !Builtins.shopt_enabled?('globstar')
