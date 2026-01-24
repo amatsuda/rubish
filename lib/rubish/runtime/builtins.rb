@@ -351,6 +351,12 @@ module Rubish
       ENV.delete('prev')
     end
 
+    # Check if we're currently in a completion context
+    # Used to suppress stderr during command substitution in completion functions
+    def self.in_completion_context?
+      @comp_words && !@comp_words.empty?
+    end
+
     # TMOUT - timeout for read builtin (in seconds)
     def self.tmout
       tmout_val = ENV['TMOUT']

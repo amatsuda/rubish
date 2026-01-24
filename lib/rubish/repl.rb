@@ -3972,12 +3972,16 @@ module Rubish
 
       prefix = exports.empty? ? '' : "#{exports.join('; ')}; "
 
+      # Suppress stderr during completion to avoid spurious output on terminal
+      # (e.g., "Usage: rbenv completions" when rbenv completions fails)
+      stderr_redirect = Builtins.in_completion_context? ? ' 2>/dev/null' : ''
+
       # If inherit_errexit is enabled and errexit (set -e) is active,
       # run the command with errexit enabled in the subshell
       if Builtins.shopt_enabled?('inherit_errexit') && Builtins.set_option?('e')
-        output = `set -e; #{prefix}#{cmd}`.chomp
+        output = `set -e; #{prefix}#{cmd}#{stderr_redirect}`.chomp
       else
-        output = `#{prefix}#{cmd}`.chomp
+        output = `#{prefix}#{cmd}#{stderr_redirect}`.chomp
       end
       # Update @last_status with the command substitution's exit status
       @last_status = $?.exitstatus || 0
