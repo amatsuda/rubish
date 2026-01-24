@@ -3158,9 +3158,12 @@ module Rubish
             open_structures.pop if open_structures.any?
           end
 
-          # Detect function definition: line ends with () or "function name"
+          # Detect function definition: name() or "function name"
           # These need { on next line, so set flag and increment depth
-          if line =~ /\(\)\s*$/ || (line =~ /\Afunction\s+\w+\s*$/)
+          # But NOT array assignment like VAR=() which has = before ()
+          # Also handle name() { on same line - don't set pending, just track the {
+          if (line =~ /\A[a-zA-Z_][a-zA-Z0-9_]*\(\)\s*$/ && !line.include?('=')) ||
+             (line =~ /\Afunction\s+\w+\s*$/)
             pending_function_def = true
             depth += 1
             open_structures << ['function', line_number]

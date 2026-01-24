@@ -218,6 +218,27 @@ class TestMultilineString < Test::Unit::TestCase
     assert_equal "second\nline", get_shell_var('B')
   end
 
+  # Test that array assignment VAR=() is not detected as function definition
+  def test_source_array_assignment_not_function
+    File.write(script_file, <<~'SCRIPT')
+      myfunc() {
+        MYARRAY=()
+        MYARRAY+=(one two)
+        echo "${MYARRAY[@]}"
+      }
+      myfunc
+    SCRIPT
+
+    stderr = capture_stderr do
+      output = capture_stdout do
+        Rubish::Builtins.run_source([script_file])
+      end
+      assert_equal "one two\n", output
+    end
+    # Should NOT have unclosed structure warning
+    refute_match(/unclosed/, stderr)
+  end
+
   # Test unclosed quote warning
   def test_source_unclosed_quote_warning
     File.write(script_file, "X='unclosed")
