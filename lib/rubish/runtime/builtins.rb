@@ -2388,6 +2388,8 @@ module Rubish
 
         # Set value if provided (but not for namerefs - value is the target name)
         if value && !nameref_mode
+          # Strip quotes from value (like export does)
+          value = strip_quotes(value)
           value = apply_attributes(name, value)
           ENV[name] = value
         end

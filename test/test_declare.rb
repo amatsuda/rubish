@@ -185,4 +185,32 @@ class TestDeclare < Test::Unit::TestCase
     Rubish::Builtins.clear_var_attributes
     assert_false Rubish::Builtins.has_attribute?('NUM', :integer)
   end
+
+  # Regression tests for quote stripping in declare/typeset
+  # Previously, declare FOO="bar" would set FOO to "bar" (with quotes)
+  def test_declare_strips_double_quotes
+    Rubish::Builtins.run('declare', ['VAR="hello world"'])
+    assert_equal 'hello world', get_shell_var('VAR')
+  end
+
+  def test_declare_strips_single_quotes
+    Rubish::Builtins.run('declare', ["VAR='hello world'"])
+    assert_equal 'hello world', get_shell_var('VAR')
+  end
+
+  def test_typeset_strips_double_quotes
+    Rubish::Builtins.run('typeset', ['VAR="test value"'])
+    assert_equal 'test value', get_shell_var('VAR')
+  end
+
+  def test_typeset_g_strips_quotes
+    # This is the pattern used by rbenv: typeset -g RBENV_VERSION="4.0.1"
+    Rubish::Builtins.run('typeset', ['-g', 'VERSION="4.0.1"'])
+    assert_equal '4.0.1', get_shell_var('VERSION')
+  end
+
+  def test_declare_preserves_unquoted_value
+    Rubish::Builtins.run('declare', ['VAR=simple'])
+    assert_equal 'simple', get_shell_var('VAR')
+  end
 end
