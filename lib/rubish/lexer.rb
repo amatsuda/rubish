@@ -81,10 +81,27 @@ module Rubish
     private
 
     def skip_whitespace
-      @pos += 1 while @pos < @input.length && @input[@pos] =~ /[ \t\n]/
+      # Only skip spaces and tabs, not newlines
+      # Newlines act as command separators (like semicolons)
+      @pos += 1 while @pos < @input.length && @input[@pos] =~ /[ \t]/
+    end
+
+    def skip_newlines
+      # Skip consecutive newlines (used after reading a newline as separator)
+      @pos += 1 while @pos < @input.length && @input[@pos] == "\n"
     end
 
     def read_token
+      # Handle newlines as command separators (like semicolons)
+      # Collapse consecutive newlines into one separator
+      if @input[@pos] == "\n"
+        skip_newlines
+        skip_whitespace
+        # Don't emit separator if we're at EOF or if previous token was already a separator
+        return nil if @pos >= @input.length
+        return nil if @last_token_type == :SEMICOLON
+        return Token.new(:SEMICOLON, "\n")
+      end
       # Check for multi-char operators first
       three_char = @input[@pos, 3]
       if three_char == '<<<'
