@@ -2390,25 +2390,32 @@ module Rubish
     end
 
     def parse_array_elements(str)
-      # Parse array elements, respecting quotes
+      # Parse array elements, respecting quotes and parentheses
       elements = []
       current = +''
       in_single_quote = false
       in_double_quote = false
+      paren_depth = 0
       i = 0
 
       while i < str.length
         char = str[i]
 
-        if char == "'" && !in_double_quote
+        if char == "'" && !in_double_quote && paren_depth == 0
           in_single_quote = !in_single_quote
           current << char
-        elsif char == '"' && !in_single_quote
+        elsif char == '"' && !in_single_quote && paren_depth == 0
           in_double_quote = !in_double_quote
           current << char
-        elsif char =~ /\s/ && !in_single_quote && !in_double_quote
+        elsif char == '(' && !in_single_quote && !in_double_quote
+          paren_depth += 1
+          current << char
+        elsif char == ')' && !in_single_quote && !in_double_quote && paren_depth > 0
+          paren_depth -= 1
+          current << char
+        elsif char =~ /\s/ && !in_single_quote && !in_double_quote && paren_depth == 0
           unless current.empty?
-            elements << expand_assignment_value(current)
+            elements.concat(expand_array_element(current))
             current = +''
           end
         else
@@ -2417,8 +2424,25 @@ module Rubish
         i += 1
       end
 
-      elements << expand_assignment_value(current) unless current.empty?
+      elements.concat(expand_array_element(current)) unless current.empty?
       elements
+    end
+
+    # Expand an array element, with word splitting for command substitution
+    def expand_array_element(value)
+      return [''] if value.nil? || value.empty?
+
+      # Check if this is purely a command substitution: $(cmd) or `cmd`
+      if value =~ /\A\$\(.*\)\z/m || value =~ /\A`.*`\z/m
+        # Pure command substitution - expand and word-split the result
+        expanded = expand_string_content(value)
+        # Word-split on IFS (default: space, tab, newline)
+        ifs = ENV['IFS'] || " \t\n"
+        return expanded.split(/[#{Regexp.escape(ifs)}]+/)
+      end
+
+      # Not a pure command substitution - expand normally (returns single element)
+      [expand_assignment_value(value)]
     end
 
     def expand_assignment_value(value)
@@ -2764,6 +2788,32 @@ module Rubish
     end
 
     def expand_parameter_expansion(content)
+      # Handle ${#arr[@]} or ${#arr[*]} - array length
+      if content =~ /\A#([a-zA-Z_][a-zA-Z0-9_]*)\[[@*]\]\z/
+        var_name = $1
+        return __array_length(var_name)
+      end
+
+      # Handle ${!arr[@]} or ${!arr[*]} - array keys/indices
+      if content =~ /\A!([a-zA-Z_][a-zA-Z0-9_]*)\[[@*]\]\z/
+        var_name = $1
+        return __array_keys(var_name)
+      end
+
+      # Handle ${arr[@]} or ${arr[*]} - all array elements
+      if content =~ /\A([a-zA-Z_][a-zA-Z0-9_]*)\[([@*])\]\z/
+        var_name = $1
+        mode = $2
+        return __array_all(var_name, mode)
+      end
+
+      # Handle ${arr[n]} - array element access
+      if content =~ /\A([a-zA-Z_][a-zA-Z0-9_]*)\[([^\]]+)\]\z/
+        var_name = $1
+        index = $2
+        return __array_element(var_name, index)
+      end
+
       # Handle ${var:-default}, ${var-default}, ${var:=default}, ${var:+value}, ${var:?message}
       if content =~ /\A([a-zA-Z_][a-zA-Z0-9_]*)(:-|:=|:\+|:\?|-|=|\+|\?)(.*)?\z/
         var_name = $1

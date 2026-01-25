@@ -218,4 +218,106 @@ class TestArray < Test::Unit::TestCase
     execute("echo \"${arr[@]}\" > #{output_file}")
     assert_equal "a c e\n", File.read(output_file)
   end
+
+  # Array keys/indices with ${!arr[@]}
+  def test_array_keys
+    execute('arr=(a b c)')
+    execute("echo ${!arr[@]} > #{output_file}")
+    assert_equal "0 1 2\n", File.read(output_file)
+  end
+
+  def test_array_keys_star
+    execute('arr=(a b c)')
+    execute("echo ${!arr[*]} > #{output_file}")
+    assert_equal "0 1 2\n", File.read(output_file)
+  end
+
+  def test_array_keys_sparse
+    execute('arr=()')
+    execute('arr[0]=a')
+    execute('arr[5]=b')
+    execute('arr[10]=c')
+    execute("echo ${!arr[@]} > #{output_file}")
+    assert_equal "0 5 10\n", File.read(output_file)
+  end
+
+  def test_array_keys_empty
+    execute('arr=()')
+    execute("echo ${!arr[@]} > #{output_file}")
+    assert_equal "\n", File.read(output_file)
+  end
+
+  # Regression tests for array parameter expansion in ${...} syntax
+  # These test that expand_parameter_expansion correctly handles array subscripts
+
+  def test_parameter_expansion_array_element
+    # Test ${arr[n]} within parameter expansion
+    execute('arr=(first second third)')
+    execute("echo \"Value: ${arr[1]}\" > #{output_file}")
+    assert_equal "Value: second\n", File.read(output_file)
+  end
+
+  def test_parameter_expansion_array_all_at
+    # Test ${arr[@]} within parameter expansion
+    execute('arr=(one two three)')
+    execute("echo \"All: ${arr[@]}\" > #{output_file}")
+    assert_equal "All: one two three\n", File.read(output_file)
+  end
+
+  def test_parameter_expansion_array_all_star
+    # Test ${arr[*]} within parameter expansion
+    execute('arr=(one two three)')
+    execute("echo \"All: ${arr[*]}\" > #{output_file}")
+    assert_equal "All: one two three\n", File.read(output_file)
+  end
+
+  def test_parameter_expansion_array_length
+    # Test ${#arr[@]} within parameter expansion
+    execute('arr=(a b c d e)')
+    execute("echo \"Length: ${#arr[@]}\" > #{output_file}")
+    assert_equal "Length: 5\n", File.read(output_file)
+  end
+
+  def test_parameter_expansion_array_length_star
+    # Test ${#arr[*]} within parameter expansion
+    execute('arr=(a b c)')
+    execute("echo \"Length: ${#arr[*]}\" > #{output_file}")
+    assert_equal "Length: 3\n", File.read(output_file)
+  end
+
+  def test_parameter_expansion_array_keys
+    # Test ${!arr[@]} within parameter expansion
+    execute('arr=(x y z)')
+    execute("echo \"Keys: ${!arr[@]}\" > #{output_file}")
+    assert_equal "Keys: 0 1 2\n", File.read(output_file)
+  end
+
+  def test_parameter_expansion_multiple_array_refs
+    # Test multiple array references in one command
+    execute('arr=(a b c)')
+    execute("echo \"len=${#arr[@]} first=${arr[0]} all=${arr[@]}\" > #{output_file}")
+    assert_equal "len=3 first=a all=a b c\n", File.read(output_file)
+  end
+
+  def test_parameter_expansion_array_in_double_quotes
+    # Test array expansion within double quotes
+    execute('arr=(hello world)')
+    execute("echo \"${arr[0]} ${arr[1]}\" > #{output_file}")
+    assert_equal "hello world\n", File.read(output_file)
+  end
+
+  def test_parameter_expansion_array_element_with_spaces
+    # Test array element containing spaces
+    execute("arr=('hello world' 'foo bar')")
+    execute("echo \"${arr[0]}\" > #{output_file}")
+    assert_equal "hello world\n", File.read(output_file)
+  end
+
+  def test_parameter_expansion_nested_in_command_substitution
+    # Test array access within command substitution
+    execute('arr=(one two three)')
+    execute('result=$(echo ${arr[1]})')
+    execute("echo $result > #{output_file}")
+    assert_equal "two\n", File.read(output_file)
+  end
 end

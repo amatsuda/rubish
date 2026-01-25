@@ -971,11 +971,31 @@ module Rubish
       var_part = node.var
       elements = node.elements
 
-      # Generate element expressions
-      elem_code = elements.map { |e| generate_string_arg(e) }.join(', ')
+      # Generate element expressions with word splitting for command substitution
+      elem_code = elements.map { |e| generate_array_element(e) }.join(', ')
 
       # Call runtime method to handle the assignment
-      "__array_assign(#{var_part.inspect}, [#{elem_code}])"
+      "__array_assign(#{var_part.inspect}, [#{elem_code}].flatten)"
+    end
+
+    # Generate code for an array element, with special handling for command substitution
+    # In array context, $(cmd) should be word-split into multiple elements
+    def generate_array_element(str)
+      # Check if this element is purely a command substitution
+      if str =~ /\A\$\([^)]+\)\z/
+        # Pure command substitution: $(cmd) - word-split the result
+        cmd = str[2...-1]
+        return "__run_subst(#{cmd.inspect}).split"
+      end
+
+      # Check if element contains command substitution mixed with other text
+      if str.include?('$(') || str.include?('`')
+        # Mixed content - generate interpolated string but wrap in array for flatten
+        return "[#{generate_string_arg(str)}]"
+      end
+
+      # No command substitution - use normal string arg generation
+      generate_string_arg(str)
     end
 
     def escape_string(str)
@@ -1181,6 +1201,8 @@ module Rubish
         "(#{to_shell(node.body)})"
       when AST::Function
         "#{node.name}() {\n#{prefix}    #{to_shell(node.body, indent + 1)}\n#{prefix}}"
+      when AST::ArrayAssign
+        "#{node.var}(#{node.elements.join(' ')})"
       when NilClass
         ''
       else

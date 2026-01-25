@@ -6361,11 +6361,15 @@ module Rubish
       }
 
       i = 0
+      parsing_options = true
       while i < args.length
         arg = args[i]
 
-        if arg.start_with?('-')
+        if parsing_options && arg.start_with?('-')
           case arg
+          when '--'
+            # End of options marker - remaining args are words
+            parsing_options = false
           when '-o'
             i += 1
             spec[:options] << args[i] if args[i]
