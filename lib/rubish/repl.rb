@@ -4685,19 +4685,35 @@ module Rubish
       end
     end
 
+    # Special associative arrays that use string keys (not registered with assoc_array?)
+    SPECIAL_ASSOC_ARRAYS = %w[RUBISH_ALIASES BASH_ALIASES RUBISH_CMDS BASH_CMDS].freeze
+
     def __array_element(var_name, index)
       # ${arr[n]} or ${map[key]} - get array/assoc element
-      expanded_index = expand_string_content(index)
+      # For associative arrays, expand as string (key lookup)
+      # For indexed arrays, evaluate as arithmetic expression (expands bare variable names)
+      if Builtins.assoc_array?(var_name) || SPECIAL_ASSOC_ARRAYS.include?(var_name)
+        expanded_index = expand_string_content(index)
+        # assoc_expand_once: when disabled, subscripts may be expanded again
+        unless Builtins.shopt_enabled?('assoc_expand_once')
+          if expanded_index.include?('$')
+            expanded_index = expand_string_content(expanded_index)
+          end
+        end
+      else
+        # Indexed array: evaluate subscript as arithmetic expression
+        # This allows bare variable names like ${arr[COMP_CWORD]} to expand
+        begin
+          expanded_index = eval_arithmetic_expr(index).to_s
+        rescue
+          expanded_index = expand_string_content(index)
+        end
 
-      # array_expand_once (bash 5.2+): when disabled (default), subscripts may be expanded again
-      # assoc_expand_once (deprecated): same but only for associative arrays
-      # This allows double expansion of variables in subscripts
-      expand_once = Builtins.shopt_enabled?('array_expand_once') ||
-                    (Builtins.assoc_array?(var_name) && Builtins.shopt_enabled?('assoc_expand_once'))
-      if (Builtins.assoc_array?(var_name) || Builtins.indexed_array?(var_name)) && !expand_once
-        # Without array_expand_once, perform a second expansion if the result contains $
-        if expanded_index.include?('$')
-          expanded_index = expand_string_content(expanded_index)
+        # array_expand_once (bash 5.2+): when disabled, subscripts may be expanded again
+        unless Builtins.shopt_enabled?('array_expand_once')
+          if expanded_index.include?('$')
+            expanded_index = expand_string_content(expanded_index)
+          end
         end
       end
 

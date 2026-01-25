@@ -320,4 +320,54 @@ class TestArray < Test::Unit::TestCase
     execute("echo $result > #{output_file}")
     assert_equal "two\n", File.read(output_file)
   end
+
+  # Regression tests for array subscript with bare variable name (arithmetic context)
+
+  def test_array_subscript_with_variable
+    # In bash, array subscripts are evaluated in arithmetic context
+    # where bare variable names are expanded (without $)
+    execute('arr=(zero one two three)')
+    execute('idx=2')
+    execute("echo ${arr[idx]} > #{output_file}")
+    assert_equal "two\n", File.read(output_file)
+  end
+
+  def test_array_subscript_with_variable_expression
+    # Test arithmetic expression in subscript
+    execute('arr=(a b c d e)')
+    execute('idx=1')
+    execute("echo ${arr[idx+2]} > #{output_file}")
+    assert_equal "d\n", File.read(output_file)
+  end
+
+  def test_array_subscript_with_dollar_variable
+    # Test that $var also works in subscript
+    execute('arr=(first second third)')
+    execute('n=1')
+    execute("echo ${arr[$n]} > #{output_file}")
+    assert_equal "second\n", File.read(output_file)
+  end
+
+  def test_array_length_with_variable_subscript
+    # Test that bare variable names work in ${#arr[@]} context
+    execute('arr=(a b c d e)')
+    execute("echo ${#arr[@]} > #{output_file}")
+    assert_equal "5\n", File.read(output_file)
+  end
+
+  def test_comp_words_style_access
+    # Regression test for completion-style array access
+    # where COMP_CWORD is used as bare variable name
+    Rubish::Builtins.set_completion_context(
+      line: 'cmd arg1 arg2',
+      point: 13,
+      words: ['cmd', 'arg1', 'arg2'],
+      cword: 2,
+      type: 9,
+      key: 9
+    )
+    execute("echo ${COMP_WORDS[COMP_CWORD]} > #{output_file}")
+    assert_equal "arg2\n", File.read(output_file)
+    Rubish::Builtins.clear_completion_context
+  end
 end
