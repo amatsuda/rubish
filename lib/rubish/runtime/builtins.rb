@@ -8913,6 +8913,11 @@ module Rubish
 
       # Print key bindings in reusable format
       if print_bindings_readable
+        # First show Reline's actual key bindings
+        get_reline_key_bindings.each do |keyseq, action|
+          puts "\"#{escape_keyseq(keyseq)}\": #{action}"
+        end
+        # Then show any additional bindings from @key_bindings
         @key_bindings.each do |keyseq, binding|
           next if binding[:type] == :macro || binding[:type] == :command
 
@@ -8923,6 +8928,11 @@ module Rubish
 
       # Print key bindings with function names
       if print_bindings
+        # First show Reline's actual key bindings
+        get_reline_key_bindings.each do |keyseq, action|
+          puts "#{escape_keyseq(keyseq)} can be found in #{action}."
+        end
+        # Then show any additional bindings from @key_bindings
         @key_bindings.each do |keyseq, binding|
           next if binding[:type] == :macro || binding[:type] == :command
 
@@ -9078,6 +9088,42 @@ module Rubish
         # Function
         @key_bindings[keyseq] = {type: :function, value: value, keymap: keymap}
       end
+    end
+
+    # Get Reline's actual key bindings as a hash of keyseq string => action symbol
+    # Combines bindings from both @additional_key_bindings (higher priority, from inputrc/custom)
+    # and @default_key_bindings (lower priority, built-in defaults)
+    def self.get_reline_key_bindings
+      result = {}
+      begin
+        config = Reline.core.config
+        editing_mode = config.instance_variable_get(:@editing_mode_label) || :emacs
+
+        # First, get default key bindings (lowest priority)
+        default_bindings = config.instance_variable_get(:@default_key_bindings)
+        if default_bindings && default_bindings[editing_mode]
+          bindings = default_bindings[editing_mode].instance_variable_get(:@key_bindings)
+          bindings&.each do |seq, action|
+            next if action == :ed_insert || action == :ed_digit
+            keyseq = seq.pack('C*')
+            result[keyseq] = action
+          end
+        end
+
+        # Then, get additional key bindings (higher priority, will override defaults)
+        additional_bindings = config.instance_variable_get(:@additional_key_bindings)
+        if additional_bindings && additional_bindings[editing_mode]
+          bindings = additional_bindings[editing_mode].instance_variable_get(:@key_bindings)
+          bindings&.each do |seq, action|
+            next if action == :ed_insert || action == :ed_digit
+            keyseq = seq.pack('C*')
+            result[keyseq] = action
+          end
+        end
+      rescue
+        # Reline not available or error accessing bindings
+      end
+      result
     end
 
     def self.escape_keyseq(keyseq)

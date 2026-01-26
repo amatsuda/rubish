@@ -154,9 +154,113 @@ module Rubish
       # Use autocompletion mode (fish-style inline suggestions)
       Reline.autocompletion = true
 
+      # Set up key bindings for completion dialog navigation
+      setup_completion_dialog_keybindings
+
       # Add abbreviated path expansion as a dialog proc
       # This expands l/r/re to lib/rubish/repl.rb inline when Tab is pressed
       setup_abbreviated_path_expansion
+    end
+
+    # Set up key bindings for navigating the autocompletion dialog
+    # These bindings are context-sensitive: they navigate the dialog when open,
+    # otherwise fall back to default behavior (history nav, cursor movement)
+    def setup_completion_dialog_keybindings
+      # Add context-sensitive navigation methods to LineEditor first
+      # (this must be done before any readline calls)
+      setup_completion_context_sensitive_navigation
+
+      config = Reline.core.config
+
+      # Use bind_key to add to @additional_key_bindings which has higher priority
+      # than @default_key_bindings. This ensures our bindings won't be overridden
+      # by Reline's lazy initialization of terminfo-based key bindings.
+
+      # Arrow keys for dialog navigation (single item)
+      # Up arrow: ESC [ A, Down arrow: ESC [ B
+      config.bind_key('"\e[A"', 'completion_or_up')
+      config.bind_key('"\e[B"', 'completion_or_down')
+
+      # Also support alternate arrow key sequences (some terminals use ESC O instead of ESC [)
+      config.bind_key('"\eOA"', 'completion_or_up')
+      config.bind_key('"\eOB"', 'completion_or_down')
+
+      # Ctrl-N/Ctrl-P for dialog navigation (falls back to history when no dialog)
+      config.bind_key('"\C-n"', 'completion_or_next_history')
+      config.bind_key('"\C-p"', 'completion_or_prev_history')
+
+      # Ctrl-F/Ctrl-B for page-style navigation (falls back to cursor movement when no dialog)
+      config.bind_key('"\C-f"', 'completion_page_or_forward_char')
+      config.bind_key('"\C-b"', 'completion_page_or_backward_char')
+    end
+
+    # Add context-sensitive navigation methods to Reline::LineEditor
+    # These check if a completion dialog is open and dispatch accordingly
+    def setup_completion_context_sensitive_navigation
+      # Number of items to jump per page
+      page_size = 5
+
+      Reline::LineEditor.prepend(Module.new do
+        # Helper to check if completion dialog is active
+        define_method(:completion_dialog_active?) do
+          @config.autocompletion && @completion_journey_state
+        end
+
+        # Arrow up: navigate dialog or do nothing (arrows don't have default action in line editor)
+        define_method(:completion_or_up) do |key|
+          if completion_dialog_active?
+            completion_journey_move(:up)
+          else
+            # Arrow up has no default emacs action, but could be used for history
+            ed_prev_history(key)
+          end
+        end
+
+        # Arrow down: navigate dialog or do nothing
+        define_method(:completion_or_down) do |key|
+          if completion_dialog_active?
+            completion_journey_move(:down)
+          else
+            ed_next_history(key)
+          end
+        end
+
+        # Ctrl-N: navigate dialog down or next history
+        define_method(:completion_or_next_history) do |key|
+          if completion_dialog_active?
+            completion_journey_move(:down)
+          else
+            ed_next_history(key)
+          end
+        end
+
+        # Ctrl-P: navigate dialog up or prev history
+        define_method(:completion_or_prev_history) do |key|
+          if completion_dialog_active?
+            completion_journey_move(:up)
+          else
+            ed_prev_history(key)
+          end
+        end
+
+        # Ctrl-F: page down in dialog or forward char
+        define_method(:completion_page_or_forward_char) do |key|
+          if completion_dialog_active?
+            page_size.times { completion_journey_move(:down) }
+          else
+            ed_next_char(key)
+          end
+        end
+
+        # Ctrl-B: page up in dialog or backward char
+        define_method(:completion_page_or_backward_char) do |key|
+          if completion_dialog_active?
+            page_size.times { completion_journey_move(:up) }
+          else
+            ed_prev_char(key)
+          end
+        end
+      end)
     end
 
     # Set up abbreviated path expansion (like zsh)
