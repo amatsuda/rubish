@@ -7878,6 +7878,8 @@ module Rubish
           @help_completion_cache[cache_key] = parsed
           return parsed
         end
+        # Reset parsed if zsh result has too few subcommands (likely false positives)
+        parsed = nil
       end
 
       # Fall back to help output parsing
