@@ -4,10 +4,18 @@ require_relative 'test_helper'
 
 class TestCompletionDialogKeybindings < Test::Unit::TestCase
   def setup
+    # Reset Reline config to ensure a clean state
+    Reline.core.config.reset_variables if defined?(Reline)
+
     @repl = Rubish::REPL.new
     # setup_reline is normally called from run(), so we need to call it explicitly
     # to set up the completion dialog keybindings
     @repl.send(:setup_reline)
+  end
+
+  def teardown
+    # Reset Reline config to avoid affecting other tests
+    Reline.core.config.reset_variables if defined?(Reline)
   end
 
   # Test that keybindings are added to @additional_key_bindings (higher priority)

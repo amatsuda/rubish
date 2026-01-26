@@ -16,6 +16,8 @@ class TestINPUTRC < Test::Unit::TestCase
     FileUtils.rm_rf(@tempdir)
     ENV.clear
     @original_env.each { |k, v| ENV[k] = v }
+    # Reset Reline config to avoid affecting other tests
+    Reline.core.config.reset_variables if defined?(Reline)
   end
 
   def inputrc_path
