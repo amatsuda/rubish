@@ -130,6 +130,56 @@ class TestCompletionDialogKeybindings < Test::Unit::TestCase
     assert editor.respond_to?(:completion_dialog_active?)
   end
 
+  # Test get_reline_key_bindings includes both default and additional bindings
+
+  def test_get_reline_key_bindings_includes_additional_bindings
+    bindings = Rubish::Builtins.get_reline_key_bindings
+
+    # Arrow up binding should be our custom one from @additional_key_bindings
+    arrow_up_key = "\e[A"
+    assert_equal :completion_or_up, bindings[arrow_up_key]
+  end
+
+  def test_get_reline_key_bindings_includes_default_bindings
+    bindings = Rubish::Builtins.get_reline_key_bindings
+
+    # Ctrl-A should be ed_move_to_beg from default emacs bindings
+    ctrl_a_key = "\x01"
+    assert_equal :ed_move_to_beg, bindings[ctrl_a_key]
+  end
+
+  def test_get_reline_key_bindings_additional_overrides_default
+    bindings = Rubish::Builtins.get_reline_key_bindings
+
+    # Ctrl-N should be our custom completion_or_next_history, not ed_next_history
+    ctrl_n_key = "\x0e"
+    assert_equal :completion_or_next_history, bindings[ctrl_n_key]
+  end
+
+  def test_get_reline_key_bindings_ctrl_p_is_custom
+    bindings = Rubish::Builtins.get_reline_key_bindings
+
+    # Ctrl-P should be our custom completion_or_prev_history, not ed_prev_history
+    ctrl_p_key = "\x10"
+    assert_equal :completion_or_prev_history, bindings[ctrl_p_key]
+  end
+
+  def test_get_reline_key_bindings_ctrl_f_is_custom
+    bindings = Rubish::Builtins.get_reline_key_bindings
+
+    # Ctrl-F should be our custom completion_page_or_forward_char, not ed_next_char
+    ctrl_f_key = "\x06"
+    assert_equal :completion_page_or_forward_char, bindings[ctrl_f_key]
+  end
+
+  def test_get_reline_key_bindings_ctrl_b_is_custom
+    bindings = Rubish::Builtins.get_reline_key_bindings
+
+    # Ctrl-B should be our custom completion_page_or_backward_char, not ed_prev_char
+    ctrl_b_key = "\x02"
+    assert_equal :completion_page_or_backward_char, bindings[ctrl_b_key]
+  end
+
   # Test that bindings are in the correct keymap layer
   # (This tests the key insight: @additional_key_bindings has higher priority than @default_key_bindings)
 
@@ -194,5 +244,30 @@ class TestCompletionDialogKeybindings < Test::Unit::TestCase
     # regardless of what's in default (that's the Composite design)
     assert_equal :completion_or_up, additional_emacs.get([27, 91, 65])
     assert_equal :completion_or_next_history, additional_emacs.get([14])
+  end
+
+  # Test key binding priority: composite keymap returns additional bindings first
+
+  def test_composite_keymap_returns_additional_over_default
+    config = Reline.core.config
+    key_bindings = config.key_bindings
+
+    # The composite keymap should return our custom binding for Ctrl-N
+    # not the default ed_next_history
+    action = key_bindings.get([14])
+    assert_equal :completion_or_next_history, action
+  end
+
+  def test_composite_keymap_arrow_keys
+    config = Reline.core.config
+    key_bindings = config.key_bindings
+
+    # Arrow up (ESC [ A) should return our custom binding
+    action = key_bindings.get([27, 91, 65])
+    assert_equal :completion_or_up, action
+
+    # Arrow down (ESC [ B) should return our custom binding
+    action = key_bindings.get([27, 91, 66])
+    assert_equal :completion_or_down, action
   end
 end
