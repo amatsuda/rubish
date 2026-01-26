@@ -270,4 +270,53 @@ class TestCompletionDialogKeybindings < Test::Unit::TestCase
     action = key_bindings.get([27, 91, 66])
     assert_equal :completion_or_down, action
   end
+
+  # Regression tests: completion_dialog_active? should check for visible dialog,
+  # not just @completion_journey_state. This prevents Ctrl-P from switching to
+  # completion mode after browsing history (which sets @completion_journey_state
+  # due to buffer modification triggering autocompletion setup).
+
+  def test_completion_dialog_active_false_when_no_dialogs
+    editor = Reline::LineEditor.new(Reline.core.config)
+    # Enable autocompletion and set journey state, but no dialogs
+    editor.instance_variable_set(:@completion_journey_state, Object.new)
+    editor.instance_variable_set(:@dialogs, [])
+    assert_equal false, editor.completion_dialog_active?
+  end
+
+  def test_completion_dialog_active_false_when_dialog_has_no_contents
+    editor = Reline::LineEditor.new(Reline.core.config)
+    editor.instance_variable_set(:@completion_journey_state, Object.new)
+    # Create a mock dialog with nil contents
+    mock_dialog = Struct.new(:name, :contents).new(:autocomplete, nil)
+    editor.instance_variable_set(:@dialogs, [mock_dialog])
+    assert_equal false, editor.completion_dialog_active?
+  end
+
+  def test_completion_dialog_active_true_when_dialog_has_contents
+    editor = Reline::LineEditor.new(Reline.core.config)
+    editor.instance_variable_set(:@completion_journey_state, Object.new)
+    # Create a mock dialog with actual contents
+    mock_dialog = Struct.new(:name, :contents).new(:autocomplete, ['item1', 'item2'])
+    editor.instance_variable_set(:@dialogs, [mock_dialog])
+    assert_equal true, editor.completion_dialog_active?
+  end
+
+  def test_completion_dialog_active_false_when_different_dialog_has_contents
+    editor = Reline::LineEditor.new(Reline.core.config)
+    editor.instance_variable_set(:@completion_journey_state, Object.new)
+    # Create a dialog with different name (not :autocomplete)
+    mock_dialog = Struct.new(:name, :contents).new(:other_dialog, ['item1', 'item2'])
+    editor.instance_variable_set(:@dialogs, [mock_dialog])
+    assert_equal false, editor.completion_dialog_active?
+  end
+
+  def test_completion_dialog_active_false_when_no_journey_state
+    editor = Reline::LineEditor.new(Reline.core.config)
+    editor.instance_variable_set(:@completion_journey_state, nil)
+    mock_dialog = Struct.new(:name, :contents).new(:autocomplete, ['item1', 'item2'])
+    editor.instance_variable_set(:@dialogs, [mock_dialog])
+    # Should be false because journey state is nil
+    assert_equal false, editor.completion_dialog_active?
+  end
 end

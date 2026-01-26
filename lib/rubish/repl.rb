@@ -201,9 +201,28 @@ module Rubish
       page_size = 5
 
       Reline::LineEditor.prepend(Module.new do
-        # Helper to check if completion dialog is active
+        # Helper to check if completion dialog is active and visible
+        # Note: @completion_journey_state alone is not enough - Reline sets it
+        # whenever the buffer is modified with autocompletion enabled, even if
+        # no dialog is shown. We must check if the autocomplete dialog has contents.
         define_method(:completion_dialog_active?) do
-          @config.autocompletion && @completion_journey_state
+          return false unless @config.autocompletion && @completion_journey_state
+          # Check if autocomplete dialog is actually visible (has contents)
+          @dialogs&.any? { |dialog| dialog.name == :autocomplete && dialog.contents }
+        end
+
+        # Helper to navigate history without triggering autocompletion
+        # Sets @completion_occurs to prevent Reline from starting a new
+        # completion journey after the history item is loaded
+        define_method(:navigate_history) do |direction, key|
+          if direction == :prev
+            ed_prev_history(key)
+          else
+            ed_next_history(key)
+          end
+          # Prevent autocompletion from triggering after history navigation
+          # This is checked in input_key at lines 1057-1060
+          @completion_occurs = true
         end
 
         # Arrow up: navigate dialog or do nothing (arrows don't have default action in line editor)
@@ -211,8 +230,7 @@ module Rubish
           if completion_dialog_active?
             completion_journey_move(:up)
           else
-            # Arrow up has no default emacs action, but could be used for history
-            ed_prev_history(key)
+            navigate_history(:prev, key)
           end
         end
 
@@ -221,7 +239,7 @@ module Rubish
           if completion_dialog_active?
             completion_journey_move(:down)
           else
-            ed_next_history(key)
+            navigate_history(:next, key)
           end
         end
 
@@ -230,7 +248,7 @@ module Rubish
           if completion_dialog_active?
             completion_journey_move(:down)
           else
-            ed_next_history(key)
+            navigate_history(:next, key)
           end
         end
 
@@ -239,7 +257,7 @@ module Rubish
           if completion_dialog_active?
             completion_journey_move(:up)
           else
-            ed_prev_history(key)
+            navigate_history(:prev, key)
           end
         end
 
@@ -426,6 +444,8 @@ module Rubish
 
       begin
         lines = File.readlines(file, chomp: true)
+        # Filter out empty lines
+        lines = lines.reject(&:empty?)
         # Only keep the last HISTSIZE entries
         lines = lines.last(max_entries) if lines.size > max_entries
         lines.each { |line| Reline::HISTORY << line }
