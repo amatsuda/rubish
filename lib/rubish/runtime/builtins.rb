@@ -7946,10 +7946,12 @@ module Rubish
           in_commands_section = false
           in_options_section = true
           next
-        elsif line =~ /^[A-Z][a-z]+:$/ || line =~ /^[A-Z]+:$/
-          # New section header, reset
+        elsif line =~ /^[A-Z][-A-Za-z_]+:$/ || line =~ /^[A-Z][-A-Za-z_]+\s+[-A-Za-z_]+:$/
+          # Short section header (1-2 words) that's not a commands section
+          # Set in_options_section to true to suppress subcommand detection
+          # (sections like "Features:", "Warning categories:", "Dump List:", "YJIT options:")
           in_commands_section = false
-          in_options_section = false
+          in_options_section = true
         end
 
         # Parse subcommands in different formats:
