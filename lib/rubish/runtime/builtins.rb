@@ -7970,9 +7970,11 @@ module Rubish
           end
         elsif !in_options_section
           # Outside of explicit sections, try to detect command patterns
-          # Table format with description
+          # Table format with description (e.g., git's "   clone      Clone a repository")
           if line =~ /^\s{2,4}([a-z][-a-z0-9_]*)\s{2,}\S/
             cmd = $1
+            # Skip common English words that appear in help text (e.g., "or  java [options]...")
+            next if %w[or and the for to in of on at by as is it if an are be do no so].include?(cmd)
             subcommands << cmd if cmd.length < 25 && !cmd.include?('=')
           end
         end
