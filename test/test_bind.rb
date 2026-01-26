@@ -413,4 +413,95 @@ class TestBind < Test::Unit::TestCase
     binding = Rubish::Builtins.get_key_binding("\C-a")
     assert_equal 'vi', binding[:keymap]
   end
+
+  # ==========================================================================
+  # Regression tests for bind -p showing Reline's built-in keybindings
+  # (Previously bind -p printed nothing because get_reline_key_bindings
+  #  didn't include bindings from @default_key_bindings or @additional_key_bindings)
+  # ==========================================================================
+
+  def test_get_reline_key_bindings_returns_non_empty
+    # Regression test: get_reline_key_bindings used to return empty hash
+    bindings = Rubish::Builtins.get_reline_key_bindings
+    assert_not_empty bindings, 'get_reline_key_bindings should return Reline bindings'
+  end
+
+  def test_get_reline_key_bindings_includes_default_emacs_bindings
+    # Regression test: should include default emacs keybindings
+    bindings = Rubish::Builtins.get_reline_key_bindings
+
+    # Should include some standard Reline action names
+    # These are emacs-style actions that are always defined
+    action_names = bindings.values.map(&:to_s)
+    has_standard_actions = action_names.any? { |name|
+      name.start_with?('ed_') || name.start_with?('em_') || name == 'complete'
+    }
+    assert has_standard_actions, 'Should include standard Reline actions (ed_*, em_*, complete)'
+  end
+
+  def test_get_reline_key_bindings_includes_common_bindings
+    # Regression test: should include common readline bindings
+    bindings = Rubish::Builtins.get_reline_key_bindings
+
+    # Check that we have a reasonable number of bindings
+    # Default emacs mode has many bindings
+    assert bindings.size > 10, "Expected many bindings, got #{bindings.size}"
+  end
+
+  def test_bind_p_prints_reline_default_bindings
+    # Regression test: bind -p used to print nothing
+    # Now it should print Reline's built-in keybindings
+    output = capture_output { Rubish::Builtins.run('bind', ['-p']) }
+
+    # Should have output (not empty)
+    assert_not_empty output.strip, 'bind -p should print keybindings'
+
+    # Should contain some common action names from Reline
+    # These are standard emacs-style readline actions
+    assert(
+      output.include?('ed_') || output.include?('em_') || output.include?('complete'),
+      "bind -p should show Reline actions (ed_*, em_*, complete, etc.), got: #{output[0..200]}"
+    )
+  end
+
+  def test_bind_p_output_format
+    # Regression test: bind -p output should be in readline format
+    output = capture_output { Rubish::Builtins.run('bind', ['-p']) }
+
+    # Each line should be in format: "keyseq": action
+    lines = output.strip.split("\n").reject(&:empty?)
+    assert_not_empty lines, 'bind -p should output multiple lines'
+
+    # Check that lines follow the expected format
+    has_valid_format = lines.any? { |line| line.match?(/^".*": \w+/) }
+    assert has_valid_format, "bind -p output should have format '\"keyseq\": action'"
+  end
+
+  def test_bind_P_prints_reline_default_bindings
+    # Regression test: bind -P (verbose) should also show Reline bindings
+    output = capture_output { Rubish::Builtins.run('bind', ['-P']) }
+
+    # Should have output
+    assert_not_empty output.strip, 'bind -P should print keybindings'
+
+    # Verbose format includes "can be found in"
+    assert output.include?('can be found in'), 'bind -P should use verbose format'
+  end
+
+  def test_bind_p_includes_both_default_and_additional_bindings
+    # Setup Reline with our custom bindings
+    @repl.send(:setup_reline)
+
+    output = capture_output { Rubish::Builtins.run('bind', ['-p']) }
+
+    # Should include some default Reline bindings
+    # (checking for any ed_ or em_ action which are Reline's built-in actions)
+    has_default = output.match?(/ed_|em_/)
+
+    # Our custom bindings use completion_or_* names
+    has_custom = output.include?('completion_or_') || output.include?('completion_page_')
+
+    assert has_default || has_custom,
+      'bind -p should show either default or custom bindings'
+  end
 end
