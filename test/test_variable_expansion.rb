@@ -420,4 +420,60 @@ class TestVariableExpansion < Test::Unit::TestCase
   def test_arithmetic_in_builtin
     assert_equal '15', expand('$((10+5))')
   end
+
+  # Regression tests: unquoted empty variable expansion should be removed
+  # In bash, `$empty_var` (unquoted) becomes nothing, while `"$empty_var"` becomes ""
+  def test_unquoted_empty_var_removed_from_args
+    ENV['EMPTY_VAR'] = ''
+    # Unquoted empty var should be removed, so only 'before' and 'after' are printed
+    execute("printf '%s\\n' before $EMPTY_VAR after > #{output_file}")
+    assert_equal "before\nafter\n", File.read(output_file)
+  end
+
+  def test_quoted_empty_var_preserved_as_empty_string
+    ENV['EMPTY_VAR'] = ''
+    # Quoted empty var should be preserved as empty string argument
+    execute("printf '%s\\n' before \"$EMPTY_VAR\" after > #{output_file}")
+    assert_equal "before\n\nafter\n", File.read(output_file)
+  end
+
+  def test_unquoted_undefined_var_removed_from_args
+    ENV.delete('UNDEFINED_VAR')
+    execute("printf '%s\\n' start $UNDEFINED_VAR end > #{output_file}")
+    assert_equal "start\nend\n", File.read(output_file)
+  end
+
+  def test_quoted_undefined_var_preserved_as_empty_string
+    ENV.delete('UNDEFINED_VAR')
+    execute("printf '%s\\n' start \"$UNDEFINED_VAR\" end > #{output_file}")
+    assert_equal "start\n\nend\n", File.read(output_file)
+  end
+
+  def test_unquoted_empty_shell_var_removed
+    Rubish::Builtins.set_var('myvar', '')
+    execute("printf '%s\\n' before $myvar after > #{output_file}")
+    assert_equal "before\nafter\n", File.read(output_file)
+    Rubish::Builtins.send(:shell_vars).delete('myvar')
+  end
+
+  def test_quoted_empty_shell_var_preserved
+    Rubish::Builtins.set_var('myvar', '')
+    execute("printf '%s\\n' before \"$myvar\" after > #{output_file}")
+    assert_equal "before\n\nafter\n", File.read(output_file)
+    Rubish::Builtins.send(:shell_vars).delete('myvar')
+  end
+
+  def test_multiple_unquoted_empty_vars_all_removed
+    ENV['EMPTY1'] = ''
+    ENV['EMPTY2'] = ''
+    execute("printf '%s\\n' start $EMPTY1 $EMPTY2 end > #{output_file}")
+    assert_equal "start\nend\n", File.read(output_file)
+  end
+
+  def test_mixed_empty_and_nonempty_unquoted_vars
+    ENV['EMPTY_VAR'] = ''
+    ENV['FULL_VAR'] = 'middle'
+    execute("printf '%s\\n' start $EMPTY_VAR $FULL_VAR $EMPTY_VAR end > #{output_file}")
+    assert_equal "start\nmiddle\nend\n", File.read(output_file)
+  end
 end

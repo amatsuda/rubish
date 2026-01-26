@@ -115,9 +115,17 @@ module Rubish
         if arg == '$@' || arg == '"$@"'
           return '@positional_params'
         end
-        # Special case: $varname or "$varname" as standalone arg
-        # Check if it's an array and expand accordingly
-        if arg =~ /\A\$([a-zA-Z_][a-zA-Z0-9_]*)\z/ || arg =~ /\A"\$([a-zA-Z_][a-zA-Z0-9_]*)"\z/
+        # Special case: unquoted $varname as standalone arg
+        # In bash, unquoted empty variable expansion is removed (word splitting)
+        # so $empty_var becomes nothing, not an empty string argument
+        if arg =~ /\A\$([a-zA-Z_][a-zA-Z0-9_]*)\z/
+          var_name = $1
+          return "__fetch_var_for_arg_unquoted(#{var_name.inspect})"
+        end
+        # Special case: quoted "$varname" as standalone arg
+        # In bash, quoted empty variable expansion is preserved as empty string
+        # so "$empty_var" becomes "" (one empty string argument)
+        if arg =~ /\A"\$([a-zA-Z_][a-zA-Z0-9_]*)"\z/
           var_name = $1
           return "__fetch_var_for_arg(#{var_name.inspect})"
         end

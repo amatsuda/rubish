@@ -2599,6 +2599,12 @@ module Rubish
       # Then expand variables and globs on each result
       brace_expanded.flat_map do |item|
         expanded = expand_string_content(item)
+        # In bash, when an unquoted variable expands to empty, it's removed from
+        # the argument list (word splitting removes empty words). This is different
+        # from "$var" which preserves the empty string as an argument.
+        # Since we're in the unquoted branch here, remove empty expansions.
+        next [] if expanded.empty?
+
         # Then expand globs if present
         if expanded.match?(/[*?\[]/)
           __glob(expanded)
@@ -2628,6 +2634,10 @@ module Rubish
 
       # Unquoted: expand variables first
       expanded = expand_string_content(arg)
+
+      # In bash, when an unquoted variable expands to empty, it's removed from
+      # the argument list (word splitting removes empty words).
+      return [] if expanded.empty?
 
       # Then expand globs if present
       if expanded.match?(/[*?\[]/)
@@ -4092,9 +4102,9 @@ module Rubish
       Builtins.get_var(var_name) || ''
     end
 
-    # Fetch variable for use as command argument
+    # Fetch variable for use as command argument (quoted context)
     # Returns array if variable is an array (for proper expansion)
-    # Returns string otherwise
+    # Returns string otherwise (empty string is preserved as "$var" keeps empty strings)
     def __fetch_var_for_arg(var_name)
       # Check if it's an array variable first
       if Builtins.array?(var_name)
@@ -4103,6 +4113,24 @@ module Rubish
 
       # Otherwise fetch as regular variable
       __fetch_var(var_name)
+    end
+
+    # Fetch variable for use as command argument (unquoted context)
+    # In bash, unquoted empty variable expansion is removed by word splitting
+    # e.g., `cat $empty_var` becomes `cat` (no arguments), not `cat ""`
+    # Returns array for proper flatten behavior - empty array if value is empty
+    def __fetch_var_for_arg_unquoted(var_name)
+      # Check if it's an array variable first
+      if Builtins.array?(var_name)
+        arr = Builtins.get_array(var_name)
+        # Filter out empty strings from array expansion too
+        return arr.reject(&:empty?)
+      end
+
+      # Otherwise fetch as regular variable
+      value = __fetch_var(var_name)
+      # Return empty array if value is empty (so it gets removed from args)
+      value.empty? ? [] : [value]
     end
 
     def __run_subst(cmd)
