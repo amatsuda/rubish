@@ -7802,6 +7802,7 @@ module Rubish
     # Known help sources for popular commands (command => help invocation)
     # Note: git, ssh, make, man, kill have dedicated completion functions
     HELP_COMMAND_SOURCES = {
+      'aws' => 'aws help',
       'bundle' => 'bundle --help',
       'gem' => 'gem help commands',
       'rails' => 'rails --help',
@@ -7924,8 +7925,11 @@ module Rubish
       subcommands = []
       options = []
 
-      # Remove man page bold formatting (doubled characters like "bbuunnddllee")
-      text = text.gsub(/(.)\x08\1/, '\1')
+      # Remove man page formatting:
+      # - Bold: A\bA (doubled characters like "bbuunnddllee")
+      # - Overstrike: +\bo (bullet points, underscore emphasis)
+      text = text.gsub(/(.)\x08\1/, '\1')  # Bold: keep second char
+      text = text.gsub(/.\x08/, '')         # Overstrike: keep second char (removes first)
       # Remove ANSI escape codes
       text = text.gsub(/\e\[[0-9;]*m/, '')
 
@@ -7938,11 +7942,13 @@ module Rubish
         if line =~ /^(Commands|COMMANDS|Subcommands|SUBCOMMANDS|Available commands):/i ||
            line =~ /commands are:$/i ||
            line =~ /^=+>\s*(Built-in\s+)?commands$/i ||
-           line =~ /^(PRIMARY|UTILITIES|BUNDLE)\s+COMMANDS$/i
+           line =~ /^(PRIMARY|UTILITIES|BUNDLE)\s+COMMANDS$/i ||
+           line =~ /^AVAILABLE SERVICES$/  # AWS CLI style
           in_commands_section = true
           in_options_section = false
           next
-        elsif line =~ /^(Options|OPTIONS|Flags|FLAGS|Global options):/i
+        elsif line =~ /^(Options|OPTIONS|Flags|FLAGS|Global options):/i ||
+              line =~ /^GLOBAL OPTIONS$/  # AWS CLI style
           in_commands_section = false
           in_options_section = true
           next
@@ -7968,6 +7974,9 @@ module Rubish
             subcommands << cmd if cmd.length < 30 && !cmd.include?('=')
           # Man page format: "bundle install(1)"
           elsif line =~ /^\s+\w+\s+([a-z][-a-z0-9_]*)\s*\(\d\)/
+            subcommands << $1
+          # Bullet-point format: "       o service" (AWS CLI style, from man page)
+          elsif line =~ /^\s+o\s+([a-z][-a-z0-9_]+)$/
             subcommands << $1
           end
         elsif !in_options_section
