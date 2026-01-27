@@ -6976,6 +6976,12 @@ module Rubish
             # Filter results by current input (like readline does)
             results.select! { |r| r.start_with?(input) } unless input.empty?
 
+            # Filter out options when completing subcommands
+            # (e.g., rbenv commands returns --version but we don't want to suggest it for "rbenv <tab>")
+            unless input.start_with?('-')
+              results.reject! { |r| r.start_with?('-') }
+            end
+
             # Add prefix/suffix if specified
             if spec[:prefix] || spec[:suffix]
               results.map! { |r| "#{spec[:prefix]}#{r}#{spec[:suffix]}" }
