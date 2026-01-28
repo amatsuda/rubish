@@ -109,23 +109,132 @@ module Rubish
     attr_accessor :script_name, :positional_params, :functions, :lineno
 
     def run
-      setup_job_control
-      setup_reline
-      setup_signals
-      setup_terminal_title
-      Builtins.notify_terminal_of_cwd
-      load_history
-      setup_default_aliases
-      load_config
-      # Enable restricted mode AFTER startup files are sourced
-      # This allows profile/rc files to set PATH and other variables
-      Builtins.enable_restricted_mode if @restricted
+      # Start buffering stdin immediately so typed input during slow startup is preserved
+      start_stdin_buffering
+
+      begin
+        setup_job_control
+        setup_reline
+        setup_signals
+        setup_terminal_title
+        Builtins.notify_terminal_of_cwd
+        load_history
+        setup_default_aliases
+        load_config
+        # Enable restricted mode AFTER startup files are sourced
+        # This allows profile/rc files to set PATH and other variables
+        Builtins.enable_restricted_mode if @restricted
+      ensure
+        # Stop buffering and inject any typed input into the first prompt
+        # This is in ensure block to guarantee terminal is restored even on error
+        inject_buffered_input
+      end
+
       exit_code = catch(:exit) do
         loop { process_line }
       end
       save_history
       load_logout_config
       exit_code
+    end
+
+    # Buffer stdin input during startup so typed characters aren't lost
+    def start_stdin_buffering
+      return unless $stdin.tty?
+
+      @stdin_buffer = +''
+      @stdin_buffering = true
+
+      # Save original terminal settings
+      begin
+        @original_termios = `stty -g`.chomp
+      rescue
+        @original_termios = nil
+      end
+
+      # Start a thread to read stdin in non-blocking mode
+      @stdin_buffer_thread = Thread.new do
+        begin
+          # Put terminal in raw mode to capture all keystrokes
+          system('stty raw -echo') if @original_termios
+
+          while @stdin_buffering
+            # Check if input is available (with short timeout)
+            if IO.select([$stdin], nil, nil, 0.05)
+              begin
+                char = $stdin.read_nonblock(1)
+                @stdin_buffer << char if char
+              rescue IO::WaitReadable, EOFError
+                # No data available or EOF
+              end
+            end
+          end
+        rescue => e
+          # Silently ignore errors in buffering thread
+        ensure
+          # Restore terminal settings
+          system("stty #{@original_termios}") if @original_termios
+        end
+      end
+    end
+
+    # Stop stdin buffering and inject buffered content into Reline
+    def inject_buffered_input
+      # Always restore terminal settings first, even if no thread was started
+      if @original_termios
+        system("stty #{@original_termios}") rescue nil
+        @original_termios = nil
+      end
+
+      # Stop the buffering thread if it's running
+      if @stdin_buffer_thread
+        # Signal the thread to stop
+        @stdin_buffering = false
+
+        begin
+          @stdin_buffer_thread.join(0.2)  # Wait briefly for thread to finish
+        rescue
+          # Ignore join errors
+        end
+
+        begin
+          @stdin_buffer_thread.kill if @stdin_buffer_thread.alive?
+        rescue
+          # Ignore kill errors
+        end
+        @stdin_buffer_thread = nil
+      end
+
+      # If we have buffered input, inject it into the first readline
+      return if @stdin_buffer.nil? || @stdin_buffer.empty?
+
+      buffered = @stdin_buffer.dup
+      @stdin_buffer = nil
+
+      # Handle special characters in buffered input
+      # Remove any carriage returns, keep newlines for multi-command handling
+      buffered.gsub!("\r", "\n")
+
+      # If buffer contains newlines, we have complete commands to execute
+      if buffered.include?("\n")
+        lines = buffered.split("\n", -1)
+        # Last element is the incomplete line (could be empty)
+        incomplete = lines.pop
+
+        # Execute complete lines immediately after first prompt
+        @pending_commands = lines.reject(&:empty?)
+
+        # Set up the incomplete line as initial input
+        buffered = incomplete
+      end
+
+      # Use pre_input_hook to insert buffered text into first readline
+      return if buffered.nil? || buffered.empty?
+
+      Reline.pre_input_hook = -> {
+        Reline.insert_text(buffered)
+        Reline.pre_input_hook = nil  # Only for first prompt
+      }
     end
 
     private
@@ -1818,6 +1927,16 @@ module Rubish
 
       # Check for new mail (before prompt)
       check_mail
+
+      # Execute any commands that were typed during startup (before prompt appeared)
+      if @pending_commands && !@pending_commands.empty?
+        line = @pending_commands.shift
+        # Show the command as if it was typed (with prompt)
+        puts "#{prompt}#{line}"
+        # Execute it
+        execute(line)
+        return
+      end
 
       # Execute PROMPT_COMMAND before displaying prompt
       run_prompt_command
