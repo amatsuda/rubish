@@ -631,6 +631,10 @@ module Rubish
           elsif Command.function?(cmd.name)
             result = Command.call_function(cmd.name, cmd.args)
             exit(result ? 0 : 1)
+          elsif Builtins.builtin?(cmd.name)
+            # Run builtin in forked process (e.g., history | grep)
+            result = Builtins.run(cmd.name, cmd.args)
+            exit(result ? 0 : 1)
           else
             Command.safe_exec(cmd.name, cmd.name, *cmd.args)
           end
