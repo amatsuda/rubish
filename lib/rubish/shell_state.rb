@@ -16,6 +16,9 @@ module Rubish
     # Directory stack state
     attr_accessor :dir_stack
 
+    # Traps state
+    attr_accessor :traps, :original_traps, :current_trapsig
+
     def initialize
       # Variables state
       @shell_vars = {}
@@ -37,6 +40,11 @@ module Rubish
 
       # Directory stack state
       @dir_stack = []
+
+      # Traps state
+      @traps = {}
+      @original_traps = {}
+      @current_trapsig = ''
     end
 
     def clear_variables
@@ -65,6 +73,12 @@ module Rubish
 
     def clear_dir_stack
       @dir_stack.clear
+    end
+
+    def clear_traps
+      @traps.clear
+      @original_traps.clear
+      @current_trapsig = ''
     end
 
     private

@@ -20,9 +20,6 @@ module Rubish
       _upvars _usergroup setopt unsetopt autoload compinit compdef git_ps1 require
     ]).freeze
 
-    @traps = {}
-    @original_traps = {}
-    @current_trapsig = ''  # Signal name when trap handler is executing (for RUBISH_TRAPSIG/BASH_TRAPSIG)
     @disabled_builtins = Set.new  # Set of disabled builtin names
     @dynamic_commands = []  # Array of dynamically loaded builtin names
     @call_stack = []  # Stack of [line_number, function_name, filename] for caller builtin
@@ -63,8 +60,7 @@ module Rubish
 
     class << self
       attr_accessor :current_state
-      attr_reader :traps, :disabled_builtins, :call_stack, :completions, :completion_options, :key_bindings, :readline_variables, :coprocs, :builtin_completion_functions, :named_directories
-      attr_accessor :current_trapsig
+      attr_reader :disabled_builtins, :call_stack, :completions, :completion_options, :key_bindings, :readline_variables, :coprocs, :builtin_completion_functions, :named_directories
 
       # Delegate variables state accessors to current_state for backward compatibility
       def shell_vars; @current_state.shell_vars; end
@@ -86,6 +82,12 @@ module Rubish
 
       # Delegate directory stack state accessor to current_state for backward compatibility
       def dir_stack; @current_state.dir_stack; end
+
+      # Delegate traps state accessors to current_state for backward compatibility
+      def traps; @current_state.traps; end
+      def original_traps; @current_state.original_traps; end
+      def current_trapsig; @current_state.current_trapsig; end
+      def current_trapsig=(val); @current_state.current_trapsig = val; end
       attr_accessor :executor, :script_name_getter, :script_name_setter, :positional_params_getter, :positional_params_setter, :function_checker, :function_remover, :function_lister, :function_getter, :function_caller, :heredoc_content_setter, :command_executor, :current_completion_options
       attr_accessor :history_file_getter, :history_loader, :history_saver, :history_appender, :last_history_line, :history_timestamps
       attr_accessor :source_file_getter, :source_file_setter
@@ -1342,7 +1344,7 @@ module Rubish
     def self.trap(args)
       if args.empty?
         # List all traps
-        @traps.each do |sig, cmd|
+        @current_state.traps.each do |sig, cmd|
           sig_name = sig == 0 ? 'EXIT' : sig
           puts "trap -- #{cmd.inspect} #{sig_name}"
         end
@@ -1374,7 +1376,7 @@ module Rubish
       if args.first == '-p'
         signals = args[1..] || []
         if signals.empty?
-          @traps.each do |sig, cmd|
+          @current_state.traps.each do |sig, cmd|
             sig_name = sig == 0 ? 'EXIT' : sig
             puts "trap -- #{cmd.inspect} #{sig_name}"
           end
@@ -1383,9 +1385,9 @@ module Rubish
             sig = normalize_signal(sig_arg)
             next unless sig
 
-            if @traps.key?(sig)
+            if @current_state.traps.key?(sig)
               sig_name = sig == 0 ? 'EXIT' : sig
-              puts "trap -- #{@traps[sig].inspect} #{sig_name}"
+              puts "trap -- #{@current_state.traps[sig].inspect} #{sig_name}"
             end
           end
         end
@@ -1458,13 +1460,13 @@ module Rubish
       end
 
       # Store the trap command
-      @traps[sig] = command
+      @current_state.traps[sig] = command
 
       # Pseudo-signals are handled by the shell, not the OS
       return true if PSEUDO_SIGNALS.include?(sig)
 
       # Save original handler if not already saved
-      @original_traps[sig] ||= Signal.trap(sig, 'DEFAULT') rescue nil
+      @current_state.original_traps[sig] ||= Signal.trap(sig, 'DEFAULT') rescue nil
 
       if command.empty?
         # Ignore the signal
@@ -1474,11 +1476,11 @@ module Rubish
         # Capture signal name for RUBISH_TRAPSIG/BASH_TRAPSIG
         sig_name = sig.is_a?(Integer) ? Signal.signame(sig) : sig.to_s.sub(/^SIG/, '')
         Signal.trap(sig) do
-          @current_trapsig = sig_name
+          @current_state.current_trapsig = sig_name
           begin
             @executor&.call(command) if @executor
           ensure
-            @current_trapsig = ''
+            @current_state.current_trapsig = ''
           end
         end
       end
@@ -1489,14 +1491,14 @@ module Rubish
     end
 
     def self.reset_trap(sig)
-      @traps.delete(sig)
+      @current_state.traps.delete(sig)
 
       # Pseudo-signals have no OS signal to reset
       return if PSEUDO_SIGNALS.include?(sig)
 
       # Restore original handler
-      if @original_traps.key?(sig)
-        Signal.trap(sig, @original_traps.delete(sig) || 'DEFAULT')
+      if @current_state.original_traps.key?(sig)
+        Signal.trap(sig, @current_state.original_traps.delete(sig) || 'DEFAULT')
       else
         Signal.trap(sig, 'DEFAULT')
       end
@@ -1505,94 +1507,94 @@ module Rubish
     end
 
     def self.exit_traps
-      return unless @traps.key?(0)
+      return unless @current_state.traps.key?(0)
 
-      @current_trapsig = 'EXIT'
+      @current_state.current_trapsig = 'EXIT'
       begin
-        @executor&.call(@traps[0]) if @executor
+        @executor&.call(@current_state.traps[0]) if @executor
       ensure
-        @current_trapsig = ''
+        @current_state.current_trapsig = ''
       end
     end
 
     @in_err_trap = false
 
     def self.err_trap
-      return unless @traps.key?('ERR')
+      return unless @current_state.traps.key?('ERR')
       return if @in_err_trap  # Prevent recursion
 
       @in_err_trap = true
-      @current_trapsig = 'ERR'
+      @current_state.current_trapsig = 'ERR'
       begin
-        @executor&.call(@traps['ERR']) if @executor
+        @executor&.call(@current_state.traps['ERR']) if @executor
       ensure
         @in_err_trap = false
-        @current_trapsig = ''
+        @current_state.current_trapsig = ''
       end
     end
 
     def self.err_trap_set?
-      @traps.key?('ERR') && !@traps['ERR'].empty?
+      @current_state.traps.key?('ERR') && !@current_state.traps['ERR'].empty?
     end
 
     def self.save_and_clear_err_trap
       # Save ERR trap and clear it (for functions/subshells when errtrace is off)
-      saved = @traps.delete('ERR')
+      saved = @current_state.traps.delete('ERR')
       saved
     end
 
     def self.restore_err_trap(saved)
       # Restore a previously saved ERR trap
       if saved
-        @traps['ERR'] = saved
+        @current_state.traps['ERR'] = saved
       end
     end
 
     @in_debug_trap = false
 
     def self.debug_trap
-      return unless @traps.key?('DEBUG')
+      return unless @current_state.traps.key?('DEBUG')
       return if @in_debug_trap  # Prevent recursion
 
       @in_debug_trap = true
-      @current_trapsig = 'DEBUG'
+      @current_state.current_trapsig = 'DEBUG'
       begin
-        @executor&.call(@traps['DEBUG']) if @executor
+        @executor&.call(@current_state.traps['DEBUG']) if @executor
       ensure
         @in_debug_trap = false
-        @current_trapsig = ''
+        @current_state.current_trapsig = ''
       end
     end
 
     def self.debug_trap_set?
-      @traps.key?('DEBUG') && !@traps['DEBUG'].empty?
+      @current_state.traps.key?('DEBUG') && !@current_state.traps['DEBUG'].empty?
     end
 
     @in_return_trap = false
 
     def self.return_trap
-      return unless @traps.key?('RETURN')
+      return unless @current_state.traps.key?('RETURN')
       return if @in_return_trap  # Prevent recursion
 
       @in_return_trap = true
-      @current_trapsig = 'RETURN'
+      @current_state.current_trapsig = 'RETURN'
       begin
-        @executor&.call(@traps['RETURN']) if @executor
+        @executor&.call(@current_state.traps['RETURN']) if @executor
       ensure
         @in_return_trap = false
-        @current_trapsig = ''
+        @current_state.current_trapsig = ''
       end
     end
 
     def self.return_trap_set?
-      @traps.key?('RETURN') && !@traps['RETURN'].empty?
+      @current_state.traps.key?('RETURN') && !@current_state.traps['RETURN'].empty?
     end
 
     def self.save_and_clear_functrace_traps
       # Save DEBUG and RETURN traps and clear them (for functions when functrace is off)
       saved = {}
-      saved['DEBUG'] = @traps.delete('DEBUG') if @traps.key?('DEBUG')
-      saved['RETURN'] = @traps.delete('RETURN') if @traps.key?('RETURN')
+      saved['DEBUG'] = @current_state.traps.delete('DEBUG') if @current_state.traps.key?('DEBUG')
+      saved['RETURN'] = @current_state.traps.delete('RETURN') if @current_state.traps.key?('RETURN')
       saved.empty? ? nil : saved
     end
 
@@ -1600,16 +1602,16 @@ module Rubish
       # Restore previously saved DEBUG and RETURN traps
       return unless saved
 
-      @traps['DEBUG'] = saved['DEBUG'] if saved['DEBUG']
-      @traps['RETURN'] = saved['RETURN'] if saved['RETURN']
+      @current_state.traps['DEBUG'] = saved['DEBUG'] if saved['DEBUG']
+      @current_state.traps['RETURN'] = saved['RETURN'] if saved['RETURN']
     end
 
     def self.clear_traps
-      @traps.each_key do |sig|
+      @current_state.traps.each_key do |sig|
         reset_trap(sig) unless PSEUDO_SIGNALS.include?(sig)
       end
-      @traps.clear
-      @original_traps.clear
+      @current_state.traps.clear
+      @current_state.original_traps.clear
     end
 
     def self.getopts(args)
