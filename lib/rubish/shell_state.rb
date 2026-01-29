@@ -22,6 +22,12 @@ module Rubish
     # Completion state
     attr_accessor :completions, :completion_options, :current_completion_options
 
+    # Key bindings state
+    attr_accessor :key_bindings, :readline_variables
+
+    # History state
+    attr_accessor :history_timestamps
+
     def initialize
       # Variables state
       @shell_vars = {}
@@ -53,6 +59,13 @@ module Rubish
       @completions = {}
       @completion_options = {}
       @current_completion_options = Set.new
+
+      # Key bindings state
+      @key_bindings = {}
+      @readline_variables = {}
+
+      # History state
+      @history_timestamps = {}
     end
 
     def clear_variables
@@ -93,6 +106,15 @@ module Rubish
       @completions.clear
       @completion_options.clear
       @current_completion_options.clear
+    end
+
+    def clear_key_bindings
+      @key_bindings.clear
+      @readline_variables.clear
+    end
+
+    def clear_history_timestamps
+      @history_timestamps.clear
     end
 
     private

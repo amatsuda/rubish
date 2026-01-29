@@ -23,8 +23,7 @@ module Rubish
     @disabled_builtins = Set.new  # Set of disabled builtin names
     @dynamic_commands = []  # Array of dynamically loaded builtin names
     @call_stack = []  # Stack of [line_number, function_name, filename] for caller builtin
-    @key_bindings = {}  # Hash of keyseq to function/macro/command
-    @readline_variables = {}  # Hash of readline variable names to values
+    # @key_bindings and @readline_variables moved to ShellState
     @bind_x_counter = 0  # Counter for generating unique bind -x method names
     @bind_x_executor = nil  # Callback to execute bind -x shell commands
     @coprocs = {}  # Hash of coproc names to {pid:, read_fd:, write_fd:, reader:, writer:}
@@ -47,7 +46,7 @@ module Rubish
     @history_saver = nil  # Saves history to file
     @history_appender = nil  # Appends new entries to file
     @last_history_line = 0  # Track last line read for -n option
-    @history_timestamps = {}  # Timestamps for history entries (index => Time)
+    # @history_timestamps moved to ShellState
     @source_file_getter = nil  # Gets current source file for RUBISH_SOURCE
     @source_file_setter = nil  # Sets current source file for RUBISH_SOURCE
     @lineno_getter = nil  # Gets current line number for LINENO
@@ -57,7 +56,7 @@ module Rubish
 
     class << self
       attr_accessor :current_state
-      attr_reader :disabled_builtins, :call_stack, :key_bindings, :readline_variables, :coprocs, :builtin_completion_functions, :named_directories
+      attr_reader :disabled_builtins, :call_stack, :coprocs, :builtin_completion_functions, :named_directories
 
       # Delegate variables state accessors to current_state for backward compatibility
       def shell_vars; @current_state.shell_vars; end
@@ -91,8 +90,15 @@ module Rubish
       def completion_options; @current_state.completion_options; end
       def current_completion_options; @current_state.current_completion_options; end
       def current_completion_options=(val); @current_state.current_completion_options = val; end
+
+      # Delegate key bindings state accessors to current_state for backward compatibility
+      def key_bindings; @current_state.key_bindings; end
+      def readline_variables; @current_state.readline_variables; end
+
+      # Delegate history state accessor to current_state for backward compatibility
+      def history_timestamps; @current_state.history_timestamps; end
       attr_accessor :executor, :script_name_getter, :script_name_setter, :positional_params_getter, :positional_params_setter, :function_checker, :function_remover, :function_lister, :function_getter, :function_caller, :heredoc_content_setter, :command_executor
-      attr_accessor :history_file_getter, :history_loader, :history_saver, :history_appender, :last_history_line, :history_timestamps
+      attr_accessor :history_file_getter, :history_loader, :history_saver, :history_appender, :last_history_line
       attr_accessor :source_file_getter, :source_file_setter
       attr_accessor :lineno_getter
       attr_accessor :bash_argv0_unsetter
@@ -2683,32 +2689,33 @@ module Rubish
 
     # Record timestamp for a history entry
     def self.record_history_timestamp(index, time = Time.now)
-      @history_timestamps[index] = time
+      @current_state.history_timestamps[index] = time
     end
 
     # Get timestamp for a history entry
     def self.get_history_timestamp(index)
-      @history_timestamps[index]
+      @current_state.history_timestamps[index]
     end
 
     # Clear all history timestamps
     def self.clear_history_timestamps
-      @history_timestamps.clear
+      @current_state.history_timestamps.clear
     end
 
     # Remove timestamp for a specific index and reindex remaining
     def self.remove_history_timestamp(index)
-      @history_timestamps.delete(index)
+      @current_state.history_timestamps.delete(index)
       # Reindex: shift all timestamps after deleted index down by 1
       new_timestamps = {}
-      @history_timestamps.each do |idx, time|
+      @current_state.history_timestamps.each do |idx, time|
         if idx > index
           new_timestamps[idx - 1] = time
         else
           new_timestamps[idx] = time
         end
       end
-      @history_timestamps = new_timestamps
+      @current_state.history_timestamps.clear
+      @current_state.history_timestamps.merge!(new_timestamps)
     end
 
     def self.history(args)
@@ -4988,7 +4995,7 @@ module Rubish
       # Remove binding
       if remove_key
         keyseq = parse_bindkey_keyseq(remove_key)
-        @key_bindings.delete(keyseq)
+        @current_state.key_bindings.delete(keyseq)
         return true
       end
 
@@ -5002,7 +5009,7 @@ module Rubish
       # One arg - show binding for that key
       if remaining_args.length == 1
         keyseq = parse_bindkey_keyseq(remaining_args[0])
-        binding = @key_bindings[keyseq]
+        binding = @current_state.key_bindings[keyseq]
         if binding
           puts "\"#{format_bindkey_keyseq(keyseq)}\" #{binding[:value]}"
         else
@@ -5017,10 +5024,10 @@ module Rubish
 
       if macro_binding
         # -s: bind to macro (string output)
-        @key_bindings[keyseq] = {type: :macro, value: parse_bindkey_keyseq(value), keymap: keymap || 'main'}
+        @current_state.key_bindings[keyseq] = {type: :macro, value: parse_bindkey_keyseq(value), keymap: keymap || 'main'}
       else
         # Bind to widget (function)
-        @key_bindings[keyseq] = {type: :function, value: value, keymap: keymap || 'main'}
+        @current_state.key_bindings[keyseq] = {type: :function, value: value, keymap: keymap || 'main'}
       end
 
       true
@@ -5128,7 +5135,7 @@ module Rubish
 
     # List all key bindings in bindkey format
     def self.list_bindkey_bindings(keymap = nil)
-      if @key_bindings.empty?
+      if @current_state.key_bindings.empty?
         # Show some default bindings
         puts '"^A" beginning-of-line'
         puts '"^E" end-of-line'
@@ -5138,7 +5145,7 @@ module Rubish
         return true
       end
 
-      @key_bindings.each do |keyseq, binding|
+      @current_state.key_bindings.each do |keyseq, binding|
         next if keymap && binding[:keymap] != keymap
 
         formatted_key = format_bindkey_keyseq(keyseq)
@@ -8784,7 +8791,7 @@ module Rubish
           puts "\"#{escape_keyseq(keyseq)}\": #{action}"
         end
         # Then show any additional bindings from @key_bindings
-        @key_bindings.each do |keyseq, binding|
+        @current_state.key_bindings.each do |keyseq, binding|
           next if binding[:type] == :macro || binding[:type] == :command
 
           puts "\"#{escape_keyseq(keyseq)}\": #{binding[:value]}"
@@ -8799,7 +8806,7 @@ module Rubish
           puts "#{escape_keyseq(keyseq)} can be found in #{action}."
         end
         # Then show any additional bindings from @key_bindings
-        @key_bindings.each do |keyseq, binding|
+        @current_state.key_bindings.each do |keyseq, binding|
           next if binding[:type] == :macro || binding[:type] == :command
 
           puts "#{escape_keyseq(keyseq)} can be found in #{binding[:value]}."
@@ -8809,7 +8816,7 @@ module Rubish
 
       # Print macros in reusable format
       if print_macros_readable
-        @key_bindings.each do |keyseq, binding|
+        @current_state.key_bindings.each do |keyseq, binding|
           next unless binding[:type] == :macro
 
           puts "\"#{escape_keyseq(keyseq)}\": \"#{binding[:value]}\""
@@ -8819,7 +8826,7 @@ module Rubish
 
       # Print macros
       if print_macros
-        @key_bindings.each do |keyseq, binding|
+        @current_state.key_bindings.each do |keyseq, binding|
           next unless binding[:type] == :macro
 
           puts "#{escape_keyseq(keyseq)} outputs #{binding[:value]}"
@@ -8847,7 +8854,7 @@ module Rubish
 
       # Print shell command bindings
       if print_shell_bindings
-        @key_bindings.each do |keyseq, binding|
+        @current_state.key_bindings.each do |keyseq, binding|
           next unless binding[:type] == :command
 
           puts "\"#{escape_keyseq(keyseq)}\": \"#{binding[:value]}\""
@@ -8858,7 +8865,7 @@ module Rubish
       # Query which keys invoke a function
       if query_function
         found = false
-        @key_bindings.each do |keyseq, binding|
+        @current_state.key_bindings.each do |keyseq, binding|
           if binding[:value] == query_function && binding[:type] == :function
             puts "#{query_function} can be invoked via \"#{escape_keyseq(keyseq)}\"."
             found = true
@@ -8870,13 +8877,13 @@ module Rubish
 
       # Unbind all keys for a function
       if unbind_function
-        @key_bindings.delete_if { |_, binding| binding[:value] == unbind_function }
+        @current_state.key_bindings.delete_if { |_, binding| binding[:value] == unbind_function }
         return true
       end
 
       # Remove binding for keyseq
       if remove_keyseq
-        @key_bindings.delete(remove_keyseq)
+        @current_state.key_bindings.delete(remove_keyseq)
         return true
       end
 
@@ -8913,7 +8920,7 @@ module Rubish
           keyseq, command = shell_command_binding.split(':', 2)
           keyseq = unescape_keyseq(keyseq.delete('"'))
           command = command.delete('"').strip
-          @key_bindings[keyseq] = {type: :command, value: command, keymap: keymap}
+          @current_state.key_bindings[keyseq] = {type: :command, value: command, keymap: keymap}
           # Register with Reline for actual execution
           register_bind_x_with_reline(keyseq, command, keymap)
         else
@@ -8949,10 +8956,10 @@ module Rubish
       # Determine if it's a function or macro
       if value.start_with?('"') && value.end_with?('"')
         # Macro
-        @key_bindings[keyseq] = {type: :macro, value: value[1..-2], keymap: keymap}
+        @current_state.key_bindings[keyseq] = {type: :macro, value: value[1..-2], keymap: keymap}
       else
         # Function
-        @key_bindings[keyseq] = {type: :function, value: value, keymap: keymap}
+        @current_state.key_bindings[keyseq] = {type: :function, value: value, keymap: keymap}
       end
     end
 
@@ -9089,12 +9096,12 @@ module Rubish
     end
 
     def self.get_key_binding(keyseq)
-      @key_bindings[keyseq]
+      @current_state.key_bindings[keyseq]
     end
 
     def self.clear_key_bindings
-      @key_bindings.clear
-      @readline_variables.clear
+      @current_state.key_bindings.clear
+      @current_state.readline_variables.clear
     end
 
     # Register a bind -x shell command with Reline for actual execution
@@ -9106,7 +9113,7 @@ module Rubish
       @bind_x_counter += 1
 
       # Store the command in the binding for lookup
-      @key_bindings[keyseq][:method_name] = method_name
+      @current_state.key_bindings[keyseq][:method_name] = method_name
 
       # Define the method on Reline::LineEditor
       # We need to capture 'command' and 'self' (Builtins) in the closure
@@ -9170,7 +9177,7 @@ module Rubish
 
     # Apply a readline variable to Reline (if applicable)
     def self.apply_readline_variable(var, value)
-      @readline_variables[var] = value
+      @current_state.readline_variables[var] = value
 
       # Sync with Reline where possible
       begin
@@ -9216,7 +9223,7 @@ module Rubish
       rescue
         # Fall through to stored value
       end
-      @readline_variables[var]
+      @current_state.readline_variables[var]
     end
 
     def self.hash(args)
