@@ -28,27 +28,27 @@ class TestLogout < Test::Unit::TestCase
   # Exit behavior tests
   def test_logout_throws_exit
     assert_throw(:exit) do
-      Rubish::Builtins.run_logout([])
+      Rubish::Builtins.logout([])
     end
   end
 
   def test_logout_exits_with_zero_by_default
     exit_code = catch(:exit) do
-      Rubish::Builtins.run_logout([])
+      Rubish::Builtins.logout([])
     end
     assert_equal 0, exit_code
   end
 
   def test_logout_exits_with_specified_code
     exit_code = catch(:exit) do
-      Rubish::Builtins.run_logout(['42'])
+      Rubish::Builtins.logout(['42'])
     end
     assert_equal 42, exit_code
   end
 
   def test_logout_exits_with_negative_code
     exit_code = catch(:exit) do
-      Rubish::Builtins.run_logout(['-1'])
+      Rubish::Builtins.logout(['-1'])
     end
     assert_equal(-1, exit_code)
   end
@@ -58,7 +58,7 @@ class TestLogout < Test::Unit::TestCase
     Rubish::Builtins.shell_options['login_shell'] = false
 
     output = capture_stderr do
-      catch(:exit) { Rubish::Builtins.run_logout([]) }
+      catch(:exit) { Rubish::Builtins.logout([]) }
     end
 
     assert_match(/not login shell/, output)
@@ -69,7 +69,7 @@ class TestLogout < Test::Unit::TestCase
     Rubish::Builtins.shell_options['login_shell'] = true
 
     output = capture_stderr do
-      catch(:exit) { Rubish::Builtins.run_logout([]) }
+      catch(:exit) { Rubish::Builtins.logout([]) }
     end
 
     assert_equal '', output
@@ -80,7 +80,7 @@ class TestLogout < Test::Unit::TestCase
 
     $stderr = StringIO.new  # Suppress warning
     exit_code = catch(:exit) do
-      Rubish::Builtins.run_logout(['5'])
+      Rubish::Builtins.logout(['5'])
     end
 
     assert_equal 5, exit_code
@@ -96,7 +96,7 @@ class TestLogout < Test::Unit::TestCase
     Rubish::Builtins.executor = ->(cmd) { trap_executed = true if cmd == 'echo trap' }
 
     $stderr = StringIO.new  # Suppress any warnings
-    catch(:exit) { Rubish::Builtins.run_logout([]) }
+    catch(:exit) { Rubish::Builtins.logout([]) }
 
     assert_true trap_executed
   ensure

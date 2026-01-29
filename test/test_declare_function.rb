@@ -44,7 +44,7 @@ class TestDeclareFunction < Test::Unit::TestCase
 
   def test_declare_f_shows_function_definition
     execute('testfn() { echo hello world; }')
-    output = capture_stdout { Rubish::Builtins.run_declare(['-f', 'testfn']) }
+    output = capture_stdout { Rubish::Builtins.declare(['-f', 'testfn']) }
     assert_match(/testfn\(\) \{/, output)
     assert_match(/echo hello world/, output)
     assert_match(/\}/, output)
@@ -53,13 +53,13 @@ class TestDeclareFunction < Test::Unit::TestCase
   def test_declare_f_all_functions
     execute('fn1() { echo one; }')
     execute('fn2() { echo two; }')
-    output = capture_stdout { Rubish::Builtins.run_declare(['-f']) }
+    output = capture_stdout { Rubish::Builtins.declare(['-f']) }
     assert_match(/fn1\(\) \{/, output)
     assert_match(/fn2\(\) \{/, output)
   end
 
   def test_declare_f_nonexistent_function
-    output = capture_stdout { Rubish::Builtins.run_declare(['-f', 'nonexistent']) }
+    output = capture_stdout { Rubish::Builtins.declare(['-f', 'nonexistent']) }
     assert_match(/not found/, output)
   end
 
@@ -67,7 +67,7 @@ class TestDeclareFunction < Test::Unit::TestCase
 
   def test_declare_F_shows_name_only
     execute('myfunc() { echo test; }')
-    output = capture_stdout { Rubish::Builtins.run_declare(['-F', 'myfunc']) }
+    output = capture_stdout { Rubish::Builtins.declare(['-F', 'myfunc']) }
     assert_match(/declare -f myfunc/, output)
     # Should not show the body
     refute_match(/echo test/, output)
@@ -76,7 +76,7 @@ class TestDeclareFunction < Test::Unit::TestCase
   def test_declare_F_all_functions
     execute('fn1() { echo one; }')
     execute('fn2() { echo two; }')
-    output = capture_stdout { Rubish::Builtins.run_declare(['-F']) }
+    output = capture_stdout { Rubish::Builtins.declare(['-F']) }
     assert_match(/declare -f fn1/, output)
     assert_match(/declare -f fn2/, output)
     # Should not show bodies
@@ -85,7 +85,7 @@ class TestDeclareFunction < Test::Unit::TestCase
   end
 
   def test_declare_F_nonexistent_function
-    output = capture_stdout { Rubish::Builtins.run_declare(['-F', 'nonexistent']) }
+    output = capture_stdout { Rubish::Builtins.declare(['-F', 'nonexistent']) }
     assert_match(/not found/, output)
   end
 

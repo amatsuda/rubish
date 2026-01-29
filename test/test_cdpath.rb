@@ -38,7 +38,7 @@ class TestCDPATH < Test::Unit::TestCase
     Dir.chdir(@tempdir)
     ENV.delete('CDPATH')
 
-    result = Rubish::Builtins.run_cd(['dir1'])
+    result = Rubish::Builtins.cd(['dir1'])
 
     assert result
     assert_equal real(File.join(@tempdir, 'dir1')), real(Dir.pwd)
@@ -48,7 +48,7 @@ class TestCDPATH < Test::Unit::TestCase
     Dir.chdir(@tempdir)
     ENV['CDPATH'] = File.join(@tempdir, 'search1')
 
-    output = capture_output { Rubish::Builtins.run_cd(['target']) }
+    output = capture_output { Rubish::Builtins.cd(['target']) }
 
     assert_equal real(File.join(@tempdir, 'search1', 'target')), real(Dir.pwd)
     # Should print the directory when found via CDPATH
@@ -61,7 +61,7 @@ class TestCDPATH < Test::Unit::TestCase
     FileUtils.mkdir_p(File.join(@tempdir, 'target'))
     ENV['CDPATH'] = File.join(@tempdir, 'search1')
 
-    output = capture_output { Rubish::Builtins.run_cd(['target']) }
+    output = capture_output { Rubish::Builtins.cd(['target']) }
 
     # Should use current directory's target, not CDPATH
     assert_equal real(File.join(@tempdir, 'target')), real(Dir.pwd)
@@ -74,7 +74,7 @@ class TestCDPATH < Test::Unit::TestCase
     # Both search1 and search2 have 'target'
     ENV['CDPATH'] = "#{File.join(@tempdir, 'search1')}:#{File.join(@tempdir, 'search2')}"
 
-    Rubish::Builtins.run_cd(['target'])
+    Rubish::Builtins.cd(['target'])
 
     # Should find in search1 first
     assert_equal real(File.join(@tempdir, 'search1', 'target')), real(Dir.pwd)
@@ -85,7 +85,7 @@ class TestCDPATH < Test::Unit::TestCase
     # Only search2 has 'other'
     ENV['CDPATH'] = "#{File.join(@tempdir, 'search1')}:#{File.join(@tempdir, 'search2')}"
 
-    Rubish::Builtins.run_cd(['other'])
+    Rubish::Builtins.cd(['other'])
 
     assert_equal real(File.join(@tempdir, 'search2', 'other')), real(Dir.pwd)
   end
@@ -96,7 +96,7 @@ class TestCDPATH < Test::Unit::TestCase
     ENV['CDPATH'] = ":#{File.join(@tempdir, 'search1')}"
 
     # dir1 exists in current directory
-    output = capture_output { Rubish::Builtins.run_cd(['dir1']) }
+    output = capture_output { Rubish::Builtins.cd(['dir1']) }
 
     assert_equal real(File.join(@tempdir, 'dir1')), real(Dir.pwd)
     # Empty path entry found it, so no output (same as current dir)
@@ -110,7 +110,7 @@ class TestCDPATH < Test::Unit::TestCase
     ENV['CDPATH'] = '/nonexistent'
     target = File.join(@tempdir, 'dir1')
 
-    Rubish::Builtins.run_cd([target])
+    Rubish::Builtins.cd([target])
 
     assert_equal real(target), real(Dir.pwd)
   end
@@ -121,7 +121,7 @@ class TestCDPATH < Test::Unit::TestCase
     Dir.chdir(@tempdir)
     ENV['CDPATH'] = File.join(@tempdir, 'search1')
 
-    Rubish::Builtins.run_cd(['./dir1'])
+    Rubish::Builtins.cd(['./dir1'])
 
     assert_equal real(File.join(@tempdir, 'dir1')), real(Dir.pwd)
   end
@@ -130,7 +130,7 @@ class TestCDPATH < Test::Unit::TestCase
     Dir.chdir(File.join(@tempdir, 'dir1'))
     ENV['CDPATH'] = '/nonexistent'
 
-    Rubish::Builtins.run_cd(['../dir2'])
+    Rubish::Builtins.cd(['../dir2'])
 
     assert_equal real(File.join(@tempdir, 'dir2')), real(Dir.pwd)
   end
@@ -139,7 +139,7 @@ class TestCDPATH < Test::Unit::TestCase
     Dir.chdir(@tempdir)
     ENV['CDPATH'] = '/nonexistent'
 
-    Rubish::Builtins.run_cd(['.'])
+    Rubish::Builtins.cd(['.'])
 
     assert_equal real(@tempdir), real(Dir.pwd)
   end
@@ -148,7 +148,7 @@ class TestCDPATH < Test::Unit::TestCase
     Dir.chdir(File.join(@tempdir, 'dir1'))
     ENV['CDPATH'] = '/nonexistent'
 
-    Rubish::Builtins.run_cd(['..'])
+    Rubish::Builtins.cd(['..'])
 
     assert_equal real(@tempdir), real(Dir.pwd)
   end
@@ -159,7 +159,7 @@ class TestCDPATH < Test::Unit::TestCase
     Dir.chdir(@tempdir)
     ENV['CDPATH'] = File.join(@tempdir, 'search1')
 
-    Rubish::Builtins.run_cd(['-P', 'target'])
+    Rubish::Builtins.cd(['-P', 'target'])
 
     # Should resolve to physical path
     assert_equal real(File.join(@tempdir, 'search1', 'target')), real(Dir.pwd)
@@ -171,7 +171,7 @@ class TestCDPATH < Test::Unit::TestCase
     Dir.chdir(@tempdir)
     ENV['CDPATH'] = File.join(@tempdir, 'search1')
 
-    result = Rubish::Builtins.run_cd(['nonexistent'])
+    result = Rubish::Builtins.cd(['nonexistent'])
 
     assert_equal false, result
   end
@@ -207,7 +207,7 @@ class TestCDPATH < Test::Unit::TestCase
     Dir.chdir(dir1)
     ENV['OLDPWD'] = dir2
 
-    output = capture_output { Rubish::Builtins.run_cd(['-']) }
+    output = capture_output { Rubish::Builtins.cd(['-']) }
 
     assert_equal real(dir2), real(Dir.pwd)
     # cd - should print the new directory
@@ -223,7 +223,7 @@ class TestCDPATH < Test::Unit::TestCase
     ENV['PWD'] = Dir.pwd  # Ensure PWD is set correctly
     ENV['OLDPWD'] = dir2
 
-    Rubish::Builtins.run_cd(['-'])
+    Rubish::Builtins.cd(['-'])
 
     # OLDPWD should now be the previous directory (dir1)
     assert_equal real(dir1), real(ENV['OLDPWD'])
@@ -239,15 +239,15 @@ class TestCDPATH < Test::Unit::TestCase
     ENV['OLDPWD'] = dir2
 
     # First cd - goes to dir2
-    Rubish::Builtins.run_cd(['-'])
+    Rubish::Builtins.cd(['-'])
     assert_equal real(dir2), real(Dir.pwd)
 
     # Second cd - goes back to dir1
-    Rubish::Builtins.run_cd(['-'])
+    Rubish::Builtins.cd(['-'])
     assert_equal real(dir1), real(Dir.pwd)
 
     # Third cd - goes back to dir2
-    Rubish::Builtins.run_cd(['-'])
+    Rubish::Builtins.cd(['-'])
     assert_equal real(dir2), real(Dir.pwd)
   end
 
@@ -255,7 +255,7 @@ class TestCDPATH < Test::Unit::TestCase
     Dir.chdir(@tempdir)
     ENV.delete('OLDPWD')
 
-    stderr_output = capture_stderr { result = Rubish::Builtins.run_cd(['-']) }
+    stderr_output = capture_stderr { result = Rubish::Builtins.cd(['-']) }
 
     assert_match(/OLDPWD not set/, stderr_output)
   end
@@ -264,7 +264,7 @@ class TestCDPATH < Test::Unit::TestCase
     Dir.chdir(@tempdir)
     ENV['OLDPWD'] = ''
 
-    stderr_output = capture_stderr { Rubish::Builtins.run_cd(['-']) }
+    stderr_output = capture_stderr { Rubish::Builtins.cd(['-']) }
 
     assert_match(/OLDPWD not set/, stderr_output)
   end
@@ -291,7 +291,7 @@ class TestCDPATH < Test::Unit::TestCase
     Dir.chdir(dir1)
     ENV['OLDPWD'] = dir2
 
-    Rubish::Builtins.run_cd(['-P', '-'])
+    Rubish::Builtins.cd(['-P', '-'])
 
     assert_equal real(dir2), real(Dir.pwd)
   end

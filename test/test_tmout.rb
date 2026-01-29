@@ -53,7 +53,7 @@ class TestTMOUT < Test::Unit::TestCase
 
     File.open('input.txt', 'r') do |f|
       $stdin = f
-      result = Rubish::Builtins.run_read(['var'])
+      result = Rubish::Builtins.read(['var'])
       $stdin = STDIN
       assert_equal true, result
       assert_equal 'hello', ENV['var']
@@ -74,7 +74,7 @@ class TestTMOUT < Test::Unit::TestCase
 
     original_stdin = $stdin
     $stdin = read_io
-    result = Rubish::Builtins.run_read(['var'])
+    result = Rubish::Builtins.read(['var'])
     $stdin = original_stdin
 
     assert_equal false, result
@@ -95,7 +95,7 @@ class TestTMOUT < Test::Unit::TestCase
 
     original_stdin = $stdin
     $stdin = read_io
-    result = Rubish::Builtins.run_read(['-t', '0.1', 'var'])
+    result = Rubish::Builtins.read(['-t', '0.1', 'var'])
     $stdin = original_stdin
     elapsed = Time.now - start_time
 
@@ -110,7 +110,7 @@ class TestTMOUT < Test::Unit::TestCase
 
     File.open('input.txt', 'r') do |f|
       $stdin = f
-      result = Rubish::Builtins.run_read(['var'])
+      result = Rubish::Builtins.read(['var'])
       $stdin = STDIN
       assert_equal true, result
       assert_equal 'data', ENV['var']
@@ -123,7 +123,7 @@ class TestTMOUT < Test::Unit::TestCase
 
     File.open('input.txt', 'r') do |f|
       $stdin = f
-      result = Rubish::Builtins.run_read(['var'])
+      result = Rubish::Builtins.read(['var'])
       $stdin = STDIN
       assert_equal true, result
       assert_equal 'value', ENV['var']
@@ -136,7 +136,7 @@ class TestTMOUT < Test::Unit::TestCase
 
     File.open('input.txt', 'r') do |f|
       $stdin = f
-      result = Rubish::Builtins.run_read(['-n', '3', 'var'])
+      result = Rubish::Builtins.read(['-n', '3', 'var'])
       $stdin = STDIN
       assert_equal true, result
       assert_equal 'abc', ENV['var']
@@ -149,7 +149,7 @@ class TestTMOUT < Test::Unit::TestCase
 
     File.open('input.txt', 'r') do |f|
       $stdin = f
-      result = Rubish::Builtins.run_read(['-a', 'arr'])
+      result = Rubish::Builtins.read(['-a', 'arr'])
       $stdin = STDIN
       assert_equal true, result
       assert_equal '3', ENV['arr_LENGTH']
@@ -164,7 +164,7 @@ class TestTMOUT < Test::Unit::TestCase
 
     File.open('input.txt', 'r') do |f|
       $stdin = f
-      result = Rubish::Builtins.run_read(['var'])
+      result = Rubish::Builtins.read(['var'])
       $stdin = STDIN
       assert_equal true, result
       assert_equal 'test', ENV['var']

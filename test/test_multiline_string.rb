@@ -124,7 +124,7 @@ class TestMultilineString < Test::Unit::TestCase
       line2'
     SCRIPT
 
-    Rubish::Builtins.run_source([script_file])
+    Rubish::Builtins.source([script_file])
     assert_equal "line1\nline2", get_shell_var('X')
   end
 
@@ -135,7 +135,7 @@ class TestMultilineString < Test::Unit::TestCase
       $NAME"
     SCRIPT
 
-    Rubish::Builtins.run_source([script_file])
+    Rubish::Builtins.source([script_file])
     assert_equal "Hello\nWorld", get_shell_var('MSG')
   end
 
@@ -147,7 +147,7 @@ class TestMultilineString < Test::Unit::TestCase
     SCRIPT
 
     output = capture_stdout do
-      Rubish::Builtins.run_source([script_file])
+      Rubish::Builtins.source([script_file])
     end
     assert_equal "hello\nworld\n", output
   end
@@ -164,7 +164,7 @@ class TestMultilineString < Test::Unit::TestCase
     SCRIPT
 
     output = capture_stdout do
-      Rubish::Builtins.run_source([script_file])
+      Rubish::Builtins.source([script_file])
     end
     assert_equal "line1\nline2\n", output
   end
@@ -183,7 +183,7 @@ class TestMultilineString < Test::Unit::TestCase
       rbenv shell
     SCRIPT
 
-    Rubish::Builtins.run_source([script_file])
+    Rubish::Builtins.source([script_file])
     assert_equal '2.7.8', get_shell_var('RBENV_VERSION')
     assert_equal 'ruby-dev', get_shell_var('RBENV_VERSION_OLD')
   end
@@ -213,7 +213,7 @@ class TestMultilineString < Test::Unit::TestCase
       line'
     SCRIPT
 
-    Rubish::Builtins.run_source([script_file])
+    Rubish::Builtins.source([script_file])
     assert_equal "first\nline", get_shell_var('A')
     assert_equal "second\nline", get_shell_var('B')
   end
@@ -231,7 +231,7 @@ class TestMultilineString < Test::Unit::TestCase
 
     stderr = capture_stderr do
       output = capture_stdout do
-        Rubish::Builtins.run_source([script_file])
+        Rubish::Builtins.source([script_file])
       end
       assert_equal "one two\n", output
     end
@@ -244,7 +244,7 @@ class TestMultilineString < Test::Unit::TestCase
     File.write(script_file, "X='unclosed")
 
     stderr = capture_stderr do
-      Rubish::Builtins.run_source([script_file])
+      Rubish::Builtins.source([script_file])
     end
     assert_match(/unclosed quote/, stderr)
   end

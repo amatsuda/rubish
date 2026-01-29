@@ -27,7 +27,7 @@ class TestHistoryBuiltin < Test::Unit::TestCase
     Reline::HISTORY << 'pwd'
     Reline::HISTORY << 'echo hello'
 
-    output = capture_output { Rubish::Builtins.run_history([]) }
+    output = capture_output { Rubish::Builtins.history([]) }
 
     assert_match(/1  ls/, output)
     assert_match(/2  pwd/, output)
@@ -41,7 +41,7 @@ class TestHistoryBuiltin < Test::Unit::TestCase
     Reline::HISTORY << 'cmd4'
     Reline::HISTORY << 'cmd5'
 
-    output = capture_output { Rubish::Builtins.run_history(['3']) }
+    output = capture_output { Rubish::Builtins.history(['3']) }
 
     assert_no_match(/cmd1/, output)
     assert_no_match(/cmd2/, output)
@@ -54,7 +54,7 @@ class TestHistoryBuiltin < Test::Unit::TestCase
     Reline::HISTORY << 'only'
     Reline::HISTORY << 'two'
 
-    output = capture_output { Rubish::Builtins.run_history(['10']) }
+    output = capture_output { Rubish::Builtins.history(['10']) }
 
     assert_match(/1  only/, output)
     assert_match(/2  two/, output)
@@ -66,7 +66,7 @@ class TestHistoryBuiltin < Test::Unit::TestCase
     Reline::HISTORY << 'ls'
     Reline::HISTORY << 'pwd'
 
-    result = Rubish::Builtins.run_history(['-c'])
+    result = Rubish::Builtins.history(['-c'])
 
     assert result
     assert_equal 0, Reline::HISTORY.size
@@ -79,7 +79,7 @@ class TestHistoryBuiltin < Test::Unit::TestCase
     Reline::HISTORY << 'second'
     Reline::HISTORY << 'third'
 
-    result = Rubish::Builtins.run_history(['-d', '2'])
+    result = Rubish::Builtins.history(['-d', '2'])
 
     assert result
     assert_equal 2, Reline::HISTORY.size
@@ -90,7 +90,7 @@ class TestHistoryBuiltin < Test::Unit::TestCase
     Reline::HISTORY << 'first'
     Reline::HISTORY << 'second'
 
-    Rubish::Builtins.run_history(['-d', '1'])
+    Rubish::Builtins.history(['-d', '1'])
 
     assert_equal ['second'], Reline::HISTORY.to_a
   end
@@ -99,7 +99,7 @@ class TestHistoryBuiltin < Test::Unit::TestCase
     Reline::HISTORY << 'first'
     Reline::HISTORY << 'second'
 
-    Rubish::Builtins.run_history(['-d', '2'])
+    Rubish::Builtins.history(['-d', '2'])
 
     assert_equal ['first'], Reline::HISTORY.to_a
   end
@@ -107,13 +107,13 @@ class TestHistoryBuiltin < Test::Unit::TestCase
   def test_history_delete_out_of_range
     Reline::HISTORY << 'only'
 
-    stderr = capture_stderr { result = Rubish::Builtins.run_history(['-d', '5']) }
+    stderr = capture_stderr { result = Rubish::Builtins.history(['-d', '5']) }
 
     assert_match(/history position out of range/, stderr)
   end
 
   def test_history_delete_missing_argument
-    stderr = capture_stderr { result = Rubish::Builtins.run_history(['-d']) }
+    stderr = capture_stderr { result = Rubish::Builtins.history(['-d']) }
 
     assert_match(/option requires an argument/, stderr)
   end
@@ -121,7 +121,7 @@ class TestHistoryBuiltin < Test::Unit::TestCase
   # -s: store args as history entry
 
   def test_history_store
-    result = Rubish::Builtins.run_history(['-s', 'echo', 'hello', 'world'])
+    result = Rubish::Builtins.history(['-s', 'echo', 'hello', 'world'])
 
     assert result
     assert_equal 1, Reline::HISTORY.size
@@ -129,13 +129,13 @@ class TestHistoryBuiltin < Test::Unit::TestCase
   end
 
   def test_history_store_single_word
-    Rubish::Builtins.run_history(['-s', 'pwd'])
+    Rubish::Builtins.history(['-s', 'pwd'])
 
     assert_equal ['pwd'], Reline::HISTORY.to_a
   end
 
   def test_history_store_empty
-    Rubish::Builtins.run_history(['-s'])
+    Rubish::Builtins.history(['-s'])
 
     assert_equal 0, Reline::HISTORY.size
   end
@@ -143,7 +143,7 @@ class TestHistoryBuiltin < Test::Unit::TestCase
   # -p: print expansion
 
   def test_history_print
-    output = capture_output { Rubish::Builtins.run_history(['-p', 'hello', 'world']) }
+    output = capture_output { Rubish::Builtins.history(['-p', 'hello', 'world']) }
 
     assert_equal "hello world\n", output
   end
@@ -157,7 +157,7 @@ class TestHistoryBuiltin < Test::Unit::TestCase
     Reline::HISTORY << 'cmd1'
     Reline::HISTORY << 'cmd2'
 
-    result = Rubish::Builtins.run_history(['-w'])
+    result = Rubish::Builtins.history(['-w'])
 
     assert result
     assert File.exist?(histfile)
@@ -173,7 +173,7 @@ class TestHistoryBuiltin < Test::Unit::TestCase
 
     Reline::HISTORY << 'existing'
 
-    result = Rubish::Builtins.run_history(['-r'])
+    result = Rubish::Builtins.history(['-r'])
 
     assert result
     assert_equal ['from_file1', 'from_file2'], Reline::HISTORY.to_a
@@ -195,7 +195,7 @@ class TestHistoryBuiltin < Test::Unit::TestCase
     Reline::HISTORY << 'new1'
     Reline::HISTORY << 'new2'
 
-    result = Rubish::Builtins.run_history(['-a'])
+    result = Rubish::Builtins.history(['-a'])
 
     assert result
     content = File.read(histfile)
@@ -210,7 +210,7 @@ class TestHistoryBuiltin < Test::Unit::TestCase
     Reline::HISTORY << 'existing'
     Rubish::Builtins.last_history_line = 1
 
-    Rubish::Builtins.run_history(['-a'])
+    Rubish::Builtins.history(['-a'])
 
     # File should remain unchanged
     assert_equal "existing\n", File.read(histfile)
@@ -228,7 +228,7 @@ class TestHistoryBuiltin < Test::Unit::TestCase
     Reline::HISTORY << 'line2'
     Rubish::Builtins.last_history_line = 2
 
-    result = Rubish::Builtins.run_history(['-n'])
+    result = Rubish::Builtins.history(['-n'])
 
     assert result
     assert_equal ['line1', 'line2', 'line3'], Reline::HISTORY.to_a
@@ -243,7 +243,7 @@ class TestHistoryBuiltin < Test::Unit::TestCase
     Reline::HISTORY << 'line2'
     Rubish::Builtins.last_history_line = 2
 
-    Rubish::Builtins.run_history(['-n'])
+    Rubish::Builtins.history(['-n'])
 
     assert_equal 2, Reline::HISTORY.size
   end
@@ -251,7 +251,7 @@ class TestHistoryBuiltin < Test::Unit::TestCase
   # Invalid option
 
   def test_history_invalid_option
-    stderr = capture_stderr { result = Rubish::Builtins.run_history(['-x']) }
+    stderr = capture_stderr { result = Rubish::Builtins.history(['-x']) }
 
     assert_match(/invalid option/, stderr)
   end
@@ -288,7 +288,7 @@ class TestHistoryBuiltin < Test::Unit::TestCase
   def test_history_line_numbers_formatted
     100.times { |i| Reline::HISTORY << "cmd#{i}" }
 
-    output = capture_output { Rubish::Builtins.run_history(['3']) }
+    output = capture_output { Rubish::Builtins.history(['3']) }
 
     # Should have proper alignment with 5 character width
     assert_match(/^\s*98  cmd97$/, output)
@@ -303,7 +303,7 @@ class TestHistoryBuiltin < Test::Unit::TestCase
     Rubish::Builtins.record_history_timestamp(0)
 
     ENV.delete('HISTTIMEFORMAT')
-    output = capture_output { Rubish::Builtins.run_history([]) }
+    output = capture_output { Rubish::Builtins.history([]) }
 
     # Should show just number and command, no timestamp
     assert_match(/^\s*1  cmd1$/, output)
@@ -315,7 +315,7 @@ class TestHistoryBuiltin < Test::Unit::TestCase
     Rubish::Builtins.record_history_timestamp(0, test_time)
 
     ENV['HISTTIMEFORMAT'] = '%Y-%m-%d %H:%M:%S '
-    output = capture_output { Rubish::Builtins.run_history([]) }
+    output = capture_output { Rubish::Builtins.history([]) }
 
     assert_match(/^\s*1  2024-06-15 10:30:45 cmd1$/, output)
   end
@@ -326,7 +326,7 @@ class TestHistoryBuiltin < Test::Unit::TestCase
     Rubish::Builtins.record_history_timestamp(0, test_time)
 
     ENV['HISTTIMEFORMAT'] = '%Y/%m/%d '
-    output = capture_output { Rubish::Builtins.run_history([]) }
+    output = capture_output { Rubish::Builtins.history([]) }
 
     assert_match(/^\s*1  2024\/12\/25 echo hello$/, output)
   end
@@ -337,7 +337,7 @@ class TestHistoryBuiltin < Test::Unit::TestCase
     Rubish::Builtins.record_history_timestamp(0, test_time)
 
     ENV['HISTTIMEFORMAT'] = '[%H:%M] '
-    output = capture_output { Rubish::Builtins.run_history([]) }
+    output = capture_output { Rubish::Builtins.history([]) }
 
     assert_match(/^\s*1  \[08:15\] pwd$/, output)
   end
@@ -351,7 +351,7 @@ class TestHistoryBuiltin < Test::Unit::TestCase
     Rubish::Builtins.record_history_timestamp(2, Time.new(2024, 1, 1, 12, 0, 0))
 
     ENV['HISTTIMEFORMAT'] = '%H:%M '
-    output = capture_output { Rubish::Builtins.run_history([]) }
+    output = capture_output { Rubish::Builtins.history([]) }
 
     assert_match(/^\s*1  10:00 first$/, output)
     assert_match(/^\s*2  11:00 second$/, output)
@@ -365,7 +365,7 @@ class TestHistoryBuiltin < Test::Unit::TestCase
     Rubish::Builtins.record_history_timestamp(1, Time.new(2024, 6, 1, 9, 0, 0))
 
     ENV['HISTTIMEFORMAT'] = '%H:%M '
-    output = capture_output { Rubish::Builtins.run_history([]) }
+    output = capture_output { Rubish::Builtins.history([]) }
 
     # First entry has no timestamp, shown without time
     assert_match(/^\s*1  old_command$/, output)
@@ -378,7 +378,7 @@ class TestHistoryBuiltin < Test::Unit::TestCase
     Rubish::Builtins.record_history_timestamp(0)
 
     ENV['HISTTIMEFORMAT'] = ''
-    output = capture_output { Rubish::Builtins.run_history([]) }
+    output = capture_output { Rubish::Builtins.history([]) }
 
     # Empty format should behave like unset
     assert_match(/^\s*1  cmd1$/, output)
@@ -391,7 +391,7 @@ class TestHistoryBuiltin < Test::Unit::TestCase
     end
 
     ENV['HISTTIMEFORMAT'] = '%H:00 '
-    output = capture_output { Rubish::Builtins.run_history(['2']) }
+    output = capture_output { Rubish::Builtins.history(['2']) }
 
     # Should only show last 2 entries with timestamps
     assert_no_match(/cmd0/, output)
@@ -405,10 +405,10 @@ class TestHistoryBuiltin < Test::Unit::TestCase
     ENV['HISTTIMEFORMAT'] = '%Y-%m-%d '
 
     before = Time.now
-    Rubish::Builtins.run_history(['-s', 'stored', 'command'])
+    Rubish::Builtins.history(['-s', 'stored', 'command'])
     after = Time.now
 
-    output = capture_output { Rubish::Builtins.run_history([]) }
+    output = capture_output { Rubish::Builtins.history([]) }
 
     # Should have today's date
     expected_date = before.strftime('%Y-%m-%d')
@@ -420,7 +420,7 @@ class TestHistoryBuiltin < Test::Unit::TestCase
     Reline::HISTORY << 'cmd1'
     Rubish::Builtins.record_history_timestamp(0, Time.now)
 
-    Rubish::Builtins.run_history(['-c'])
+    Rubish::Builtins.history(['-c'])
 
     # Timestamps should be cleared
     assert_nil Rubish::Builtins.get_history_timestamp(0)
@@ -434,7 +434,7 @@ class TestHistoryBuiltin < Test::Unit::TestCase
     Rubish::Builtins.record_history_timestamp(1, Time.new(2024, 2, 1))
     Rubish::Builtins.record_history_timestamp(2, Time.new(2024, 3, 1))
 
-    Rubish::Builtins.run_history(['-d', '2'])
+    Rubish::Builtins.history(['-d', '2'])
 
     # After deleting index 1, the old index 2 should now be at index 1
     assert_equal Time.new(2024, 1, 1), Rubish::Builtins.get_history_timestamp(0)
@@ -447,7 +447,7 @@ class TestHistoryBuiltin < Test::Unit::TestCase
 
     @repl.send(:add_to_history, 'test command')
 
-    output = capture_output { Rubish::Builtins.run_history([]) }
+    output = capture_output { Rubish::Builtins.history([]) }
 
     # Should have current time (just check format is present)
     assert_match(/^\s*1  \d{2}:\d{2} test command$/, output)

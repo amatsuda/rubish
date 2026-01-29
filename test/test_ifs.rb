@@ -159,7 +159,7 @@ class TestIFS < Test::Unit::TestCase
 
     File.open('input.txt', 'r') do |f|
       $stdin = f
-      Rubish::Builtins.run_read(['a', 'b', 'c'])
+      Rubish::Builtins.read(['a', 'b', 'c'])
     end
     $stdin = STDIN
 
@@ -174,7 +174,7 @@ class TestIFS < Test::Unit::TestCase
 
     File.open('input.txt', 'r') do |f|
       $stdin = f
-      Rubish::Builtins.run_read(['a', 'b', 'c'])
+      Rubish::Builtins.read(['a', 'b', 'c'])
     end
     $stdin = STDIN
 
@@ -189,7 +189,7 @@ class TestIFS < Test::Unit::TestCase
 
     File.open('input.txt', 'r') do |f|
       $stdin = f
-      Rubish::Builtins.run_read(['result'])
+      Rubish::Builtins.read(['result'])
     end
     $stdin = STDIN
 
@@ -202,7 +202,7 @@ class TestIFS < Test::Unit::TestCase
 
     File.open('input.txt', 'r') do |f|
       $stdin = f
-      Rubish::Builtins.run_read(['-a', 'arr'])
+      Rubish::Builtins.read(['-a', 'arr'])
     end
     $stdin = STDIN
 

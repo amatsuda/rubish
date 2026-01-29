@@ -458,7 +458,7 @@ class TestAutoCompletion < Test::Unit::TestCase
   def test_sandbox_timeout
     # Verify timeout works (command should fail, not hang)
     start = Time.now
-    output, success = Rubish::Builtins.run_sandboxed_help_command('sleep 10')
+    output, success = Rubish::Builtins.sandboxed_help_command('sleep 10')
     elapsed = Time.now - start
 
     assert_false success
@@ -467,7 +467,7 @@ class TestAutoCompletion < Test::Unit::TestCase
 
   def test_sandbox_blocks_network
     # Verify network access is blocked
-    output, success = Rubish::Builtins.run_sandboxed_help_command('curl -s --max-time 1 https://example.com')
+    output, success = Rubish::Builtins.sandboxed_help_command('curl -s --max-time 1 https://example.com')
     assert_false success
   end
 
@@ -493,7 +493,7 @@ class TestAutoCompletion < Test::Unit::TestCase
         Rubish::Builtins.call_builtin_completion_function('_auto', 'touch', '', 'touch')
 
         # Also directly test the sandboxed help command
-        Rubish::Builtins.run_sandboxed_help_command('touch --help')
+        Rubish::Builtins.sandboxed_help_command('touch --help')
 
         # Record files after completion
         files_after = Dir.glob('*', base: tmpdir)
@@ -526,7 +526,7 @@ class TestAutoCompletion < Test::Unit::TestCase
         Rubish::Builtins.call_builtin_completion_function('_auto', 'rm', '', 'rm')
 
         # Also directly test the sandboxed help command
-        Rubish::Builtins.run_sandboxed_help_command('rm --help')
+        Rubish::Builtins.sandboxed_help_command('rm --help')
 
         # Test file should still exist
         assert File.exist?(test_file), 'Completion deleted the test file!'

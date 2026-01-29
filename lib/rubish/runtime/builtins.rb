@@ -4,6 +4,20 @@ module Rubish
   module Builtins
     COMMANDS = %w(cd exit logout jobs fg bg export pwd history alias unalias source . shift set return read echo test [ break continue pushd popd dirs trap getopts local unset readonly declare typeset let printf type which true false : eval command builtin wait kill umask exec times hash disown ulimit suspend shopt enable caller complete compgen compopt bind bindkey help fc mapfile readarray basename dirname realpath _get_comp_words_by_ref _init_completion _filedir _have _split_longopt __ltrim_colon_completions _variables _tilde _quote_readline_by_ref _parse_help _upvars _usergroup setopt unsetopt autoload compinit compdef __git_ps1 require).freeze
 
+    # Method names for builtin commands (accounting for Ruby keyword conflicts)
+    # Note: '.', ':', '[', 'typeset', 'readarray', '__git_ps1', '__ltrim_colon_completions'
+    # are mapped via NAME_TO_METHOD to their method names
+    BUILTIN_METHODS = Set.new(%i[
+      cd exit logout jobs fg bg export pwd history alias unalias source shift set
+      return_ read echo test break_ continue pushd popd dirs trap getopts local
+      unset readonly declare let printf type which true_ false_ eval command builtin
+      wait kill umask exec times hash disown ulimit suspend shopt enable caller
+      complete compgen compopt bind bindkey help fc mapfile basename dirname realpath
+      _get_comp_words_by_ref _init_completion _filedir _have _split_longopt
+      _ltrim_colon_completions _variables _tilde _quote_readline_by_ref _parse_help
+      _upvars _usergroup setopt unsetopt autoload compinit compdef git_ps1 require
+    ]).freeze
+
     @aliases = {}
     @dir_stack = []
     @traps = {}
@@ -791,204 +805,57 @@ module Rubish
     }.freeze
 
     def self.builtin?(name)
-      (COMMANDS.include?(name) || @dynamic_commands.include?(name)) && !@disabled_builtins.include?(name)
+      builtin_exists?(name) && !@disabled_builtins.include?(name)
     end
 
     def self.builtin_exists?(name)
-      COMMANDS.include?(name) || @dynamic_commands.include?(name)
+      method_name = NAME_TO_METHOD[name] || name.to_sym
+      BUILTIN_METHODS.include?(method_name) || @dynamic_commands.include?(name)
     end
 
     def self.builtin_enabled?(name)
-      (COMMANDS.include?(name) || @dynamic_commands.include?(name)) && !@disabled_builtins.include?(name)
+      builtin_exists?(name) && !@disabled_builtins.include?(name)
     end
 
     def self.all_commands
       COMMANDS + @dynamic_commands
     end
 
+    # Mapping from builtin names to method names for special cases
+    # Most builtins use their name directly as the method name
+    NAME_TO_METHOD = {
+      '.' => :source,
+      ':' => :true_,
+      '[' => :test,
+      'typeset' => :declare,
+      'readarray' => :mapfile,
+      'return' => :return_,
+      'break' => :break_,
+      'true' => :true_,
+      'false' => :false_,
+      '__git_ps1' => :git_ps1,
+      '__ltrim_colon_completions' => :_ltrim_colon_completions
+    }.freeze
+
     def self.run(name, args)
-      case name
-      when 'cd'
-        run_cd(args)
-      when 'exit'
-        run_exit(args)
-      when 'logout'
-        run_logout(args)
-      when 'jobs'
-        run_jobs(args)
-      when 'fg'
-        run_fg(args)
-      when 'bg'
-        run_bg(args)
-      when 'export'
-        run_export(args)
-      when 'pwd'
-        run_pwd(args)
-      when 'history'
-        run_history(args)
-      when 'alias'
-        run_alias(args)
-      when 'unalias'
-        run_unalias(args)
-      when 'source', '.'
-        run_source(args)
-      when 'shift'
-        run_shift(args)
-      when 'set'
-        run_set(args)
-      when 'return'
-        run_return(args)
-      when 'read'
-        run_read(args)
-      when 'echo'
-        run_echo(args)
-      when 'test', '['
-        run_test(args)
-      when 'break'
-        run_break(args)
-      when 'continue'
-        run_continue(args)
-      when 'pushd'
-        run_pushd(args)
-      when 'popd'
-        run_popd(args)
-      when 'dirs'
-        run_dirs(args)
-      when 'trap'
-        run_trap(args)
-      when 'getopts'
-        run_getopts(args)
-      when 'local'
-        run_local(args)
-      when 'unset'
-        run_unset(args)
-      when 'readonly'
-        run_readonly(args)
-      when 'declare', 'typeset'
-        run_declare(args)
-      when 'let'
-        run_let(args)
-      when 'printf'
-        run_printf(args)
-      when 'type'
-        run_type(args)
-      when 'which'
-        run_which(args)
-      when 'true', ':'
-        true
-      when 'false'
-        false
-      when 'eval'
-        run_eval(args)
-      when 'command'
-        run_command(args)
-      when 'builtin'
-        run_builtin(args)
-      when 'wait'
-        run_wait(args)
-      when 'kill'
-        run_kill(args)
-      when 'umask'
-        run_umask(args)
-      when 'exec'
-        run_exec(args)
-      when 'times'
-        run_times(args)
-      when 'hash'
-        run_hash(args)
-      when 'disown'
-        run_disown(args)
-      when 'ulimit'
-        run_ulimit(args)
-      when 'suspend'
-        run_suspend(args)
-      when 'shopt'
-        run_shopt(args)
-      when 'enable'
-        run_enable(args)
-      when 'caller'
-        run_caller(args)
-      when 'complete'
-        run_complete(args)
-      when 'compgen'
-        run_compgen(args)
-      when 'compopt'
-        run_compopt(args)
-      when 'bind'
-        run_bind(args)
-      when 'help'
-        run_help(args)
-      when 'fc'
-        run_fc(args)
-      when 'mapfile', 'readarray'
-        run_mapfile(args)
-      when 'basename'
-        run_basename(args)
-      when 'dirname'
-        run_dirname(args)
-      when 'realpath'
-        run_realpath(args)
-      when 'head'
-        run_head(args)
-      when 'tail'
-        run_tail(args)
-      # Bash-completion helper functions
-      when '_get_comp_words_by_ref'
-        run__get_comp_words_by_ref(args)
-      when '_init_completion'
-        run__init_completion(args)
-      when '_filedir'
-        run__filedir(args)
-      when '_have'
-        run__have(args)
-      when '_split_longopt'
-        run__split_longopt(args)
-      when '__ltrim_colon_completions'
-        run____ltrim_colon_completions(args)
-      when '_variables'
-        run__variables(args)
-      when '_tilde'
-        run__tilde(args)
-      when '_quote_readline_by_ref'
-        run__quote_readline_by_ref(args)
-      when '_parse_help'
-        run__parse_help(args)
-      when '_upvars'
-        run__upvars(args)
-      when '_usergroup'
-        run__usergroup(args)
-      when 'setopt'
-        run_setopt(args)
-      when 'unsetopt'
-        run_unsetopt(args)
-      when 'bindkey'
-        run_bindkey(args)
-      when 'autoload'
-        run_autoload(args)
-      when 'compinit'
-        run_compinit(args)
-      when 'compdef'
-        run_compdef(args)
-      when '__git_ps1'
-        run_git_ps1(args)
-      when 'require'
-        run_require(args)
-      else
+      method_name = NAME_TO_METHOD[name] || name.to_sym
+
+      if respond_to?(method_name, false)
+        send(method_name, args)
+      elsif @loaded_builtins.key?(name)
         # Check for dynamically loaded builtins
-        if @loaded_builtins.key?(name)
-          callable = @loaded_builtins[name][:callable]
-          if callable.respond_to?(:call)
-            callable.call(args)
-          else
-            false
-          end
+        callable = @loaded_builtins[name][:callable]
+        if callable.respond_to?(:call)
+          callable.call(args)
         else
           false
         end
+      else
+        false
       end
     end
 
-    def self.run_cd(args)
+    def self.cd(args)
       # cd [-L|-P] [dir]
       # -L: follow symbolic links (default)
       # -P: use physical directory structure (don't follow symlinks)
@@ -1206,7 +1073,7 @@ module Rubish
       false
     end
 
-    def self.run_pushd(args)
+    def self.pushd(args)
       # pushd [-n] [+N | -N | dir]
       # -n: Suppress the normal change of directory; only manipulate the stack
       # +N: Rotate the stack so that the Nth directory (counting from left, starting at 0) is at the top
@@ -1309,7 +1176,7 @@ module Rubish
       end
     end
 
-    def self.run_popd(args)
+    def self.popd(args)
       # popd [-n] [+N | -N]
       # -n: Suppress the normal change of directory; only manipulate the stack
       # +N: Remove the Nth directory (counting from left, starting at 0)
@@ -1397,7 +1264,7 @@ module Rubish
       true
     end
 
-    def self.run_dirs(args)
+    def self.dirs(args)
       print_dir_stack
       true
     end
@@ -1459,7 +1326,7 @@ module Rubish
     # Signals that cannot be trapped (for error messages)
     UNTRAPABLE_SIGNALS = %w[KILL STOP].freeze
 
-    def self.run_trap(args)
+    def self.trap(args)
       if args.empty?
         # List all traps
         @traps.each do |sig, cmd|
@@ -1624,7 +1491,7 @@ module Rubish
       puts "trap: #{e.message}"
     end
 
-    def self.run_exit_traps
+    def self.exit_traps
       return unless @traps.key?(0)
 
       @current_trapsig = 'EXIT'
@@ -1637,7 +1504,7 @@ module Rubish
 
     @in_err_trap = false
 
-    def self.run_err_trap
+    def self.err_trap
       return unless @traps.key?('ERR')
       return if @in_err_trap  # Prevent recursion
 
@@ -1670,7 +1537,7 @@ module Rubish
 
     @in_debug_trap = false
 
-    def self.run_debug_trap
+    def self.debug_trap
       return unless @traps.key?('DEBUG')
       return if @in_debug_trap  # Prevent recursion
 
@@ -1690,7 +1557,7 @@ module Rubish
 
     @in_return_trap = false
 
-    def self.run_return_trap
+    def self.return_trap
       return unless @traps.key?('RETURN')
       return if @in_return_trap  # Prevent recursion
 
@@ -1732,7 +1599,7 @@ module Rubish
       @original_traps.clear
     end
 
-    def self.run_getopts(args)
+    def self.getopts(args)
       # getopts optstring name [args...]
       # Returns true if option found, false when done
       if args.length < 2
@@ -1857,7 +1724,7 @@ module Rubish
       ENV.delete('OPTARG')
     end
 
-    def self.run_local(args)
+    def self.local(args)
       # local [-n] var=value or local var
       # -n: create a nameref (reference to another variable)
       # Only valid inside a function (when scope stack is not empty)
@@ -2018,7 +1885,7 @@ module Rubish
       $stderr.puts "local: warning: #{name}: shadows variable in outer scope"
     end
 
-    def self.run_unset(args)
+    def self.unset(args)
       # unset [-fv] name [name ...]
       # -f: treat names as function names
       # -v: treat names as variable names (default)
@@ -2111,7 +1978,7 @@ module Rubish
       true
     end
 
-    def self.run_readonly(args)
+    def self.readonly(args)
       # readonly [-p] [name[=value] ...]
       # -p: print all readonly variables in reusable format
 
@@ -2206,7 +2073,7 @@ module Rubish
       ENV[name] = @shell_vars[name] if @shell_vars.key?(name)
     end
 
-    def self.run_declare(args)
+    def self.declare(args)
       # declare [-aAfFgIilnrtux] [-p] [name[=value] ...]
       # -a: indexed array
       # -A: associative array
@@ -2428,7 +2295,7 @@ module Rubish
         # Evaluate as arithmetic expression
         begin
           # Simple arithmetic evaluation
-          result = eval(value.gsub(/[a-zA-Z_][a-zA-Z0-9_]*/) { |var| ENV[var] || '0' })
+          result = Kernel.eval(value.gsub(/[a-zA-Z_][a-zA-Z0-9_]*/) { |var| ENV[var] || '0' })
           value = result.to_s
         rescue StandardError
           value = '0'
@@ -2591,7 +2458,7 @@ module Rubish
       @var_attributes.clear
     end
 
-    def self.run_let(args)
+    def self.let(args)
       # let expression [expression ...]
       # Evaluates arithmetic expressions
       # Returns 0 (true) if last expression is non-zero, 1 (false) if zero
@@ -2725,14 +2592,14 @@ module Rubish
 
       # Evaluate safely
       begin
-        result = eval(expanded)
+        result = Kernel.eval(expanded)
         result.is_a?(Integer) ? result : (result ? 1 : 0)
       rescue StandardError
         0
       end
     end
 
-    def self.run_export(args)
+    def self.export(args)
       if args.empty?
         # List all exported variables (from ENV, which contains only exported vars)
         ENV.each { |k, v| puts "#{k}=#{v}" }
@@ -2767,7 +2634,7 @@ module Rubish
       true
     end
 
-    def self.run_pwd(args)
+    def self.pwd(args)
       # pwd [-L|-P]
       # -L: print logical path (may contain symlinks, default)
       # -P: print physical path (no symlinks)
@@ -2826,7 +2693,7 @@ module Rubish
       @history_timestamps = new_timestamps
     end
 
-    def self.run_history(args)
+    def self.history(args)
       # Parse options
       clear = false
       delete_offset = nil
@@ -2987,7 +2854,7 @@ module Rubish
       true
     end
 
-    def self.run_alias(args)
+    def self.alias(args)
       if args.empty?
         # List all aliases
         @aliases.each { |name, value| puts "alias #{name}='#{value}'" }
@@ -3011,7 +2878,7 @@ module Rubish
       true
     end
 
-    def self.run_unalias(args)
+    def self.unalias(args)
       if args.empty?
         puts 'unalias: usage: unalias name [name ...]'
         return false
@@ -3049,7 +2916,7 @@ module Rubish
       @aliases.clear
     end
 
-    def self.run_source(args)
+    def self.source(args)
       if args.empty?
         puts 'source: usage: source filename [arguments]'
         return false
@@ -3269,7 +3136,7 @@ module Rubish
       return_code.nil? || return_code == 0
     end
 
-    def self.run_shift(args)
+    def self.shift(args)
       n = args.first&.to_i || 1
 
       return false if n < 0
@@ -3360,7 +3227,7 @@ module Rubish
     # List of variables that cannot be modified in restricted mode
     RESTRICTED_VARIABLES = %w[SHELL ENV PATH BASH_ENV SHELLOPTS RUBISHOPTS].freeze
 
-    def self.run_set(args)
+    def self.set(args)
       # set [-+abCefhmnuvx] [-o option] [--] [arg...]
       # With no args, clear positional params (original behavior)
       if args.empty?
@@ -3553,24 +3420,32 @@ module Rubish
       end
     end
 
-    def self.run_return(args)
+    def self.return_(args)
       code = args.first&.to_i || 0
       throw :return, code
     end
 
-    def self.run_break(args)
+    def self.break_(args)
       # Optional: break N to break out of N levels (default 1)
       levels = args.first&.to_i || 1
       throw :break_loop, levels
     end
 
-    def self.run_continue(args)
+    def self.continue(args)
       # Optional: continue N to continue Nth enclosing loop (default 1)
       levels = args.first&.to_i || 1
       throw :continue_loop, levels
     end
 
-    def self.run_test(args)
+    def self.true_(_args)
+      true
+    end
+
+    def self.false_(_args)
+      false
+    end
+
+    def self.test(args)
       # Remove trailing ] if called as [
       args = args[0...-1] if args.last == ']'
 
@@ -3580,21 +3455,21 @@ module Rubish
       # -o has lower precedence than -a
       if args.include?('-o')
         idx = args.index('-o')
-        left_result = run_test(args[0...idx])
-        right_result = run_test(args[(idx + 1)..])
+        left_result = test(args[0...idx])
+        right_result = test(args[(idx + 1)..])
         return left_result || right_result
       end
 
       if args.include?('-a')
         idx = args.index('-a')
-        left_result = run_test(args[0...idx])
-        right_result = run_test(args[(idx + 1)..])
+        left_result = test(args[0...idx])
+        right_result = test(args[(idx + 1)..])
         return left_result && right_result
       end
 
       # Negation
       if args.first == '!'
-        return !run_test(args[1..])
+        return !test(args[1..])
       end
 
       # Single argument - true if non-empty
@@ -3697,7 +3572,7 @@ module Rubish
       false
     end
 
-    def self.run_echo(args)
+    def self.echo(args)
       newline = true
       # xpg_echo: expand backslash escapes by default when enabled
       interpret_escapes = shopt_enabled?('xpg_echo')
@@ -3792,7 +3667,7 @@ module Rubish
       result
     end
 
-    def self.run_printf(args)
+    def self.printf(args)
       # printf [-v var] format [arguments...]
       # Supports: %s, %d, %i, %f, %e, %g, %x, %X, %o, %c, %b, %q, %%
       # Also supports width, precision, and flags: %-10s, %05d, %.2f, etc.
@@ -4196,7 +4071,7 @@ module Rubish
       result
     end
 
-    def self.run_type(args)
+    def self.type(args)
       # type [-afptP] name [name ...]
       # -a: display all locations containing an executable named name
       # -f: suppress function lookup
@@ -4371,7 +4246,7 @@ module Rubish
       results
     end
 
-    def self.run_disown(args)
+    def self.disown(args)
       # disown [-h] [-ar] [jobspec ...]
       # -h: mark jobs so SIGHUP is not sent (but keep in table)
       # -a: remove all jobs
@@ -4465,7 +4340,7 @@ module Rubish
       all_found
     end
 
-    def self.run_ulimit(args)
+    def self.ulimit(args)
       # ulimit [-HSabcdefiklmnpqrstuvxPRT] [limit]
       # -H: use hard limit
       # -S: use soft limit (default for display)
@@ -4639,7 +4514,7 @@ module Rubish
       end
     end
 
-    def self.run_suspend(args)
+    def self.suspend(args)
       # suspend [-f]
       # Suspend shell execution
       # -f: force suspend even if login shell
@@ -4685,7 +4560,7 @@ module Rubish
       'r' => 'restricted'
     }.freeze
 
-    def self.run_shopt(args)
+    def self.shopt(args)
       # shopt [-pqsu] [-o] [optname ...]
       # -s: enable (set) options
       # -u: disable (unset) options
@@ -4736,7 +4611,7 @@ module Rubish
 
       # When -o is used, work with set -o options instead of shell options
       if set_o_mode
-        return run_shopt_set_o(set_mode, unset_mode, print_mode, quiet_mode, opt_names)
+        return shopt_set_o(set_mode, unset_mode, print_mode, quiet_mode, opt_names)
       end
 
       # Helper to get current value of an option
@@ -4823,7 +4698,7 @@ module Rubish
     end
 
     # Handle shopt -o for set -o style options
-    def self.run_shopt_set_o(set_mode, unset_mode, print_mode, quiet_mode, opt_names)
+    def self.shopt_set_o(set_mode, unset_mode, print_mode, quiet_mode, opt_names)
       # Build list of valid set -o option names (long names)
       valid_options = {}
       @set_options.each_key do |key|
@@ -4976,7 +4851,7 @@ module Rubish
 
     # setopt [+-options] [name ...]
     # Enable shell options (zsh-style)
-    def self.run_setopt(args)
+    def self.setopt(args)
       # No arguments: list all enabled options
       if args.empty?
         list_enabled_zsh_options
@@ -5020,7 +4895,7 @@ module Rubish
 
     # unsetopt [+-options] [name ...]
     # Disable shell options (zsh-style)
-    def self.run_unsetopt(args)
+    def self.unsetopt(args)
       # No arguments: list all disabled options
       if args.empty?
         list_disabled_zsh_options
@@ -5074,7 +4949,7 @@ module Rubish
     #   bindkey -s key string      - bind key to output string (macro)
     #   bindkey key                - show binding for key
     #   bindkey key widget         - bind key to widget
-    def self.run_bindkey(args)
+    def self.bindkey(args)
       keymap = nil
       list_keymaps = false
       remove_key = nil
@@ -5322,7 +5197,7 @@ module Rubish
     #   -t  turn on tracing for the function
     #   -X  immediately load the function (used inside function stub)
     #   +X  load function immediately without executing
-    def self.run_autoload(args)
+    def self.autoload(args)
       suppress_alias = false
       zsh_style = true
       ksh_style = false
@@ -5475,7 +5350,7 @@ module Rubish
     #   -u  use without checking for insecure directories
     #   -d  specify dump file for caching
     #   -C  skip checking for new completion functions
-    def self.run_compinit(args)
+    def self.compinit(args)
       # Parse options (mostly ignored for compatibility)
       i = 0
       while i < args.length
@@ -5540,7 +5415,7 @@ module Rubish
     #        compdef -n function command...  (don't override existing)
     #        compdef -d command...           (delete completion)
     #        compdef -p pattern function     (pattern-based completion)
-    def self.run_compdef(args)
+    def self.compdef(args)
       return list_zsh_completions if args.empty?
 
       no_override = false
@@ -5617,7 +5492,7 @@ module Rubish
     #   GIT_PS1_SHOWUPSTREAM       - show <, >, <>, = for behind, ahead, diverged, up-to-date
     #   GIT_PS1_SHOWCOLORHINTS     - colorize the output
     #   GIT_PS1_DESCRIBE_STYLE     - how to show detached HEAD (contains, branch, describe, tag, default)
-    def self.run_git_ps1(args)
+    def self.git_ps1(args)
       # Check if we're in a git repo
       git_dir = `git rev-parse --git-dir 2>/dev/null`.chomp
       return true if git_dir.empty?
@@ -5900,7 +5775,7 @@ module Rubish
       attr_reader :loaded_builtins
     end
 
-    def self.run_enable(args)
+    def self.enable(args)
       # enable [-a] [-dnps] [-f filename] [name ...]
       # -a: list all builtins (enabled and disabled)
       # -n: disable builtins
@@ -6098,7 +5973,7 @@ module Rubish
       nil
     end
 
-    def self.run_caller(args)
+    def self.caller(args)
       # caller [expr]
       # Display the call stack of the current subroutine call
       # With expr: display stack frame at that depth (0 = current)
@@ -6153,7 +6028,7 @@ module Rubish
       @call_stack.clear
     end
 
-    def self.run_complete(args)
+    def self.complete(args)
       # complete [-abcdefgjksuv] [-o option] [-A action] [-G globpat] [-W wordlist]
       #          [-F function] [-C command] [-X filterpat] [-P prefix] [-S suffix]
       #          [-p] [-r] [name ...]
@@ -6327,7 +6202,7 @@ module Rubish
       parts.join(' ')
     end
 
-    def self.run_compgen(args)
+    def self.compgen(args)
       # compgen [-abcdefgjksuv] [-o option] [-A action] [-G globpat] [-W wordlist]
       #         [-F function] [-C command] [-X filterpat] [-P prefix] [-S suffix] [word]
       # Generate completions matching word
@@ -7370,14 +7245,14 @@ module Rubish
       when '-F', '-i', '-S', '-E', '-c', '-o'
         # File/config completions
         if %w[-F -i -S -E].include?(prev)
-          run__filedir([])
+          _filedir([])
         else
           @compreply = []
         end
         return
       when '-l'
         # Username completion
-        run__usergroup(['-u'])
+        _usergroup(['-u'])
         return
       when '-p'
         # Port number
@@ -7481,7 +7356,7 @@ module Rubish
       end
 
       # Complete directories only
-      run__filedir(['-d'])
+      _filedir(['-d'])
     end
 
     # ==========================================================================
@@ -7490,19 +7365,19 @@ module Rubish
     def self._make_completion(cmd, cur, prev)
       case prev
       when '-f', '--file', '--makefile'
-        run__filedir([])
+        _filedir([])
         return
       when '-C', '--directory'
-        run__filedir(['-d'])
+        _filedir(['-d'])
         return
       when '-I', '--include-dir'
-        run__filedir(['-d'])
+        _filedir(['-d'])
         return
       when '-j', '--jobs', '-l', '--load-average'
         @compreply = []
         return
       when '-o', '--old-file', '--assume-old', '-W', '--what-if', '--new-file', '--assume-new'
-        run__filedir([])
+        _filedir([])
         return
       end
 
@@ -7560,7 +7435,7 @@ module Rubish
         @compreply = []
         return
       when '-M', '--manpath'
-        run__filedir(['-d'])
+        _filedir(['-d'])
         return
       when '-S', '-s', '--sections'
         @compreply = %w[1 2 3 4 5 6 7 8 9 n l].select { |s| s.start_with?(cur) }
@@ -7730,9 +7605,9 @@ module Rubish
 
     # Run a help command in a sandboxed environment with timeout
     # Returns [output, success] or [nil, false] on failure/timeout
-    def self.run_sandboxed_help_command(help_cmd)
-      require 'open3'
-      require 'tempfile'
+    def self.sandboxed_help_command(help_cmd)
+      Kernel.require 'open3'
+      Kernel.require 'tempfile'
 
       pid = nil
       output = nil
@@ -7900,7 +7775,7 @@ module Rubish
       help_output = nil
       help_commands.each do |help_cmd|
         # Run help command in sandbox with timeout for safety
-        output, success = run_sandboxed_help_command(help_cmd)
+        output, success = sandboxed_help_command(help_cmd)
         next unless success && output && output.length > 50
 
         help_output = output
@@ -8030,7 +7905,7 @@ module Rubish
       # or: $(cargo --list) or `cargo --list`
       extracted_cmds = extract_zsh_completion_commands(content, command)
       extracted_cmds.each do |cmd|
-        output = run_with_timeout(cmd, 2)
+        output = with_timeout(cmd, 2)
         next unless output && output.length > 10
 
         # Parse the output for subcommands
@@ -8119,7 +7994,7 @@ module Rubish
     end
 
     # Execute a command with timeout, returns output or nil
-    def self.run_with_timeout(cmd, timeout = 2)
+    def self.with_timeout(cmd, timeout = 2)
       output = nil
       begin
         Timeout.timeout(timeout) do
@@ -8136,7 +8011,7 @@ module Rubish
       bashdefault default dirnames filenames noquote nosort nospace plusdirs
     ].freeze
 
-    def self.run_compopt(args)
+    def self.compopt(args)
       # compopt [-o option] [-DE] [+o option] [name ...]
       # Modify completion options for each name, or for the currently executing completion
       # -o option: Enable option
@@ -8317,7 +8192,7 @@ module Rubish
     #   -p VAR      - Store previous word in VAR (default: prev)
     #   -w VAR      - Store words array in VAR (default: words)
     #   -i VAR      - Store cword index in VAR (default: cword)
-    def self.run__get_comp_words_by_ref(args)
+    def self._get_comp_words_by_ref(args)
       exclude_chars = ''
       cur_var = 'cur'
       prev_var = 'prev'
@@ -8426,7 +8301,7 @@ module Rubish
     # Options:
     #   -n EXCLUDE  - Characters to exclude from COMP_WORDBREAKS
     #   -s          - Split on = for --option=value
-    def self.run__init_completion(args)
+    def self._init_completion(args)
       exclude_chars = ''
       split_on_equals = false
 
@@ -8445,7 +8320,7 @@ module Rubish
       # Call _get_comp_words_by_ref with the exclude chars
       ref_args = []
       ref_args += ['-n', exclude_chars] unless exclude_chars.empty?
-      run__get_comp_words_by_ref(ref_args)
+      _get_comp_words_by_ref(ref_args)
 
       # Handle --option=value splitting if requested
       if split_on_equals
@@ -8492,7 +8367,7 @@ module Rubish
     # Arguments: [extension_pattern]
     # Options:
     #   -d  - Only directories
-    def self.run__filedir(args)
+    def self._filedir(args)
       dirs_only = false
       pattern = nil
 
@@ -8576,7 +8451,7 @@ module Rubish
     end
 
     # _have - Check if a command exists in PATH
-    def self.run__have(args)
+    def self._have(args)
       return false if args.empty?
 
       cmd = args[0]
@@ -8594,7 +8469,7 @@ module Rubish
 
     # _split_longopt - Handle --option=value completion
     # Sets prev to option, cur to value after =
-    def self.run__split_longopt(args)
+    def self._split_longopt(args)
       cur = ENV['cur'] || ''
 
       return false unless cur.include?('=')
@@ -8612,7 +8487,7 @@ module Rubish
 
     # __ltrim_colon_completions - Remove colon prefix from completions
     # Handles the case where cur contains colons (e.g., package:version)
-    def self.run____ltrim_colon_completions(args)
+    def self._ltrim_colon_completions(args)
       cur = args[0] || ENV['cur'] || ''
 
       return true unless cur.include?(':')
@@ -8636,7 +8511,7 @@ module Rubish
     end
 
     # _variables - Complete variable names
-    def self.run__variables(args)
+    def self._variables(args)
       cur = ENV['cur'] || ''
 
       # Remove leading $ if present
@@ -8659,7 +8534,7 @@ module Rubish
     end
 
     # _tilde - Complete tilde expressions (~username)
-    def self.run__tilde(args)
+    def self._tilde(args)
       cur = ENV['cur'] || ''
 
       return true unless cur.start_with?('~')
@@ -8697,7 +8572,7 @@ module Rubish
 
     # _quote_readline_by_ref - Quote a string for readline
     # Sets the named variable to the quoted string
-    def self.run__quote_readline_by_ref(args)
+    def self._quote_readline_by_ref(args)
       return false if args.length < 2
 
       varname = args[0]
@@ -8712,7 +8587,7 @@ module Rubish
 
     # _parse_help - Parse --help output to extract options
     # Usage: _parse_help command [option]
-    def self.run__parse_help(args)
+    def self._parse_help(args)
       return false if args.empty?
 
       cmd = args[0]
@@ -8751,7 +8626,7 @@ module Rubish
 
     # _upvars - Set variables in caller's scope (simplified implementation)
     # Usage: _upvars [-v varname value]... [-a arrayname values...]...
-    def self.run__upvars(args)
+    def self._upvars(args)
       i = 0
       while i < args.length
         case args[i]
@@ -8783,7 +8658,7 @@ module Rubish
     # Options:
     #   -u  - Complete usernames only
     #   -g  - Complete groups only
-    def self.run__usergroup(args)
+    def self._usergroup(args)
       users_only = args.include?('-u')
       groups_only = args.include?('-g')
 
@@ -8824,7 +8699,7 @@ module Rubish
       true
     end
 
-    def self.run_bind(args)
+    def self.bind(args)
       # bind [-m keymap] [-lpsvPSVX]
       # bind [-m keymap] [-q function] [-u function] [-r keyseq]
       # bind [-m keymap] -f filename
@@ -9368,7 +9243,7 @@ module Rubish
       @readline_variables[var]
     end
 
-    def self.run_hash(args)
+    def self.hash(args)
       # hash [-lr] [-p path] [-dt] [name ...]
       # -r: forget all cached paths
       # -d: named directories (zsh) or forget cached path (bash)
@@ -9443,7 +9318,7 @@ module Rubish
 
       # Handle named directories mode (zsh-style hash -d)
       if named_dir_mode
-        return run_hash_named_directories(names, list_mode)
+        return hash_named_directories(names, list_mode)
       end
 
       # Handle -r (clear all)
@@ -9539,7 +9414,7 @@ module Rubish
     # - hash -d name      → if name is in command_hash, delete it (bash)
     #                       if name is a named directory, show path (zsh)
     #                       otherwise, error
-    def self.run_hash_named_directories(names, list_mode = false)
+    def self.hash_named_directories(names, list_mode = false)
       # No names: list all named directories
       if names.empty?
         if @named_directories.empty?
@@ -9627,7 +9502,7 @@ module Rubish
       end
     end
 
-    def self.run_times(_args)
+    def self.times(_args)
       # times
       # Display accumulated user and system times for shell and children
       # Format: user system (for shell), then user system (for children)
@@ -9649,7 +9524,7 @@ module Rubish
       true
     end
 
-    def self.run_exec(args)
+    def self.exec(args)
       # exec [-cl] [-a name] [command [arguments]]
       # -c: execute command with empty environment
       # -l: place dash at beginning of argv[0] (login shell)
@@ -9731,15 +9606,15 @@ module Rubish
       end
 
       # Run exit traps before exec
-      run_exit_traps
+      exit_traps
 
       # Execute
       begin
         if clear_env
           # Clear environment and exec
-          exec([command, exec_argv0], *command_args, unsetenv_others: true)
+          Kernel.exec([command, exec_argv0], *command_args, unsetenv_others: true)
         else
-          exec([command, exec_argv0], *command_args)
+          Kernel.exec([command, exec_argv0], *command_args)
         end
       rescue Errno::ENOENT
         $stderr.puts "exec: #{cmd_args.first}: not found"
@@ -9759,7 +9634,7 @@ module Rubish
       end
     end
 
-    def self.run_umask(args)
+    def self.umask(args)
       # umask [-p] [-S] [mode]
       # -p: output in a form that can be reused as input
       # -S: output in symbolic form
@@ -9887,7 +9762,7 @@ module Rubish
       parts.join(',')
     end
 
-    def self.run_kill(args)
+    def self.kill(args)
       # kill [-s signal | -signal] pid|%jobspec ...
       # kill -l [signal]
       # Send signals to processes or jobs
@@ -9998,7 +9873,7 @@ module Rubish
       all_success
     end
 
-    def self.run_wait(args)
+    def self.wait(args)
       # wait [-fn] [-p VARNAME] [pid|%jobspec ...]
       # Wait for background jobs to complete
       # -n: wait for any single job to complete (bash 4.3+)
@@ -10222,7 +10097,7 @@ module Rubish
       last_status
     end
 
-    def self.run_builtin(args)
+    def self.builtin(args)
       # builtin command [arguments...]
       # Run a shell builtin directly, bypassing functions and aliases
       # Returns error if command is not a builtin
@@ -10243,7 +10118,7 @@ module Rubish
       run(cmd_name, cmd_args)
     end
 
-    def self.run_command(args)
+    def self.command(args)
       # command [-pVv] command [arguments...]
       # -p: use default PATH to search for command
       # -v: print pathname or command type (similar to type -t)
@@ -10329,7 +10204,7 @@ module Rubish
       end
     end
 
-    def self.run_eval(args)
+    def self.eval(args)
       # eval [arg ...]
       # Concatenate arguments and execute as a shell command
       return true if args.empty?
@@ -10350,7 +10225,7 @@ module Rubish
       end
     end
 
-    def self.run_which(args)
+    def self.which(args)
       # which [-a] name [name ...]
       # -a: print all matching executables in PATH, not just the first
 
@@ -10401,7 +10276,7 @@ module Rubish
       all_found
     end
 
-    def self.run_read(args)
+    def self.read(args)
       # Options
       opts = {
         prompt: nil,
@@ -10694,7 +10569,7 @@ module Rubish
       end
     end
 
-    def self.run_exit(args)
+    def self.exit(args)
       code = args.first&.to_i || 0
 
       # Check for active jobs if checkjobs is enabled
@@ -10726,7 +10601,7 @@ module Rubish
         send_hup_to_active_jobs
       end
 
-      run_exit_traps
+      exit_traps
       throw :exit, code
     end
 
@@ -10755,7 +10630,7 @@ module Rubish
       end
     end
 
-    def self.run_logout(args)
+    def self.logout(args)
       # In bash, logout only works in login shells
       # For simplicity, we treat rubish as always being a login shell
       # and logout behaves the same as exit
@@ -10763,10 +10638,10 @@ module Rubish
         # If not a login shell, warn but still exit (bash behavior varies)
         $stderr.puts 'logout: not login shell: use `exit\''
       end
-      run_exit(args)
+      exit(args)
     end
 
-    def self.run_jobs(_args)
+    def self.jobs(_args)
       jobs = JobManager.instance.active
       if jobs.empty?
         # No output when no jobs
@@ -10776,7 +10651,7 @@ module Rubish
       true
     end
 
-    def self.run_fg(args)
+    def self.fg(args)
       unless set_option?('m')
         puts 'fg: no job control'
         return false
@@ -10828,7 +10703,7 @@ module Rubish
       true
     end
 
-    def self.run_bg(args)
+    def self.bg(args)
       unless set_option?('m')
         puts 'bg: no job control'
         return false
@@ -11583,7 +11458,7 @@ module Rubish
       }
     }.freeze
 
-    def self.run_help(args)
+    def self.help(args)
       # Parse options
       short_desc = false
       manpage = false
@@ -11743,7 +11618,7 @@ module Rubish
       lines
     end
 
-    def self.run_fc(args)
+    def self.fc(args)
       # Parse options
       list_mode = false
       suppress_numbers = false
@@ -11967,7 +11842,7 @@ module Rubish
       end
     end
 
-    def self.run_mapfile(args)
+    def self.mapfile(args)
       # Parse options
       delimiter = "\n"
       max_count = 0  # 0 means unlimited
@@ -12110,7 +11985,7 @@ module Rubish
       ENV.keys.select { |k| k.start_with?("#{name}_") }.each { |k| ENV.delete(k) }
     end
 
-    def self.run_basename(args)
+    def self.basename(args)
       # basename NAME [SUFFIX]
       # basename -a [-s SUFFIX] NAME...
       # basename -s SUFFIX NAME...
@@ -12171,7 +12046,7 @@ module Rubish
       true
     end
 
-    def self.run_dirname(args)
+    def self.dirname(args)
       # dirname NAME...
       # -z: end each line with NUL instead of newline
       null_terminated = false
@@ -12208,7 +12083,7 @@ module Rubish
       true
     end
 
-    def self.run_realpath(args)
+    def self.realpath(args)
       # realpath [OPTION]... FILE...
       # -e, --canonicalize-existing: all components must exist
       # -m, --canonicalize-missing: no components need exist
@@ -12287,7 +12162,7 @@ module Rubish
       success
     end
 
-    def self.run_require(args)
+    def self.require(args)
       # require NAME
       # Calls Ruby's require method to load a library
       if args.empty?
@@ -12297,7 +12172,7 @@ module Rubish
 
       name = args.first
       begin
-        require name
+        Kernel.require name
         true
       rescue LoadError => e
         $stderr.puts "require: #{e.message}"
@@ -12309,17 +12184,17 @@ module Rubish
     end
 
     # Wrapper for head command to support Ruby-like syntax: head(5) -> head -5
-    def self.run_head(args)
-      run_head_tail_wrapper('head', args)
+    def self.head(args)
+      head_tail_wrapper('head', args)
     end
 
     # Wrapper for tail command to support Ruby-like syntax: tail(5) -> tail -5
-    def self.run_tail(args)
-      run_head_tail_wrapper('tail', args)
+    def self.tail(args)
+      head_tail_wrapper('tail', args)
     end
 
     # Common wrapper for head/tail that converts bare positive integers to -n form
-    def self.run_head_tail_wrapper(cmd, args)
+    def self.head_tail_wrapper(cmd, args)
       # Transform args: convert bare positive integers to -n form
       # e.g., head(5) -> head -n 5, tail(10) -> tail -n 10
       # But don't transform if preceded by -n or -c (already has the flag)

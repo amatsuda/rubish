@@ -54,7 +54,7 @@ class TestTRAPSIG < Test::Unit::TestCase
     output_file = File.join(@tempdir, 'exit_output.txt')
     # Set up EXIT trap that records the signal name
     Rubish::Builtins.traps[0] = "echo $RUBISH_TRAPSIG > #{output_file}"
-    Rubish::Builtins.run_exit_traps
+    Rubish::Builtins.exit_traps
     content = File.read(output_file).strip
     assert_equal 'EXIT', content, 'RUBISH_TRAPSIG should be EXIT in exit trap'
   end
@@ -62,7 +62,7 @@ class TestTRAPSIG < Test::Unit::TestCase
   def test_bash_trapsig_in_exit_trap
     output_file = File.join(@tempdir, 'exit_output.txt')
     Rubish::Builtins.traps[0] = "echo $BASH_TRAPSIG > #{output_file}"
-    Rubish::Builtins.run_exit_traps
+    Rubish::Builtins.exit_traps
     content = File.read(output_file).strip
     assert_equal 'EXIT', content, 'BASH_TRAPSIG should be EXIT in exit trap'
   end
@@ -72,7 +72,7 @@ class TestTRAPSIG < Test::Unit::TestCase
   def test_rubish_trapsig_in_err_trap
     output_file = File.join(@tempdir, 'err_output.txt')
     Rubish::Builtins.traps['ERR'] = "echo $RUBISH_TRAPSIG > #{output_file}"
-    Rubish::Builtins.run_err_trap
+    Rubish::Builtins.err_trap
     content = File.read(output_file).strip
     assert_equal 'ERR', content, 'RUBISH_TRAPSIG should be ERR in err trap'
   end
@@ -80,7 +80,7 @@ class TestTRAPSIG < Test::Unit::TestCase
   def test_bash_trapsig_in_err_trap
     output_file = File.join(@tempdir, 'err_output.txt')
     Rubish::Builtins.traps['ERR'] = "echo $BASH_TRAPSIG > #{output_file}"
-    Rubish::Builtins.run_err_trap
+    Rubish::Builtins.err_trap
     content = File.read(output_file).strip
     assert_equal 'ERR', content, 'BASH_TRAPSIG should be ERR in err trap'
   end
@@ -90,7 +90,7 @@ class TestTRAPSIG < Test::Unit::TestCase
   def test_rubish_trapsig_in_debug_trap
     output_file = File.join(@tempdir, 'debug_output.txt')
     Rubish::Builtins.traps['DEBUG'] = "echo $RUBISH_TRAPSIG > #{output_file}"
-    Rubish::Builtins.run_debug_trap
+    Rubish::Builtins.debug_trap
     content = File.read(output_file).strip
     assert_equal 'DEBUG', content, 'RUBISH_TRAPSIG should be DEBUG in debug trap'
   end
@@ -100,7 +100,7 @@ class TestTRAPSIG < Test::Unit::TestCase
   def test_rubish_trapsig_in_return_trap
     output_file = File.join(@tempdir, 'return_output.txt')
     Rubish::Builtins.traps['RETURN'] = "echo $RUBISH_TRAPSIG > #{output_file}"
-    Rubish::Builtins.run_return_trap
+    Rubish::Builtins.return_trap
     content = File.read(output_file).strip
     assert_equal 'RETURN', content, 'RUBISH_TRAPSIG should be RETURN in return trap'
   end
@@ -124,7 +124,7 @@ class TestTRAPSIG < Test::Unit::TestCase
   def test_trapsig_cleared_after_exit_trap
     output_file = File.join(@tempdir, 'exit_output.txt')
     Rubish::Builtins.traps[0] = "echo $RUBISH_TRAPSIG > #{output_file}"
-    Rubish::Builtins.run_exit_traps
+    Rubish::Builtins.exit_traps
     # After trap completes, TRAPSIG should be empty
     assert_equal '', Rubish::Builtins.current_trapsig, 'TRAPSIG should be cleared after trap'
   end
@@ -132,7 +132,7 @@ class TestTRAPSIG < Test::Unit::TestCase
   def test_trapsig_cleared_after_err_trap
     output_file = File.join(@tempdir, 'err_output.txt')
     Rubish::Builtins.traps['ERR'] = "echo $RUBISH_TRAPSIG > #{output_file}"
-    Rubish::Builtins.run_err_trap
+    Rubish::Builtins.err_trap
     assert_equal '', Rubish::Builtins.current_trapsig, 'TRAPSIG should be cleared after trap'
   end
 

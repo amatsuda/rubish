@@ -174,7 +174,7 @@ class TestEXECIGNORE < Test::Unit::TestCase
     ENV['EXECIGNORE'] = 'testcmd'
 
     # Capture stdout
-    output = capture_stdout { Rubish::Builtins.run_type(['testcmd']) }
+    output = capture_stdout { Rubish::Builtins.type(['testcmd']) }
 
     assert_match(/not found/, output)
   end
@@ -183,7 +183,7 @@ class TestEXECIGNORE < Test::Unit::TestCase
     create_executable(File.join(@bindir1, 'testcmd'))
     ENV['EXECIGNORE'] = 'testcmd'
 
-    output = capture_stdout { Rubish::Builtins.run_which(['testcmd']) }
+    output = capture_stdout { Rubish::Builtins.which(['testcmd']) }
 
     assert_match(/not found/, output)
   end
@@ -193,7 +193,7 @@ class TestEXECIGNORE < Test::Unit::TestCase
     create_executable(File.join(@bindir2, 'testcmd'))
     ENV['EXECIGNORE'] = "#{@bindir1}/*"
 
-    output = capture_stdout { Rubish::Builtins.run_which(['-a', 'testcmd']) }
+    output = capture_stdout { Rubish::Builtins.which(['-a', 'testcmd']) }
 
     assert_not_include output, @bindir1
     assert_include output, File.join(@bindir2, 'testcmd')

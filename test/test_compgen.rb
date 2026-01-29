@@ -28,7 +28,7 @@ class TestCompgen < Test::Unit::TestCase
 
   def test_wordlist_basic
     output = capture_output do
-      Rubish::Builtins.run_compgen(['-W', 'apple banana cherry', ''])
+      Rubish::Builtins.compgen(['-W', 'apple banana cherry', ''])
     end
     lines = output.strip.split("\n")
     assert_includes lines, 'apple'
@@ -38,7 +38,7 @@ class TestCompgen < Test::Unit::TestCase
 
   def test_wordlist_with_prefix
     output = capture_output do
-      Rubish::Builtins.run_compgen(['-W', 'apple banana cherry', 'a'])
+      Rubish::Builtins.compgen(['-W', 'apple banana cherry', 'a'])
     end
     lines = output.strip.split("\n")
     assert_includes lines, 'apple'
@@ -48,7 +48,7 @@ class TestCompgen < Test::Unit::TestCase
 
   def test_wordlist_no_match
     output = capture_output do
-      result = Rubish::Builtins.run_compgen(['-W', 'apple banana cherry', 'z'])
+      result = Rubish::Builtins.compgen(['-W', 'apple banana cherry', 'z'])
       assert_false result
     end
     assert_empty output.strip
@@ -56,7 +56,7 @@ class TestCompgen < Test::Unit::TestCase
 
   def test_wordlist_multiple_matches
     output = capture_output do
-      Rubish::Builtins.run_compgen(['-W', 'bar baz bat foo', 'ba'])
+      Rubish::Builtins.compgen(['-W', 'bar baz bat foo', 'ba'])
     end
     lines = output.strip.split("\n")
     assert_includes lines, 'bar'
@@ -129,7 +129,7 @@ class TestCompgen < Test::Unit::TestCase
 
   def test_action_keyword
     output = capture_output do
-      Rubish::Builtins.run_compgen(['-A', 'keyword', 'i'])
+      Rubish::Builtins.compgen(['-A', 'keyword', 'i'])
     end
     lines = output.strip.split("\n")
     assert_includes lines, 'if'
@@ -138,7 +138,7 @@ class TestCompgen < Test::Unit::TestCase
 
   def test_action_signal
     output = capture_output do
-      Rubish::Builtins.run_compgen(['-A', 'signal', 'INT'])
+      Rubish::Builtins.compgen(['-A', 'signal', 'INT'])
     end
     lines = output.strip.split("\n")
     assert_includes lines, 'INT'
@@ -146,7 +146,7 @@ class TestCompgen < Test::Unit::TestCase
 
   def test_action_signal_all
     output = capture_output do
-      Rubish::Builtins.run_compgen(['-A', 'signal', ''])
+      Rubish::Builtins.compgen(['-A', 'signal', ''])
     end
     lines = output.strip.split("\n")
     assert_includes lines, 'HUP'
@@ -156,7 +156,7 @@ class TestCompgen < Test::Unit::TestCase
 
   def test_action_shopt
     output = capture_output do
-      Rubish::Builtins.run_compgen(['-A', 'shopt', 'ext'])
+      Rubish::Builtins.compgen(['-A', 'shopt', 'ext'])
     end
     lines = output.strip.split("\n")
     assert_includes lines, 'extdebug'
@@ -165,7 +165,7 @@ class TestCompgen < Test::Unit::TestCase
 
   def test_action_setopt
     output = capture_output do
-      Rubish::Builtins.run_compgen(['-A', 'setopt', 'no'])
+      Rubish::Builtins.compgen(['-A', 'setopt', 'no'])
     end
     lines = output.strip.split("\n")
     assert_includes lines, 'noclobber'
@@ -175,7 +175,7 @@ class TestCompgen < Test::Unit::TestCase
 
   def test_action_builtin
     output = capture_output do
-      Rubish::Builtins.run_compgen(['-A', 'builtin', 'ec'])
+      Rubish::Builtins.compgen(['-A', 'builtin', 'ec'])
     end
     lines = output.strip.split("\n")
     assert_includes lines, 'echo'
@@ -183,7 +183,7 @@ class TestCompgen < Test::Unit::TestCase
 
   def test_action_hostname
     output = capture_output do
-      Rubish::Builtins.run_compgen(['-A', 'hostname', 'local'])
+      Rubish::Builtins.compgen(['-A', 'hostname', 'local'])
     end
     lines = output.strip.split("\n")
     assert_includes lines, 'localhost'
@@ -191,7 +191,7 @@ class TestCompgen < Test::Unit::TestCase
 
   def test_action_enabled
     output = capture_output do
-      Rubish::Builtins.run_compgen(['-A', 'enabled', 'ec'])
+      Rubish::Builtins.compgen(['-A', 'enabled', 'ec'])
     end
     lines = output.strip.split("\n")
     assert_includes lines, 'echo'
@@ -202,7 +202,7 @@ class TestCompgen < Test::Unit::TestCase
     Rubish::Builtins.disabled_builtins.add('testbuiltin')
 
     output = capture_output do
-      Rubish::Builtins.run_compgen(['-A', 'disabled', 'test'])
+      Rubish::Builtins.compgen(['-A', 'disabled', 'test'])
     end
     lines = output.strip.split("\n")
     assert_includes lines, 'testbuiltin'
@@ -215,7 +215,7 @@ class TestCompgen < Test::Unit::TestCase
     Rubish::Builtins.set_array('mylist', ['x', 'y', 'z'])
 
     output = capture_output do
-      Rubish::Builtins.run_compgen(['-A', 'arrayvar', 'my'])
+      Rubish::Builtins.compgen(['-A', 'arrayvar', 'my'])
     end
     lines = output.strip.split("\n")
     assert_includes lines, 'myarray'
@@ -227,7 +227,7 @@ class TestCompgen < Test::Unit::TestCase
 
   def test_action_binding
     output = capture_output do
-      Rubish::Builtins.run_compgen(['-A', 'binding', 'complete'])
+      Rubish::Builtins.compgen(['-A', 'binding', 'complete'])
     end
     lines = output.strip.split("\n")
     assert lines.any? { |l| l.include?('complete') }
@@ -235,7 +235,7 @@ class TestCompgen < Test::Unit::TestCase
 
   def test_action_helptopic
     output = capture_output do
-      Rubish::Builtins.run_compgen(['-A', 'helptopic', 'ec'])
+      Rubish::Builtins.compgen(['-A', 'helptopic', 'ec'])
     end
     lines = output.strip.split("\n")
     assert_includes lines, 'echo'
@@ -247,7 +247,7 @@ class TestCompgen < Test::Unit::TestCase
 
   def test_filter_glob
     output = capture_output do
-      Rubish::Builtins.run_compgen(['-W', 'foo.txt bar.rb baz.txt', '-X', '*.txt'])
+      Rubish::Builtins.compgen(['-W', 'foo.txt bar.rb baz.txt', '-X', '*.txt'])
     end
     lines = output.strip.split("\n")
     assert_includes lines, 'bar.rb'
@@ -257,7 +257,7 @@ class TestCompgen < Test::Unit::TestCase
 
   def test_filter_question_mark
     output = capture_output do
-      Rubish::Builtins.run_compgen(['-W', 'foo bar baz', '-X', 'ba?'])
+      Rubish::Builtins.compgen(['-W', 'foo bar baz', '-X', 'ba?'])
     end
     lines = output.strip.split("\n")
     assert_includes lines, 'foo'
@@ -267,7 +267,7 @@ class TestCompgen < Test::Unit::TestCase
 
   def test_filter_no_match
     output = capture_output do
-      Rubish::Builtins.run_compgen(['-W', 'foo bar baz', '-X', 'xyz'])
+      Rubish::Builtins.compgen(['-W', 'foo bar baz', '-X', 'xyz'])
     end
     lines = output.strip.split("\n")
     assert_includes lines, 'foo'
@@ -281,7 +281,7 @@ class TestCompgen < Test::Unit::TestCase
 
   def test_prefix_only
     output = capture_output do
-      Rubish::Builtins.run_compgen(['-W', 'one two', '-P', 'pre_'])
+      Rubish::Builtins.compgen(['-W', 'one two', '-P', 'pre_'])
     end
     lines = output.strip.split("\n")
     assert_includes lines, 'pre_one'
@@ -290,7 +290,7 @@ class TestCompgen < Test::Unit::TestCase
 
   def test_suffix_only
     output = capture_output do
-      Rubish::Builtins.run_compgen(['-W', 'one two', '-S', '_suf'])
+      Rubish::Builtins.compgen(['-W', 'one two', '-S', '_suf'])
     end
     lines = output.strip.split("\n")
     assert_includes lines, 'one_suf'
@@ -299,7 +299,7 @@ class TestCompgen < Test::Unit::TestCase
 
   def test_prefix_and_suffix
     output = capture_output do
-      Rubish::Builtins.run_compgen(['-W', 'one two', '-P', 'pre_', '-S', '_suf'])
+      Rubish::Builtins.compgen(['-W', 'one two', '-P', 'pre_', '-S', '_suf'])
     end
     lines = output.strip.split("\n")
     assert_includes lines, 'pre_one_suf'
@@ -317,7 +317,7 @@ class TestCompgen < Test::Unit::TestCase
     FileUtils.touch('other.rb')
 
     output = capture_output do
-      Rubish::Builtins.run_compgen(['-G', '*.txt'])
+      Rubish::Builtins.compgen(['-G', '*.txt'])
     end
     lines = output.strip.split("\n")
     assert_includes lines, 'test1.txt'
@@ -333,7 +333,7 @@ class TestCompgen < Test::Unit::TestCase
     Rubish::Builtins.aliases['myalias'] = 'ls -la'
 
     output = capture_output do
-      Rubish::Builtins.run_compgen(['-a', 'my'])
+      Rubish::Builtins.compgen(['-a', 'my'])
     end
     lines = output.strip.split("\n")
     assert_includes lines, 'myalias'
@@ -343,7 +343,7 @@ class TestCompgen < Test::Unit::TestCase
 
   def test_short_flag_b_builtin
     output = capture_output do
-      Rubish::Builtins.run_compgen(['-b', 'ec'])
+      Rubish::Builtins.compgen(['-b', 'ec'])
     end
     lines = output.strip.split("\n")
     assert_includes lines, 'echo'
@@ -353,7 +353,7 @@ class TestCompgen < Test::Unit::TestCase
     FileUtils.mkdir('testdir')
 
     output = capture_output do
-      Rubish::Builtins.run_compgen(['-d', 'test'])
+      Rubish::Builtins.compgen(['-d', 'test'])
     end
     lines = output.strip.split("\n")
     assert lines.any? { |l| l.include?('testdir') }
@@ -364,7 +364,7 @@ class TestCompgen < Test::Unit::TestCase
     FileUtils.mkdir('testdir')
 
     output = capture_output do
-      Rubish::Builtins.run_compgen(['-f', 'test'])
+      Rubish::Builtins.compgen(['-f', 'test'])
     end
     lines = output.strip.split("\n")
     assert lines.any? { |l| l.include?('testfile') }
@@ -375,7 +375,7 @@ class TestCompgen < Test::Unit::TestCase
     ENV['MY_TEST_VAR'] = 'value'
 
     output = capture_output do
-      Rubish::Builtins.run_compgen(['-v', 'MY_TEST'])
+      Rubish::Builtins.compgen(['-v', 'MY_TEST'])
     end
     lines = output.strip.split("\n")
     assert_includes lines, 'MY_TEST_VAR'
@@ -387,7 +387,7 @@ class TestCompgen < Test::Unit::TestCase
 
   def test_combined_wordlist_and_filter
     output = capture_output do
-      Rubish::Builtins.run_compgen(['-W', 'foo.txt bar.rb baz.txt', '-X', '*.txt', 'b'])
+      Rubish::Builtins.compgen(['-W', 'foo.txt bar.rb baz.txt', '-X', '*.txt', 'b'])
     end
     lines = output.strip.split("\n")
     assert_includes lines, 'bar.rb'
@@ -396,7 +396,7 @@ class TestCompgen < Test::Unit::TestCase
 
   def test_combined_wordlist_prefix_suffix
     output = capture_output do
-      Rubish::Builtins.run_compgen(['-W', 'one two', '-P', '(', '-S', ')', 'o'])
+      Rubish::Builtins.compgen(['-W', 'one two', '-P', '(', '-S', ')', 'o'])
     end
     lines = output.strip.split("\n")
     assert_includes lines, '(one)'
@@ -404,7 +404,7 @@ class TestCompgen < Test::Unit::TestCase
 
   def test_combined_multiple_actions
     output = capture_output do
-      Rubish::Builtins.run_compgen(['-A', 'keyword', '-A', 'signal', 'i'])
+      Rubish::Builtins.compgen(['-A', 'keyword', '-A', 'signal', 'i'])
     end
     lines = output.strip.split("\n")
     assert_includes lines, 'if'
@@ -420,7 +420,7 @@ class TestCompgen < Test::Unit::TestCase
   def test_returns_true_on_match
     result = nil
     capture_output do
-      result = Rubish::Builtins.run_compgen(['-W', 'foo bar', 'f'])
+      result = Rubish::Builtins.compgen(['-W', 'foo bar', 'f'])
     end
     assert result
   end
@@ -428,7 +428,7 @@ class TestCompgen < Test::Unit::TestCase
   def test_returns_false_on_no_match
     result = nil
     capture_output do
-      result = Rubish::Builtins.run_compgen(['-W', 'foo bar', 'z'])
+      result = Rubish::Builtins.compgen(['-W', 'foo bar', 'z'])
     end
     assert_false result
   end

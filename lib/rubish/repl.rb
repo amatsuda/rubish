@@ -822,7 +822,7 @@ module Rubish
       return false unless File.exist?(path)
 
       begin
-        Builtins.run_source([path])
+        Builtins.source([path])
         true
       rescue SyntaxError => e
         $stderr.puts "rubish: #{path}: #{e.message}"
@@ -2196,7 +2196,7 @@ module Rubish
         builtin_name = ast.name
         begin
           # Run DEBUG trap before command
-          Builtins.run_debug_trap
+          Builtins.debug_trap
 
           # Expand variables in args for builtins
           expanded_args = expand_args_for_builtin(ast.args)
@@ -2230,7 +2230,7 @@ module Rubish
       if ast.is_a?(AST::Command) && @functions.key?(ast.name)
         begin
           # Run DEBUG trap before function call
-          Builtins.run_debug_trap
+          Builtins.debug_trap
 
           expanded_args = expand_args_for_builtin(ast.args)
           result = call_function(ast.name, expanded_args)
@@ -2428,7 +2428,7 @@ module Rubish
         true
       ensure
         # Run RETURN trap before leaving function (if functrace is on, trap exists)
-        Builtins.run_return_trap
+        Builtins.return_trap
 
         # Restore ERR trap if we cleared it
         Builtins.restore_err_trap(saved_err_trap) if saved_err_trap
@@ -3782,11 +3782,11 @@ module Rubish
 
     # Ruby methods for builtins - usable in blocks
     def echo(*args)
-      Builtins.run_echo(args.map(&:to_s))
+      Builtins.echo(args.map(&:to_s))
     end
 
     def printf(*args)
-      Builtins.run_printf(args.map(&:to_s))
+      Builtins.printf(args.map(&:to_s))
     end
 
     def __cmd(name, *args, __prefix_env: nil, &block)
@@ -6902,7 +6902,7 @@ module Rubish
       result = block.call
 
       # Run DEBUG trap before each command
-      Builtins.run_debug_trap
+      Builtins.debug_trap
 
       if result.is_a?(Command) && result.name == 'exec'
         # Special handling for exec builtin
@@ -6960,7 +6960,7 @@ module Rubish
     end
 
     def run_err_trap_if_failed
-      Builtins.run_err_trap if @last_status != 0
+      Builtins.err_trap if @last_status != 0
     end
 
     # Handle exec builtin with special support for redirections
