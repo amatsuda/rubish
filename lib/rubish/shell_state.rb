@@ -10,6 +10,9 @@ module Rubish
     # Options state
     attr_accessor :shell_options, :zsh_options, :set_options
 
+    # Aliases and hash table state
+    attr_accessor :aliases, :command_hash
+
     def initialize
       # Variables state
       @shell_vars = {}
@@ -24,6 +27,10 @@ module Rubish
       @shell_options = {}
       @zsh_options = {}
       @set_options = default_set_options
+
+      # Aliases and hash table state
+      @aliases = {}
+      @command_hash = {}
     end
 
     def clear_variables
@@ -40,6 +47,14 @@ module Rubish
       @shell_options.clear
       @zsh_options.clear
       @set_options = default_set_options
+    end
+
+    def clear_aliases
+      @aliases.clear
+    end
+
+    def clear_hash
+      @command_hash.clear
     end
 
     private

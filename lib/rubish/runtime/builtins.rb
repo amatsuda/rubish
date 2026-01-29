@@ -20,12 +20,10 @@ module Rubish
       _upvars _usergroup setopt unsetopt autoload compinit compdef git_ps1 require
     ]).freeze
 
-    @aliases = {}
     @dir_stack = []
     @traps = {}
     @original_traps = {}
     @current_trapsig = ''  # Signal name when trap handler is executing (for RUBISH_TRAPSIG/BASH_TRAPSIG)
-    @command_hash = {}  # Hash of command names to their cached paths
     @disabled_builtins = Set.new  # Set of disabled builtin names
     @dynamic_commands = []  # Array of dynamically loaded builtin names
     @call_stack = []  # Stack of [line_number, function_name, filename] for caller builtin
@@ -66,7 +64,7 @@ module Rubish
 
     class << self
       attr_accessor :current_state
-      attr_reader :aliases, :dir_stack, :traps, :command_hash, :disabled_builtins, :call_stack, :completions, :completion_options, :key_bindings, :readline_variables, :coprocs, :builtin_completion_functions, :named_directories
+      attr_reader :dir_stack, :traps, :disabled_builtins, :call_stack, :completions, :completion_options, :key_bindings, :readline_variables, :coprocs, :builtin_completion_functions, :named_directories
       attr_accessor :current_trapsig
 
       # Delegate variables state accessors to current_state for backward compatibility
@@ -82,6 +80,10 @@ module Rubish
       def shell_options; @current_state.shell_options; end
       def zsh_options; @current_state.zsh_options; end
       def set_options; @current_state.set_options; end
+
+      # Delegate aliases/hash state accessors to current_state for backward compatibility
+      def aliases; @current_state.aliases; end
+      def command_hash; @current_state.command_hash; end
       attr_accessor :executor, :script_name_getter, :script_name_setter, :positional_params_getter, :positional_params_setter, :function_checker, :function_remover, :function_lister, :function_getter, :function_caller, :heredoc_content_setter, :command_executor, :current_completion_options
       attr_accessor :history_file_getter, :history_loader, :history_saver, :history_appender, :last_history_line, :history_timestamps
       attr_accessor :source_file_getter, :source_file_setter
@@ -2866,18 +2868,18 @@ module Rubish
     def self.alias(args)
       if args.empty?
         # List all aliases
-        @aliases.each { |name, value| puts "alias #{name}='#{value}'" }
+        @current_state.aliases.each { |name, value| puts "alias #{name}='#{value}'" }
       else
         args.each do |arg|
           if arg.include?('=')
             name, value = arg.split('=', 2)
             # Remove surrounding quotes if present
             value = value.sub(/\A(['"])(.*)\1\z/, '\2')
-            @aliases[name] = value
+            @current_state.aliases[name] = value
           else
             # Show specific alias
-            if @aliases.key?(arg)
-              puts "alias #{arg}='#{@aliases[arg]}'"
+            if @current_state.aliases.key?(arg)
+              puts "alias #{arg}='#{@current_state.aliases[arg]}'"
             else
               puts "alias: #{arg}: not found"
             end
@@ -2894,8 +2896,8 @@ module Rubish
       end
 
       args.each do |name|
-        if @aliases.key?(name)
-          @aliases.delete(name)
+        if @current_state.aliases.key?(name)
+          @current_state.aliases.delete(name)
         else
           puts "unalias: #{name}: not found"
         end
@@ -2913,16 +2915,16 @@ module Rubish
       first_word = line.split(/\s/, 2).first
       return line unless first_word
 
-      if @aliases.key?(first_word)
+      if @current_state.aliases.key?(first_word)
         rest = line[first_word.length..]
-        "#{@aliases[first_word]}#{rest}"
+        "#{@current_state.aliases[first_word]}#{rest}"
       else
         line
       end
     end
 
     def self.clear_aliases
-      @aliases.clear
+      @current_state.aliases.clear
     end
 
     def self.source(args)
@@ -4087,12 +4089,12 @@ module Rubish
 
         # Check alias (unless force_path)
         unless force_path
-          if @aliases.key?(name)
+          if @current_state.aliases.key?(name)
             found = true
             if type_only
               puts 'alias'
             elsif !path_only
-              puts "#{name} is aliased to '#{@aliases[name]}'"
+              puts "#{name} is aliased to '#{@current_state.aliases[name]}'"
             end
             next unless show_all
           end
@@ -6267,7 +6269,7 @@ module Rubish
       (spec[:actions] || []).each do |action|
         case action
         when :alias
-          results.concat(@aliases.keys.select { |a| a.start_with?(word) })
+          results.concat(@current_state.aliases.keys.select { |a| a.start_with?(word) })
         when :arrayvar
           # Array variable names
           results.concat(@current_state.arrays.keys.select { |a| a.start_with?(word) })
@@ -6663,9 +6665,9 @@ module Rubish
       return spec if spec
 
       # progcomp_alias: if name is an alias, use completion spec for the aliased command
-      if shopt_enabled?('progcomp_alias') && @aliases.key?(name)
+      if shopt_enabled?('progcomp_alias') && @current_state.aliases.key?(name)
         # Get the first word of the alias expansion
-        alias_value = @aliases[name]
+        alias_value = @current_state.aliases[name]
         first_word = alias_value.split(/\s+/).first
         # Avoid infinite loop if alias points to itself
         return nil if first_word == name
@@ -9225,10 +9227,10 @@ module Rubish
 
       if args.empty?
         # List all cached paths
-        if @command_hash.empty?
+        if @current_state.command_hash.empty?
           puts 'hash: hash table empty'
         else
-          @command_hash.each do |name, path|
+          @current_state.command_hash.each do |name, path|
             puts "#{name}=#{path}"
           end
         end
@@ -9290,13 +9292,13 @@ module Rubish
 
       # Handle -r (clear all)
       if clear_all
-        @command_hash.clear
+        @current_state.command_hash.clear
         return true
       end
 
       # Handle -l (list mode) with no names
       if list_mode && names.empty?
-        @command_hash.each do |name, path|
+        @current_state.command_hash.each do |name, path|
           puts "hash -p #{path} #{name}"
         end
         return true
@@ -9307,10 +9309,10 @@ module Rubish
 
       if names.empty? && !set_path
         # No names and no path to set, just list
-        if @command_hash.empty?
+        if @current_state.command_hash.empty?
           puts 'hash: hash table empty'
         else
-          @command_hash.each do |name, path|
+          @current_state.command_hash.each do |name, path|
             puts "#{name}=#{path}"
           end
         end
@@ -9320,21 +9322,21 @@ module Rubish
       names.each do |name|
         if delete_mode
           # Forget cached path
-          if @command_hash.key?(name)
-            @command_hash.delete(name)
+          if @current_state.command_hash.key?(name)
+            @current_state.command_hash.delete(name)
           else
             puts "hash: #{name}: not found"
             all_found = false
           end
         elsif print_mode
           # Print cached path
-          if @command_hash.key?(name)
-            puts @command_hash[name]
+          if @current_state.command_hash.key?(name)
+            puts @current_state.command_hash[name]
           else
             # Try to find and cache
             path = find_in_path(name)
             if path
-              @command_hash[name] = path
+              @current_state.command_hash[name] = path
               puts path
             else
               puts "hash: #{name}: not found"
@@ -9343,12 +9345,12 @@ module Rubish
           end
         elsif set_path
           # Set specific path
-          @command_hash[name] = set_path
+          @current_state.command_hash[name] = set_path
         else
           # Cache the command
           path = find_in_path(name)
           if path
-            @command_hash[name] = path
+            @current_state.command_hash[name] = path
           else
             puts "hash: #{name}: not found"
             all_found = false
@@ -9360,19 +9362,19 @@ module Rubish
     end
 
     def self.hash_lookup(name)
-      @command_hash[name]
+      @current_state.command_hash[name]
     end
 
     def self.hash_store(name, path)
-      @command_hash[name] = path
+      @current_state.command_hash[name] = path
     end
 
     def self.hash_delete(name)
-      @command_hash.delete(name)
+      @current_state.command_hash.delete(name)
     end
 
     def self.clear_hash
-      @command_hash.clear
+      @current_state.command_hash.clear
     end
 
     # Handle -d option: named directories (zsh) or delete from hash (bash)
@@ -9413,9 +9415,9 @@ module Rubish
           # Expand ~ in path
           path = File.expand_path(path) if path.start_with?('~')
           @named_directories[name] = path
-        elsif @command_hash.key?(arg)
+        elsif @current_state.command_hash.key?(arg)
           # Bash-style: delete from command hash
-          @command_hash.delete(arg)
+          @current_state.command_hash.delete(arg)
         elsif @named_directories.key?(arg)
           # zsh-style: show named directory path
           puts @named_directories[arg]
