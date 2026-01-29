@@ -13,6 +13,9 @@ module Rubish
     # Aliases and hash table state
     attr_accessor :aliases, :command_hash
 
+    # Directory stack state
+    attr_accessor :dir_stack
+
     def initialize
       # Variables state
       @shell_vars = {}
@@ -31,6 +34,9 @@ module Rubish
       # Aliases and hash table state
       @aliases = {}
       @command_hash = {}
+
+      # Directory stack state
+      @dir_stack = []
     end
 
     def clear_variables
@@ -55,6 +61,10 @@ module Rubish
 
     def clear_hash
       @command_hash.clear
+    end
+
+    def clear_dir_stack
+      @dir_stack.clear
     end
 
     private

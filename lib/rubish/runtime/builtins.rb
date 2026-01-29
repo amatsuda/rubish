@@ -20,7 +20,6 @@ module Rubish
       _upvars _usergroup setopt unsetopt autoload compinit compdef git_ps1 require
     ]).freeze
 
-    @dir_stack = []
     @traps = {}
     @original_traps = {}
     @current_trapsig = ''  # Signal name when trap handler is executing (for RUBISH_TRAPSIG/BASH_TRAPSIG)
@@ -64,7 +63,7 @@ module Rubish
 
     class << self
       attr_accessor :current_state
-      attr_reader :dir_stack, :traps, :disabled_builtins, :call_stack, :completions, :completion_options, :key_bindings, :readline_variables, :coprocs, :builtin_completion_functions, :named_directories
+      attr_reader :traps, :disabled_builtins, :call_stack, :completions, :completion_options, :key_bindings, :readline_variables, :coprocs, :builtin_completion_functions, :named_directories
       attr_accessor :current_trapsig
 
       # Delegate variables state accessors to current_state for backward compatibility
@@ -84,6 +83,9 @@ module Rubish
       # Delegate aliases/hash state accessors to current_state for backward compatibility
       def aliases; @current_state.aliases; end
       def command_hash; @current_state.command_hash; end
+
+      # Delegate directory stack state accessor to current_state for backward compatibility
+      def dir_stack; @current_state.dir_stack; end
       attr_accessor :executor, :script_name_getter, :script_name_setter, :positional_params_getter, :positional_params_setter, :function_checker, :function_remover, :function_lister, :function_getter, :function_caller, :heredoc_content_setter, :command_executor, :current_completion_options
       attr_accessor :history_file_getter, :history_loader, :history_saver, :history_appender, :last_history_line, :history_timestamps
       attr_accessor :source_file_getter, :source_file_setter
@@ -1104,13 +1106,13 @@ module Rubish
 
       if remaining_args.empty?
         # Swap top two directories
-        if @dir_stack.empty?
+        if @current_state.dir_stack.empty?
           puts 'pushd: no other directory'
           return false
         end
         current = Dir.pwd
-        target = @dir_stack.shift
-        @dir_stack.unshift(current)
+        target = @current_state.dir_stack.shift
+        @current_state.dir_stack.unshift(current)
         unless no_cd
           begin
             Dir.chdir(target)
@@ -1126,7 +1128,7 @@ module Rubish
         # Stack rotation: +N or -N
         arg = remaining_args.first
         n = arg[1..].to_i
-        full_stack = [Dir.pwd] + @dir_stack
+        full_stack = [Dir.pwd] + @current_state.dir_stack
 
         if n >= full_stack.length
           puts "pushd: #{arg}: directory stack index out of range"
@@ -1148,7 +1150,7 @@ module Rubish
         end
 
         target = rotated.first
-        @dir_stack = rotated[1..]
+        @current_state.dir_stack = rotated[1..]
 
         unless no_cd
           begin
@@ -1172,7 +1174,7 @@ module Rubish
           return false
         end
 
-        @dir_stack.unshift(current)
+        @current_state.dir_stack.unshift(current)
         unless no_cd
           begin
             Dir.chdir(dir)
@@ -1207,12 +1209,12 @@ module Rubish
         end
       end
 
-      if @dir_stack.empty? && index_arg.nil?
+      if @current_state.dir_stack.empty? && index_arg.nil?
         puts 'popd: directory stack empty'
         return false
       end
 
-      full_stack = [Dir.pwd] + @dir_stack
+      full_stack = [Dir.pwd] + @current_state.dir_stack
 
       if index_arg
         n = index_arg[1..].to_i
@@ -1237,7 +1239,7 @@ module Rubish
             return false
           end
           target = full_stack[1]
-          @dir_stack = full_stack[2..] || []
+          @current_state.dir_stack = full_stack[2..] || []
           unless no_cd
             begin
               Dir.chdir(target)
@@ -1250,16 +1252,16 @@ module Rubish
         else
           # Removing from stack (not current dir)
           full_stack.delete_at(index)
-          @dir_stack = full_stack[1..] || []
+          @current_state.dir_stack = full_stack[1..] || []
         end
       else
         # Default: pop top of stack and cd there
-        if @dir_stack.empty?
+        if @current_state.dir_stack.empty?
           puts 'popd: directory stack empty'
           return false
         end
 
-        target = @dir_stack.shift
+        target = @current_state.dir_stack.shift
         unless no_cd
           begin
             Dir.chdir(target)
@@ -1281,12 +1283,12 @@ module Rubish
     end
 
     def self.print_dir_stack
-      stack = [Dir.pwd] + @dir_stack
+      stack = [Dir.pwd] + @current_state.dir_stack
       puts stack.map { |d| d.sub(ENV['HOME'], '~') }.join(' ')
     end
 
     def self.clear_dir_stack
-      @dir_stack.clear
+      @current_state.dir_stack.clear
     end
 
     # Signal name mapping
