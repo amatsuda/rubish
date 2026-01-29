@@ -6,6 +6,7 @@ require_relative 'history'
 require_relative 'config'
 require_relative 'arithmetic'
 require_relative 'expansion'
+require_relative 'runtime'
 
 module Rubish
   class NounsetError < StandardError; end
@@ -18,6 +19,7 @@ module Rubish
     include Config
     include Arithmetic
     include Expansion
+    include Runtime
 
     def initialize(login_shell: false, no_profile: false, no_rc: false, restricted: false, rcfile: nil)
       # Clear shell variables from previous REPL instance (shell vars are per-instance)
