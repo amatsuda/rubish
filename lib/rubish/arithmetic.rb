@@ -34,8 +34,8 @@ module Rubish
           n = $2.to_i
           (@positional_params[n - 1] || '0')
         elsif (var_name = $1 || $3 || $4)
-          # Use __get_special_var for special variables, fall back to ENV
-          __get_special_var(var_name) || ENV.fetch(var_name, '0')
+          # Use get_special_var for special variables, fall back to ENV
+          get_special_var(var_name) || ENV.fetch(var_name, '0')
         else
           match
         end
@@ -173,7 +173,7 @@ module Rubish
           n = $2.to_i
           (@positional_params[n - 1] || '0')
         elsif (var_name = $1 || $3 || $4)
-          __get_special_var(var_name) || Builtins.get_var(var_name) || '0'
+          get_special_var(var_name) || Builtins.get_var(var_name) || '0'
         else
           match
         end

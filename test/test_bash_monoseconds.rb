@@ -156,10 +156,10 @@ class TestBashMonoseconds < Test::Unit::TestCase
     assert (values.max - values.min) <= 1, 'Multiple accesses should be close in value'
   end
 
-  # __bash_monoseconds method
+  # monoseconds method
 
   def test_bash_monoseconds_method_returns_integer
-    value = @repl.send(:__bash_monoseconds)
+    value = @repl.send(:monoseconds)
     assert_kind_of Integer, value
     assert value > 0
   end
@@ -168,13 +168,13 @@ class TestBashMonoseconds < Test::Unit::TestCase
     # Verify the method uses Process::CLOCK_MONOTONIC when available
     if defined?(Process::CLOCK_MONOTONIC)
       expected = Process.clock_gettime(Process::CLOCK_MONOTONIC).to_i
-      actual = @repl.send(:__bash_monoseconds)
+      actual = @repl.send(:monoseconds)
       # Should be very close (within 1 second)
       assert (expected - actual).abs <= 1, 'Should use monotonic clock'
     else
       # Falls back to Time.now
       expected = Time.now.to_i
-      actual = @repl.send(:__bash_monoseconds)
+      actual = @repl.send(:monoseconds)
       assert (expected - actual).abs <= 1, 'Should fall back to epoch time'
     end
   end

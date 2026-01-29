@@ -289,7 +289,7 @@ module Rubish
       when '$?' then return [@last_status.to_s, 2]
       when '$$' then return [Process.pid.to_s, 2]
       when '$!' then return [@last_bg_pid&.to_s || '', 2]
-      when '$0' then return [__bash_argv0, 2]
+      when '$0' then return [argv0, 2]
       when '$#' then return [@positional_params.length.to_s, 2]
       when '$@' then return [@positional_params.join(' '), 2]
       when '$*' then return [Builtins.join_by_ifs(@positional_params), 2]
@@ -590,12 +590,12 @@ module Rubish
 
     # ${#var} - length of variable value
     def __param_length(var_name)
-      (__get_special_var(var_name) || Builtins.get_var(var_name) || '').length.to_s
+      (get_special_var(var_name) || Builtins.get_var(var_name) || '').length.to_s
     end
 
     # ${var:offset} or ${var:offset:length} - substring extraction
     def __param_substring(var_name, offset, length)
-      value = __get_special_var(var_name) || Builtins.get_var(var_name) || ''
+      value = get_special_var(var_name) || Builtins.get_var(var_name) || ''
       offset = offset.to_i
       if length
         length = length.to_i
@@ -617,7 +617,7 @@ module Rubish
     # L: Lowercase entire value
     # K: For associative arrays, show key-value pairs
     def __param_transform(var_name, operator)
-      value = __get_special_var(var_name) || Builtins.get_var(var_name)
+      value = get_special_var(var_name) || Builtins.get_var(var_name)
 
       case operator
       when 'Q' then value.nil? ? "''" : "'" + value.gsub("'") { "'\\''" } + "'"
@@ -643,7 +643,8 @@ module Rubish
       end
     end
 
-    def __get_special_var(var_name)
+    # Alias for internal use - delegates to get_special_var_value
+    def get_special_var(var_name)
       get_special_var_value(var_name)
     end
 
@@ -651,7 +652,7 @@ module Rubish
     # /  - replace first occurrence
     # // - replace all occurrences
     def __param_replace(var_name, operator, pattern, replacement)
-      value = __get_special_var(var_name) || Builtins.get_var(var_name) || ''
+      value = get_special_var(var_name) || Builtins.get_var(var_name) || ''
       return '' if value.empty?
 
       regex = pattern_to_regex(pattern, :any, :longest)
@@ -691,36 +692,36 @@ module Rubish
 
     # Returns RUBISH_VERSINFO array similar to BASH_VERSINFO
     # [0] major, [1] minor, [2] patch, [3] extra, [4] release status, [5] machine type
-    def __rubish_versinfo
+    def rubish_versinfo
       parts = Rubish::VERSION.split('.')
       [parts[0] || '0', parts[1] || '0', parts[2] || '0', '', 'release', RUBY_PLATFORM]
     end
 
     # Returns OS type from RUBY_PLATFORM (e.g., "darwin23", "linux-gnu")
-    def __ostype
+    def ostype
       parts = RUBY_PLATFORM.split('-', 2)
       parts[1] || RUBY_PLATFORM
     end
 
     # Returns host/machine type from RUBY_PLATFORM (e.g., "arm64", "x86_64")
-    def __hosttype
+    def hosttype
       RUBY_PLATFORM.split('-').first
     end
 
     # Returns the value from the system's monotonic clock in seconds
     # The monotonic clock is not affected by system time changes
-    def __bash_monoseconds
+    def monoseconds
       defined?(Process::CLOCK_MONOTONIC) ? Process.clock_gettime(Process::CLOCK_MONOTONIC).to_i : Time.now.to_i
     end
 
     # Returns the same value as $0 (the shell or script name)
     # RUBISH_ARGV0 overrides @script_name if set (even if empty)
-    def __bash_argv0
+    def argv0
       Builtins.var_set?('RUBISH_ARGV0') ? Builtins.get_var('RUBISH_ARGV0') : @script_name
     end
 
     # Returns the full pathname used to invoke rubish (like BASH in bash)
-    def __rubish_path
+    def rubish_path
       @rubish_path ||= begin
         if $PROGRAM_NAME && File.exist?($PROGRAM_NAME)
           File.expand_path($PROGRAM_NAME)
@@ -1064,11 +1065,11 @@ module Rubish
       when 'EPOCHSECONDS' then Time.now.to_i.to_s
       when 'EPOCHREALTIME' then format('%.6f', Time.now.to_f)
       when 'SRANDOM' then SecureRandom.random_number(2**32).to_s
-      when 'RUBISH_MONOSECONDS', 'BASH_MONOSECONDS' then __bash_monoseconds.to_s
-      when 'BASH_ARGV0' then @bash_argv0_unset ? nil : __bash_argv0
+      when 'RUBISH_MONOSECONDS', 'BASH_MONOSECONDS' then monoseconds.to_s
+      when 'BASH_ARGV0' then @bash_argv0_unset ? nil : argv0
       when 'RUBISH_VERSION', 'BASH_VERSION' then Rubish::VERSION
-      when 'OSTYPE' then __ostype
-      when 'HOSTTYPE' then __hosttype
+      when 'OSTYPE' then ostype
+      when 'HOSTTYPE' then hosttype
       when 'MACHTYPE' then RUBY_PLATFORM
       when 'RUBISH_COMMAND', 'BASH_COMMAND' then @rubish_command
       when 'RUBISH_SUBSHELL', 'BASH_SUBSHELL' then @subshell_level.to_s
@@ -1085,7 +1086,7 @@ module Rubish
       when 'BASHOPTS' then Builtins.bashopts
       when 'BASH_COMPAT' then Builtins.bash_compat
       when 'RUBISH_EXECUTION_STRING', 'BASH_EXECUTION_STRING' then ENV['RUBISH_EXECUTION_STRING'] || ''
-      when 'RUBISH', 'BASH' then __rubish_path
+      when 'RUBISH', 'BASH' then rubish_path
       when 'RUBISH_TRAPSIG', 'BASH_TRAPSIG' then Builtins.current_trapsig || ''
       when 'READLINE_LINE' then Builtins.readline_line
       when 'READLINE_POINT' then Builtins.readline_point.to_s
@@ -1101,7 +1102,7 @@ module Rubish
       when /\A\d+\z/
         n = var_name.to_i
         if n == 0
-          value = __bash_argv0
+          value = argv0
           [value, true, value.empty?]
         else
           value = @positional_params[n - 1]
@@ -1214,7 +1215,7 @@ module Rubish
     def get_special_array_values(var_name)
       case var_name
       when 'GROUPS' then Process.groups
-      when 'RUBISH_VERSINFO', 'BASH_VERSINFO' then __rubish_versinfo
+      when 'RUBISH_VERSINFO', 'BASH_VERSINFO' then rubish_versinfo
       when 'PIPESTATUS' then @pipestatus
       when 'FUNCNAME' then @funcname_stack
       when 'RUBISH_LINENO', 'BASH_LINENO' then @rubish_lineno_stack

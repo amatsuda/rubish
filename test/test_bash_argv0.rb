@@ -194,17 +194,17 @@ class TestBashArgv0 < Test::Unit::TestCase
     assert_equal 'newname', values2[1]
   end
 
-  # __bash_argv0 method
+  # argv0 method
 
   def test_bash_argv0_method_returns_string
-    value = @repl.send(:__bash_argv0)
+    value = @repl.send(:argv0)
     assert_kind_of String, value
     assert_equal 'rubish', value
   end
 
   def test_bash_argv0_method_respects_rubish_argv0
     ENV['RUBISH_ARGV0'] = 'custom_shell'
-    value = @repl.send(:__bash_argv0)
+    value = @repl.send(:argv0)
     assert_equal 'custom_shell', value
   end
 end
