@@ -253,7 +253,7 @@ class TestStartupFiles < Test::Unit::TestCase
     File.write(File.join(@tempdir, '.bashrc'), 'BASHRC_SOURCED=yes')
 
     # Enable privileged mode
-    Rubish::Builtins.instance_variable_get(:@set_options)['p'] = true
+    Rubish::Builtins.set_options['p'] = true
 
     begin
       repl = create_test_repl(login_shell: true)
@@ -262,7 +262,7 @@ class TestStartupFiles < Test::Unit::TestCase
       assert_nil Rubish::Builtins.get_var('PROFILE_SOURCED')
       assert_nil Rubish::Builtins.get_var('BASHRC_SOURCED')
     ensure
-      Rubish::Builtins.instance_variable_get(:@set_options)['p'] = false
+      Rubish::Builtins.set_options['p'] = false
     end
   end
 
@@ -322,7 +322,7 @@ class TestStartupFiles < Test::Unit::TestCase
     assert Rubish::Builtins.interactive_mode?
   ensure
     # Reset interactive mode
-    Rubish::Builtins.instance_variable_get(:@set_options)['i'] = false
+    Rubish::Builtins.set_options['i'] = false
   end
 
   def test_interactive_mode_cannot_be_changed_via_set
@@ -336,7 +336,7 @@ class TestStartupFiles < Test::Unit::TestCase
     stderr = capture_stderr { repl.send(:execute, 'set +i') }
     assert_match(/cannot modify/, stderr)
   ensure
-    Rubish::Builtins.instance_variable_get(:@set_options)['i'] = false
+    Rubish::Builtins.set_options['i'] = false
   end
 
   # ==========================================================================

@@ -6,7 +6,7 @@ class TestHistverify < Test::Unit::TestCase
   def setup
     @repl = Rubish::REPL.new
     @original_shell_options = Rubish::Builtins.shell_options.dup
-    @original_set_options = Rubish::Builtins.instance_variable_get(:@set_options).dup
+    @original_set_options = Rubish::Builtins.set_options.dup
     # Clear Reline history and pre_input_hook
     Reline::HISTORY.clear
     Reline.pre_input_hook = nil
@@ -15,7 +15,8 @@ class TestHistverify < Test::Unit::TestCase
   def teardown
     Rubish::Builtins.shell_options.clear
     @original_shell_options.each { |k, v| Rubish::Builtins.shell_options[k] = v }
-    Rubish::Builtins.instance_variable_set(:@set_options, @original_set_options)
+    Rubish::Builtins.set_options.clear
+    @original_set_options.each { |k, v| Rubish::Builtins.set_options[k] = v }
     Reline::HISTORY.clear
     Reline.pre_input_hook = nil
   end

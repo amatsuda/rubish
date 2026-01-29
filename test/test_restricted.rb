@@ -9,8 +9,8 @@ class TestRestricted < Test::Unit::TestCase
     @tempdir = Dir.mktmpdir('rubish_restricted_test')
     @original_dir = Dir.pwd
     # Reset restricted mode
-    Rubish::Builtins.instance_variable_set(:@set_options, Rubish::Builtins.instance_variable_get(:@set_options).merge('r' => false))
-    Rubish::Builtins.instance_variable_set(:@shell_options, Rubish::Builtins.instance_variable_get(:@shell_options).merge('restricted_shell' => false))
+    Rubish::Builtins.set_options['r'] = false
+    Rubish::Builtins.shell_options['restricted_shell'] = false
   end
 
   def teardown
@@ -19,8 +19,8 @@ class TestRestricted < Test::Unit::TestCase
     ENV.clear
     @original_env.each { |k, v| ENV[k] = v }
     # Reset restricted mode
-    Rubish::Builtins.instance_variable_set(:@set_options, Rubish::Builtins.instance_variable_get(:@set_options).merge('r' => false))
-    Rubish::Builtins.instance_variable_set(:@shell_options, Rubish::Builtins.instance_variable_get(:@shell_options).merge('restricted_shell' => false))
+    Rubish::Builtins.set_options['r'] = false
+    Rubish::Builtins.shell_options['restricted_shell'] = false
   end
 
   # ==========================================================================
@@ -268,10 +268,8 @@ class TestRestricted < Test::Unit::TestCase
       File.write(bashrc_path, 'PATH=/custom/path:$PATH')
 
       # Reset restricted mode
-      Rubish::Builtins.instance_variable_set(:@set_options,
-        Rubish::Builtins.instance_variable_get(:@set_options).merge('r' => false))
-      Rubish::Builtins.instance_variable_set(:@shell_options,
-        Rubish::Builtins.instance_variable_get(:@shell_options).merge('restricted_shell' => false))
+      Rubish::Builtins.set_options['r'] = false
+      Rubish::Builtins.shell_options['restricted_shell'] = false
 
       # Create REPL with restricted flag
       repl = Rubish::REPL.new(restricted: true)
@@ -297,10 +295,8 @@ class TestRestricted < Test::Unit::TestCase
       ENV['HOME'] = original_home
       FileUtils.rm_rf(tempdir)
       # Reset restricted mode
-      Rubish::Builtins.instance_variable_set(:@set_options,
-        Rubish::Builtins.instance_variable_get(:@set_options).merge('r' => false))
-      Rubish::Builtins.instance_variable_set(:@shell_options,
-        Rubish::Builtins.instance_variable_get(:@shell_options).merge('restricted_shell' => false))
+      Rubish::Builtins.set_options['r'] = false
+      Rubish::Builtins.shell_options['restricted_shell'] = false
     end
   end
 end

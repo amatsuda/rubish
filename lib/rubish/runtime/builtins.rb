@@ -26,8 +26,6 @@ module Rubish
     @original_traps = {}
     @current_trapsig = ''  # Signal name when trap handler is executing (for RUBISH_TRAPSIG/BASH_TRAPSIG)
     @command_hash = {}  # Hash of command names to their cached paths
-    @shell_options = {}  # Hash of shell option names to boolean values
-    @zsh_options = {}  # Hash of zsh-specific option names to boolean values
     @disabled_builtins = Set.new  # Set of disabled builtin names
     @dynamic_commands = []  # Array of dynamically loaded builtin names
     @call_stack = []  # Stack of [line_number, function_name, filename] for caller builtin
@@ -68,7 +66,7 @@ module Rubish
 
     class << self
       attr_accessor :current_state
-      attr_reader :aliases, :dir_stack, :traps, :command_hash, :shell_options, :zsh_options, :disabled_builtins, :call_stack, :completions, :completion_options, :key_bindings, :readline_variables, :coprocs, :builtin_completion_functions, :named_directories
+      attr_reader :aliases, :dir_stack, :traps, :command_hash, :disabled_builtins, :call_stack, :completions, :completion_options, :key_bindings, :readline_variables, :coprocs, :builtin_completion_functions, :named_directories
       attr_accessor :current_trapsig
 
       # Delegate variables state accessors to current_state for backward compatibility
@@ -79,6 +77,11 @@ module Rubish
       def var_attributes; @current_state.var_attributes; end
       def readonly_vars; @current_state.readonly_vars; end
       def local_scope_stack; @current_state.local_scope_stack; end
+
+      # Delegate options state accessors to current_state for backward compatibility
+      def shell_options; @current_state.shell_options; end
+      def zsh_options; @current_state.zsh_options; end
+      def set_options; @current_state.set_options; end
       attr_accessor :executor, :script_name_getter, :script_name_setter, :positional_params_getter, :positional_params_setter, :function_checker, :function_remover, :function_lister, :function_getter, :function_caller, :heredoc_content_setter, :command_executor, :current_completion_options
       attr_accessor :history_file_getter, :history_loader, :history_saver, :history_appender, :last_history_line, :history_timestamps
       attr_accessor :source_file_getter, :source_file_setter
@@ -3161,73 +3164,31 @@ module Rubish
       true
     end
 
-    # Shell option flags (set -o options)
-    @set_options = {
-      'B' => true,   # braceexpand: enable brace expansion (enabled by default)
-      'H' => true,   # histexpand: enable ! style history expansion (enabled by default)
-      'e' => false,  # errexit: exit on error
-      'E' => false,  # errtrace: ERR trap inherited by functions/subshells
-      'T' => false,  # functrace: DEBUG/RETURN traps inherited by functions/subshells
-      'x' => false,  # xtrace: print commands
-      'u' => false,  # nounset: error on unset variables
-      'n' => false,  # noexec: don't execute (syntax check)
-      'v' => false,  # verbose: print input lines
-      'f' => false,  # noglob: disable globbing
-      'C' => false,  # noclobber: don't overwrite files with >
-      'a' => false,  # allexport: export all variables
-      'b' => false,  # notify: report job status immediately
-      'h' => false,  # hashall: hash commands
-      'm' => false,  # monitor: job control
-      'pipefail' => false,  # pipefail: pipeline fails if any command fails
-      'globstar' => false,  # globstar: ** matches directories recursively
-      'nullglob' => false,  # nullglob: patterns matching nothing expand to nothing
-      'failglob' => false,  # failglob: patterns matching nothing cause an error
-      'dotglob' => false,   # dotglob: globs match files starting with .
-      'nocaseglob' => false, # nocaseglob: case-insensitive globbing
-      'ignoreeof' => false,  # ignoreeof: don't exit on EOF (Ctrl+D)
-      'extglob' => false,    # extglob: extended pattern matching operators
-      'P' => false,          # physical: don't follow symlinks for cd/pwd
-      'emacs' => true,       # emacs: use emacs-style line editing (default)
-      'vi' => false,         # vi: use vi-style line editing
-      'nocasematch' => false, # nocasematch: case-insensitive pattern matching in case/[[
-      't' => false,          # onecmd: exit after reading and executing one command
-      'k' => false,          # keyword: all assignment args placed in environment
-      'p' => false,          # privileged: don't read startup files, ignore some env vars
-      'history' => true,     # history: enable command history (enabled by default)
-      'nolog' => false,      # nolog: obsolete, has no effect
-      'r' => false,          # restricted: restricted shell mode (cannot be disabled once set)
-      'i' => false,          # interactive: shell is interactive (read-only, set at startup)
-    }
-
-    def self.set_options
-      @set_options
-    end
-
     def self.set_option?(flag)
-      @set_options[flag] || false
+      @current_state.set_options[flag] || false
     end
 
     # Check if shell is in restricted mode
     def self.restricted_mode?
-      @set_options['r'] || @shell_options['restricted_shell']
+      @current_state.set_options['r'] || @current_state.shell_options['restricted_shell']
     end
 
     # Enable restricted mode (cannot be disabled once set)
     def self.enable_restricted_mode
-      @set_options['r'] = true
-      @shell_options['restricted_shell'] = true
+      @current_state.set_options['r'] = true
+      @current_state.shell_options['restricted_shell'] = true
     end
 
     # Check if shell is interactive
     def self.interactive_mode?
-      @set_options['i']
+      @current_state.set_options['i']
     end
 
     # Enable interactive mode (read-only, set at startup)
     # Also enables monitor mode (job control) as per bash behavior
     def self.enable_interactive_mode
-      @set_options['i'] = true
-      @set_options['m'] = true  # Job control enabled for interactive shells
+      @current_state.set_options['i'] = true
+      @current_state.set_options['m'] = true  # Job control enabled for interactive shells
     end
 
     # List of variables that cannot be modified in restricted mode
@@ -3273,7 +3234,7 @@ module Rubish
         elsif arg.start_with?('-') && arg.length > 1 && arg != '-'
           # Short options: -e, -x, -ex
           arg[1..].each_char do |c|
-            if @set_options.key?(c)
+            if @current_state.set_options.key?(c)
               if c == 'r'
                 # Enable restricted mode (syncs with restricted_shell shopt)
                 enable_restricted_mode
@@ -3282,14 +3243,14 @@ module Rubish
                 $stderr.puts 'rubish: set: interactive: cannot modify at runtime'
                 return false
               else
-                @set_options[c] = true
+                @current_state.set_options[c] = true
               end
             end
           end
         elsif arg.start_with?('+') && arg.length > 1
           # Disable short options: +e, +x
           arg[1..].each_char do |c|
-            if @set_options.key?(c)
+            if @current_state.set_options.key?(c)
               if c == 'r' && restricted_mode?
                 # Cannot disable restricted mode once enabled
                 $stderr.puts 'rubish: set: restricted: cannot modify in restricted mode'
@@ -3299,7 +3260,7 @@ module Rubish
                 $stderr.puts 'rubish: set: interactive: cannot modify at runtime'
                 return false
               else
-                @set_options[c] = false
+                @current_state.set_options[c] = false
               end
             end
           end
@@ -3328,7 +3289,7 @@ module Rubish
         'p' => 'privileged', 'history' => 'history', 'nolog' => 'nolog',
         'r' => 'restricted'
       }
-      @set_options.each do |flag, value|
+      @current_state.set_options.each do |flag, value|
         name = long_names[flag] || flag
         state = value ? '-o' : '+o'
         puts "set #{state} #{name}"
@@ -3351,7 +3312,7 @@ module Rubish
         'p' => 'privileged', 'history' => 'history', 'nolog' => 'nolog',
         'r' => 'restricted'
       }
-      enabled = @set_options.select { |_, v| v }.keys.map { |k| long_names[k] || k }
+      enabled = @current_state.set_options.select { |_, v| v }.keys.map { |k| long_names[k] || k }
       enabled.sort.join(':')
     end
 
@@ -3359,8 +3320,8 @@ module Rubish
     def self.rubishopts
       enabled = []
       SHELL_OPTIONS.each_key do |name|
-        if @shell_options.key?(name)
-          enabled << name if @shell_options[name]
+        if @current_state.shell_options.key?(name)
+          enabled << name if @current_state.shell_options[name]
         elsif SHELL_OPTIONS[name][0]  # default value is true
           enabled << name
         end
@@ -3404,25 +3365,25 @@ module Rubish
 
       # vi and emacs are mutually exclusive
       if flag == 'vi' && value
-        @set_options['vi'] = true
-        @set_options['emacs'] = false
+        @current_state.set_options['vi'] = true
+        @current_state.set_options['emacs'] = false
         Reline.vi_editing_mode if defined?(Reline)
       elsif flag == 'emacs' && value
-        @set_options['emacs'] = true
-        @set_options['vi'] = false
+        @current_state.set_options['emacs'] = true
+        @current_state.set_options['vi'] = false
         Reline.emacs_editing_mode if defined?(Reline)
       elsif flag == 'vi' && !value
         # Disabling vi enables emacs
-        @set_options['vi'] = false
-        @set_options['emacs'] = true
+        @current_state.set_options['vi'] = false
+        @current_state.set_options['emacs'] = true
         Reline.emacs_editing_mode if defined?(Reline)
       elsif flag == 'emacs' && !value
         # Disabling emacs enables vi
-        @set_options['emacs'] = false
-        @set_options['vi'] = true
+        @current_state.set_options['emacs'] = false
+        @current_state.set_options['vi'] = true
         Reline.vi_editing_mode if defined?(Reline)
       else
-        @set_options[flag] = value
+        @current_state.set_options[flag] = value
       end
     end
 
@@ -4622,8 +4583,8 @@ module Rubish
 
       # Helper to get current value of an option
       get_option = lambda do |name|
-        if @shell_options.key?(name)
-          @shell_options[name]
+        if @current_state.shell_options.key?(name)
+          @current_state.shell_options[name]
         elsif SHELL_OPTIONS.key?(name)
           SHELL_OPTIONS[name][0]  # default value
         else
@@ -4694,10 +4655,10 @@ module Rubish
 
         # Compat options are mutually exclusive - enabling one disables others
         if set_mode && COMPAT_OPTIONS.include?(name)
-          COMPAT_OPTIONS.each { |opt| @shell_options[opt] = false }
+          COMPAT_OPTIONS.each { |opt| @current_state.shell_options[opt] = false }
         end
 
-        @shell_options[name] = set_mode
+        @current_state.shell_options[name] = set_mode
       end
 
       true
@@ -4707,7 +4668,7 @@ module Rubish
     def self.shopt_set_o(set_mode, unset_mode, print_mode, quiet_mode, opt_names)
       # Build list of valid set -o option names (long names)
       valid_options = {}
-      @set_options.each_key do |key|
+      @current_state.set_options.each_key do |key|
         long_name = SET_O_LONG_NAMES[key] || key
         valid_options[long_name] = key
       end
@@ -4716,7 +4677,7 @@ module Rubish
       get_option = lambda do |name|
         key = valid_options[name]
         return nil unless key
-        @set_options[key]
+        @current_state.set_options[key]
       end
 
       # Helper to print an option
@@ -4775,18 +4736,18 @@ module Rubish
         end
 
         key = valid_options[name]
-        @set_options[key] = set_mode
+        @current_state.set_options[key] = set_mode
       end
 
       true
     end
 
     def self.shopt_enabled?(name)
-      # Check @shell_options first (shopt -s)
-      if @shell_options.key?(name)
-        @shell_options[name]
-      # Also check @set_options for options that can be set via both shopt and set -o
-      elsif @set_options.key?(name) && @set_options[name]
+      # Check @current_state.shell_options first (shopt -s)
+      if @current_state.shell_options.key?(name)
+        @current_state.shell_options[name]
+      # Also check @current_state.set_options for options that can be set via both shopt and set -o
+      elsif @current_state.set_options.key?(name) && @current_state.set_options[name]
         true
       elsif SHELL_OPTIONS.key?(name)
         SHELL_OPTIONS[name][0]
@@ -4797,7 +4758,7 @@ module Rubish
 
     # Set a shell option directly (for internal use)
     def self.set_shell_option(name, value)
-      @shell_options[name] = value
+      @current_state.shell_options[name] = value
     end
 
     # Normalize zsh option name: lowercase and remove underscores
@@ -4833,8 +4794,8 @@ module Rubish
       if type == :bash
         shopt_enabled?(canonical_name)
       else
-        if @zsh_options.key?(canonical_name)
-          @zsh_options[canonical_name]
+        if @current_state.zsh_options.key?(canonical_name)
+          @current_state.zsh_options[canonical_name]
         else
           ZSH_OPTIONS[canonical_name][0]  # default value
         end
@@ -4848,9 +4809,9 @@ module Rubish
 
       type, canonical_name = result
       if type == :bash
-        @shell_options[canonical_name] = value
+        @current_state.shell_options[canonical_name] = value
       else
-        @zsh_options[canonical_name] = value
+        @current_state.zsh_options[canonical_name] = value
       end
       true
     end
@@ -4874,9 +4835,9 @@ module Rubish
           if result
             type, canonical_name = result
             if type == :bash
-              @shell_options[canonical_name] = false
+              @current_state.shell_options[canonical_name] = false
             else
-              @zsh_options[canonical_name] = false
+              @current_state.zsh_options[canonical_name] = false
             end
             next
           end
@@ -4886,9 +4847,9 @@ module Rubish
         if result
           type, canonical_name = result
           if type == :bash
-            @shell_options[canonical_name] = true
+            @current_state.shell_options[canonical_name] = true
           else
-            @zsh_options[canonical_name] = true
+            @current_state.zsh_options[canonical_name] = true
           end
         else
           $stderr.puts "setopt: no such option: #{arg}"
@@ -4918,9 +4879,9 @@ module Rubish
           if result
             type, canonical_name = result
             if type == :bash
-              @shell_options[canonical_name] = true
+              @current_state.shell_options[canonical_name] = true
             else
-              @zsh_options[canonical_name] = true
+              @current_state.zsh_options[canonical_name] = true
             end
             next
           end
@@ -4930,9 +4891,9 @@ module Rubish
         if result
           type, canonical_name = result
           if type == :bash
-            @shell_options[canonical_name] = false
+            @current_state.shell_options[canonical_name] = false
           else
-            @zsh_options[canonical_name] = false
+            @current_state.zsh_options[canonical_name] = false
           end
         else
           $stderr.puts "unsetopt: no such option: #{arg}"
@@ -5615,7 +5576,7 @@ module Rubish
 
       # Zsh-specific options that are enabled
       ZSH_OPTIONS.each do |name, (default, _desc)|
-        value = @zsh_options.key?(name) ? @zsh_options[name] : default
+        value = @current_state.zsh_options.key?(name) ? @current_state.zsh_options[name] : default
         enabled << name if value
       end
 
@@ -5633,7 +5594,7 @@ module Rubish
 
       # Zsh-specific options that are disabled
       ZSH_OPTIONS.each do |name, (default, _desc)|
-        value = @zsh_options.key?(name) ? @zsh_options[name] : default
+        value = @current_state.zsh_options.key?(name) ? @current_state.zsh_options[name] : default
         disabled << name unless value
       end
 
@@ -5709,13 +5670,13 @@ module Rubish
       end
 
       # Clear all compat options and enable the specified one
-      COMPAT_OPTIONS.each { |opt| @shell_options[opt] = false }
-      @shell_options[compat_opt] = true
+      COMPAT_OPTIONS.each { |opt| @current_state.shell_options[opt] = false }
+      @current_state.shell_options[compat_opt] = true
     end
 
     # Clear all compat levels (return to default)
     def self.clear_compat_level
-      COMPAT_OPTIONS.each { |opt| @shell_options[opt] = false }
+      COMPAT_OPTIONS.each { |opt| @current_state.shell_options[opt] = false }
     end
 
     # Set compatibility level (used when RUBISH_COMPAT is assigned)
@@ -5723,7 +5684,7 @@ module Rubish
       return unless version
 
       # Clear all compat options first
-      COMPAT_OPTIONS.each { |opt| @shell_options[opt] = false }
+      COMPAT_OPTIONS.each { |opt| @current_state.shell_options[opt] = false }
 
       # Parse version string
       parts = version.to_s.split('.')
@@ -5737,7 +5698,7 @@ module Rubish
 
       # Enable the appropriate compat option
       compat_opt = "compat#{level}"
-      @shell_options[compat_opt] = true if SHELL_OPTIONS.key?(compat_opt)
+      @current_state.shell_options[compat_opt] = true if SHELL_OPTIONS.key?(compat_opt)
     end
 
     # Check if POSIX mode is enabled via POSIXLY_CORRECT environment variable
@@ -10640,7 +10601,7 @@ module Rubish
       # In bash, logout only works in login shells
       # For simplicity, we treat rubish as always being a login shell
       # and logout behaves the same as exit
-      unless @shell_options['login_shell']
+      unless @current_state.shell_options['login_shell']
         # If not a login shell, warn but still exit (bash behavior varies)
         $stderr.puts 'logout: not login shell: use `exit\''
       end
