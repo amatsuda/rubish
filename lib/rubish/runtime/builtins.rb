@@ -24,33 +24,17 @@ module Rubish
     @dynamic_commands = []  # Array of dynamically loaded builtin names
     @call_stack = []  # Stack of [line_number, function_name, filename] for caller builtin
     # @key_bindings and @readline_variables moved to ShellState
-    @bind_x_counter = 0  # Counter for generating unique bind -x method names
-    @bind_x_executor = nil  # Callback to execute bind -x shell commands
+    # @bind_x_counter and @bind_x_executor moved to ShellState
     @coprocs = {}  # Hash of coproc names to {pid:, read_fd:, write_fd:, reader:, writer:}
     @named_directories = {}  # Hash of names to paths for zsh-style ~name expansion
-    @executor = nil
-    @script_name_getter = nil
-    @script_name_setter = nil
-    @positional_params_getter = nil
-    @positional_params_setter = nil
-    @function_checker = nil
-    @function_remover = nil
-    @function_lister = nil  # Returns hash of all functions {name => {source:, file:}}
-    @function_getter = nil  # Returns function info for a specific name
-    @function_caller = nil  # Calls a function with args, returns success boolean
-    @autoload_functions = {}  # Hash of function names to {options:, loaded:}
-    @heredoc_content_setter = nil
-    @command_executor = nil  # Executor that bypasses functions/aliases
-    @history_file_getter = nil  # Gets HISTFILE path
-    @history_loader = nil  # Loads history from file
-    @history_saver = nil  # Saves history to file
-    @history_appender = nil  # Appends new entries to file
-    @last_history_line = 0  # Track last line read for -n option
+    # Callbacks moved to ShellState:
+    # @executor, @script_name_getter, @script_name_setter, @positional_params_getter,
+    # @positional_params_setter, @function_checker, @function_remover, @function_lister,
+    # @function_getter, @function_caller, @autoload_functions, @heredoc_content_setter,
+    # @command_executor, @history_file_getter, @history_loader, @history_saver,
+    # @history_appender, @last_history_line
     # @history_timestamps moved to ShellState
-    @source_file_getter = nil  # Gets current source file for RUBISH_SOURCE
-    @source_file_setter = nil  # Sets current source file for RUBISH_SOURCE
-    @lineno_getter = nil  # Gets current line number for LINENO
-    @exit_blocked_by_jobs = false  # Track if exit was blocked due to running jobs (for checkjobs)
+    # @source_file_getter, @source_file_setter, @lineno_getter, @exit_blocked_by_jobs moved to ShellState
     @builtin_completion_functions = {}  # Hash of function names to lambdas for builtin completions
     @current_state = ShellState.new  # Per-session shell state
 
@@ -97,16 +81,86 @@ module Rubish
 
       # Delegate history state accessor to current_state for backward compatibility
       def history_timestamps; @current_state.history_timestamps; end
-      attr_accessor :executor, :script_name_getter, :script_name_setter, :positional_params_getter, :positional_params_setter, :function_checker, :function_remover, :function_lister, :function_getter, :function_caller, :heredoc_content_setter, :command_executor
-      attr_accessor :history_file_getter, :history_loader, :history_saver, :history_appender, :last_history_line
-      attr_accessor :source_file_getter, :source_file_setter
-      attr_accessor :lineno_getter
-      attr_accessor :bash_argv0_unsetter
-      attr_accessor :readline_line_getter, :readline_line_setter, :readline_point_getter, :readline_point_setter, :readline_mark_getter, :readline_mark_setter
-      attr_accessor :readline_point_modified  # Track if READLINE_POINT was explicitly set during bind -x
-      attr_accessor :bind_x_executor
-      attr_accessor :exit_blocked_by_jobs
-      attr_accessor :sourcing_file  # True when sourcing a file (disables history expansion)
+
+      # Delegate execution callbacks to current_state
+      def executor; @current_state.executor; end
+      def executor=(val); @current_state.executor = val; end
+      def command_executor; @current_state.command_executor; end
+      def command_executor=(val); @current_state.command_executor = val; end
+      def heredoc_content_setter; @current_state.heredoc_content_setter; end
+      def heredoc_content_setter=(val); @current_state.heredoc_content_setter = val; end
+
+      # Delegate script/position callbacks to current_state
+      def script_name_getter; @current_state.script_name_getter; end
+      def script_name_getter=(val); @current_state.script_name_getter = val; end
+      def script_name_setter; @current_state.script_name_setter; end
+      def script_name_setter=(val); @current_state.script_name_setter = val; end
+      def positional_params_getter; @current_state.positional_params_getter; end
+      def positional_params_getter=(val); @current_state.positional_params_getter = val; end
+      def positional_params_setter; @current_state.positional_params_setter; end
+      def positional_params_setter=(val); @current_state.positional_params_setter = val; end
+      def lineno_getter; @current_state.lineno_getter; end
+      def lineno_getter=(val); @current_state.lineno_getter = val; end
+
+      # Delegate function callbacks to current_state
+      def function_checker; @current_state.function_checker; end
+      def function_checker=(val); @current_state.function_checker = val; end
+      def function_remover; @current_state.function_remover; end
+      def function_remover=(val); @current_state.function_remover = val; end
+      def function_lister; @current_state.function_lister; end
+      def function_lister=(val); @current_state.function_lister = val; end
+      def function_getter; @current_state.function_getter; end
+      def function_getter=(val); @current_state.function_getter = val; end
+      def function_caller; @current_state.function_caller; end
+      def function_caller=(val); @current_state.function_caller = val; end
+      def autoload_functions; @current_state.autoload_functions; end
+      def autoload_functions=(val); @current_state.autoload_functions = val; end
+
+      # Delegate history callbacks to current_state
+      def history_file_getter; @current_state.history_file_getter; end
+      def history_file_getter=(val); @current_state.history_file_getter = val; end
+      def history_loader; @current_state.history_loader; end
+      def history_loader=(val); @current_state.history_loader = val; end
+      def history_saver; @current_state.history_saver; end
+      def history_saver=(val); @current_state.history_saver = val; end
+      def history_appender; @current_state.history_appender; end
+      def history_appender=(val); @current_state.history_appender = val; end
+      def last_history_line; @current_state.last_history_line; end
+      def last_history_line=(val); @current_state.last_history_line = val; end
+
+      # Delegate source file callbacks to current_state
+      def source_file_getter; @current_state.source_file_getter; end
+      def source_file_getter=(val); @current_state.source_file_getter = val; end
+      def source_file_setter; @current_state.source_file_setter; end
+      def source_file_setter=(val); @current_state.source_file_setter = val; end
+
+      # Delegate readline callbacks to current_state
+      def readline_line_getter; @current_state.readline_line_getter; end
+      def readline_line_getter=(val); @current_state.readline_line_getter = val; end
+      def readline_line_setter; @current_state.readline_line_setter; end
+      def readline_line_setter=(val); @current_state.readline_line_setter = val; end
+      def readline_point_getter; @current_state.readline_point_getter; end
+      def readline_point_getter=(val); @current_state.readline_point_getter = val; end
+      def readline_point_setter; @current_state.readline_point_setter; end
+      def readline_point_setter=(val); @current_state.readline_point_setter = val; end
+      def readline_mark_getter; @current_state.readline_mark_getter; end
+      def readline_mark_getter=(val); @current_state.readline_mark_getter = val; end
+      def readline_mark_setter; @current_state.readline_mark_setter; end
+      def readline_mark_setter=(val); @current_state.readline_mark_setter = val; end
+      def readline_point_modified; @current_state.readline_point_modified; end
+      def readline_point_modified=(val); @current_state.readline_point_modified = val; end
+
+      # Delegate misc callbacks to current_state
+      def bash_argv0_unsetter; @current_state.bash_argv0_unsetter; end
+      def bash_argv0_unsetter=(val); @current_state.bash_argv0_unsetter = val; end
+      def bind_x_executor; @current_state.bind_x_executor; end
+      def bind_x_executor=(val); @current_state.bind_x_executor = val; end
+      def bind_x_counter; @current_state.bind_x_counter; end
+      def bind_x_counter=(val); @current_state.bind_x_counter = val; end
+      def exit_blocked_by_jobs; @current_state.exit_blocked_by_jobs; end
+      def exit_blocked_by_jobs=(val); @current_state.exit_blocked_by_jobs = val; end
+      def sourcing_file; @current_state.sourcing_file; end
+      def sourcing_file=(val); @current_state.sourcing_file = val; end
     end
 
     # Notify the terminal of the current working directory using OSC 7
@@ -134,8 +188,8 @@ module Rubish
                end
 
       if shopt_enabled?('gnu_errfmt')
-        source = @source_file_getter&.call || 'rubish'
-        lineno = @lineno_getter&.call || 0
+        source = @current_state.source_file_getter&.call || 'rubish'
+        lineno = @current_state.lineno_getter&.call || 0
         "#{source}:#{lineno}: #{prefix.sub(/\Arubish: /, '')}#{message}"
       else
         "#{prefix}#{message}"
@@ -1487,7 +1541,7 @@ module Rubish
         Signal.trap(sig) do
           @current_state.current_trapsig = sig_name
           begin
-            @executor&.call(command) if @executor
+            @current_state.executor&.call(command) if @current_state.executor
           ensure
             @current_state.current_trapsig = ''
           end
@@ -1520,7 +1574,7 @@ module Rubish
 
       @current_state.current_trapsig = 'EXIT'
       begin
-        @executor&.call(@current_state.traps[0]) if @executor
+        @current_state.executor&.call(@current_state.traps[0]) if @current_state.executor
       ensure
         @current_state.current_trapsig = ''
       end
@@ -1535,7 +1589,7 @@ module Rubish
       @in_err_trap = true
       @current_state.current_trapsig = 'ERR'
       begin
-        @executor&.call(@current_state.traps['ERR']) if @executor
+        @current_state.executor&.call(@current_state.traps['ERR']) if @current_state.executor
       ensure
         @in_err_trap = false
         @current_state.current_trapsig = ''
@@ -1568,7 +1622,7 @@ module Rubish
       @in_debug_trap = true
       @current_state.current_trapsig = 'DEBUG'
       begin
-        @executor&.call(@current_state.traps['DEBUG']) if @executor
+        @current_state.executor&.call(@current_state.traps['DEBUG']) if @current_state.executor
       ensure
         @in_debug_trap = false
         @current_state.current_trapsig = ''
@@ -1588,7 +1642,7 @@ module Rubish
       @in_return_trap = true
       @current_state.current_trapsig = 'RETURN'
       begin
-        @executor&.call(@current_state.traps['RETURN']) if @executor
+        @current_state.executor&.call(@current_state.traps['RETURN']) if @current_state.executor
       ensure
         @in_return_trap = false
         @current_state.current_trapsig = ''
@@ -1638,7 +1692,7 @@ module Rubish
       if args.length > 2
         parse_args = args[2..]
       else
-        parse_args = @positional_params_getter&.call || []
+        parse_args = @current_state.positional_params_getter&.call || []
       end
 
       # Get current OPTIND (1-based index)
@@ -1943,7 +1997,7 @@ module Rubish
       names.each do |name|
         if mode == :function
           # Remove function
-          @function_remover&.call(name)
+          @current_state.function_remover&.call(name)
         else
           # Check for array element reference: arr[index] or arr[key]
           if name =~ /\A([a-zA-Z_][a-zA-Z0-9_]*)\[(.+)\]\z/
@@ -1991,7 +2045,7 @@ module Rubish
 
           # Special handling for BASH_ARGV0: loses special properties when unset
           if name == 'BASH_ARGV0'
-            @bash_argv0_unsetter&.call
+            @current_state.bash_argv0_unsetter&.call
           end
 
           # Standard behavior: remove from shell_vars and ENV (if exported)
@@ -2419,7 +2473,7 @@ module Rubish
 
     def self.print_functions(names, names_only)
       # Get all functions via callback
-      functions = @function_lister&.call || {}
+      functions = @current_state.function_lister&.call || {}
 
       if names.empty?
         # List all functions
@@ -2429,7 +2483,7 @@ module Rubish
       else
         # List specific functions
         names.each do |name|
-          info = @function_getter&.call(name)
+          info = @current_state.function_getter&.call(name)
           if info
             print_function(name, info, names_only)
           else
@@ -2773,7 +2827,7 @@ module Rubish
       if clear
         Reline::HISTORY.clear
         clear_history_timestamps
-        @last_history_line = 0
+        @current_state.last_history_line = 0
         return true
       end
 
@@ -2792,23 +2846,23 @@ module Rubish
 
       # Handle -a: append new lines to history file
       if append_to_file
-        @history_appender&.call
+        @current_state.history_appender&.call
         return true
       end
 
       # Handle -n: read new lines from history file
       if read_new
-        file = @history_file_getter&.call
+        file = @current_state.history_file_getter&.call
         return true unless file && File.exist?(file)
 
         begin
           lines = File.readlines(file, chomp: true)
           # Read lines after what we've already read
-          file_last_line = @last_history_line
+          file_last_line = @current_state.last_history_line
           new_lines = lines[file_last_line..]
           if new_lines && !new_lines.empty?
             new_lines.each { |line| Reline::HISTORY << line }
-            @last_history_line = lines.size
+            @current_state.last_history_line = lines.size
           end
         rescue => e
           $stderr.puts "history: #{e.message}"
@@ -2821,14 +2875,14 @@ module Rubish
       if read_all
         Reline::HISTORY.clear
         clear_history_timestamps
-        @last_history_line = 0
-        @history_loader&.call
+        @current_state.last_history_line = 0
+        @current_state.history_loader&.call
         return true
       end
 
       # Handle -w: write history to file
       if write_all
-        @history_saver&.call
+        @current_state.history_saver&.call
         return true
       end
 
@@ -2981,24 +3035,24 @@ module Rubish
         return false
       end
 
-      unless @executor
+      unless @current_state.executor
         puts 'source: executor not configured'
         return false
       end
 
       # Save and set script name, positional params, and source file
-      old_script_name = @script_name_getter&.call
-      old_positional_params = @positional_params_getter&.call
-      old_source_file = @source_file_getter&.call
-      @script_name_setter&.call(file)
-      @positional_params_setter&.call(args[1..] || [])
+      old_script_name = @current_state.script_name_getter&.call
+      old_positional_params = @current_state.positional_params_getter&.call
+      old_source_file = @current_state.source_file_getter&.call
+      @current_state.script_name_setter&.call(file)
+      @current_state.positional_params_setter&.call(args[1..] || [])
       # bash_source_fullpath: when enabled, store full path; when disabled, use filename as specified
       source_file_value = shopt_enabled?('bash_source_fullpath') ? file : original_file
-      @source_file_setter&.call(source_file_value)
+      @current_state.source_file_setter&.call(source_file_value)
 
       # Disable history expansion while sourcing (bash behavior)
-      old_sourcing = @sourcing_file
-      @sourcing_file = true
+      old_sourcing = @current_state.sourcing_file
+      @current_state.sourcing_file = true
 
       return_code = catch(:return) do
         buffer = +''
@@ -3037,7 +3091,7 @@ module Rubish
             end
             # Set heredoc content before executing
             content = heredoc_lines.join("\n") + (heredoc_lines.empty? ? '' : "\n")
-            @heredoc_content_setter&.call(content)
+            @current_state.heredoc_content_setter&.call(content)
           end
 
           # Remember if we're waiting for function body BEFORE processing this line
@@ -3110,7 +3164,7 @@ module Rubish
           # - no unclosed quotes in the buffer
           if depth == 0 && !pending_function_def && !has_unclosed_quotes(buffer)
             begin
-              @executor.call(buffer)
+              @current_state.executor.call(buffer)
             rescue SyntaxError => e
               puts "source: #{file}:#{buffer_start_line}: syntax error: #{e.message}"
             end
@@ -3143,7 +3197,7 @@ module Rubish
           end
 
           begin
-            @executor.call(buffer)
+            @current_state.executor.call(buffer)
           rescue SyntaxError => e
             puts "source: #{file}: syntax error (starting at line #{buffer_start_line}): #{e.message}"
           end
@@ -3153,10 +3207,10 @@ module Rubish
       end
 
       # Restore script name, positional params, source file, and sourcing flag
-      @script_name_setter&.call(old_script_name) if old_script_name
-      @positional_params_setter&.call(old_positional_params) if old_positional_params
-      @source_file_setter&.call(old_source_file) if old_source_file
-      @sourcing_file = old_sourcing
+      @current_state.script_name_setter&.call(old_script_name) if old_script_name
+      @current_state.positional_params_setter&.call(old_positional_params) if old_positional_params
+      @current_state.source_file_setter&.call(old_source_file) if old_source_file
+      @current_state.sourcing_file = old_sourcing
 
       return_code.nil? || return_code == 0
     end
@@ -3166,7 +3220,7 @@ module Rubish
 
       return false if n < 0
 
-      params = @positional_params_getter&.call || []
+      params = @current_state.positional_params_getter&.call || []
 
       if n > params.length
         # shift_verbose: print error if shift count exceeds positional parameters
@@ -3176,7 +3230,7 @@ module Rubish
         return false
       end
 
-      @positional_params_setter&.call(params.drop(n))
+      @current_state.positional_params_setter&.call(params.drop(n))
       true
     end
 
@@ -3214,7 +3268,7 @@ module Rubish
       # set [-+abCefhmnuvx] [-o option] [--] [arg...]
       # With no args, clear positional params (original behavior)
       if args.empty?
-        @positional_params_setter&.call([])
+        @current_state.positional_params_setter&.call([])
         return true
       end
 
@@ -3224,7 +3278,7 @@ module Rubish
 
         if arg == '--'
           # Everything after -- is positional params
-          @positional_params_setter&.call(args[i + 1..] || [])
+          @current_state.positional_params_setter&.call(args[i + 1..] || [])
           return true
         elsif arg == '-o'
           # Long option form: set -o errexit, or just set -o to list
@@ -3282,7 +3336,7 @@ module Rubish
           end
         else
           # Positional parameters
-          @positional_params_setter&.call(args[i..])
+          @current_state.positional_params_setter&.call(args[i..])
           return true
         end
         i += 1
@@ -4116,7 +4170,7 @@ module Rubish
 
         # Check function (unless force_path or suppress_functions)
         unless force_path || suppress_functions
-          if @function_checker&.call(name)
+          if @current_state.function_checker&.call(name)
             found = true
             if type_only
               puts 'function'
@@ -5226,7 +5280,7 @@ module Rubish
 
       # No function names - list all autoloaded functions
       if func_names.empty?
-        @autoload_functions.each do |name, info|
+        @current_state.autoload_functions.each do |name, info|
           if info[:loaded]
             puts name
           else
@@ -5247,7 +5301,7 @@ module Rubish
           end
         else
           # Mark for autoloading
-          @autoload_functions[name] = {
+          @current_state.autoload_functions[name] = {
             suppress_alias: suppress_alias,
             zsh_style: zsh_style,
             ksh_style: ksh_style,
@@ -5262,7 +5316,7 @@ module Rubish
 
     # Check if a function is marked for autoloading
     def self.autoload_pending?(name)
-      @autoload_functions.key?(name) && !@autoload_functions[name][:loaded]
+      @current_state.autoload_functions.key?(name) && !@current_state.autoload_functions[name][:loaded]
     end
 
     # Get fpath - the function search path
@@ -5289,7 +5343,7 @@ module Rubish
 
           # zsh-style: file contains function body directly
           # ksh-style: file contains function definition "name() { ... }"
-          info = @autoload_functions[name] || {}
+          info = @current_state.autoload_functions[name] || {}
 
           if info[:ksh_style]
             # ksh-style: source the file directly
@@ -5301,7 +5355,7 @@ module Rubish
             @source_executor&.call(nil, func_def)
           end
 
-          @autoload_functions[name] = info.merge(loaded: true)
+          @current_state.autoload_functions[name] = info.merge(loaded: true)
           return true
         rescue => e
           $stderr.puts "autoload: error loading #{name}: #{e.message}" if ENV['RUBISH_DEBUG']
@@ -5725,30 +5779,30 @@ module Rubish
 
     # READLINE_LINE - contents of the readline buffer during bind -x execution
     def self.readline_line
-      @readline_line_getter&.call || ''
+      @current_state.readline_line_getter&.call || ''
     end
 
     def self.readline_line=(value)
-      @readline_line_setter&.call(value.to_s)
+      @current_state.readline_line_setter&.call(value.to_s)
     end
 
     # READLINE_POINT - cursor position (index) in READLINE_LINE during bind -x execution
     def self.readline_point
-      @readline_point_getter&.call || 0
+      @current_state.readline_point_getter&.call || 0
     end
 
     def self.readline_point=(value)
-      @readline_point_setter&.call(value.to_i)
-      @readline_point_modified = true
+      @current_state.readline_point_setter&.call(value.to_i)
+      @current_state.readline_point_modified = true
     end
 
     # READLINE_MARK - mark position in READLINE_LINE during bind -x execution
     def self.readline_mark
-      @readline_mark_getter&.call || 0
+      @current_state.readline_mark_getter&.call || 0
     end
 
     def self.readline_mark=(value)
-      @readline_mark_setter&.call(value.to_i)
+      @current_state.readline_mark_setter&.call(value.to_i)
     end
 
     # Track dynamically loaded builtins
@@ -6326,7 +6380,7 @@ module Rubish
           results.concat(Dir.glob(pattern))
         when :function
           # Shell function names
-          functions = @function_lister&.call || {}
+          functions = @current_state.function_lister&.call || {}
           results.concat(functions.keys.select { |f| f.start_with?(word) })
         when :group
           begin
@@ -6563,9 +6617,9 @@ module Rubish
         # Try builtin completion function first
         if builtin_completion_function?(function_name)
           call_builtin_completion_function(function_name, cmd, word, prev)
-        elsif @function_caller
+        elsif @current_state.function_caller
           # Call user-defined function
-          @function_caller.call(function_name, [cmd, word, prev])
+          @current_state.function_caller.call(function_name, [cmd, word, prev])
         end
 
         # Return the results from COMPREPLY
@@ -9109,8 +9163,8 @@ module Rubish
       return unless defined?(Reline)
 
       # Generate a unique method name for this binding
-      method_name = :"__rubish_bind_x_#{@bind_x_counter}"
-      @bind_x_counter += 1
+      method_name = :"__rubish_bind_x_#{@current_state.bind_x_counter}"
+      @current_state.bind_x_counter += 1
 
       # Store the command in the binding for lookup
       @current_state.key_bindings[keyseq][:method_name] = method_name
@@ -10176,13 +10230,13 @@ module Rubish
       end
 
       # Execute command bypassing functions and aliases
-      if @command_executor
-        @command_executor.call(cmd_args)
+      if @current_state.command_executor
+        @current_state.command_executor.call(cmd_args)
         true
       else
         # Fallback: just use regular executor with the command
         # This won't bypass functions but at least runs something
-        @executor&.call(cmd_args.join(' '))
+        @current_state.executor&.call(cmd_args.join(' '))
         true
       end
     end
@@ -10194,13 +10248,13 @@ module Rubish
 
       command = args.join(' ')
 
-      unless @executor
+      unless @current_state.executor
         puts 'eval: executor not configured'
         return false
       end
 
       begin
-        @executor.call(command)
+        @current_state.executor.call(command)
         true
       rescue => e
         puts "eval: #{e.message}"
@@ -10559,12 +10613,12 @@ module Rubish
       if shopt_enabled?('checkjobs')
         active_jobs = JobManager.instance.active
         if active_jobs.any?
-          if @exit_blocked_by_jobs
+          if @current_state.exit_blocked_by_jobs
             # Second exit attempt - proceed with exit
-            @exit_blocked_by_jobs = false
+            @current_state.exit_blocked_by_jobs = false
           else
             # First exit attempt - warn and block
-            @exit_blocked_by_jobs = true
+            @current_state.exit_blocked_by_jobs = true
             running = active_jobs.count(&:running?)
             stopped = active_jobs.count(&:stopped?)
             parts = []
@@ -10574,7 +10628,7 @@ module Rubish
             return false
           end
         else
-          @exit_blocked_by_jobs = false
+          @current_state.exit_blocked_by_jobs = false
         end
       end
 
@@ -10590,7 +10644,7 @@ module Rubish
 
     # Reset the exit blocked flag (call after any non-exit command)
     def self.clear_exit_blocked
-      @exit_blocked_by_jobs = false
+      @current_state.exit_blocked_by_jobs = false
     end
 
     # Send SIGHUP to all active jobs (for huponexit)
@@ -11713,7 +11767,7 @@ module Rubish
 
       # Display and execute the command
       puts cmd
-      @executor&.call(cmd) if @executor
+      @current_state.executor&.call(cmd) if @current_state.executor
       true
     end
 
@@ -11816,7 +11870,7 @@ module Rubish
           line = line.chomp
           next if line.empty? || line.start_with?('#')
           puts line
-          @executor&.call(line) if @executor
+          @current_state.executor&.call(line) if @current_state.executor
         end
 
         true
@@ -11947,7 +12001,7 @@ module Rubish
 
         # Call callback if specified
         if callback && ((i + 1) % quantum == 0)
-          @executor&.call("#{callback} #{idx} #{line.inspect}")
+          @current_state.executor&.call("#{callback} #{idx} #{line.inspect}")
         end
       end
 

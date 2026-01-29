@@ -28,6 +28,37 @@ module Rubish
     # History state
     attr_accessor :history_timestamps
 
+    # Execution callbacks
+    attr_accessor :executor, :command_executor, :heredoc_content_setter
+
+    # Script/position callbacks
+    attr_accessor :script_name_getter, :script_name_setter
+    attr_accessor :positional_params_getter, :positional_params_setter
+    attr_accessor :lineno_getter
+
+    # Function callbacks
+    attr_accessor :function_checker, :function_remover, :function_lister, :function_getter, :function_caller
+    attr_accessor :autoload_functions
+
+    # History callbacks
+    attr_accessor :history_file_getter, :history_loader, :history_saver, :history_appender
+    attr_accessor :last_history_line
+
+    # Source file callbacks
+    attr_accessor :source_file_getter, :source_file_setter
+
+    # Readline callbacks
+    attr_accessor :readline_line_getter, :readline_line_setter
+    attr_accessor :readline_point_getter, :readline_point_setter
+    attr_accessor :readline_mark_getter, :readline_mark_setter
+    attr_accessor :readline_point_modified
+
+    # Misc callbacks and state
+    attr_accessor :bash_argv0_unsetter
+    attr_accessor :bind_x_executor, :bind_x_counter
+    attr_accessor :exit_blocked_by_jobs
+    attr_accessor :sourcing_file
+
     def initialize
       # Variables state
       @shell_vars = {}
@@ -66,6 +97,53 @@ module Rubish
 
       # History state
       @history_timestamps = {}
+
+      # Execution callbacks (nil by default, set by REPL)
+      @executor = nil
+      @command_executor = nil
+      @heredoc_content_setter = nil
+
+      # Script/position callbacks
+      @script_name_getter = nil
+      @script_name_setter = nil
+      @positional_params_getter = nil
+      @positional_params_setter = nil
+      @lineno_getter = nil
+
+      # Function callbacks
+      @function_checker = nil
+      @function_remover = nil
+      @function_lister = nil
+      @function_getter = nil
+      @function_caller = nil
+      @autoload_functions = {}
+
+      # History callbacks
+      @history_file_getter = nil
+      @history_loader = nil
+      @history_saver = nil
+      @history_appender = nil
+      @last_history_line = 0
+
+      # Source file callbacks
+      @source_file_getter = nil
+      @source_file_setter = nil
+
+      # Readline callbacks
+      @readline_line_getter = nil
+      @readline_line_setter = nil
+      @readline_point_getter = nil
+      @readline_point_setter = nil
+      @readline_mark_getter = nil
+      @readline_mark_setter = nil
+      @readline_point_modified = nil
+
+      # Misc callbacks and state
+      @bash_argv0_unsetter = nil
+      @bind_x_executor = nil
+      @bind_x_counter = 0
+      @exit_blocked_by_jobs = false
+      @sourcing_file = nil
     end
 
     def clear_variables
