@@ -19,6 +19,9 @@ module Rubish
     # Traps state
     attr_accessor :traps, :original_traps, :current_trapsig
 
+    # Completion state
+    attr_accessor :completions, :completion_options, :current_completion_options
+
     def initialize
       # Variables state
       @shell_vars = {}
@@ -45,6 +48,11 @@ module Rubish
       @traps = {}
       @original_traps = {}
       @current_trapsig = ''
+
+      # Completion state
+      @completions = {}
+      @completion_options = {}
+      @current_completion_options = Set.new
     end
 
     def clear_variables
@@ -79,6 +87,12 @@ module Rubish
       @traps.clear
       @original_traps.clear
       @current_trapsig = ''
+    end
+
+    def clear_completions
+      @completions.clear
+      @completion_options.clear
+      @current_completion_options.clear
     end
 
     private

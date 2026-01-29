@@ -7,7 +7,7 @@ class TestProgcompAlias < Test::Unit::TestCase
     @repl = Rubish::REPL.new
     @original_shell_options = Rubish::Builtins.shell_options.dup
     @original_aliases = Rubish::Builtins.aliases.dup
-    @original_completions = Rubish::Builtins.instance_variable_get(:@completions).dup
+    @original_completions = Rubish::Builtins.completions.dup
     @tempdir = Dir.mktmpdir('rubish_progcomp_alias_test')
   end
 
@@ -16,9 +16,8 @@ class TestProgcompAlias < Test::Unit::TestCase
     @original_shell_options.each { |k, v| Rubish::Builtins.shell_options[k] = v }
     Rubish::Builtins.aliases.clear
     @original_aliases.each { |k, v| Rubish::Builtins.aliases[k] = v }
-    completions = Rubish::Builtins.instance_variable_get(:@completions)
-    completions.clear
-    @original_completions.each { |k, v| completions[k] = v }
+    Rubish::Builtins.completions.clear
+    @original_completions.each { |k, v| Rubish::Builtins.completions[k] = v }
     FileUtils.rm_rf(@tempdir)
   end
 

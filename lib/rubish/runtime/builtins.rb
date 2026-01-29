@@ -23,9 +23,6 @@ module Rubish
     @disabled_builtins = Set.new  # Set of disabled builtin names
     @dynamic_commands = []  # Array of dynamically loaded builtin names
     @call_stack = []  # Stack of [line_number, function_name, filename] for caller builtin
-    @completions = {}  # Hash of command names to completion specs
-    @completion_options = {}  # Hash of command names to Set of completion options
-    @current_completion_options = Set.new  # Options for currently executing completion
     @key_bindings = {}  # Hash of keyseq to function/macro/command
     @readline_variables = {}  # Hash of readline variable names to values
     @bind_x_counter = 0  # Counter for generating unique bind -x method names
@@ -60,7 +57,7 @@ module Rubish
 
     class << self
       attr_accessor :current_state
-      attr_reader :disabled_builtins, :call_stack, :completions, :completion_options, :key_bindings, :readline_variables, :coprocs, :builtin_completion_functions, :named_directories
+      attr_reader :disabled_builtins, :call_stack, :key_bindings, :readline_variables, :coprocs, :builtin_completion_functions, :named_directories
 
       # Delegate variables state accessors to current_state for backward compatibility
       def shell_vars; @current_state.shell_vars; end
@@ -88,7 +85,13 @@ module Rubish
       def original_traps; @current_state.original_traps; end
       def current_trapsig; @current_state.current_trapsig; end
       def current_trapsig=(val); @current_state.current_trapsig = val; end
-      attr_accessor :executor, :script_name_getter, :script_name_setter, :positional_params_getter, :positional_params_setter, :function_checker, :function_remover, :function_lister, :function_getter, :function_caller, :heredoc_content_setter, :command_executor, :current_completion_options
+
+      # Delegate completion state accessors to current_state for backward compatibility
+      def completions; @current_state.completions; end
+      def completion_options; @current_state.completion_options; end
+      def current_completion_options; @current_state.current_completion_options; end
+      def current_completion_options=(val); @current_state.current_completion_options = val; end
+      attr_accessor :executor, :script_name_getter, :script_name_setter, :positional_params_getter, :positional_params_setter, :function_checker, :function_remover, :function_lister, :function_getter, :function_caller, :heredoc_content_setter, :command_executor
       attr_accessor :history_file_getter, :history_loader, :history_saver, :history_appender, :last_history_line, :history_timestamps
       attr_accessor :source_file_getter, :source_file_setter
       attr_accessor :lineno_getter
@@ -5357,30 +5360,30 @@ module Rubish
 
       # File/directory completions
       %w[cat less more head tail vim vi nano emacs].each do |cmd|
-        @completions[cmd] ||= {files: true}
+        @current_state.completions[cmd] ||= {files: true}
       end
 
       # Directory-only completions
       %w[cd pushd].each do |cmd|
-        @completions[cmd] ||= {directories: true}
+        @current_state.completions[cmd] ||= {directories: true}
       end
 
       # Git completions (if _git function exists or we have builtin)
-      @completions['git'] ||= {function: '_git'}
+      @current_state.completions['git'] ||= {function: '_git'}
 
       # SSH completions
-      @completions['ssh'] ||= {function: '_ssh'}
-      @completions['scp'] ||= {function: '_ssh'}
+      @current_state.completions['ssh'] ||= {function: '_ssh'}
+      @current_state.completions['scp'] ||= {function: '_ssh'}
 
       # Make completions
-      @completions['make'] ||= {function: '_make'}
+      @current_state.completions['make'] ||= {function: '_make'}
 
       # Man completions
-      @completions['man'] ||= {function: '_man'}
+      @current_state.completions['man'] ||= {function: '_man'}
 
       # Kill completions (process IDs)
-      @completions['kill'] ||= {function: '_kill'}
-      @completions['killall'] ||= {signals: true, running: true}
+      @current_state.completions['kill'] ||= {function: '_kill'}
+      @current_state.completions['killall'] ||= {signals: true, running: true}
     end
 
     # compdef - define zsh-style completion
@@ -5419,7 +5422,7 @@ module Rubish
       if delete_mode
         # Delete completions for specified commands
         remaining.each do |cmd|
-          @completions.delete(cmd)
+          @current_state.completions.delete(cmd)
           @zsh_completions.delete(cmd)
         end
         return true
@@ -5442,14 +5445,14 @@ module Rubish
 
       remaining.each do |cmd|
         # Skip if no_override and completion already exists
-        next if no_override && (@completions.key?(cmd) || @zsh_completions.key?(cmd))
+        next if no_override && (@current_state.completions.key?(cmd) || @zsh_completions.key?(cmd))
 
         # Register the completion
         @zsh_completions[cmd] = func
 
         # Also register with bash-style system for integration
         # This allows the existing completion code to call the function
-        @completions[cmd] = {function: func}
+        @current_state.completions[cmd] = {function: func}
       end
 
       true
@@ -6097,14 +6100,14 @@ module Rubish
       if print_mode
         if names.empty?
           # Print all completions
-          @completions.each do |name, s|
+          @current_state.completions.each do |name, s|
             puts format_completion_spec(name, s)
           end
         else
           # Print specified completions
           names.each do |name|
-            if @completions.key?(name)
-              puts format_completion_spec(name, @completions[name])
+            if @current_state.completions.key?(name)
+              puts format_completion_spec(name, @current_state.completions[name])
             else
               puts "complete: #{name}: no completion specification"
               return false
@@ -6118,10 +6121,10 @@ module Rubish
       if remove_mode
         if names.empty?
           # Remove all completions
-          @completions.clear
+          @current_state.completions.clear
         else
           names.each do |name|
-            @completions.delete(name)
+            @current_state.completions.delete(name)
           end
         end
         return true
@@ -6134,7 +6137,7 @@ module Rubish
       end
 
       names.each do |name|
-        @completions[name] = spec.dup
+        @current_state.completions[name] = spec.dup
       end
 
       true
@@ -6665,7 +6668,7 @@ module Rubish
     end
 
     def self.get_completion_spec(name)
-      spec = @completions[name]
+      spec = @current_state.completions[name]
       return spec if spec
 
       # progcomp_alias: if name is an alias, use completion spec for the aliased command
@@ -6675,14 +6678,14 @@ module Rubish
         first_word = alias_value.split(/\s+/).first
         # Avoid infinite loop if alias points to itself
         return nil if first_word == name
-        return @completions[first_word]
+        return @current_state.completions[first_word]
       end
 
       nil
     end
 
     def self.clear_completions
-      @completions.clear
+      @current_state.completions.clear
     end
 
     # Check if a function name is a builtin completion function
@@ -6731,28 +6734,28 @@ module Rubish
     # This registers the builtin completion functions with the completion system
     def self.setup_default_completions
       # Git completion
-      @completions['git'] = {actions: [], function: '_git'}
+      @current_state.completions['git'] = {actions: [], function: '_git'}
 
       # SSH/SCP/SFTP completion
-      @completions['ssh'] = {actions: [], function: '_ssh'}
-      @completions['scp'] = {actions: [], function: '_ssh'}
-      @completions['sftp'] = {actions: [], function: '_ssh'}
+      @current_state.completions['ssh'] = {actions: [], function: '_ssh'}
+      @current_state.completions['scp'] = {actions: [], function: '_ssh'}
+      @current_state.completions['sftp'] = {actions: [], function: '_ssh'}
 
       # CD completion (directories only)
-      @completions['cd'] = {actions: [], function: '_cd'}
-      @completions['pushd'] = {actions: [], function: '_cd'}
+      @current_state.completions['cd'] = {actions: [], function: '_cd'}
+      @current_state.completions['pushd'] = {actions: [], function: '_cd'}
 
       # Make completion
-      @completions['make'] = {actions: [], function: '_make'}
-      @completions['gmake'] = {actions: [], function: '_make'}
+      @current_state.completions['make'] = {actions: [], function: '_make'}
+      @current_state.completions['gmake'] = {actions: [], function: '_make'}
 
       # Man page completion
-      @completions['man'] = {actions: [], function: '_man'}
+      @current_state.completions['man'] = {actions: [], function: '_man'}
 
       # Kill completion
-      @completions['kill'] = {actions: [], function: '_kill'}
-      @completions['killall'] = {actions: [], function: '_kill'}
-      @completions['pkill'] = {actions: [], function: '_kill'}
+      @current_state.completions['kill'] = {actions: [], function: '_kill'}
+      @current_state.completions['killall'] = {actions: [], function: '_kill'}
+      @current_state.completions['pkill'] = {actions: [], function: '_kill'}
     end
 
     # ==========================================================================
@@ -8056,8 +8059,8 @@ module Rubish
       # Apply options
       if names.empty? && !apply_default && !apply_empty
         # Apply to currently executing completion
-        enable_opts.each { |opt| @current_completion_options.add(opt) }
-        disable_opts.each { |opt| @current_completion_options.delete(opt) }
+        enable_opts.each { |opt| @current_state.current_completion_options.add(opt) }
+        disable_opts.each { |opt| @current_state.current_completion_options.delete(opt) }
       else
         # Apply to named commands
         targets = []
@@ -8066,9 +8069,9 @@ module Rubish
         targets.concat(names)
 
         targets.each do |name|
-          @completion_options[name] ||= Set.new
-          enable_opts.each { |opt| @completion_options[name].add(opt) }
-          disable_opts.each { |opt| @completion_options[name].delete(opt) }
+          @current_state.completion_options[name] ||= Set.new
+          enable_opts.each { |opt| @current_state.completion_options[name].add(opt) }
+          disable_opts.each { |opt| @current_state.completion_options[name].delete(opt) }
         end
       end
 
@@ -8083,14 +8086,14 @@ module Rubish
 
       if targets.empty?
         # Print current completion options
-        if @current_completion_options.empty?
+        if @current_state.current_completion_options.empty?
           puts 'compopt: no options set'
         else
-          @current_completion_options.each { |opt| puts "compopt -o #{opt}" }
+          @current_state.current_completion_options.each { |opt| puts "compopt -o #{opt}" }
         end
       else
         targets.each do |name|
-          opts = @completion_options[name] || Set.new
+          opts = @current_state.completion_options[name] || Set.new
           display_name = name.is_a?(Symbol) ? "-#{name.to_s[0].upcase}" : name
           if opts.empty?
             puts "compopt #{display_name}: no options"
@@ -8103,11 +8106,11 @@ module Rubish
     end
 
     def self.get_completion_options(name)
-      @completion_options[name] || Set.new
+      @current_state.completion_options[name] || Set.new
     end
 
     def self.completion_option?(name, option)
-      (@completion_options[name] || Set.new).include?(option)
+      (@current_state.completion_options[name] || Set.new).include?(option)
     end
 
     # Readline function names for -l option

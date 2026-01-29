@@ -7,16 +7,19 @@ class TestCompopt < Test::Unit::TestCase
     @repl = Rubish::REPL.new
     @saved_stderr = $stderr
     @saved_stdout = $stdout
-    # Clear completion options
-    Rubish::Builtins.instance_variable_set(:@completion_options, {})
+    # Save and clear completion options
+    @original_completion_options = Rubish::Builtins.completion_options.dup
+    @original_current_completion_options = Rubish::Builtins.current_completion_options.dup
+    Rubish::Builtins.completion_options.clear
     Rubish::Builtins.current_completion_options = Set.new
   end
 
   def teardown
     $stderr = @saved_stderr
     $stdout = @saved_stdout
-    Rubish::Builtins.instance_variable_set(:@completion_options, {})
-    Rubish::Builtins.current_completion_options = Set.new
+    Rubish::Builtins.completion_options.clear
+    @original_completion_options.each { |k, v| Rubish::Builtins.completion_options[k] = v }
+    Rubish::Builtins.current_completion_options = @original_current_completion_options
   end
 
   # Basic tests
