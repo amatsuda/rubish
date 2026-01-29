@@ -7,16 +7,16 @@ class TestAssocArray < Test::Unit::TestCase
     @repl = Rubish::REPL.new
     @tempdir = Dir.mktmpdir('rubish_assoc_test')
     @saved_env = ENV.to_h
-    Rubish::Builtins.instance_variable_set(:@arrays, {})
-    Rubish::Builtins.instance_variable_set(:@assoc_arrays, {})
+    Rubish::Builtins.arrays.clear
+    Rubish::Builtins.assoc_arrays.clear
   end
 
   def teardown
     FileUtils.rm_rf(@tempdir)
     ENV.clear
     @saved_env.each { |k, v| ENV[k] = v }
-    Rubish::Builtins.instance_variable_set(:@arrays, {})
-    Rubish::Builtins.instance_variable_set(:@assoc_arrays, {})
+    Rubish::Builtins.arrays.clear
+    Rubish::Builtins.assoc_arrays.clear
   end
 
   def output_file

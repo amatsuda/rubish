@@ -10,7 +10,7 @@ class TestAssocExpandOnce < Test::Unit::TestCase
     @original_dir = Dir.pwd
     Dir.chdir(@tempdir)
     # Clear any existing assoc arrays
-    Rubish::Builtins.instance_variable_get(:@assoc_arrays).clear
+    Rubish::Builtins.assoc_arrays.clear
   end
 
   def teardown
@@ -18,7 +18,7 @@ class TestAssocExpandOnce < Test::Unit::TestCase
     Rubish::Builtins.shell_options.clear
     @original_shell_options.each { |k, v| Rubish::Builtins.shell_options[k] = v }
     FileUtils.rm_rf(@tempdir)
-    Rubish::Builtins.instance_variable_get(:@assoc_arrays).clear
+    Rubish::Builtins.assoc_arrays.clear
   end
 
   def output_file

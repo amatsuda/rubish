@@ -7,14 +7,14 @@ class TestArray < Test::Unit::TestCase
     @repl = Rubish::REPL.new
     @tempdir = Dir.mktmpdir('rubish_array_test')
     @saved_env = ENV.to_h
-    Rubish::Builtins.instance_variable_set(:@arrays, {})
+    Rubish::Builtins.arrays.clear
   end
 
   def teardown
     FileUtils.rm_rf(@tempdir)
     ENV.clear
     @saved_env.each { |k, v| ENV[k] = v }
-    Rubish::Builtins.instance_variable_set(:@arrays, {})
+    Rubish::Builtins.arrays.clear
   end
 
   def output_file

@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require_relative '../shell_state'
+
 module Rubish
   module Builtins
     COMMANDS = %w(cd exit logout jobs fg bg export pwd history alias unalias source . shift set return read echo test [ break continue pushd popd dirs trap getopts local unset readonly declare typeset let printf type which true false : eval command builtin wait kill umask exec times hash disown ulimit suspend shopt enable caller complete compgen compopt bind bindkey help fc mapfile readarray basename dirname realpath _get_comp_words_by_ref _init_completion _filedir _have _split_longopt __ltrim_colon_completions _variables _tilde _quote_readline_by_ref _parse_help _upvars _usergroup setopt unsetopt autoload compinit compdef __git_ps1 require).freeze
@@ -23,9 +25,6 @@ module Rubish
     @traps = {}
     @original_traps = {}
     @current_trapsig = ''  # Signal name when trap handler is executing (for RUBISH_TRAPSIG/BASH_TRAPSIG)
-    @local_scope_stack = []  # Stack of hashes for local variable scopes
-    @readonly_vars = {}  # Hash of readonly variable names to their values
-    @var_attributes = {}  # Hash of variable names to Set of attributes (:integer, :lowercase, :uppercase, :export)
     @command_hash = {}  # Hash of command names to their cached paths
     @shell_options = {}  # Hash of shell option names to boolean values
     @zsh_options = {}  # Hash of zsh-specific option names to boolean values
@@ -39,12 +38,8 @@ module Rubish
     @readline_variables = {}  # Hash of readline variable names to values
     @bind_x_counter = 0  # Counter for generating unique bind -x method names
     @bind_x_executor = nil  # Callback to execute bind -x shell commands
-    @arrays = {}  # Hash of array variable names to their values (Array)
-    @assoc_arrays = {}  # Hash of associative array names to their values (Hash)
-    @namerefs = {}  # Hash of nameref variable names to their target variable names
     @coprocs = {}  # Hash of coproc names to {pid:, read_fd:, write_fd:, reader:, writer:}
     @named_directories = {}  # Hash of names to paths for zsh-style ~name expansion
-    @shell_vars = {}  # Hash of shell variable names to values (non-exported variables)
     @executor = nil
     @script_name_getter = nil
     @script_name_setter = nil
@@ -69,10 +64,21 @@ module Rubish
     @lineno_getter = nil  # Gets current line number for LINENO
     @exit_blocked_by_jobs = false  # Track if exit was blocked due to running jobs (for checkjobs)
     @builtin_completion_functions = {}  # Hash of function names to lambdas for builtin completions
+    @current_state = ShellState.new  # Per-session shell state
 
     class << self
-      attr_reader :aliases, :dir_stack, :traps, :local_scope_stack, :readonly_vars, :var_attributes, :command_hash, :shell_options, :zsh_options, :disabled_builtins, :call_stack, :completions, :completion_options, :key_bindings, :readline_variables, :arrays, :assoc_arrays, :namerefs, :coprocs, :builtin_completion_functions, :named_directories, :shell_vars
+      attr_accessor :current_state
+      attr_reader :aliases, :dir_stack, :traps, :command_hash, :shell_options, :zsh_options, :disabled_builtins, :call_stack, :completions, :completion_options, :key_bindings, :readline_variables, :coprocs, :builtin_completion_functions, :named_directories
       attr_accessor :current_trapsig
+
+      # Delegate variables state accessors to current_state for backward compatibility
+      def shell_vars; @current_state.shell_vars; end
+      def arrays; @current_state.arrays; end
+      def assoc_arrays; @current_state.assoc_arrays; end
+      def namerefs; @current_state.namerefs; end
+      def var_attributes; @current_state.var_attributes; end
+      def readonly_vars; @current_state.readonly_vars; end
+      def local_scope_stack; @current_state.local_scope_stack; end
       attr_accessor :executor, :script_name_getter, :script_name_setter, :positional_params_getter, :positional_params_setter, :function_checker, :function_remover, :function_lister, :function_getter, :function_caller, :heredoc_content_setter, :command_executor, :current_completion_options
       attr_accessor :history_file_getter, :history_loader, :history_saver, :history_appender, :last_history_line, :history_timestamps
       attr_accessor :source_file_getter, :source_file_setter
@@ -120,107 +126,107 @@ module Rubish
 
     # Array variable methods
     def self.array?(name)
-      @arrays.key?(name)
+      @current_state.arrays.key?(name)
     end
 
     def self.get_array(name)
-      @arrays[name] || []
+      @current_state.arrays[name] || []
     end
 
     def self.set_array(name, values)
-      @arrays[name] = values.is_a?(Array) ? values : [values]
+      @current_state.arrays[name] = values.is_a?(Array) ? values : [values]
     end
 
     def self.get_array_element(name, index)
-      arr = @arrays[name]
+      arr = @current_state.arrays[name]
       return '' unless arr
       arr[index.to_i] || ''
     end
 
     def self.set_array_element(name, index, value)
-      @arrays[name] ||= []
-      @arrays[name][index.to_i] = value
+      @current_state.arrays[name] ||= []
+      @current_state.arrays[name][index.to_i] = value
     end
 
     def self.indexed_array?(name)
-      @arrays.key?(name)
+      @current_state.arrays.key?(name)
     end
 
     def self.array_length(name)
-      (@arrays[name] || []).length
+      (@current_state.arrays[name] || []).length
     end
 
     def self.array_append(name, values)
-      @arrays[name] ||= []
-      @arrays[name].concat(values.is_a?(Array) ? values : [values])
+      @current_state.arrays[name] ||= []
+      @current_state.arrays[name].concat(values.is_a?(Array) ? values : [values])
     end
 
     def self.unset_array(name)
-      @arrays.delete(name)
+      @current_state.arrays.delete(name)
     end
 
     def self.unset_array_element(name, index)
-      return unless @arrays[name]
-      @arrays[name][index.to_i] = nil
+      return unless @current_state.arrays[name]
+      @current_state.arrays[name][index.to_i] = nil
     end
 
     # Associative array methods
     def self.assoc_array?(name)
-      @assoc_arrays.key?(name)
+      @current_state.assoc_arrays.key?(name)
     end
 
     def self.declare_assoc_array(name)
-      @assoc_arrays[name] ||= {}
+      @current_state.assoc_arrays[name] ||= {}
     end
 
     def self.get_assoc_array(name)
-      @assoc_arrays[name] || {}
+      @current_state.assoc_arrays[name] || {}
     end
 
     def self.set_assoc_array(name, hash)
-      @assoc_arrays[name] = hash.is_a?(Hash) ? hash : {}
+      @current_state.assoc_arrays[name] = hash.is_a?(Hash) ? hash : {}
     end
 
     def self.get_assoc_element(name, key)
-      hash = @assoc_arrays[name]
+      hash = @current_state.assoc_arrays[name]
       return '' unless hash
       hash[key] || ''
     end
 
     def self.set_assoc_element(name, key, value)
-      @assoc_arrays[name] ||= {}
-      @assoc_arrays[name][key] = value
+      @current_state.assoc_arrays[name] ||= {}
+      @current_state.assoc_arrays[name][key] = value
     end
 
     def self.assoc_keys(name)
-      (@assoc_arrays[name] || {}).keys
+      (@current_state.assoc_arrays[name] || {}).keys
     end
 
     def self.assoc_values(name)
-      (@assoc_arrays[name] || {}).values
+      (@current_state.assoc_arrays[name] || {}).values
     end
 
     def self.assoc_length(name)
-      (@assoc_arrays[name] || {}).length
+      (@current_state.assoc_arrays[name] || {}).length
     end
 
     def self.unset_assoc_array(name)
-      @assoc_arrays.delete(name)
+      @current_state.assoc_arrays.delete(name)
     end
 
     def self.unset_assoc_element(name, key)
-      return unless @assoc_arrays[name]
-      @assoc_arrays[name].delete(key)
+      return unless @current_state.assoc_arrays[name]
+      @current_state.assoc_arrays[name].delete(key)
     end
 
     # Nameref (reference variable) methods
     def self.nameref?(name)
-      (@var_attributes[name] || Set.new).include?(:nameref)
+      (@current_state.var_attributes[name] || Set.new).include?(:nameref)
     end
 
     def self.resolve_nameref(name, visited = Set.new)
       # Resolve nameref chain, detecting circular references
-      return name unless @namerefs.key?(name)
+      return name unless @current_state.namerefs.key?(name)
 
       if visited.include?(name)
         $stderr.puts format_error('circular name reference', command: name)
@@ -228,23 +234,23 @@ module Rubish
       end
 
       visited << name
-      target = @namerefs[name]
+      target = @current_state.namerefs[name]
       resolve_nameref(target, visited)
     end
 
     def self.get_nameref_target(name)
-      @namerefs[name]
+      @current_state.namerefs[name]
     end
 
     def self.set_nameref(name, target)
-      @namerefs[name] = target
-      @var_attributes[name] ||= Set.new
-      @var_attributes[name] << :nameref
+      @current_state.namerefs[name] = target
+      @current_state.var_attributes[name] ||= Set.new
+      @current_state.var_attributes[name] << :nameref
     end
 
     def self.unset_nameref(name)
-      @namerefs.delete(name)
-      @var_attributes[name]&.delete(:nameref)
+      @current_state.namerefs.delete(name)
+      @current_state.var_attributes[name]&.delete(:nameref)
     end
 
     def self.get_var_through_nameref(name)
@@ -285,10 +291,10 @@ module Rubish
     end
 
     def self.clear_namerefs
-      @namerefs.each_key do |name|
-        @var_attributes[name]&.delete(:nameref)
+      @current_state.namerefs.each_key do |name|
+        @current_state.var_attributes[name]&.delete(:nameref)
       end
-      @namerefs.clear
+      @current_state.namerefs.clear
     end
 
     # IFS (Internal Field Separator) methods
@@ -1728,12 +1734,12 @@ module Rubish
       # local [-n] var=value or local var
       # -n: create a nameref (reference to another variable)
       # Only valid inside a function (when scope stack is not empty)
-      if @local_scope_stack.empty?
+      if @current_state.local_scope_stack.empty?
         $stderr.puts 'local: can only be used in a function'
         return false
       end
 
-      current_scope = @local_scope_stack.last
+      current_scope = @current_state.local_scope_stack.last
       nameref_mode = false
       remaining_args = []
 
@@ -1804,8 +1810,8 @@ module Rubish
           if nameref_mode
             # Create nameref without target (will be set later via assignment)
             # For now, just mark it as a nameref with nil target
-            @var_attributes[name] ||= Set.new
-            @var_attributes[name] << :nameref
+            @current_state.var_attributes[name] ||= Set.new
+            @current_state.var_attributes[name] << :nameref
           else
             # localvar_inherit: inherit value and attributes from outer scope
             if shopt_enabled?('localvar_inherit')
@@ -1825,13 +1831,13 @@ module Rubish
     end
 
     def self.push_local_scope
-      @local_scope_stack.push({})
+      @current_state.local_scope_stack.push({})
     end
 
     def self.pop_local_scope
-      return if @local_scope_stack.empty?
+      return if @current_state.local_scope_stack.empty?
 
-      scope = @local_scope_stack.pop
+      scope = @current_state.local_scope_stack.pop
       # Restore original values
       scope.each do |name, original_value|
         if original_value.is_a?(Hash)
@@ -1862,14 +1868,14 @@ module Rubish
     end
 
     def self.in_function?
-      !@local_scope_stack.empty?
+      !@current_state.local_scope_stack.empty?
     end
 
     # Set a local variable from a function parameter (for Ruby-style def with named args)
     def self.set_local_from_param(name, value)
       return unless in_function?
 
-      current_scope = @local_scope_stack.last
+      current_scope = @current_state.local_scope_stack.last
       unless current_scope.key?(name)
         current_scope[name] = var_set?(name) ? get_var(name) : :unset
       end
@@ -1877,7 +1883,7 @@ module Rubish
     end
 
     def self.clear_local_scopes
-      @local_scope_stack.clear
+      @current_state.local_scope_stack.clear
     end
 
     def self.warn_shadow(name)
@@ -1951,8 +1957,8 @@ module Rubish
 
           # localvar_unset: when unsetting a local variable, remove it from local scope
           # and restore the outer scope's value
-          if shopt_enabled?('localvar_unset') && !@local_scope_stack.empty?
-            current_scope = @local_scope_stack.last
+          if shopt_enabled?('localvar_unset') && !@current_state.local_scope_stack.empty?
+            current_scope = @current_state.local_scope_stack.last
             if current_scope.key?(name)
               # Remove from local scope and restore original value
               original_value = current_scope.delete(name)
@@ -1984,7 +1990,7 @@ module Rubish
 
       if args.empty? || args == ['-p']
         # List all readonly variables
-        @readonly_vars.each do |name, _|
+        @current_state.readonly_vars.each do |name, _|
           value = get_var(name)
           if value
             puts "readonly #{name}=#{value.inspect}"
@@ -2002,15 +2008,15 @@ module Rubish
         if arg.include?('=')
           name, value = arg.split('=', 2)
           # Check if already readonly with different value
-          if @readonly_vars.key?(name) && ENV[name] != value
+          if @current_state.readonly_vars.key?(name) && ENV[name] != value
             puts "readonly: #{name}: readonly variable"
             next
           end
           ENV[name] = value
-          @readonly_vars[name] = true
+          @current_state.readonly_vars[name] = true
         else
           # Mark existing variable as readonly
-          @readonly_vars[arg] = true
+          @current_state.readonly_vars[arg] = true
         end
       end
 
@@ -2018,23 +2024,23 @@ module Rubish
     end
 
     def self.readonly?(name)
-      @readonly_vars.key?(name)
+      @current_state.readonly_vars.key?(name)
     end
 
     def self.clear_readonly_vars
-      @readonly_vars.clear
+      @current_state.readonly_vars.clear
     end
 
     def self.exported?(name)
-      @var_attributes[name]&.include?(:export)
+      @current_state.var_attributes[name]&.include?(:export)
     end
 
     # Get a shell variable's value
     # Checks shell_vars first (for variables set in this shell),
     # then falls back to ENV (for inherited environment variables)
     def self.get_var(name)
-      if @shell_vars.key?(name)
-        @shell_vars[name]
+      if @current_state.shell_vars.key?(name)
+        @current_state.shell_vars[name]
       else
         ENV[name]
       end
@@ -2043,34 +2049,34 @@ module Rubish
     # Set a shell variable's value
     # If the variable is exported or already exists in ENV (inherited), also updates ENV
     def self.set_var(name, value)
-      @shell_vars[name] = value
+      @current_state.shell_vars[name] = value
       # If variable is exported or was inherited from parent env, also update ENV
       ENV[name] = value if exported?(name) || ENV.key?(name)
     end
 
     # Delete a shell variable (from both shell_vars and ENV)
     def self.delete_var(name)
-      @shell_vars.delete(name)
+      @current_state.shell_vars.delete(name)
       ENV.delete(name)
-      @var_attributes.delete(name)
+      @current_state.var_attributes.delete(name)
     end
 
     # Check if a shell variable is set (in shell_vars or ENV)
     def self.var_set?(name)
-      @shell_vars.key?(name) || ENV.key?(name)
+      @current_state.shell_vars.key?(name) || ENV.key?(name)
     end
 
     # Clear all shell variables (for testing)
     def self.clear_shell_vars
-      @shell_vars.clear
+      @current_state.shell_vars.clear
     end
 
     # Export a variable (add to ENV if it has a value)
     def self.export_var(name)
-      @var_attributes[name] ||= Set.new
-      @var_attributes[name] << :export
+      @current_state.var_attributes[name] ||= Set.new
+      @current_state.var_attributes[name] << :export
       # If variable has a value in shell_vars, copy to ENV
-      ENV[name] = @shell_vars[name] if @shell_vars.key?(name)
+      ENV[name] = @current_state.shell_vars[name] if @current_state.shell_vars.key?(name)
     end
 
     def self.declare(args)
@@ -2203,7 +2209,7 @@ module Rubish
         # Track in local scope if inside a function and -g not specified
         # This makes declare behave like local by default in functions
         if in_function? && !global_mode
-          current_scope = @local_scope_stack.last
+          current_scope = @current_state.local_scope_stack.last
           unless current_scope.key?(name)
             current_scope[name] = ENV.key?(name) ? ENV[name] : :unset
           end
@@ -2212,8 +2218,8 @@ module Rubish
         # Handle -I: inherit attributes and value from previous scope
         if inherit_mode && in_function?
           # Copy existing attributes if variable exists
-          if @var_attributes[name]
-            add_attrs = add_attrs | @var_attributes[name]
+          if @current_state.var_attributes[name]
+            add_attrs = add_attrs | @current_state.var_attributes[name]
           end
           # Inherit value if not specified and variable exists
           if value.nil? && ENV.key?(name)
@@ -2222,30 +2228,30 @@ module Rubish
         end
 
         # Initialize attributes set for this variable
-        @var_attributes[name] ||= Set.new
+        @current_state.var_attributes[name] ||= Set.new
 
         # Add new attributes
-        add_attrs.each { |attr| @var_attributes[name] << attr }
+        add_attrs.each { |attr| @current_state.var_attributes[name] << attr }
 
         # Remove attributes (except readonly)
-        remove_attrs.each { |attr| @var_attributes[name].delete(attr) }
+        remove_attrs.each { |attr| @current_state.var_attributes[name].delete(attr) }
 
         # Handle nameref attribute
         if add_attrs.include?(:nameref)
           if value
             # Set the nameref to point to the target variable
-            @namerefs[name] = value
+            @current_state.namerefs[name] = value
           end
         end
 
         # Handle removing nameref attribute
         if remove_attrs.include?(:nameref)
-          @namerefs.delete(name)
+          @current_state.namerefs.delete(name)
         end
 
         # Handle readonly attribute
         if add_attrs.include?(:readonly)
-          @readonly_vars[name] = true
+          @current_state.readonly_vars[name] = true
         end
 
         # Handle export attribute
@@ -2288,7 +2294,7 @@ module Rubish
     end
 
     def self.apply_attributes(name, value)
-      attrs = @var_attributes[name] || Set.new
+      attrs = @current_state.var_attributes[name] || Set.new
 
       # Apply integer attribute
       if attrs.include?(:integer)
@@ -2321,14 +2327,14 @@ module Rubish
       end
 
       # Apply attributes when setting a variable
-      if @var_attributes[name]
+      if @current_state.var_attributes[name]
         value = apply_attributes(name, value)
       end
       ENV[name] = value
     end
 
     def self.print_declaration(name)
-      attrs = @var_attributes[name] || Set.new
+      attrs = @current_state.var_attributes[name] || Set.new
       flags = +''
       flags << 'i' if attrs.include?(:integer)
       flags << 'l' if attrs.include?(:lowercase)
@@ -2340,7 +2346,7 @@ module Rubish
 
       # For namerefs, show the target variable name
       if attrs.include?(:nameref)
-        target = @namerefs[name]
+        target = @current_state.namerefs[name]
         if flags.empty?
           if target
             puts "declare -- #{name}=#{target.inspect}"
@@ -2376,12 +2382,12 @@ module Rubish
       # Collect all variables with attributes
       vars_to_print = Set.new
 
-      @var_attributes.each_key { |name| vars_to_print << name }
-      @readonly_vars.each_key { |name| vars_to_print << name }
-      @namerefs.each_key { |name| vars_to_print << name }
+      @current_state.var_attributes.each_key { |name| vars_to_print << name }
+      @current_state.readonly_vars.each_key { |name| vars_to_print << name }
+      @current_state.namerefs.each_key { |name| vars_to_print << name }
 
       vars_to_print.each do |name|
-        attrs = @var_attributes[name] || Set.new
+        attrs = @current_state.var_attributes[name] || Set.new
         attrs = attrs.dup
         attrs << :readonly if readonly?(name)
         attrs << :nameref if nameref?(name)
@@ -2442,20 +2448,20 @@ module Rubish
     end
 
     def self.get_var_attributes(name)
-      @var_attributes[name] || Set.new
+      @current_state.var_attributes[name] || Set.new
     end
 
     def self.has_attribute?(name, attr)
-      (@var_attributes[name] || Set.new).include?(attr)
+      (@current_state.var_attributes[name] || Set.new).include?(attr)
     end
 
     def self.mark_exported(name)
-      @var_attributes[name] ||= Set.new
-      @var_attributes[name] << :export
+      @current_state.var_attributes[name] ||= Set.new
+      @current_state.var_attributes[name] << :export
     end
 
     def self.clear_var_attributes
-      @var_attributes.clear
+      @current_state.var_attributes.clear
     end
 
     def self.let(args)
@@ -2620,11 +2626,11 @@ module Rubish
             # Apply attributes if any
             value = apply_attributes(key, value)
             # Store in shell_vars and ENV (since we're exporting)
-            @shell_vars[key] = value
+            @current_state.shell_vars[key] = value
             ENV[key] = value
             # Mark as exported
-            @var_attributes[key] ||= Set.new
-            @var_attributes[key] << :export
+            @current_state.var_attributes[key] ||= Set.new
+            @current_state.var_attributes[key] << :export
           else
             # Just export existing variable - copy from shell_vars to ENV if it exists
             export_var(arg)
@@ -6303,7 +6309,7 @@ module Rubish
           results.concat(@aliases.keys.select { |a| a.start_with?(word) })
         when :arrayvar
           # Array variable names
-          results.concat(@arrays.keys.select { |a| a.start_with?(word) })
+          results.concat(@current_state.arrays.keys.select { |a| a.start_with?(word) })
         when :binding
           # Readline key binding names
           results.concat(READLINE_FUNCTIONS.select { |f| f.start_with?(word) })
@@ -8525,7 +8531,7 @@ module Rubish
       end
 
       # Shell arrays
-      @arrays.keys.each do |key|
+      @current_state.arrays.keys.each do |key|
         results << "$#{key}" if key.start_with?(prefix)
       end
 
