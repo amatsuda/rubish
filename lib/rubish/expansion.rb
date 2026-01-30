@@ -809,7 +809,7 @@ module Rubish
       when 'BASH_COMPAT' then Builtins.bash_compat
       when 'RUBISH_EXECUTION_STRING', 'BASH_EXECUTION_STRING' then ENV['RUBISH_EXECUTION_STRING'] || ''
       when 'RUBISH', 'BASH' then rubish_path
-      when 'RUBISH_TRAPSIG', 'BASH_TRAPSIG' then Builtins.current_trapsig || ''
+      when 'RUBISH_TRAPSIG', 'BASH_TRAPSIG' then Builtins.current_state.current_trapsig || ''
       when 'READLINE_LINE' then Builtins.readline_line
       when 'READLINE_POINT' then Builtins.readline_point.to_s
       when 'READLINE_MARK' then Builtins.readline_mark.to_s
@@ -944,7 +944,7 @@ module Rubish
       when 'RUBISH_SOURCE', 'BASH_SOURCE' then @rubish_source_stack
       when 'RUBISH_ARGC', 'BASH_ARGC' then @rubish_argc_stack
       when 'RUBISH_ARGV', 'BASH_ARGV' then @rubish_argv_stack
-      when 'DIRSTACK' then [Dir.pwd] + Builtins.dir_stack
+      when 'DIRSTACK' then [Dir.pwd] + Builtins.current_state.dir_stack
       when 'COMP_WORDS' then Builtins.comp_words
       when 'COMPREPLY' then Builtins.compreply
       when 'RUBISH_REMATCH', 'BASH_REMATCH' then Builtins.get_array('RUBISH_REMATCH')
@@ -954,32 +954,32 @@ module Rubish
 
     def get_special_assoc_value(var_name, key)
       case var_name
-      when 'RUBISH_ALIASES', 'BASH_ALIASES' then (Builtins.aliases[key] || '').to_s
-      when 'RUBISH_CMDS', 'BASH_CMDS' then (Builtins.command_hash[key] || '').to_s
+      when 'RUBISH_ALIASES', 'BASH_ALIASES' then (Builtins.current_state.aliases[key] || '').to_s
+      when 'RUBISH_CMDS', 'BASH_CMDS' then (Builtins.current_state.command_hash[key] || '').to_s
       else ''
       end
     end
 
     def get_special_assoc_all_values(var_name)
       case var_name
-      when 'RUBISH_ALIASES', 'BASH_ALIASES' then Builtins.aliases.values
-      when 'RUBISH_CMDS', 'BASH_CMDS' then Builtins.command_hash.values
+      when 'RUBISH_ALIASES', 'BASH_ALIASES' then Builtins.current_state.aliases.values
+      when 'RUBISH_CMDS', 'BASH_CMDS' then Builtins.current_state.command_hash.values
       else []
       end
     end
 
     def get_special_assoc_length(var_name)
       case var_name
-      when 'RUBISH_ALIASES', 'BASH_ALIASES' then Builtins.aliases.length
-      when 'RUBISH_CMDS', 'BASH_CMDS' then Builtins.command_hash.length
+      when 'RUBISH_ALIASES', 'BASH_ALIASES' then Builtins.current_state.aliases.length
+      when 'RUBISH_CMDS', 'BASH_CMDS' then Builtins.current_state.command_hash.length
       else 0
       end
     end
 
     def get_special_assoc_keys(var_name)
       case var_name
-      when 'RUBISH_ALIASES', 'BASH_ALIASES' then Builtins.aliases.keys
-      when 'RUBISH_CMDS', 'BASH_CMDS' then Builtins.command_hash.keys
+      when 'RUBISH_ALIASES', 'BASH_ALIASES' then Builtins.current_state.aliases.keys
+      when 'RUBISH_CMDS', 'BASH_CMDS' then Builtins.current_state.command_hash.keys
       else []
       end
     end

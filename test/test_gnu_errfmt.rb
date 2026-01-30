@@ -5,15 +5,15 @@ require_relative 'test_helper'
 class TestGnuErrfmt < Test::Unit::TestCase
   def setup
     @repl = Rubish::REPL.new
-    @original_shell_options = Rubish::Builtins.shell_options.dup
-    @original_set_options = Rubish::Builtins.set_options.dup
+    @original_shell_options = Rubish::Builtins.current_state.shell_options.dup
+    @original_set_options = Rubish::Builtins.current_state.set_options.dup
   end
 
   def teardown
-    Rubish::Builtins.shell_options.clear
-    @original_shell_options.each { |k, v| Rubish::Builtins.shell_options[k] = v }
-    Rubish::Builtins.set_options.clear
-    @original_set_options.each { |k, v| Rubish::Builtins.set_options[k] = v }
+    Rubish::Builtins.current_state.shell_options.clear
+    @original_shell_options.each { |k, v| Rubish::Builtins.current_state.shell_options[k] = v }
+    Rubish::Builtins.current_state.set_options.clear
+    @original_set_options.each { |k, v| Rubish::Builtins.current_state.set_options[k] = v }
   end
 
   # gnu_errfmt is disabled by default
@@ -116,8 +116,8 @@ class TestGnuErrfmt < Test::Unit::TestCase
     execute('shopt -s gnu_errfmt')
 
     # Create circular nameref: a -> b -> a
-    Rubish::Builtins.namerefs['circular_a'] = 'circular_b'
-    Rubish::Builtins.namerefs['circular_b'] = 'circular_a'
+    Rubish::Builtins.current_state.namerefs['circular_a'] = 'circular_b'
+    Rubish::Builtins.current_state.namerefs['circular_b'] = 'circular_a'
 
     stderr = capture_stderr do
       Rubish::Builtins.resolve_nameref('circular_a')
@@ -126,14 +126,14 @@ class TestGnuErrfmt < Test::Unit::TestCase
     # Should be in GNU format
     assert_match(/\A\w+:\d+: circular_[ab]: circular name reference\n\z/, stderr)
   ensure
-    Rubish::Builtins.namerefs.delete('circular_a')
-    Rubish::Builtins.namerefs.delete('circular_b')
+    Rubish::Builtins.current_state.namerefs.delete('circular_a')
+    Rubish::Builtins.current_state.namerefs.delete('circular_b')
   end
 
   # Test circular nameref error without gnu_errfmt
   def test_circular_nameref_standard_format
-    Rubish::Builtins.namerefs['circular_a'] = 'circular_b'
-    Rubish::Builtins.namerefs['circular_b'] = 'circular_a'
+    Rubish::Builtins.current_state.namerefs['circular_a'] = 'circular_b'
+    Rubish::Builtins.current_state.namerefs['circular_b'] = 'circular_a'
 
     stderr = capture_stderr do
       Rubish::Builtins.resolve_nameref('circular_a')
@@ -142,8 +142,8 @@ class TestGnuErrfmt < Test::Unit::TestCase
     # Should be in standard format
     assert_match(/\Arubish: circular_[ab]: circular name reference\n\z/, stderr)
   ensure
-    Rubish::Builtins.namerefs.delete('circular_a')
-    Rubish::Builtins.namerefs.delete('circular_b')
+    Rubish::Builtins.current_state.namerefs.delete('circular_a')
+    Rubish::Builtins.current_state.namerefs.delete('circular_b')
   end
 
   # Test that format_error works when getters are not set

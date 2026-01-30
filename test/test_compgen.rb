@@ -330,7 +330,7 @@ class TestCompgen < Test::Unit::TestCase
   # ==========================================================================
 
   def test_short_flag_a_alias
-    Rubish::Builtins.aliases['myalias'] = 'ls -la'
+    Rubish::Builtins.current_state.aliases['myalias'] = 'ls -la'
 
     output = capture_output do
       Rubish::Builtins.compgen(['-a', 'my'])
@@ -338,7 +338,7 @@ class TestCompgen < Test::Unit::TestCase
     lines = output.strip.split("\n")
     assert_includes lines, 'myalias'
   ensure
-    Rubish::Builtins.aliases.delete('myalias')
+    Rubish::Builtins.current_state.aliases.delete('myalias')
   end
 
   def test_short_flag_b_builtin

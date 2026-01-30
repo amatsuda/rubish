@@ -87,7 +87,7 @@ module Rubish
         end
 
         # Command substitution only inherits errexit when inherit_errexit is enabled
-        Builtins.set_options['e'] = false unless inherit_errexit
+        Builtins.current_state.set_options['e'] = false unless inherit_errexit
 
         begin
           exit_code = catch(:exit) do
@@ -523,7 +523,7 @@ module Rubish
       __bound_vars__ = Set.new
 
       # First bind shell variables (these take precedence, includes function-local vars)
-      Builtins.shell_vars.each do |key, value|
+      Builtins.current_state.shell_vars.each do |key, value|
         var_name = key.downcase
         next unless var_name =~ /\A[a-z_][a-z0-9_]*\z/
         __binding__.local_variable_set(var_name.to_sym, value)
@@ -668,7 +668,7 @@ module Rubish
       return Builtins.bash_compat if var_name == 'BASH_COMPAT'
       return ENV['RUBISH_EXECUTION_STRING'] || '' if var_name == 'RUBISH_EXECUTION_STRING' || var_name == 'BASH_EXECUTION_STRING'
       return rubish_path if var_name == 'RUBISH' || var_name == 'BASH'
-      return Builtins.current_trapsig || '' if var_name == 'RUBISH_TRAPSIG' || var_name == 'BASH_TRAPSIG'
+      return Builtins.current_state.current_trapsig || '' if var_name == 'RUBISH_TRAPSIG' || var_name == 'BASH_TRAPSIG'
       return Builtins.readline_line if var_name == 'READLINE_LINE'
       return Builtins.readline_point.to_s if var_name == 'READLINE_POINT'
       return Builtins.readline_mark.to_s if var_name == 'READLINE_MARK'

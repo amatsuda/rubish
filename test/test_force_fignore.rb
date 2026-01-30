@@ -5,19 +5,19 @@ require_relative 'test_helper'
 class TestForceFignore < Test::Unit::TestCase
   def setup
     @repl = Rubish::REPL.new
-    @original_shell_options = Rubish::Builtins.shell_options.dup
+    @original_shell_options = Rubish::Builtins.current_state.shell_options.dup
     @tempdir = Dir.mktmpdir('rubish_force_fignore_test')
     @original_dir = Dir.pwd
     @original_fignore = ENV['FIGNORE']
     Dir.chdir(@tempdir)
     # Disable complete_fullquote to simplify testing
-    Rubish::Builtins.shell_options['complete_fullquote'] = false
+    Rubish::Builtins.current_state.shell_options['complete_fullquote'] = false
   end
 
   def teardown
     Dir.chdir(@original_dir)
-    Rubish::Builtins.shell_options.clear
-    @original_shell_options.each { |k, v| Rubish::Builtins.shell_options[k] = v }
+    Rubish::Builtins.current_state.shell_options.clear
+    @original_shell_options.each { |k, v| Rubish::Builtins.current_state.shell_options[k] = v }
     ENV['FIGNORE'] = @original_fignore
     FileUtils.rm_rf(@tempdir)
   end

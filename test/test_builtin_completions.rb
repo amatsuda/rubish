@@ -37,23 +37,23 @@ class TestBuiltinCompletions < Test::Unit::TestCase
   end
 
   def test_default_completions_registered
-    assert_not_nil Rubish::Builtins.completions['git']
-    assert_equal '_git', Rubish::Builtins.completions['git'][:function]
+    assert_not_nil Rubish::Builtins.current_state.completions['git']
+    assert_equal '_git', Rubish::Builtins.current_state.completions['git'][:function]
 
-    assert_not_nil Rubish::Builtins.completions['ssh']
-    assert_equal '_ssh', Rubish::Builtins.completions['ssh'][:function]
+    assert_not_nil Rubish::Builtins.current_state.completions['ssh']
+    assert_equal '_ssh', Rubish::Builtins.current_state.completions['ssh'][:function]
 
-    assert_not_nil Rubish::Builtins.completions['cd']
-    assert_equal '_cd', Rubish::Builtins.completions['cd'][:function]
+    assert_not_nil Rubish::Builtins.current_state.completions['cd']
+    assert_equal '_cd', Rubish::Builtins.current_state.completions['cd'][:function]
 
-    assert_not_nil Rubish::Builtins.completions['make']
-    assert_equal '_make', Rubish::Builtins.completions['make'][:function]
+    assert_not_nil Rubish::Builtins.current_state.completions['make']
+    assert_equal '_make', Rubish::Builtins.current_state.completions['make'][:function]
 
-    assert_not_nil Rubish::Builtins.completions['man']
-    assert_equal '_man', Rubish::Builtins.completions['man'][:function]
+    assert_not_nil Rubish::Builtins.current_state.completions['man']
+    assert_equal '_man', Rubish::Builtins.current_state.completions['man'][:function]
 
-    assert_not_nil Rubish::Builtins.completions['kill']
-    assert_equal '_kill', Rubish::Builtins.completions['kill'][:function]
+    assert_not_nil Rubish::Builtins.current_state.completions['kill']
+    assert_equal '_kill', Rubish::Builtins.current_state.completions['kill'][:function]
   end
 
   # ==========================================================================

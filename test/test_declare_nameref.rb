@@ -9,9 +9,9 @@ class TestDeclareNameref < Test::Unit::TestCase
     @original_dir = Dir.pwd
     @tempdir = Dir.mktmpdir('rubish_nameref_test')
     Dir.chdir(@tempdir)
-    Rubish::Builtins.namerefs.clear
-    Rubish::Builtins.var_attributes.clear
-    Rubish::Builtins.readonly_vars.clear
+    Rubish::Builtins.current_state.namerefs.clear
+    Rubish::Builtins.current_state.var_attributes.clear
+    Rubish::Builtins.current_state.readonly_vars.clear
   end
 
   def teardown
@@ -19,9 +19,9 @@ class TestDeclareNameref < Test::Unit::TestCase
     FileUtils.rm_rf(@tempdir)
     ENV.clear
     @original_env.each { |k, v| ENV[k] = v }
-    Rubish::Builtins.namerefs.clear
-    Rubish::Builtins.var_attributes.clear
-    Rubish::Builtins.readonly_vars.clear
+    Rubish::Builtins.current_state.namerefs.clear
+    Rubish::Builtins.current_state.var_attributes.clear
+    Rubish::Builtins.current_state.readonly_vars.clear
   end
 
   def output_file

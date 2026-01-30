@@ -170,7 +170,7 @@ class TestBind < Test::Unit::TestCase
     result = Rubish::Builtins.run('bind', ['-f', inputrc])
     assert result
 
-    assert_equal 'vi', Rubish::Builtins.readline_variables['editing-mode']
+    assert_equal 'vi', Rubish::Builtins.current_state.readline_variables['editing-mode']
     assert_not_nil Rubish::Builtins.get_key_binding("\C-a")
   end
 

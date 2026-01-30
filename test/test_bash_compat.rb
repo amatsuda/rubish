@@ -6,7 +6,7 @@ class TestBASH_COMPAT < Test::Unit::TestCase
   def setup
     @repl = Rubish::REPL.new
     @original_env = ENV.to_h.dup
-    @original_shell_options = Rubish::Builtins.shell_options.dup
+    @original_shell_options = Rubish::Builtins.current_state.shell_options.dup
     @tempdir = Dir.mktmpdir('rubish_bash_compat_test')
     @original_dir = Dir.pwd
     Dir.chdir(@tempdir)
@@ -17,8 +17,8 @@ class TestBASH_COMPAT < Test::Unit::TestCase
   def teardown
     Dir.chdir(@original_dir)
     FileUtils.rm_rf(@tempdir)
-    Rubish::Builtins.shell_options.clear
-    @original_shell_options.each { |k, v| Rubish::Builtins.shell_options[k] = v }
+    Rubish::Builtins.current_state.shell_options.clear
+    @original_shell_options.each { |k, v| Rubish::Builtins.current_state.shell_options[k] = v }
     ENV.clear
     @original_env.each { |k, v| ENV[k] = v }
   end

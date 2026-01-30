@@ -73,17 +73,17 @@ module Rubish
       # Colored ls by default (like fish)
       # -G is BSD/macOS style, --color=auto is GNU/Linux style
       if RUBY_PLATFORM =~ /darwin|bsd/i
-        Builtins.aliases['ls'] ||= 'ls -G'
-        Builtins.aliases['ll'] ||= 'ls -lG'
-        Builtins.aliases['la'] ||= 'ls -laG'
+        Builtins.current_state.aliases['ls'] ||= 'ls -G'
+        Builtins.current_state.aliases['ll'] ||= 'ls -lG'
+        Builtins.current_state.aliases['la'] ||= 'ls -laG'
       else
-        Builtins.aliases['ls'] ||= 'ls --color=auto'
-        Builtins.aliases['ll'] ||= 'ls -l --color=auto'
-        Builtins.aliases['la'] ||= 'ls -la --color=auto'
+        Builtins.current_state.aliases['ls'] ||= 'ls --color=auto'
+        Builtins.current_state.aliases['ll'] ||= 'ls -l --color=auto'
+        Builtins.current_state.aliases['la'] ||= 'ls -la --color=auto'
       end
 
       # Colored grep (like fish)
-      Builtins.aliases['grep'] ||= 'grep --color=auto'
+      Builtins.current_state.aliases['grep'] ||= 'grep --color=auto'
     end
 
     # Set up job control for interactive shells

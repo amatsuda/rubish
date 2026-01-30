@@ -5,7 +5,7 @@ require_relative 'test_helper'
 class TestHistappend < Test::Unit::TestCase
   def setup
     @repl = Rubish::REPL.new
-    @original_shell_options = Rubish::Builtins.shell_options.dup
+    @original_shell_options = Rubish::Builtins.current_state.shell_options.dup
     @original_histfile = ENV['HISTFILE']
     @original_histfilesize = ENV['HISTFILESIZE']
     @tempdir = Dir.mktmpdir('rubish_histappend_test')
@@ -18,8 +18,8 @@ class TestHistappend < Test::Unit::TestCase
   end
 
   def teardown
-    Rubish::Builtins.shell_options.clear
-    @original_shell_options.each { |k, v| Rubish::Builtins.shell_options[k] = v }
+    Rubish::Builtins.current_state.shell_options.clear
+    @original_shell_options.each { |k, v| Rubish::Builtins.current_state.shell_options[k] = v }
     if @original_histfile
       ENV['HISTFILE'] = @original_histfile
     else

@@ -10,8 +10,8 @@ class TestTRAPSIG < Test::Unit::TestCase
     @tempdir = Dir.mktmpdir('trapsig_test')
     Dir.chdir(@tempdir)
     # Clear any existing traps
-    Rubish::Builtins.traps.clear
-    Rubish::Builtins.current_trapsig = ''
+    Rubish::Builtins.current_state.traps.clear
+    Rubish::Builtins.current_state.current_trapsig = ''
   end
 
   def teardown
@@ -19,8 +19,8 @@ class TestTRAPSIG < Test::Unit::TestCase
     FileUtils.rm_rf(@tempdir)
     ENV.clear
     @original_env.each { |k, v| ENV[k] = v }
-    Rubish::Builtins.traps.clear
-    Rubish::Builtins.current_trapsig = ''
+    Rubish::Builtins.current_state.traps.clear
+    Rubish::Builtins.current_state.current_trapsig = ''
   end
 
   # Basic RUBISH_TRAPSIG functionality
@@ -53,7 +53,7 @@ class TestTRAPSIG < Test::Unit::TestCase
   def test_rubish_trapsig_in_exit_trap
     output_file = File.join(@tempdir, 'exit_output.txt')
     # Set up EXIT trap that records the signal name
-    Rubish::Builtins.traps[0] = "echo $RUBISH_TRAPSIG > #{output_file}"
+    Rubish::Builtins.current_state.traps[0] = "echo $RUBISH_TRAPSIG > #{output_file}"
     Rubish::Builtins.exit_traps
     content = File.read(output_file).strip
     assert_equal 'EXIT', content, 'RUBISH_TRAPSIG should be EXIT in exit trap'
@@ -61,7 +61,7 @@ class TestTRAPSIG < Test::Unit::TestCase
 
   def test_bash_trapsig_in_exit_trap
     output_file = File.join(@tempdir, 'exit_output.txt')
-    Rubish::Builtins.traps[0] = "echo $BASH_TRAPSIG > #{output_file}"
+    Rubish::Builtins.current_state.traps[0] = "echo $BASH_TRAPSIG > #{output_file}"
     Rubish::Builtins.exit_traps
     content = File.read(output_file).strip
     assert_equal 'EXIT', content, 'BASH_TRAPSIG should be EXIT in exit trap'
@@ -71,7 +71,7 @@ class TestTRAPSIG < Test::Unit::TestCase
 
   def test_rubish_trapsig_in_err_trap
     output_file = File.join(@tempdir, 'err_output.txt')
-    Rubish::Builtins.traps['ERR'] = "echo $RUBISH_TRAPSIG > #{output_file}"
+    Rubish::Builtins.current_state.traps['ERR'] = "echo $RUBISH_TRAPSIG > #{output_file}"
     Rubish::Builtins.err_trap
     content = File.read(output_file).strip
     assert_equal 'ERR', content, 'RUBISH_TRAPSIG should be ERR in err trap'
@@ -79,7 +79,7 @@ class TestTRAPSIG < Test::Unit::TestCase
 
   def test_bash_trapsig_in_err_trap
     output_file = File.join(@tempdir, 'err_output.txt')
-    Rubish::Builtins.traps['ERR'] = "echo $BASH_TRAPSIG > #{output_file}"
+    Rubish::Builtins.current_state.traps['ERR'] = "echo $BASH_TRAPSIG > #{output_file}"
     Rubish::Builtins.err_trap
     content = File.read(output_file).strip
     assert_equal 'ERR', content, 'BASH_TRAPSIG should be ERR in err trap'
@@ -89,7 +89,7 @@ class TestTRAPSIG < Test::Unit::TestCase
 
   def test_rubish_trapsig_in_debug_trap
     output_file = File.join(@tempdir, 'debug_output.txt')
-    Rubish::Builtins.traps['DEBUG'] = "echo $RUBISH_TRAPSIG > #{output_file}"
+    Rubish::Builtins.current_state.traps['DEBUG'] = "echo $RUBISH_TRAPSIG > #{output_file}"
     Rubish::Builtins.debug_trap
     content = File.read(output_file).strip
     assert_equal 'DEBUG', content, 'RUBISH_TRAPSIG should be DEBUG in debug trap'
@@ -99,7 +99,7 @@ class TestTRAPSIG < Test::Unit::TestCase
 
   def test_rubish_trapsig_in_return_trap
     output_file = File.join(@tempdir, 'return_output.txt')
-    Rubish::Builtins.traps['RETURN'] = "echo $RUBISH_TRAPSIG > #{output_file}"
+    Rubish::Builtins.current_state.traps['RETURN'] = "echo $RUBISH_TRAPSIG > #{output_file}"
     Rubish::Builtins.return_trap
     content = File.read(output_file).strip
     assert_equal 'RETURN', content, 'RUBISH_TRAPSIG should be RETURN in return trap'
@@ -109,13 +109,13 @@ class TestTRAPSIG < Test::Unit::TestCase
 
   def test_rubish_trapsig_is_read_only
     execute('RUBISH_TRAPSIG=test')
-    value = Rubish::Builtins.current_trapsig
+    value = Rubish::Builtins.current_state.current_trapsig
     assert_equal '', value, 'RUBISH_TRAPSIG should be read-only'
   end
 
   def test_bash_trapsig_is_read_only
     execute('BASH_TRAPSIG=test')
-    value = Rubish::Builtins.current_trapsig
+    value = Rubish::Builtins.current_state.current_trapsig
     assert_equal '', value, 'BASH_TRAPSIG should be read-only'
   end
 
@@ -123,17 +123,17 @@ class TestTRAPSIG < Test::Unit::TestCase
 
   def test_trapsig_cleared_after_exit_trap
     output_file = File.join(@tempdir, 'exit_output.txt')
-    Rubish::Builtins.traps[0] = "echo $RUBISH_TRAPSIG > #{output_file}"
+    Rubish::Builtins.current_state.traps[0] = "echo $RUBISH_TRAPSIG > #{output_file}"
     Rubish::Builtins.exit_traps
     # After trap completes, TRAPSIG should be empty
-    assert_equal '', Rubish::Builtins.current_trapsig, 'TRAPSIG should be cleared after trap'
+    assert_equal '', Rubish::Builtins.current_state.current_trapsig, 'TRAPSIG should be cleared after trap'
   end
 
   def test_trapsig_cleared_after_err_trap
     output_file = File.join(@tempdir, 'err_output.txt')
-    Rubish::Builtins.traps['ERR'] = "echo $RUBISH_TRAPSIG > #{output_file}"
+    Rubish::Builtins.current_state.traps['ERR'] = "echo $RUBISH_TRAPSIG > #{output_file}"
     Rubish::Builtins.err_trap
-    assert_equal '', Rubish::Builtins.current_trapsig, 'TRAPSIG should be cleared after trap'
+    assert_equal '', Rubish::Builtins.current_state.current_trapsig, 'TRAPSIG should be cleared after trap'
   end
 
   # Parameter expansion

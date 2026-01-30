@@ -147,14 +147,14 @@ class TestParamTransform < Test::Unit::TestCase
   # ${var@A} - Assignment statement form
   def test_transform_a_upper_basic
     ENV['TEST'] = 'hello'
-    Rubish::Builtins.var_attributes.delete('TEST')
+    Rubish::Builtins.current_state.var_attributes.delete('TEST')
     execute("echo ${TEST@A} > #{output_file}")
     assert_equal "declare -- TEST='hello'\n", File.read(output_file)
   end
 
   def test_transform_a_upper_with_spaces
     ENV['TEST'] = 'hello world'
-    Rubish::Builtins.var_attributes.delete('TEST')
+    Rubish::Builtins.current_state.var_attributes.delete('TEST')
     execute("echo ${TEST@A} > #{output_file}")
     assert_equal "declare -- TEST='hello world'\n", File.read(output_file)
   end
@@ -165,7 +165,7 @@ class TestParamTransform < Test::Unit::TestCase
     execute("echo ${TEST@A} > #{output_file}")
     assert_equal "declare -x TEST='hello'\n", File.read(output_file)
     # Clean up
-    Rubish::Builtins.var_attributes.delete('TEST')
+    Rubish::Builtins.current_state.var_attributes.delete('TEST')
   end
 
   def test_transform_a_upper_unset
@@ -177,18 +177,18 @@ class TestParamTransform < Test::Unit::TestCase
   # ${var@a} - Attribute flags
   def test_transform_a_lower_no_attrs
     ENV['TEST'] = 'hello'
-    Rubish::Builtins.var_attributes.delete('TEST')
+    Rubish::Builtins.current_state.var_attributes.delete('TEST')
     execute("echo ${TEST@a} > #{output_file}")
     assert_equal "\n", File.read(output_file)
   end
 
   def test_transform_a_lower_exported
     ENV['TEST'] = 'hello'
-    Rubish::Builtins.var_attributes['TEST'] = Set.new([:export])
+    Rubish::Builtins.current_state.var_attributes['TEST'] = Set.new([:export])
     execute("echo ${TEST@a} > #{output_file}")
     assert_equal "x\n", File.read(output_file)
     # Clean up
-    Rubish::Builtins.var_attributes.delete('TEST')
+    Rubish::Builtins.current_state.var_attributes.delete('TEST')
   end
 
   def test_transform_a_lower_readonly

@@ -8,18 +8,18 @@ class TestCompopt < Test::Unit::TestCase
     @saved_stderr = $stderr
     @saved_stdout = $stdout
     # Save and clear completion options
-    @original_completion_options = Rubish::Builtins.completion_options.dup
-    @original_current_completion_options = Rubish::Builtins.current_completion_options.dup
-    Rubish::Builtins.completion_options.clear
-    Rubish::Builtins.current_completion_options = Set.new
+    @original_completion_options = Rubish::Builtins.current_state.completion_options.dup
+    @original_current_completion_options = Rubish::Builtins.current_state.current_completion_options.dup
+    Rubish::Builtins.current_state.completion_options.clear
+    Rubish::Builtins.current_state.current_completion_options = Set.new
   end
 
   def teardown
     $stderr = @saved_stderr
     $stdout = @saved_stdout
-    Rubish::Builtins.completion_options.clear
-    @original_completion_options.each { |k, v| Rubish::Builtins.completion_options[k] = v }
-    Rubish::Builtins.current_completion_options = @original_current_completion_options
+    Rubish::Builtins.current_state.completion_options.clear
+    @original_completion_options.each { |k, v| Rubish::Builtins.current_state.completion_options[k] = v }
+    Rubish::Builtins.current_state.current_completion_options = @original_current_completion_options
   end
 
   # Basic tests
@@ -82,13 +82,13 @@ class TestCompopt < Test::Unit::TestCase
   # Current completion options (no command name)
   def test_compopt_current_completion_enable
     Rubish::Builtins.compopt(['-o', 'nospace'])
-    assert_include Rubish::Builtins.current_completion_options, 'nospace'
+    assert_include Rubish::Builtins.current_state.current_completion_options, 'nospace'
   end
 
   def test_compopt_current_completion_disable
-    Rubish::Builtins.current_completion_options = Set.new(['nospace'])
+    Rubish::Builtins.current_state.current_completion_options = Set.new(['nospace'])
     Rubish::Builtins.compopt(['+o', 'nospace'])
-    assert_not_include Rubish::Builtins.current_completion_options, 'nospace'
+    assert_not_include Rubish::Builtins.current_state.current_completion_options, 'nospace'
   end
 
   # -D default completion
@@ -154,7 +154,7 @@ class TestCompopt < Test::Unit::TestCase
   end
 
   def test_compopt_print_current_options
-    Rubish::Builtins.current_completion_options = Set.new(['nospace', 'filenames'])
+    Rubish::Builtins.current_state.current_completion_options = Set.new(['nospace', 'filenames'])
     output = capture_stdout do
       Rubish::Builtins.compopt([])
     end

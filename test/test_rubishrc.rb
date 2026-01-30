@@ -15,7 +15,7 @@ class TestRubishrc < Test::Unit::TestCase
     ENV.clear
     @saved_env.each { |k, v| ENV[k] = v }
     # Clear any shell options set during the test
-    Rubish::Builtins.shell_options.clear
+    Rubish::Builtins.current_state.shell_options.clear
   end
 
   # Test that config sets variables
@@ -37,7 +37,7 @@ class TestRubishrc < Test::Unit::TestCase
 
     @repl.send(:load_config)
 
-    assert Rubish::Builtins.aliases.key?('ll')
+    assert Rubish::Builtins.current_state.aliases.key?('ll')
   end
 
   # Test for loop works
@@ -115,6 +115,6 @@ class TestRubishrc < Test::Unit::TestCase
 
     @repl.send(:load_config)
 
-    assert Rubish::Builtins.shell_options['extglob']
+    assert Rubish::Builtins.current_state.shell_options['extglob']
   end
 end

@@ -5,14 +5,14 @@ require_relative 'test_helper'
 class TestLocalvarUnset < Test::Unit::TestCase
   def setup
     @repl = Rubish::REPL.new
-    @original_shell_options = Rubish::Builtins.shell_options.dup
+    @original_shell_options = Rubish::Builtins.current_state.shell_options.dup
     @original_env = ENV.to_h.dup
     Rubish::Builtins.clear_local_scopes
   end
 
   def teardown
-    Rubish::Builtins.shell_options.clear
-    @original_shell_options.each { |k, v| Rubish::Builtins.shell_options[k] = v }
+    Rubish::Builtins.current_state.shell_options.clear
+    @original_shell_options.each { |k, v| Rubish::Builtins.current_state.shell_options[k] = v }
     Rubish::Builtins.clear_local_scopes
     ENV.clear
     @original_env.each { |k, v| ENV[k] = v }
@@ -223,7 +223,7 @@ class TestLocalvarUnset < Test::Unit::TestCase
     Rubish::Builtins.run('local', ['MYVAR=local'])
 
     # Get current scope
-    scope = Rubish::Builtins.local_scope_stack.last
+    scope = Rubish::Builtins.current_state.local_scope_stack.last
     assert scope.key?('MYVAR')
 
     Rubish::Builtins.run('unset', ['MYVAR'])
@@ -254,7 +254,7 @@ class TestLocalvarUnset < Test::Unit::TestCase
 
     Rubish::Builtins.push_local_scope
     ENV['READONLY_VAR'] = 'value'
-    Rubish::Builtins.readonly_vars['READONLY_VAR'] = true
+    Rubish::Builtins.current_state.readonly_vars['READONLY_VAR'] = true
 
     output = capture_output do
       Rubish::Builtins.run('unset', ['READONLY_VAR'])
@@ -265,6 +265,6 @@ class TestLocalvarUnset < Test::Unit::TestCase
 
     Rubish::Builtins.pop_local_scope
   ensure
-    Rubish::Builtins.readonly_vars.delete('READONLY_VAR')
+    Rubish::Builtins.current_state.readonly_vars.delete('READONLY_VAR')
   end
 end

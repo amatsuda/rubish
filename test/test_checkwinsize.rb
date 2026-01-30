@@ -5,14 +5,14 @@ require_relative 'test_helper'
 class TestCheckwinsize < Test::Unit::TestCase
   def setup
     @repl = Rubish::REPL.new
-    @original_shell_options = Rubish::Builtins.shell_options.dup
+    @original_shell_options = Rubish::Builtins.current_state.shell_options.dup
     @original_lines = ENV['LINES']
     @original_columns = ENV['COLUMNS']
   end
 
   def teardown
-    Rubish::Builtins.shell_options.clear
-    @original_shell_options.each { |k, v| Rubish::Builtins.shell_options[k] = v }
+    Rubish::Builtins.current_state.shell_options.clear
+    @original_shell_options.each { |k, v| Rubish::Builtins.current_state.shell_options[k] = v }
     # Restore original values
     if @original_lines
       ENV['LINES'] = @original_lines

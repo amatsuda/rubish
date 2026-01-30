@@ -15,7 +15,7 @@ class TestENVVariable < Test::Unit::TestCase
     FileUtils.rm_rf(@tempdir)
     ENV.clear
     @original_env.each { |k, v| ENV[k] = v }
-    Rubish::Builtins.shell_options.clear
+    Rubish::Builtins.current_state.shell_options.clear
   end
 
   # Basic ENV variable functionality
@@ -60,7 +60,7 @@ class TestENVVariable < Test::Unit::TestCase
     repl = Rubish::REPL.new
     repl.send(:load_config)
 
-    assert_equal 'ls -la', Rubish::Builtins.aliases['ll']
+    assert_equal 'ls -la', Rubish::Builtins.current_state.aliases['ll']
   end
 
   # ENV variable not set or empty
@@ -203,7 +203,7 @@ class TestENVVariable < Test::Unit::TestCase
 
     repl = Rubish::REPL.new
     # Enable privileged mode
-    Rubish::Builtins.set_options['p'] = true
+    Rubish::Builtins.current_state.set_options['p'] = true
 
     repl.send(:load_config)
 
@@ -211,7 +211,7 @@ class TestENVVariable < Test::Unit::TestCase
     assert_nil ENV['PRIVILEGED_TEST']
 
     # Clean up
-    Rubish::Builtins.set_options['p'] = false
+    Rubish::Builtins.current_state.set_options['p'] = false
   end
 
   # ENV with export statements

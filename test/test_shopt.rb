@@ -8,15 +8,15 @@ class TestShopt < Test::Unit::TestCase
     @original_env = ENV.to_h.dup
     @tempdir = Dir.mktmpdir('rubish_shopt_test')
     # Clear shell options between tests
-    Rubish::Builtins.shell_options.clear
+    Rubish::Builtins.current_state.shell_options.clear
   end
 
   def teardown
-    Rubish::Builtins.shell_options.clear
+    Rubish::Builtins.current_state.shell_options.clear
     # Reset set_options to defaults
-    Rubish::Builtins.set_options.each_key do |k|
+    Rubish::Builtins.current_state.set_options.each_key do |k|
       # Reset to default values
-      Rubish::Builtins.set_options[k] = case k
+      Rubish::Builtins.current_state.set_options[k] = case k
         when 'B', 'H', 'emacs', 'history' then true
         else false
       end

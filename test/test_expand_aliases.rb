@@ -5,8 +5,8 @@ require_relative 'test_helper'
 class TestExpandAliases < Test::Unit::TestCase
   def setup
     @repl = Rubish::REPL.new
-    @original_shell_options = Rubish::Builtins.shell_options.dup
-    @original_aliases = Rubish::Builtins.aliases.dup
+    @original_shell_options = Rubish::Builtins.current_state.shell_options.dup
+    @original_aliases = Rubish::Builtins.current_state.aliases.dup
     @tempdir = Dir.mktmpdir('rubish_expand_aliases_test')
     @original_dir = Dir.pwd
     Dir.chdir(@tempdir)
@@ -14,10 +14,10 @@ class TestExpandAliases < Test::Unit::TestCase
 
   def teardown
     Dir.chdir(@original_dir)
-    Rubish::Builtins.shell_options.clear
-    @original_shell_options.each { |k, v| Rubish::Builtins.shell_options[k] = v }
+    Rubish::Builtins.current_state.shell_options.clear
+    @original_shell_options.each { |k, v| Rubish::Builtins.current_state.shell_options[k] = v }
     Rubish::Builtins.clear_aliases
-    @original_aliases.each { |k, v| Rubish::Builtins.aliases[k] = v }
+    @original_aliases.each { |k, v| Rubish::Builtins.current_state.aliases[k] = v }
     FileUtils.rm_rf(@tempdir)
   end
 
@@ -161,8 +161,8 @@ class TestExpandAliases < Test::Unit::TestCase
     execute('alias newalias="echo new"')
 
     # Alias should be defined
-    assert Rubish::Builtins.aliases.key?('newalias')
-    assert_equal 'echo new', Rubish::Builtins.aliases['newalias']
+    assert Rubish::Builtins.current_state.aliases.key?('newalias')
+    assert_equal 'echo new', Rubish::Builtins.current_state.aliases['newalias']
 
     # But not expanded
     result = Rubish::Builtins.expand_alias('newalias')
@@ -180,6 +180,6 @@ class TestExpandAliases < Test::Unit::TestCase
     execute('shopt -u expand_aliases')
     execute('unalias removeme')
 
-    assert_false Rubish::Builtins.aliases.key?('removeme')
+    assert_false Rubish::Builtins.current_state.aliases.key?('removeme')
   end
 end

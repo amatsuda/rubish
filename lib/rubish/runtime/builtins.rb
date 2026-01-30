@@ -20,77 +20,28 @@ module Rubish
       _upvars _usergroup setopt unsetopt autoload compinit compdef git_ps1 require
     ]).freeze
 
+    # Global state (shared across all sessions)
     @disabled_builtins = Set.new  # Set of disabled builtin names
     @dynamic_commands = []  # Array of dynamically loaded builtin names
     @call_stack = []  # Stack of [line_number, function_name, filename] for caller builtin
-    # @key_bindings and @readline_variables moved to ShellState
-    # @bind_x_counter and @bind_x_executor moved to ShellState
     @coprocs = {}  # Hash of coproc names to {pid:, read_fd:, write_fd:, reader:, writer:}
     @named_directories = {}  # Hash of names to paths for zsh-style ~name expansion
-    # Callbacks moved to ShellState:
-    # @executor, @script_name_getter, @script_name_setter, @positional_params_getter,
-    # @positional_params_setter, @function_checker, @function_remover, @function_lister,
-    # @function_getter, @function_caller, @autoload_functions, @heredoc_content_setter,
-    # @command_executor, @history_file_getter, @history_loader, @history_saver,
-    # @history_appender, @last_history_line
-    # @history_timestamps moved to ShellState
-    # @source_file_getter, @source_file_setter, @lineno_getter, @exit_blocked_by_jobs moved to ShellState
     @builtin_completion_functions = {}  # Hash of function names to lambdas for builtin completions
-    @current_state = ShellState.new  # Per-session shell state
+
+    # Per-session state (variables, options, aliases, completions, callbacks, etc.)
+    @current_state = ShellState.new
 
     class << self
       attr_accessor :current_state
       attr_reader :disabled_builtins, :call_stack, :coprocs, :builtin_completion_functions, :named_directories
 
-      # Delegate variables state accessors to current_state for backward compatibility
-      def shell_vars; @current_state.shell_vars; end
-      def arrays; @current_state.arrays; end
-      def assoc_arrays; @current_state.assoc_arrays; end
-      def namerefs; @current_state.namerefs; end
-      def var_attributes; @current_state.var_attributes; end
-      def readonly_vars; @current_state.readonly_vars; end
-      def local_scope_stack; @current_state.local_scope_stack; end
-
-      # Delegate options state accessors to current_state for backward compatibility
-      def shell_options; @current_state.shell_options; end
-      def zsh_options; @current_state.zsh_options; end
-      def set_options; @current_state.set_options; end
-
-      # Delegate aliases/hash state accessors to current_state for backward compatibility
-      def aliases; @current_state.aliases; end
-      def command_hash; @current_state.command_hash; end
-
-      # Delegate directory stack state accessor to current_state for backward compatibility
-      def dir_stack; @current_state.dir_stack; end
-
-      # Delegate traps state accessors to current_state for backward compatibility
-      def traps; @current_state.traps; end
-      def original_traps; @current_state.original_traps; end
-      def current_trapsig; @current_state.current_trapsig; end
-      def current_trapsig=(val); @current_state.current_trapsig = val; end
-
-      # Delegate completion state accessors to current_state for backward compatibility
-      def completions; @current_state.completions; end
-      def completion_options; @current_state.completion_options; end
-      def current_completion_options; @current_state.current_completion_options; end
-      def current_completion_options=(val); @current_state.current_completion_options = val; end
-
-      # Delegate key bindings state accessors to current_state for backward compatibility
-      def key_bindings; @current_state.key_bindings; end
-      def readline_variables; @current_state.readline_variables; end
-
-      # Delegate history state accessor to current_state for backward compatibility
-      def history_timestamps; @current_state.history_timestamps; end
-
-      # Delegate execution callbacks to current_state
+      # Delegate callbacks to current_state (used by REPL to set up callbacks)
       def executor; @current_state.executor; end
       def executor=(val); @current_state.executor = val; end
       def command_executor; @current_state.command_executor; end
       def command_executor=(val); @current_state.command_executor = val; end
       def heredoc_content_setter; @current_state.heredoc_content_setter; end
       def heredoc_content_setter=(val); @current_state.heredoc_content_setter = val; end
-
-      # Delegate script/position callbacks to current_state
       def script_name_getter; @current_state.script_name_getter; end
       def script_name_getter=(val); @current_state.script_name_getter = val; end
       def script_name_setter; @current_state.script_name_setter; end
@@ -101,8 +52,6 @@ module Rubish
       def positional_params_setter=(val); @current_state.positional_params_setter = val; end
       def lineno_getter; @current_state.lineno_getter; end
       def lineno_getter=(val); @current_state.lineno_getter = val; end
-
-      # Delegate function callbacks to current_state
       def function_checker; @current_state.function_checker; end
       def function_checker=(val); @current_state.function_checker = val; end
       def function_remover; @current_state.function_remover; end
@@ -115,8 +64,6 @@ module Rubish
       def function_caller=(val); @current_state.function_caller = val; end
       def autoload_functions; @current_state.autoload_functions; end
       def autoload_functions=(val); @current_state.autoload_functions = val; end
-
-      # Delegate history callbacks to current_state
       def history_file_getter; @current_state.history_file_getter; end
       def history_file_getter=(val); @current_state.history_file_getter = val; end
       def history_loader; @current_state.history_loader; end
@@ -127,14 +74,10 @@ module Rubish
       def history_appender=(val); @current_state.history_appender = val; end
       def last_history_line; @current_state.last_history_line; end
       def last_history_line=(val); @current_state.last_history_line = val; end
-
-      # Delegate source file callbacks to current_state
       def source_file_getter; @current_state.source_file_getter; end
       def source_file_getter=(val); @current_state.source_file_getter = val; end
       def source_file_setter; @current_state.source_file_setter; end
       def source_file_setter=(val); @current_state.source_file_setter = val; end
-
-      # Delegate readline callbacks to current_state
       def readline_line_getter; @current_state.readline_line_getter; end
       def readline_line_getter=(val); @current_state.readline_line_getter = val; end
       def readline_line_setter; @current_state.readline_line_setter; end
@@ -149,8 +92,6 @@ module Rubish
       def readline_mark_setter=(val); @current_state.readline_mark_setter = val; end
       def readline_point_modified; @current_state.readline_point_modified; end
       def readline_point_modified=(val); @current_state.readline_point_modified = val; end
-
-      # Delegate misc callbacks to current_state
       def bash_argv0_unsetter; @current_state.bash_argv0_unsetter; end
       def bash_argv0_unsetter=(val); @current_state.bash_argv0_unsetter = val; end
       def bind_x_executor; @current_state.bind_x_executor; end

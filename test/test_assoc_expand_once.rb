@@ -5,20 +5,20 @@ require_relative 'test_helper'
 class TestAssocExpandOnce < Test::Unit::TestCase
   def setup
     @repl = Rubish::REPL.new
-    @original_shell_options = Rubish::Builtins.shell_options.dup
+    @original_shell_options = Rubish::Builtins.current_state.shell_options.dup
     @tempdir = Dir.mktmpdir('rubish_assoc_expand_once_test')
     @original_dir = Dir.pwd
     Dir.chdir(@tempdir)
     # Clear any existing assoc arrays
-    Rubish::Builtins.assoc_arrays.clear
+    Rubish::Builtins.current_state.assoc_arrays.clear
   end
 
   def teardown
     Dir.chdir(@original_dir)
-    Rubish::Builtins.shell_options.clear
-    @original_shell_options.each { |k, v| Rubish::Builtins.shell_options[k] = v }
+    Rubish::Builtins.current_state.shell_options.clear
+    @original_shell_options.each { |k, v| Rubish::Builtins.current_state.shell_options[k] = v }
     FileUtils.rm_rf(@tempdir)
-    Rubish::Builtins.assoc_arrays.clear
+    Rubish::Builtins.current_state.assoc_arrays.clear
   end
 
   def output_file

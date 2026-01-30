@@ -28,8 +28,8 @@ class TestSource < Test::Unit::TestCase
 
     execute("source #{script}")
 
-    assert_equal 'ls -la', Rubish::Builtins.aliases['ll']
-    assert_equal 'git', Rubish::Builtins.aliases['g']
+    assert_equal 'ls -la', Rubish::Builtins.current_state.aliases['ll']
+    assert_equal 'git', Rubish::Builtins.current_state.aliases['g']
   end
 
   def test_source_with_dot_command
@@ -39,7 +39,7 @@ class TestSource < Test::Unit::TestCase
 
     execute(". #{script}")
 
-    assert_equal 'echo hello', Rubish::Builtins.aliases['myalias']
+    assert_equal 'echo hello', Rubish::Builtins.current_state.aliases['myalias']
   end
 
   def test_source_skips_comments
@@ -51,7 +51,7 @@ class TestSource < Test::Unit::TestCase
 
     execute("source #{script}")
 
-    assert_equal({'a' => 'b'}, Rubish::Builtins.aliases)
+    assert_equal({'a' => 'b'}, Rubish::Builtins.current_state.aliases)
   end
 
   def test_source_skips_empty_lines
@@ -63,7 +63,7 @@ class TestSource < Test::Unit::TestCase
 
     execute("source #{script}")
 
-    assert_equal 2, Rubish::Builtins.aliases.size
+    assert_equal 2, Rubish::Builtins.current_state.aliases.size
   end
 
   def test_source_nonexistent_file
@@ -97,7 +97,7 @@ class TestSource < Test::Unit::TestCase
     # Source using the full path (tilde expansion happens before source)
     execute("source #{script}")
 
-    assert_equal 'worked', Rubish::Builtins.aliases['tilde_alias']
+    assert_equal 'worked', Rubish::Builtins.current_state.aliases['tilde_alias']
   end
 
   # Regression test: inline comments with keywords should not affect depth tracking

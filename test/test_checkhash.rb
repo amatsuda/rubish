@@ -5,8 +5,8 @@ require_relative 'test_helper'
 class TestCheckhash < Test::Unit::TestCase
   def setup
     @repl = Rubish::REPL.new
-    @original_shell_options = Rubish::Builtins.shell_options.dup
-    @original_set_options = Rubish::Builtins.set_options.dup
+    @original_shell_options = Rubish::Builtins.current_state.shell_options.dup
+    @original_set_options = Rubish::Builtins.current_state.set_options.dup
     @original_path = ENV['PATH']
     @tempdir = Dir.mktmpdir('rubish_checkhash_test')
     @bin_dir = File.join(@tempdir, 'bin')
@@ -15,10 +15,10 @@ class TestCheckhash < Test::Unit::TestCase
   end
 
   def teardown
-    Rubish::Builtins.shell_options.clear
-    @original_shell_options.each { |k, v| Rubish::Builtins.shell_options[k] = v }
-    Rubish::Builtins.set_options.clear
-    @original_set_options.each { |k, v| Rubish::Builtins.set_options[k] = v }
+    Rubish::Builtins.current_state.shell_options.clear
+    @original_shell_options.each { |k, v| Rubish::Builtins.current_state.shell_options[k] = v }
+    Rubish::Builtins.current_state.set_options.clear
+    @original_set_options.each { |k, v| Rubish::Builtins.current_state.set_options[k] = v }
     ENV['PATH'] = @original_path
     FileUtils.rm_rf(@tempdir)
     Rubish::Builtins.clear_hash

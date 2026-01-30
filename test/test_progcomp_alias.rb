@@ -5,19 +5,19 @@ require_relative 'test_helper'
 class TestProgcompAlias < Test::Unit::TestCase
   def setup
     @repl = Rubish::REPL.new
-    @original_shell_options = Rubish::Builtins.shell_options.dup
-    @original_aliases = Rubish::Builtins.aliases.dup
-    @original_completions = Rubish::Builtins.completions.dup
+    @original_shell_options = Rubish::Builtins.current_state.shell_options.dup
+    @original_aliases = Rubish::Builtins.current_state.aliases.dup
+    @original_completions = Rubish::Builtins.current_state.completions.dup
     @tempdir = Dir.mktmpdir('rubish_progcomp_alias_test')
   end
 
   def teardown
-    Rubish::Builtins.shell_options.clear
-    @original_shell_options.each { |k, v| Rubish::Builtins.shell_options[k] = v }
-    Rubish::Builtins.aliases.clear
-    @original_aliases.each { |k, v| Rubish::Builtins.aliases[k] = v }
-    Rubish::Builtins.completions.clear
-    @original_completions.each { |k, v| Rubish::Builtins.completions[k] = v }
+    Rubish::Builtins.current_state.shell_options.clear
+    @original_shell_options.each { |k, v| Rubish::Builtins.current_state.shell_options[k] = v }
+    Rubish::Builtins.current_state.aliases.clear
+    @original_aliases.each { |k, v| Rubish::Builtins.current_state.aliases[k] = v }
+    Rubish::Builtins.current_state.completions.clear
+    @original_completions.each { |k, v| Rubish::Builtins.current_state.completions[k] = v }
     FileUtils.rm_rf(@tempdir)
   end
 

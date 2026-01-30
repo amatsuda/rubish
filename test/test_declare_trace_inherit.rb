@@ -9,8 +9,8 @@ class TestDeclareTraceInherit < Test::Unit::TestCase
     @original_dir = Dir.pwd
     @tempdir = Dir.mktmpdir('rubish_declare_ti_test')
     Dir.chdir(@tempdir)
-    Rubish::Builtins.var_attributes.clear
-    Rubish::Builtins.readonly_vars.clear
+    Rubish::Builtins.current_state.var_attributes.clear
+    Rubish::Builtins.current_state.readonly_vars.clear
     Rubish::Builtins.clear_local_scopes
   end
 
@@ -19,8 +19,8 @@ class TestDeclareTraceInherit < Test::Unit::TestCase
     FileUtils.rm_rf(@tempdir)
     ENV.clear
     @original_env.each { |k, v| ENV[k] = v }
-    Rubish::Builtins.var_attributes.clear
-    Rubish::Builtins.readonly_vars.clear
+    Rubish::Builtins.current_state.var_attributes.clear
+    Rubish::Builtins.current_state.readonly_vars.clear
     Rubish::Builtins.clear_local_scopes
   end
 
@@ -67,7 +67,7 @@ class TestDeclareTraceInherit < Test::Unit::TestCase
 
   def test_declare_I_outside_function_has_no_effect
     ENV['myvar'] = 'original'
-    Rubish::Builtins.var_attributes['myvar'] = Set[:lowercase]
+    Rubish::Builtins.current_state.var_attributes['myvar'] = Set[:lowercase]
     execute('declare -I myvar=NEW')
     # Outside function, -I has no effect, but existing attributes still apply
     # Since lowercase attribute exists, 'NEW' becomes 'new'
@@ -88,7 +88,7 @@ class TestDeclareTraceInherit < Test::Unit::TestCase
 
   def test_declare_I_inherits_attributes
     ENV['attrvar'] = 'value'
-    Rubish::Builtins.var_attributes['attrvar'] = Set[:integer, :uppercase]
+    Rubish::Builtins.current_state.var_attributes['attrvar'] = Set[:integer, :uppercase]
 
     Rubish::Builtins.push_local_scope
 
@@ -113,7 +113,7 @@ class TestDeclareTraceInherit < Test::Unit::TestCase
 
   def test_declare_I_combines_with_new_attributes
     ENV['combinevar'] = 'value'
-    Rubish::Builtins.var_attributes['combinevar'] = Set[:integer]
+    Rubish::Builtins.current_state.var_attributes['combinevar'] = Set[:integer]
 
     Rubish::Builtins.push_local_scope
 
@@ -127,7 +127,7 @@ class TestDeclareTraceInherit < Test::Unit::TestCase
 
   def test_declare_I_with_g_flag
     ENV['globalvar'] = 'outer'
-    Rubish::Builtins.var_attributes['globalvar'] = Set[:export]
+    Rubish::Builtins.current_state.var_attributes['globalvar'] = Set[:export]
 
     Rubish::Builtins.push_local_scope
 
@@ -142,7 +142,7 @@ class TestDeclareTraceInherit < Test::Unit::TestCase
 
   def test_declare_I_no_previous_var
     ENV.delete('newvar')
-    Rubish::Builtins.var_attributes.delete('newvar')
+    Rubish::Builtins.current_state.var_attributes.delete('newvar')
 
     Rubish::Builtins.push_local_scope
 
@@ -157,7 +157,7 @@ class TestDeclareTraceInherit < Test::Unit::TestCase
 
   def test_declare_tI_trace_and_inherit
     ENV['bothvar'] = 'value'
-    Rubish::Builtins.var_attributes['bothvar'] = Set[:export]
+    Rubish::Builtins.current_state.var_attributes['bothvar'] = Set[:export]
 
     Rubish::Builtins.push_local_scope
 

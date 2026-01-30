@@ -16,7 +16,7 @@ class TestRUBISH_COMPAT < Test::Unit::TestCase
     FileUtils.rm_rf(@tempdir)
     ENV.clear
     @original_env.each { |k, v| ENV[k] = v }
-    Rubish::Builtins.shell_options.clear
+    Rubish::Builtins.current_state.shell_options.clear
   end
 
   def output_file
@@ -68,19 +68,19 @@ class TestRUBISH_COMPAT < Test::Unit::TestCase
 
   def test_compat_level_nil_when_not_set
     ENV.delete('RUBISH_COMPAT')
-    Rubish::Builtins.shell_options.clear
+    Rubish::Builtins.current_state.shell_options.clear
     assert_nil Rubish::Builtins.compat_level
   end
 
   def test_compat_level_from_shopt
     ENV.delete('RUBISH_COMPAT')
-    Rubish::Builtins.shell_options['compat10'] = true
+    Rubish::Builtins.current_state.shell_options['compat10'] = true
     assert_equal 10, Rubish::Builtins.compat_level
   end
 
   def test_env_var_takes_precedence_over_shopt
     ENV['RUBISH_COMPAT'] = '1.1'
-    Rubish::Builtins.shell_options['compat10'] = true
+    Rubish::Builtins.current_state.shell_options['compat10'] = true
     # ENV var should take precedence
     assert_equal 11, Rubish::Builtins.compat_level
   end
@@ -102,7 +102,7 @@ class TestRUBISH_COMPAT < Test::Unit::TestCase
 
   def test_compat_level_check_nil_when_not_set
     ENV.delete('RUBISH_COMPAT')
-    Rubish::Builtins.shell_options.clear
+    Rubish::Builtins.current_state.shell_options.clear
     assert_nil Rubish::Builtins.compat_level?(10)
   end
 
@@ -113,7 +113,7 @@ class TestRUBISH_COMPAT < Test::Unit::TestCase
   end
 
   def test_shopt_compat10_default_false
-    Rubish::Builtins.shell_options.clear
+    Rubish::Builtins.current_state.shell_options.clear
     assert_false Rubish::Builtins.shopt_enabled?('compat10')
   end
 
@@ -123,7 +123,7 @@ class TestRUBISH_COMPAT < Test::Unit::TestCase
   end
 
   def test_shopt_unset_compat10
-    Rubish::Builtins.shell_options['compat10'] = true
+    Rubish::Builtins.current_state.shell_options['compat10'] = true
     execute('shopt -u compat10')
     assert_false Rubish::Builtins.shopt_enabled?('compat10')
   end
@@ -132,14 +132,14 @@ class TestRUBISH_COMPAT < Test::Unit::TestCase
 
   def test_set_compat_level_10
     Rubish::Builtins.set_compat_level('1.0')
-    assert Rubish::Builtins.shell_options['compat10']
+    assert Rubish::Builtins.current_state.shell_options['compat10']
   end
 
   def test_set_compat_level_clears_others
-    Rubish::Builtins.shell_options['compat10'] = true
+    Rubish::Builtins.current_state.shell_options['compat10'] = true
     Rubish::Builtins.set_compat_level('1.1')
     # compat10 should be cleared (compat11 doesn't exist yet, but compat10 should be false)
-    assert_false Rubish::Builtins.shell_options['compat10']
+    assert_false Rubish::Builtins.current_state.shell_options['compat10']
   end
 
   # Unset RUBISH_COMPAT

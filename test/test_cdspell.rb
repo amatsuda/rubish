@@ -5,7 +5,7 @@ require_relative 'test_helper'
 class TestCdspell < Test::Unit::TestCase
   def setup
     @repl = Rubish::REPL.new
-    @original_shell_options = Rubish::Builtins.shell_options.dup
+    @original_shell_options = Rubish::Builtins.current_state.shell_options.dup
     @original_dir = Dir.pwd
     @tempdir = Dir.mktmpdir('rubish_cdspell_test')
     Dir.chdir(@tempdir)
@@ -14,8 +14,8 @@ class TestCdspell < Test::Unit::TestCase
   def teardown
     Dir.chdir(@original_dir)
     FileUtils.rm_rf(@tempdir)
-    Rubish::Builtins.shell_options.clear
-    @original_shell_options.each { |k, v| Rubish::Builtins.shell_options[k] = v }
+    Rubish::Builtins.current_state.shell_options.clear
+    @original_shell_options.each { |k, v| Rubish::Builtins.current_state.shell_options[k] = v }
   end
 
   def test_cdspell_disabled_by_default

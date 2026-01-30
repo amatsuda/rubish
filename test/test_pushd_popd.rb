@@ -30,14 +30,14 @@ class TestPushdPopd < Test::Unit::TestCase
   def test_pushd_with_directory
     Rubish::Builtins.run('pushd', [@subdir1])
     assert_equal @subdir1, pwd
-    assert_equal [@tempdir], Rubish::Builtins.dir_stack
+    assert_equal [@tempdir], Rubish::Builtins.current_state.dir_stack
   end
 
   def test_pushd_multiple_directories
     Rubish::Builtins.run('pushd', [@subdir1])
     Rubish::Builtins.run('pushd', [@subdir2])
     assert_equal @subdir2, pwd
-    assert_equal [@subdir1, @tempdir], Rubish::Builtins.dir_stack
+    assert_equal [@subdir1, @tempdir], Rubish::Builtins.current_state.dir_stack
   end
 
   def test_pushd_swap
@@ -47,7 +47,7 @@ class TestPushdPopd < Test::Unit::TestCase
     # pushd with no args swaps top two
     Rubish::Builtins.run('pushd', [])
     assert_equal @tempdir, pwd
-    assert_equal [@subdir1], Rubish::Builtins.dir_stack
+    assert_equal [@subdir1], Rubish::Builtins.current_state.dir_stack
   end
 
   def test_pushd_no_args_empty_stack
@@ -70,7 +70,7 @@ class TestPushdPopd < Test::Unit::TestCase
     Rubish::Builtins.run('pushd', [@subdir1])
     Rubish::Builtins.run('popd', [])
     assert_equal @tempdir, pwd
-    assert_equal [], Rubish::Builtins.dir_stack
+    assert_equal [], Rubish::Builtins.current_state.dir_stack
   end
 
   def test_popd_multiple
@@ -127,7 +127,7 @@ class TestPushdPopd < Test::Unit::TestCase
     # Should NOT have changed directory
     assert_equal @tempdir, pwd
     # But stack should have the directory
-    assert_equal [@tempdir], Rubish::Builtins.dir_stack
+    assert_equal [@tempdir], Rubish::Builtins.current_state.dir_stack
   end
 
   def test_pushd_n_swap_no_cd
@@ -138,7 +138,7 @@ class TestPushdPopd < Test::Unit::TestCase
     Rubish::Builtins.run('pushd', ['-n'])
     assert_equal @subdir1, pwd
     # Stack should have swapped
-    assert_equal [@subdir1], Rubish::Builtins.dir_stack
+    assert_equal [@subdir1], Rubish::Builtins.current_state.dir_stack
   end
 
   # pushd +N/-N tests
@@ -207,7 +207,7 @@ class TestPushdPopd < Test::Unit::TestCase
     Rubish::Builtins.run('popd', ['-n'])
     assert_equal @subdir1, pwd
     # Stack should be empty
-    assert_equal [], Rubish::Builtins.dir_stack
+    assert_equal [], Rubish::Builtins.current_state.dir_stack
   end
 
   # popd +N/-N tests
@@ -220,7 +220,7 @@ class TestPushdPopd < Test::Unit::TestCase
     # +0 removes current directory, cd to next
     Rubish::Builtins.run('popd', ['+0'])
     assert_equal @subdir1, pwd
-    assert_equal [@tempdir], Rubish::Builtins.dir_stack
+    assert_equal [@tempdir], Rubish::Builtins.current_state.dir_stack
   end
 
   def test_popd_plus_one
@@ -232,7 +232,7 @@ class TestPushdPopd < Test::Unit::TestCase
     # +1 removes dir1 from stack
     Rubish::Builtins.run('popd', ['+1'])
     assert_equal @subdir2, pwd
-    assert_equal [@tempdir], Rubish::Builtins.dir_stack
+    assert_equal [@tempdir], Rubish::Builtins.current_state.dir_stack
   end
 
   def test_popd_minus_zero
@@ -244,7 +244,7 @@ class TestPushdPopd < Test::Unit::TestCase
     # -0 removes last element (tempdir)
     Rubish::Builtins.run('popd', ['-0'])
     assert_equal @subdir2, pwd
-    assert_equal [@subdir1], Rubish::Builtins.dir_stack
+    assert_equal [@subdir1], Rubish::Builtins.current_state.dir_stack
   end
 
   def test_popd_out_of_range
@@ -314,6 +314,6 @@ class TestPushdPopd < Test::Unit::TestCase
     # Swap
     Rubish::Builtins.run('pushd', [])
     assert_equal @subdir1, pwd
-    assert_equal [@subdir2, @tempdir], Rubish::Builtins.dir_stack
+    assert_equal [@subdir2, @tempdir], Rubish::Builtins.current_state.dir_stack
   end
 end

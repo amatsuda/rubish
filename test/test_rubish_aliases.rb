@@ -169,9 +169,9 @@ class TestRUBISH_ALIASES < Test::Unit::TestCase
     execute('alias ll="ls -la"')
     execute('alias la="ls -a"')
     # RUBISH_ALIASES should reflect what 'alias' shows
-    assert_equal 2, Rubish::Builtins.aliases.length
-    assert_equal 'ls -la', Rubish::Builtins.aliases['ll']
-    assert_equal 'ls -a', Rubish::Builtins.aliases['la']
+    assert_equal 2, Rubish::Builtins.current_state.aliases.length
+    assert_equal 'ls -la', Rubish::Builtins.current_state.aliases['ll']
+    assert_equal 'ls -a', Rubish::Builtins.current_state.aliases['la']
   end
 
   def test_rubish_aliases_updated_by_alias_command

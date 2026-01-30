@@ -5,8 +5,8 @@ require_relative 'test_helper'
 class TestSetopt < Test::Unit::TestCase
   def setup
     @repl = Rubish::REPL.new
-    @original_shell_options = Rubish::Builtins.shell_options.dup
-    @original_zsh_options = Rubish::Builtins.zsh_options.dup
+    @original_shell_options = Rubish::Builtins.current_state.shell_options.dup
+    @original_zsh_options = Rubish::Builtins.current_state.zsh_options.dup
     @tempdir = Dir.mktmpdir('rubish_setopt_test')
     @original_dir = Dir.pwd
     Dir.chdir(@tempdir)
@@ -15,10 +15,10 @@ class TestSetopt < Test::Unit::TestCase
   def teardown
     Dir.chdir(@original_dir)
     FileUtils.rm_rf(@tempdir)
-    Rubish::Builtins.shell_options.clear
-    @original_shell_options.each { |k, v| Rubish::Builtins.shell_options[k] = v }
-    Rubish::Builtins.zsh_options.clear
-    @original_zsh_options.each { |k, v| Rubish::Builtins.zsh_options[k] = v }
+    Rubish::Builtins.current_state.shell_options.clear
+    @original_shell_options.each { |k, v| Rubish::Builtins.current_state.shell_options[k] = v }
+    Rubish::Builtins.current_state.zsh_options.clear
+    @original_zsh_options.each { |k, v| Rubish::Builtins.current_state.zsh_options[k] = v }
   end
 
   # Basic setopt functionality

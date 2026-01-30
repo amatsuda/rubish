@@ -453,14 +453,14 @@ class TestVariableExpansion < Test::Unit::TestCase
     Rubish::Builtins.set_var('myvar', '')
     execute("printf '%s\\n' before $myvar after > #{output_file}")
     assert_equal "before\nafter\n", File.read(output_file)
-    Rubish::Builtins.send(:shell_vars).delete('myvar')
+    Rubish::Builtins.current_state.shell_vars.delete('myvar')
   end
 
   def test_quoted_empty_shell_var_preserved
     Rubish::Builtins.set_var('myvar', '')
     execute("printf '%s\\n' before \"$myvar\" after > #{output_file}")
     assert_equal "before\n\nafter\n", File.read(output_file)
-    Rubish::Builtins.send(:shell_vars).delete('myvar')
+    Rubish::Builtins.current_state.shell_vars.delete('myvar')
   end
 
   def test_multiple_unquoted_empty_vars_all_removed

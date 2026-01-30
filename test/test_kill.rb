@@ -9,7 +9,7 @@ class TestKill < Test::Unit::TestCase
     @tempdir = Dir.mktmpdir('rubish_kill_test')
     Rubish::JobManager.instance.clear
     # Enable monitor mode for job tracking
-    Rubish::Builtins.set_options['m'] = true
+    Rubish::Builtins.current_state.set_options['m'] = true
   end
 
   def teardown
@@ -17,7 +17,7 @@ class TestKill < Test::Unit::TestCase
     ENV.clear
     @original_env.each { |k, v| ENV[k] = v }
     Rubish::JobManager.instance.clear
-    Rubish::Builtins.set_options['m'] = false
+    Rubish::Builtins.current_state.set_options['m'] = false
   end
 
   # Test kill is a builtin

@@ -178,12 +178,12 @@ class TestPrompt < Test::Unit::TestCase
   def test_ps1_backslash
     # Disable promptvars to test bash escape processing only
     # With promptvars enabled, \$ would be further processed as escaped $
-    Rubish::Builtins.shell_options['promptvars'] = false
+    Rubish::Builtins.current_state.shell_options['promptvars'] = false
     ENV['PS1'] = '\\\\$ '
     prompt = @repl.send(:prompt)
     assert_equal '\\$ ', prompt
   ensure
-    Rubish::Builtins.shell_options['promptvars'] = true
+    Rubish::Builtins.current_state.shell_options['promptvars'] = true
   end
 
   # Test \[ and \] - non-printing markers (ignored)
@@ -772,13 +772,13 @@ class TestPrompt < Test::Unit::TestCase
 
   def test_prompt_subst_disabled_no_expansion
     Rubish::Builtins.set_zsh_option('prompt_subst', false)
-    Rubish::Builtins.shell_options['promptvars'] = false
+    Rubish::Builtins.current_state.shell_options['promptvars'] = false
     ENV['TEST_PROMPT_VAR'] = 'hello'
     ENV['PS1'] = '$TEST_PROMPT_VAR $ '
     result = @repl.send(:prompt)
     assert_equal '$TEST_PROMPT_VAR $ ', result
   ensure
-    Rubish::Builtins.shell_options['promptvars'] = true
+    Rubish::Builtins.current_state.shell_options['promptvars'] = true
     ENV.delete('TEST_PROMPT_VAR')
   end
 

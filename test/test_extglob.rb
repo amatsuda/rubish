@@ -10,7 +10,7 @@ class TestExtglob < Test::Unit::TestCase
     Dir.chdir(@tempdir)
 
     # Enable extglob
-    Rubish::Builtins.set_options['extglob'] = true
+    Rubish::Builtins.current_state.set_options['extglob'] = true
 
     # Create test files
     File.write('file.txt', '')
@@ -33,7 +33,7 @@ class TestExtglob < Test::Unit::TestCase
   def teardown
     Dir.chdir(@original_dir)
     FileUtils.rm_rf(@tempdir)
-    Rubish::Builtins.set_options['extglob'] = false
+    Rubish::Builtins.current_state.set_options['extglob'] = false
   end
 
   def output_file
@@ -126,12 +126,12 @@ class TestExtglob < Test::Unit::TestCase
 
   # Extglob disabled
   def test_extglob_disabled_returns_literal
-    Rubish::Builtins.set_options['extglob'] = false
+    Rubish::Builtins.current_state.set_options['extglob'] = false
     result = @repl.send(:__glob, '@(foo|bar).txt')
     # When extglob is disabled, pattern is treated literally (no match)
     assert_equal ['@(foo|bar).txt'], result
     # Re-enable for other tests
-    Rubish::Builtins.set_options['extglob'] = true
+    Rubish::Builtins.current_state.set_options['extglob'] = true
   end
 
   # extglob_to_regex tests

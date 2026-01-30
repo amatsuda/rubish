@@ -387,12 +387,12 @@ class TestGLOBSORT < Test::Unit::TestCase
     FileUtils.touch('.hidden')
     FileUtils.touch('visible')
     FileUtils.touch('alpha')
-    Rubish::Builtins.set_options['dotglob'] = true
+    Rubish::Builtins.current_state.set_options['dotglob'] = true
     ENV['GLOBSORT'] = 'name'
 
     results = glob('*')
 
-    Rubish::Builtins.set_options['dotglob'] = false
+    Rubish::Builtins.current_state.set_options['dotglob'] = false
 
     # .hidden should come first alphabetically (. sorts before letters)
     assert_equal '.hidden', results.first
@@ -402,11 +402,11 @@ class TestGLOBSORT < Test::Unit::TestCase
 
   def test_globsort_with_nullglob_empty_result
     ENV['GLOBSORT'] = 'size'
-    Rubish::Builtins.set_options['nullglob'] = true
+    Rubish::Builtins.current_state.set_options['nullglob'] = true
 
     results = glob('nonexistent*.xyz')
 
-    Rubish::Builtins.set_options['nullglob'] = false
+    Rubish::Builtins.current_state.set_options['nullglob'] = false
 
     assert_equal [], results
   end

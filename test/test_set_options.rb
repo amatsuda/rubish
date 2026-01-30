@@ -20,11 +20,11 @@ class TestSetOptions < Test::Unit::TestCase
 
   def reset_set_options
     # Reset all options to their defaults
-    Rubish::Builtins.set_options.each_key { |k| Rubish::Builtins.set_options[k] = false }
+    Rubish::Builtins.current_state.set_options.each_key { |k| Rubish::Builtins.current_state.set_options[k] = false }
     # Braceexpand, histexpand, and emacs are enabled by default
-    Rubish::Builtins.set_options['B'] = true
-    Rubish::Builtins.set_options['H'] = true
-    Rubish::Builtins.set_options['emacs'] = true
+    Rubish::Builtins.current_state.set_options['B'] = true
+    Rubish::Builtins.current_state.set_options['H'] = true
+    Rubish::Builtins.current_state.set_options['emacs'] = true
   end
 
   # Check if filesystem is case-sensitive (nocaseglob tests require case-insensitive fs)

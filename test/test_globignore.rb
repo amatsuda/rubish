@@ -134,9 +134,9 @@ class TestGLOBIGNORE < Test::Unit::TestCase
     ENV['GLOBIGNORE'] = '*.bak'  # Any GLOBIGNORE setting
 
     # Even with dotglob, . and .. should be excluded when GLOBIGNORE is set
-    Rubish::Builtins.set_options['dotglob'] = true
+    Rubish::Builtins.current_state.set_options['dotglob'] = true
     results = glob('*')
-    Rubish::Builtins.set_options['dotglob'] = false
+    Rubish::Builtins.current_state.set_options['dotglob'] = false
 
     assert_includes results, 'file.txt'
     assert_not_include results, '.'
@@ -161,27 +161,27 @@ class TestGLOBIGNORE < Test::Unit::TestCase
     FileUtils.touch('file.o')
     FileUtils.touch('file.txt')
     ENV['GLOBIGNORE'] = '*.o:*.txt'
-    Rubish::Builtins.set_options['nullglob'] = true
+    Rubish::Builtins.current_state.set_options['nullglob'] = true
 
     results = glob('file.*')
 
     # All matches filtered + nullglob = empty array
     assert_equal [], results
 
-    Rubish::Builtins.set_options['nullglob'] = false
+    Rubish::Builtins.current_state.set_options['nullglob'] = false
   end
 
   def test_globignore_with_failglob_raises_error
     FileUtils.touch('file.o')
     FileUtils.touch('file.txt')
     ENV['GLOBIGNORE'] = '*.o:*.txt'
-    Rubish::Builtins.set_options['failglob'] = true
+    Rubish::Builtins.current_state.set_options['failglob'] = true
 
     assert_raise(Rubish::FailglobError) do
       glob('file.*')
     end
 
-    Rubish::Builtins.set_options['failglob'] = false
+    Rubish::Builtins.current_state.set_options['failglob'] = false
   end
 
   def test_globignore_returns_pattern_if_all_filtered
@@ -216,9 +216,9 @@ class TestGLOBIGNORE < Test::Unit::TestCase
     FileUtils.touch('visible')
     ENV['GLOBIGNORE'] = '.*'
 
-    Rubish::Builtins.set_options['dotglob'] = true
+    Rubish::Builtins.current_state.set_options['dotglob'] = true
     results = glob('*')
-    Rubish::Builtins.set_options['dotglob'] = false
+    Rubish::Builtins.current_state.set_options['dotglob'] = false
 
     assert_includes results, 'visible'
     assert_not_include results, '.hidden'

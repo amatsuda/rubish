@@ -13,34 +13,34 @@ class TestTrap < Test::Unit::TestCase
 
   def test_trap_set_command
     Rubish::Builtins.run('trap', ['echo trapped', 'INT'])
-    assert_equal({'INT' => 'echo trapped'}, Rubish::Builtins.traps)
+    assert_equal({'INT' => 'echo trapped'}, Rubish::Builtins.current_state.traps)
   end
 
   def test_trap_set_multiple_signals
     Rubish::Builtins.run('trap', ['echo handler', 'INT', 'TERM'])
-    assert_equal 'echo handler', Rubish::Builtins.traps['INT']
-    assert_equal 'echo handler', Rubish::Builtins.traps['TERM']
+    assert_equal 'echo handler', Rubish::Builtins.current_state.traps['INT']
+    assert_equal 'echo handler', Rubish::Builtins.current_state.traps['TERM']
   end
 
   def test_trap_with_sig_prefix
     Rubish::Builtins.run('trap', ['echo sig', 'SIGINT'])
-    assert_equal({'INT' => 'echo sig'}, Rubish::Builtins.traps)
+    assert_equal({'INT' => 'echo sig'}, Rubish::Builtins.current_state.traps)
   end
 
   def test_trap_ignore_signal
     Rubish::Builtins.run('trap', ['', 'INT'])
-    assert_equal({'INT' => ''}, Rubish::Builtins.traps)
+    assert_equal({'INT' => ''}, Rubish::Builtins.current_state.traps)
   end
 
   def test_trap_reset_signal
     Rubish::Builtins.run('trap', ['echo handler', 'USR1'])
     Rubish::Builtins.run('trap', ['-', 'USR1'])
-    assert_equal({}, Rubish::Builtins.traps)
+    assert_equal({}, Rubish::Builtins.current_state.traps)
   end
 
   def test_trap_exit
     Rubish::Builtins.run('trap', ['echo goodbye', 'EXIT'])
-    assert_equal({0 => 'echo goodbye'}, Rubish::Builtins.traps)
+    assert_equal({0 => 'echo goodbye'}, Rubish::Builtins.current_state.traps)
   end
 
   def test_trap_list
@@ -82,7 +82,7 @@ class TestTrap < Test::Unit::TestCase
   def test_trap_overwrite
     Rubish::Builtins.run('trap', ['echo first', 'USR1'])
     Rubish::Builtins.run('trap', ['echo second', 'USR1'])
-    assert_equal({'USR1' => 'echo second'}, Rubish::Builtins.traps)
+    assert_equal({'USR1' => 'echo second'}, Rubish::Builtins.current_state.traps)
   end
 
   def test_normalize_signal_numeric
@@ -113,12 +113,12 @@ class TestTrap < Test::Unit::TestCase
   # Tests for new signals
   def test_trap_pipe_signal
     Rubish::Builtins.run('trap', ['echo pipe', 'PIPE'])
-    assert_equal 'echo pipe', Rubish::Builtins.traps['PIPE']
+    assert_equal 'echo pipe', Rubish::Builtins.current_state.traps['PIPE']
   end
 
   def test_trap_abrt_signal
     Rubish::Builtins.run('trap', ['echo abort', 'ABRT'])
-    assert_equal 'echo abort', Rubish::Builtins.traps['ABRT']
+    assert_equal 'echo abort', Rubish::Builtins.current_state.traps['ABRT']
   end
 
   def test_trap_iot_alias
@@ -145,13 +145,13 @@ class TestTrap < Test::Unit::TestCase
   def test_trap_kill_cannot_be_trapped
     output = capture_output { Rubish::Builtins.run('trap', ['echo kill', 'KILL']) }
     assert_match(/cannot be trapped/, output)
-    assert_nil Rubish::Builtins.traps['KILL']
+    assert_nil Rubish::Builtins.current_state.traps['KILL']
   end
 
   def test_trap_stop_cannot_be_trapped
     output = capture_output { Rubish::Builtins.run('trap', ['echo stop', 'STOP']) }
     assert_match(/cannot be trapped/, output)
-    assert_nil Rubish::Builtins.traps['STOP']
+    assert_nil Rubish::Builtins.current_state.traps['STOP']
   end
 
   def test_trap_list_format
@@ -165,22 +165,22 @@ class TestTrap < Test::Unit::TestCase
 
   def test_trap_xcpu_signal
     Rubish::Builtins.run('trap', ['echo cpu', 'XCPU'])
-    assert_equal 'echo cpu', Rubish::Builtins.traps['XCPU']
+    assert_equal 'echo cpu', Rubish::Builtins.current_state.traps['XCPU']
   end
 
   def test_trap_xfsz_signal
     Rubish::Builtins.run('trap', ['echo fsz', 'XFSZ'])
-    assert_equal 'echo fsz', Rubish::Builtins.traps['XFSZ']
+    assert_equal 'echo fsz', Rubish::Builtins.current_state.traps['XFSZ']
   end
 
   def test_trap_winch_signal
     Rubish::Builtins.run('trap', ['echo winch', 'WINCH'])
-    assert_equal 'echo winch', Rubish::Builtins.traps['WINCH']
+    assert_equal 'echo winch', Rubish::Builtins.current_state.traps['WINCH']
   end
 
   def test_trap_info_signal
     Rubish::Builtins.run('trap', ['echo info', 'INFO'])
-    assert_equal 'echo info', Rubish::Builtins.traps['INFO']
+    assert_equal 'echo info', Rubish::Builtins.current_state.traps['INFO']
   end
 
   def test_trap_chld_alias
@@ -198,6 +198,6 @@ class TestTrap < Test::Unit::TestCase
   def test_trap_double_dash_end_of_options
     # trap -- '' SIGINT should ignore SIGINT (used by direnv hook)
     Rubish::Builtins.run('trap', ['--', '', 'INT'])
-    assert_equal({'INT' => ''}, Rubish::Builtins.traps)
+    assert_equal({'INT' => ''}, Rubish::Builtins.current_state.traps)
   end
 end

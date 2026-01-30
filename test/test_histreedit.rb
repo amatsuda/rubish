@@ -5,11 +5,11 @@ require_relative 'test_helper'
 class TestHistreedit < Test::Unit::TestCase
   def setup
     @repl = Rubish::REPL.new
-    @original_shell_options = Rubish::Builtins.shell_options.dup
-    @original_set_options = Rubish::Builtins.set_options.dup
+    @original_shell_options = Rubish::Builtins.current_state.shell_options.dup
+    @original_set_options = Rubish::Builtins.current_state.set_options.dup
     @tempdir = Dir.mktmpdir('rubish_histreedit_test')
     # Enable history expansion
-    Rubish::Builtins.set_options['H'] = true
+    Rubish::Builtins.current_state.set_options['H'] = true
     # Clear Reline history
     Reline::HISTORY.clear
     # Clear any pre_input_hook
@@ -17,10 +17,10 @@ class TestHistreedit < Test::Unit::TestCase
   end
 
   def teardown
-    Rubish::Builtins.shell_options.clear
-    @original_shell_options.each { |k, v| Rubish::Builtins.shell_options[k] = v }
-    Rubish::Builtins.set_options.clear
-    @original_set_options.each { |k, v| Rubish::Builtins.set_options[k] = v }
+    Rubish::Builtins.current_state.shell_options.clear
+    @original_shell_options.each { |k, v| Rubish::Builtins.current_state.shell_options[k] = v }
+    Rubish::Builtins.current_state.set_options.clear
+    @original_set_options.each { |k, v| Rubish::Builtins.current_state.set_options[k] = v }
     FileUtils.rm_rf(@tempdir)
     Reline::HISTORY.clear
     Reline.pre_input_hook = nil

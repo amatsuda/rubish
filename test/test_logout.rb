@@ -7,7 +7,7 @@ class TestLogout < Test::Unit::TestCase
     @repl = Rubish::REPL.new
     @saved_stderr = $stderr
     # Save shell options state
-    @saved_shell_options = Rubish::Builtins.shell_options.dup
+    @saved_shell_options = Rubish::Builtins.current_state.shell_options.dup
   end
 
   def teardown
@@ -55,7 +55,7 @@ class TestLogout < Test::Unit::TestCase
 
   # Login shell warning tests
   def test_logout_warns_when_not_login_shell
-    Rubish::Builtins.shell_options['login_shell'] = false
+    Rubish::Builtins.current_state.shell_options['login_shell'] = false
 
     output = capture_stderr do
       catch(:exit) { Rubish::Builtins.logout([]) }
@@ -66,7 +66,7 @@ class TestLogout < Test::Unit::TestCase
   end
 
   def test_logout_no_warning_when_login_shell
-    Rubish::Builtins.shell_options['login_shell'] = true
+    Rubish::Builtins.current_state.shell_options['login_shell'] = true
 
     output = capture_stderr do
       catch(:exit) { Rubish::Builtins.logout([]) }
@@ -76,7 +76,7 @@ class TestLogout < Test::Unit::TestCase
   end
 
   def test_logout_still_exits_when_not_login_shell
-    Rubish::Builtins.shell_options['login_shell'] = false
+    Rubish::Builtins.current_state.shell_options['login_shell'] = false
 
     $stderr = StringIO.new  # Suppress warning
     exit_code = catch(:exit) do
@@ -89,7 +89,7 @@ class TestLogout < Test::Unit::TestCase
   # Exit traps
   def test_logout_runs_exit_traps
     trap_executed = false
-    Rubish::Builtins.traps[0] = 'echo trap'
+    Rubish::Builtins.current_state.traps[0] = 'echo trap'
 
     # Mock the executor to track trap execution
     original_executor = Rubish::Builtins.executor
@@ -101,7 +101,7 @@ class TestLogout < Test::Unit::TestCase
     assert_true trap_executed
   ensure
     Rubish::Builtins.executor = original_executor
-    Rubish::Builtins.traps.delete(0)
+    Rubish::Builtins.current_state.traps.delete(0)
   end
 
   # Integration with run method

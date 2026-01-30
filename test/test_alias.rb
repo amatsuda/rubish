@@ -13,28 +13,28 @@ class TestAlias < Test::Unit::TestCase
 
   def test_define_alias
     Rubish::Builtins.run('alias', ['ll=ls -la'])
-    assert_equal({'ll' => 'ls -la'}, Rubish::Builtins.aliases)
+    assert_equal({'ll' => 'ls -la'}, Rubish::Builtins.current_state.aliases)
   end
 
   def test_define_alias_with_single_quotes
     Rubish::Builtins.run('alias', ["ll='ls -la'"])
-    assert_equal({'ll' => 'ls -la'}, Rubish::Builtins.aliases)
+    assert_equal({'ll' => 'ls -la'}, Rubish::Builtins.current_state.aliases)
   end
 
   def test_define_alias_with_double_quotes
     Rubish::Builtins.run('alias', ['ll="ls -la"'])
-    assert_equal({'ll' => 'ls -la'}, Rubish::Builtins.aliases)
+    assert_equal({'ll' => 'ls -la'}, Rubish::Builtins.current_state.aliases)
   end
 
   def test_define_multiple_aliases
     Rubish::Builtins.run('alias', ['ll=ls -la', 'g=git'])
-    assert_equal({'ll' => 'ls -la', 'g' => 'git'}, Rubish::Builtins.aliases)
+    assert_equal({'ll' => 'ls -la', 'g' => 'git'}, Rubish::Builtins.current_state.aliases)
   end
 
   def test_unalias
     Rubish::Builtins.run('alias', ['ll=ls -la'])
     Rubish::Builtins.run('unalias', ['ll'])
-    assert_equal({}, Rubish::Builtins.aliases)
+    assert_equal({}, Rubish::Builtins.current_state.aliases)
   end
 
   def test_unalias_nonexistent
@@ -85,7 +85,7 @@ class TestAlias < Test::Unit::TestCase
   def test_alias_overwrite
     Rubish::Builtins.run('alias', ['ll=ls -la'])
     Rubish::Builtins.run('alias', ['ll=ls -lah'])
-    assert_equal({'ll' => 'ls -lah'}, Rubish::Builtins.aliases)
+    assert_equal({'ll' => 'ls -lah'}, Rubish::Builtins.current_state.aliases)
   end
 
   def test_alias_only_expands_first_word
@@ -99,11 +99,11 @@ class TestAlias < Test::Unit::TestCase
     repl = Rubish::REPL.new
     repl.send(:setup_default_aliases)
 
-    assert Rubish::Builtins.aliases.key?('ls'), 'ls alias should be set'
+    assert Rubish::Builtins.current_state.aliases.key?('ls'), 'ls alias should be set'
     if RUBY_PLATFORM =~ /darwin|bsd/i
-      assert_equal 'ls -G', Rubish::Builtins.aliases['ls']
+      assert_equal 'ls -G', Rubish::Builtins.current_state.aliases['ls']
     else
-      assert_equal 'ls --color=auto', Rubish::Builtins.aliases['ls']
+      assert_equal 'ls --color=auto', Rubish::Builtins.current_state.aliases['ls']
     end
   end
 
@@ -111,11 +111,11 @@ class TestAlias < Test::Unit::TestCase
     repl = Rubish::REPL.new
     repl.send(:setup_default_aliases)
 
-    assert Rubish::Builtins.aliases.key?('ll'), 'll alias should be set'
+    assert Rubish::Builtins.current_state.aliases.key?('ll'), 'll alias should be set'
     if RUBY_PLATFORM =~ /darwin|bsd/i
-      assert_equal 'ls -lG', Rubish::Builtins.aliases['ll']
+      assert_equal 'ls -lG', Rubish::Builtins.current_state.aliases['ll']
     else
-      assert_equal 'ls -l --color=auto', Rubish::Builtins.aliases['ll']
+      assert_equal 'ls -l --color=auto', Rubish::Builtins.current_state.aliases['ll']
     end
   end
 
@@ -123,11 +123,11 @@ class TestAlias < Test::Unit::TestCase
     repl = Rubish::REPL.new
     repl.send(:setup_default_aliases)
 
-    assert Rubish::Builtins.aliases.key?('la'), 'la alias should be set'
+    assert Rubish::Builtins.current_state.aliases.key?('la'), 'la alias should be set'
     if RUBY_PLATFORM =~ /darwin|bsd/i
-      assert_equal 'ls -laG', Rubish::Builtins.aliases['la']
+      assert_equal 'ls -laG', Rubish::Builtins.current_state.aliases['la']
     else
-      assert_equal 'ls -la --color=auto', Rubish::Builtins.aliases['la']
+      assert_equal 'ls -la --color=auto', Rubish::Builtins.current_state.aliases['la']
     end
   end
 
@@ -135,20 +135,20 @@ class TestAlias < Test::Unit::TestCase
     repl = Rubish::REPL.new
     repl.send(:setup_default_aliases)
 
-    assert Rubish::Builtins.aliases.key?('grep'), 'grep alias should be set'
-    assert_equal 'grep --color=auto', Rubish::Builtins.aliases['grep']
+    assert Rubish::Builtins.current_state.aliases.key?('grep'), 'grep alias should be set'
+    assert_equal 'grep --color=auto', Rubish::Builtins.current_state.aliases['grep']
   end
 
   def test_setup_default_aliases_does_not_overwrite_existing
     # Set custom aliases first
-    Rubish::Builtins.aliases['ls'] = 'ls -la'
-    Rubish::Builtins.aliases['grep'] = 'grep -n'
+    Rubish::Builtins.current_state.aliases['ls'] = 'ls -la'
+    Rubish::Builtins.current_state.aliases['grep'] = 'grep -n'
 
     repl = Rubish::REPL.new
     repl.send(:setup_default_aliases)
 
     # Should preserve the existing aliases
-    assert_equal 'ls -la', Rubish::Builtins.aliases['ls']
-    assert_equal 'grep -n', Rubish::Builtins.aliases['grep']
+    assert_equal 'ls -la', Rubish::Builtins.current_state.aliases['ls']
+    assert_equal 'grep -n', Rubish::Builtins.current_state.aliases['grep']
   end
 end

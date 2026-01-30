@@ -125,7 +125,7 @@ class TestComplete < Test::Unit::TestCase
     Rubish::Builtins.run('complete', ['-d', 'cmd2'])
 
     Rubish::Builtins.run('complete', ['-r'])
-    assert Rubish::Builtins.completions.empty?
+    assert Rubish::Builtins.current_state.completions.empty?
   end
 
   # Test complete with invalid option

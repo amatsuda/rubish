@@ -9,8 +9,8 @@ class TestDeclareGlobal < Test::Unit::TestCase
     @original_dir = Dir.pwd
     @tempdir = Dir.mktmpdir('rubish_declare_global_test')
     Dir.chdir(@tempdir)
-    Rubish::Builtins.var_attributes.clear
-    Rubish::Builtins.readonly_vars.clear
+    Rubish::Builtins.current_state.var_attributes.clear
+    Rubish::Builtins.current_state.readonly_vars.clear
     Rubish::Builtins.clear_local_scopes
   end
 
@@ -19,8 +19,8 @@ class TestDeclareGlobal < Test::Unit::TestCase
     FileUtils.rm_rf(@tempdir)
     ENV.clear
     @original_env.each { |k, v| ENV[k] = v }
-    Rubish::Builtins.var_attributes.clear
-    Rubish::Builtins.readonly_vars.clear
+    Rubish::Builtins.current_state.var_attributes.clear
+    Rubish::Builtins.current_state.readonly_vars.clear
     Rubish::Builtins.clear_local_scopes
   end
 

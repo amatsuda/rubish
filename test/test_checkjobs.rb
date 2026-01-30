@@ -5,14 +5,14 @@ require_relative 'test_helper'
 class TestCheckjobs < Test::Unit::TestCase
   def setup
     @repl = Rubish::REPL.new
-    @original_shell_options = Rubish::Builtins.shell_options.dup
+    @original_shell_options = Rubish::Builtins.current_state.shell_options.dup
     Rubish::JobManager.instance.clear
     Rubish::Builtins.exit_blocked_by_jobs = false
   end
 
   def teardown
-    Rubish::Builtins.shell_options.clear
-    @original_shell_options.each { |k, v| Rubish::Builtins.shell_options[k] = v }
+    Rubish::Builtins.current_state.shell_options.clear
+    @original_shell_options.each { |k, v| Rubish::Builtins.current_state.shell_options[k] = v }
     Rubish::JobManager.instance.clear
     Rubish::Builtins.exit_blocked_by_jobs = false
   end

@@ -5,7 +5,7 @@ require_relative 'test_helper'
 class TestSourcepath < Test::Unit::TestCase
   def setup
     @repl = Rubish::REPL.new
-    @original_shell_options = Rubish::Builtins.shell_options.dup
+    @original_shell_options = Rubish::Builtins.current_state.shell_options.dup
     @original_dir = Dir.pwd
     @original_path = ENV['PATH']
     @tempdir = Dir.mktmpdir('rubish_sourcepath_test')
@@ -18,8 +18,8 @@ class TestSourcepath < Test::Unit::TestCase
     Dir.chdir(@original_dir)
     FileUtils.rm_rf(@tempdir)
     ENV['PATH'] = @original_path
-    Rubish::Builtins.shell_options.clear
-    @original_shell_options.each { |k, v| Rubish::Builtins.shell_options[k] = v }
+    Rubish::Builtins.current_state.shell_options.clear
+    @original_shell_options.each { |k, v| Rubish::Builtins.current_state.shell_options[k] = v }
   end
 
   # sourcepath is enabled by default (like bash)
