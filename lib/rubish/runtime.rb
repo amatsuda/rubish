@@ -94,10 +94,10 @@ module Rubish
             execute(cmd, skip_history_expansion: true)
             @last_status
           end
-          exit(exit_code || 0)
+          Kernel.exit(exit_code || 0)
         rescue => e
           $stderr.puts "rubish: #{e.message}" unless Builtins.in_completion_context?
-          exit(1)
+          Kernel.exit(1)
         end
       end
 
@@ -374,8 +374,8 @@ module Rubish
       # Fork and run in background
       pid = fork do
         # Reset signal handlers in child
-        trap('INT', 'DEFAULT')
-        trap('TSTP', 'DEFAULT')
+        Kernel.trap('INT', 'DEFAULT')
+        Kernel.trap('TSTP', 'DEFAULT')
 
         # Create new process group if job control is enabled
         Process.setpgid(0, 0) if Builtins.set_option?('m')
@@ -383,7 +383,7 @@ module Rubish
         # Execute the command
         result = block.call
         result.run if result.is_a?(Command) || result.is_a?(Pipeline)
-        exit(0)
+        Kernel.exit(0)
       end
 
       @last_bg_pid = pid
@@ -564,7 +564,7 @@ module Rubish
         # Run the command if it's a Command or Pipeline
         result.run if result.is_a?(Command) || result.is_a?(Pipeline)
 
-        exit(0)
+        Kernel.exit(0)
       end
 
       write_io.close
@@ -815,7 +815,7 @@ module Rubish
           $stderr.reopen('/dev/null', 'w')
 
           # Execute the command via shell
-          exec('/bin/sh', '-c', command)
+          Kernel.exec('/bin/sh', '-c', command)
         end
         Process.detach(pid)
       else
@@ -828,7 +828,7 @@ module Rubish
           $stderr.reopen('/dev/null', 'w')
 
           # Execute the command via shell
-          exec('/bin/sh', '-c', command)
+          Kernel.exec('/bin/sh', '-c', command)
         end
         Process.detach(pid)
       end
@@ -934,13 +934,13 @@ module Rubish
         child_write.close
 
         # Reset signal handlers
-        trap('INT', 'DEFAULT')
-        trap('TSTP', 'DEFAULT')
+        Kernel.trap('INT', 'DEFAULT')
+        Kernel.trap('TSTP', 'DEFAULT')
 
         # Execute the command
         result = block.call
         result.run if result.is_a?(Command) || result.is_a?(Pipeline)
-        exit(result.respond_to?(:success?) && result.success? ? 0 : 1)
+        Kernel.exit(result.respond_to?(:success?) && result.success? ? 0 : 1)
       end
 
       # Parent process
