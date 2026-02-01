@@ -1038,12 +1038,6 @@ module Rubish
     end
 
     def __define_function(name, source_code = nil, params = nil, &block)
-      # Special handling for prompt functions - treat body as Ruby code
-      if name == 'rubish_prompt' || name == 'rubish_right_prompt'
-        define_prompt_function(name, source_code)
-        return nil
-      end
-
       @functions[name] = {block: block, source: @current_source_file, source_code: source_code, lineno: @lineno, params: params}
       nil
     end

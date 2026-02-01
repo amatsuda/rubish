@@ -276,7 +276,7 @@ module Rubish
             when 'e', 'E' then result << "\e"; i += 2
             when 'f' then result << "\f"; i += 2
             when 'v' then result << "\v"; i += 2
-            when '\\' then result << "\\"; i += 2
+            when '\\' then result << '\\'; i += 2
             when "'" then result << "'"; i += 2
             when '"' then result << '"'; i += 2
             when '?' then result << '?'; i += 2
@@ -1112,16 +1112,6 @@ module Rubish
 
     def source_file_getter=(value)
       @state.source_file_getter = value
-    end
-
-    def define_prompt_function(name, code)
-      # Stub - prompt functions are stored in REPL's @functions
-      @functions[name] = {
-        block: -> { instance_eval(code) },
-        source: nil,
-        source_code: code,
-        lineno: 0
-      }
     end
 
     public

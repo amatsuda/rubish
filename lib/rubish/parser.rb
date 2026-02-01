@@ -330,14 +330,6 @@ module Rubish
       params = parse_def_params
       skip_semicolon
 
-      # Special handling for rubish_prompt and rubish_right_prompt
-      # Capture raw token values as Ruby code instead of parsing as shell
-      if name == 'rubish_prompt' || name == 'rubish_right_prompt'
-        raw_body = capture_raw_until_end
-        consume_word('end') || raise('Expected "end" to close def')
-        return AST::Function.new(name, AST::RubyCode.new(raw_body), params)
-      end
-
       body = parse_def_body
       consume_word('end') || raise('Expected "end" to close def')
       AST::Function.new(name, body, params)

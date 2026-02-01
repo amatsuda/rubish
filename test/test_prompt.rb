@@ -4,6 +4,9 @@ require_relative 'test_helper'
 
 class TestPrompt < Test::Unit::TestCase
   def setup
+    # Clear any prompt procs from previous tests
+    Rubish::REPL.prompt_proc = nil
+    Rubish::REPL.right_prompt_proc = nil
     @repl = Rubish::REPL.new
     @original_env = ENV.to_h.dup
     @original_dir = Dir.pwd
@@ -15,6 +18,9 @@ class TestPrompt < Test::Unit::TestCase
     FileUtils.rm_rf(@tempdir)
     ENV.clear
     @original_env.each { |k, v| ENV[k] = v }
+    # Clear any prompt procs set during tests
+    Rubish::REPL.prompt_proc = nil
+    Rubish::REPL.right_prompt_proc = nil
   end
 
   # Test default prompt (no PS1 or PROMPT)
@@ -881,121 +887,6 @@ class TestPrompt < Test::Unit::TestCase
     assert_equal 'fallback$ ', prompt
   end
 
-  # Test def rubish_prompt syntax
-  def test_def_rubish_prompt
-    ENV.delete('PS1')
-    ENV.delete('PROMPT')
-
-    # Simulate defining rubish_prompt function
-    @repl.send(:__define_function, 'rubish_prompt', '"def_prompt> "')
-    prompt = @repl.send(:prompt)
-    assert_equal 'def_prompt> ', prompt
-  ensure
-    Rubish::REPL.prompt_proc = nil
-  end
-
-  def test_def_rubish_prompt_with_helpers
-    ENV.delete('PS1')
-    ENV.delete('PROMPT')
-    Dir.chdir(@tempdir)
-
-    @repl.send(:__define_function, 'rubish_prompt', 'prompt_pwd + "$ "')
-    prompt = @repl.send(:prompt)
-    assert_match(/\$ $/, prompt)
-  ensure
-    Rubish::REPL.prompt_proc = nil
-  end
-
-  def test_def_rubish_prompt_with_colors
-    ENV.delete('PS1')
-    ENV.delete('PROMPT')
-
-    @repl.send(:__define_function, 'rubish_prompt', 'cyan("test") + "> "')
-    prompt = @repl.send(:prompt)
-    assert_match(/\e\[36mtest\e\[39m> /, prompt)
-  ensure
-    Rubish::REPL.prompt_proc = nil
-  end
-
-  def test_def_rubish_right_prompt
-    @repl.send(:__define_function, 'rubish_right_prompt', '"[right]"')
-    rprompt = @repl.send(:right_prompt)
-    assert_equal '[right]', rprompt
-  ensure
-    Rubish::REPL.right_prompt_proc = nil
-  end
-
-  def test_def_rubish_prompt_multiline
-    ENV.delete('PS1')
-    ENV.delete('PROMPT')
-
-    # Multiline Ruby code
-    code = <<~RUBY.strip
-      path = prompt_pwd(expand_level: 2)
-      path + " % "
-    RUBY
-    @repl.send(:__define_function, 'rubish_prompt', code)
-    prompt = @repl.send(:prompt)
-    assert_match(/ % $/, prompt)
-  ensure
-    Rubish::REPL.prompt_proc = nil
-  end
-
-  def test_def_rubish_prompt_with_keyword_args
-    ENV.delete('PS1')
-    ENV.delete('PROMPT')
-
-    # This tests that keyword arguments like expand_level: 2 are preserved
-    @repl.send(:__define_function, 'rubish_prompt', 'prompt_pwd(expand_level: 2) + "> "')
-    prompt = @repl.send(:prompt)
-    assert_match(/> $/, prompt)
-  ensure
-    Rubish::REPL.prompt_proc = nil
-  end
-
-  def test_def_rubish_prompt_with_append_operator
-    ENV.delete('PS1')
-    ENV.delete('PROMPT')
-
-    # Test that << in Ruby code is not interpreted as heredoc
-    code = <<~RUBY.strip
-      s = ""
-      s << "hello"
-      s << "> "
-    RUBY
-    @repl.send(:__define_function, 'rubish_prompt', code)
-    prompt = @repl.send(:prompt)
-    assert_equal 'hello> ', prompt
-  ensure
-    Rubish::REPL.prompt_proc = nil
-  end
-
-  def test_def_rubish_prompt_append_operator_parsing
-    ENV.delete('PS1')
-    ENV.delete('PROMPT')
-
-    # Test that << in prompt function is correctly parsed (not as heredoc)
-    input = <<~RUBISH
-      def rubish_prompt
-        s = ""
-        s << "parsed"
-        s << "> "
-      end
-    RUBISH
-
-    tokens = Rubish::Lexer.new(input).tokenize
-    ast = Rubish::Parser.new(tokens).parse
-
-    assert_instance_of Rubish::AST::Function, ast
-    assert_equal 'rubish_prompt', ast.name
-    assert_instance_of Rubish::AST::RubyCode, ast.body
-    # The body should contain << operators reconstructed properly
-    assert_match(/<</, ast.body.code)
-    assert_match(/"parsed"/, ast.body.code)
-  ensure
-    Rubish::REPL.prompt_proc = nil
-  end
-
   # Tests for git_prompt_info kwargs
   # These tests run in the rubish repo which is a git repo
 
@@ -1088,5 +979,71 @@ class TestPrompt < Test::Unit::TestCase
         assert_equal '', result
       end
     end
+  end
+
+  # ==========================================================================
+  # Tests for Rubish.set_prompt and Rubish.set_right_prompt API
+  # ==========================================================================
+
+  def test_rubish_set_prompt_sets_prompt
+    ENV.delete('PS1')
+    ENV.delete('PROMPT')
+    Rubish::REPL.prompt_proc = nil
+
+    Rubish.set_prompt { 'custom> ' }
+
+    assert_not_nil Rubish::REPL.prompt_proc, 'set_prompt should set REPL.prompt_proc'
+    prompt = @repl.send(:prompt)
+    assert_equal 'custom> ', prompt
+  ensure
+    Rubish::REPL.prompt_proc = nil
+  end
+
+  def test_rubish_set_right_prompt_sets_right_prompt
+    ENV.delete('RPROMPT')
+    ENV.delete('RPS1')
+    Rubish::REPL.right_prompt_proc = nil
+
+    Rubish.set_right_prompt { '[right]' }
+
+    assert_not_nil Rubish::REPL.right_prompt_proc, 'set_right_prompt should set REPL.right_prompt_proc'
+    rprompt = @repl.send(:right_prompt)
+    assert_equal '[right]', rprompt
+  ensure
+    Rubish::REPL.right_prompt_proc = nil
+  end
+
+  def test_rubish_set_prompt_overrides_ps1
+    ENV['PS1'] = 'ps1> '
+    Rubish::REPL.prompt_proc = nil
+
+    Rubish.set_prompt { 'custom> ' }
+
+    prompt = @repl.send(:prompt)
+    assert_equal 'custom> ', prompt, 'set_prompt should override PS1'
+  ensure
+    Rubish::REPL.prompt_proc = nil
+  end
+
+  def test_rubish_set_prompt_with_ruby_code
+    Rubish::REPL.prompt_proc = nil
+
+    Rubish.set_prompt { "#{1 + 1}> " }
+
+    prompt = @repl.send(:prompt)
+    assert_equal '2> ', prompt
+  ensure
+    Rubish::REPL.prompt_proc = nil
+  end
+
+  def test_rubish_set_prompt_with_dynamic_content
+    Rubish::REPL.prompt_proc = nil
+
+    Rubish.set_prompt { "#{File.basename(Dir.pwd)}> " }
+
+    prompt = @repl.send(:prompt)
+    assert_equal "#{File.basename(Dir.pwd)}> ", prompt
+  ensure
+    Rubish::REPL.prompt_proc = nil
   end
 end

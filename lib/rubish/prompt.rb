@@ -388,13 +388,11 @@ module Rubish
       ([first] + abbreviated + full).join('/')
     end
 
-    # Color helper methods for fish-style prompts
+    # Color helper methods for prompts
     # These wrap text in ANSI escape codes for colorized output
     #
-    # Usage in def rubish_prompt:
-    #   def rubish_prompt
-    #     cyan(prompt_pwd) + " " + green(git_prompt_info) + "> "
-    #   end
+    # Usage with Rubish.set_prompt:
+    #   Rubish.set_prompt { cyan(prompt_pwd) + " " + green(git_prompt_info) + "> " }
 
     def black(text);   "\e[30m#{text}\e[39m"; end
     def red(text);     "\e[31m#{text}\e[39m"; end
@@ -433,7 +431,7 @@ module Rubish
     end
 
     # Prompt helper methods - Ruby equivalents of % escape sequences
-    # These can be used in def rubish_prompt / def rubish_right_prompt
+    # These can be used in Rubish.set_prompt / Rubish.set_right_prompt blocks
 
     # %n - current username
     def current_username
@@ -707,31 +705,6 @@ module Rubish
 
       # Restore the exit status (PROMPT_COMMAND shouldn't affect $?)
       @last_status = saved_status
-    end
-
-    # Define a prompt function from Ruby code
-    # The source_code is evaluated as Ruby and should return a string
-    def define_prompt_function(name, source_code)
-      return unless source_code
-
-      # Extract the Ruby code from the function body
-      # Remove leading/trailing whitespace and any 'end' that might be included
-      code = source_code.strip
-
-      begin
-        # Create a proc that evaluates the Ruby code in REPL context
-        prompt_proc = Kernel.eval("-> { #{code} }")
-
-        if name == 'rubish_prompt'
-          self.class.prompt_proc = prompt_proc
-        else
-          self.class.right_prompt_proc = prompt_proc
-        end
-      rescue SyntaxError => e
-        $stderr.puts "#{name}: syntax error: #{e.message}"
-      rescue => e
-        $stderr.puts "#{name}: error: #{e.message}"
-      end
     end
 
     # Trim directory path according to PROMPT_DIRTRIM

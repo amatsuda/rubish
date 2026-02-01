@@ -42,4 +42,18 @@ require_relative 'rubish/repl'
 
 module Rubish
   VERSION = '0.0.1'
+
+  # Set a custom prompt function
+  # Usage: Rubish.set_prompt { "#{Dir.pwd}> " }
+  def self.set_prompt(&block)
+    REPL.prompt_proc = block
+    nil
+  end
+
+  # Set a custom right prompt function
+  # Usage: Rubish.set_right_prompt { git_prompt_info }
+  def self.set_right_prompt(&block)
+    REPL.right_prompt_proc = block
+    nil
+  end
 end
