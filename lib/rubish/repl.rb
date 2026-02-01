@@ -631,7 +631,7 @@ module Rubish
       if line =~ /\A[A-Z]/ && line !~ /\A[A-Z_][A-Z0-9_]*(\[[^\]]*\])?\+?=/
         begin
           result = @context.instance_eval(line)
-          p result
+          p result unless result.nil?
         rescue SyntaxError, StandardError => e
           $stderr.puts "rubish: #{e.message}"
           @last_status = 1
@@ -648,7 +648,7 @@ module Rubish
           result = @context.instance_eval(line)
           # Auto-call lambdas with no required arguments
           result = result.call if result.is_a?(Proc) && result.arity <= 0
-          p result
+          p result unless result.nil?
         rescue SyntaxError, StandardError => e
           $stderr.puts "rubish: #{e.message}"
           @last_status = 1
