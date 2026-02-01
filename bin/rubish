@@ -217,7 +217,6 @@ elsif script_file && force_interactive
   exit(last_status)
 else
   # Interactive mode
-  Rubish::Builtins.enable_interactive_mode
   repl = Rubish::REPL.new(
     login_shell: login_shell,
     no_profile: no_profile,
@@ -225,5 +224,6 @@ else
     restricted: restricted,
     rcfile: rcfile
   )
+  Rubish::Builtins.enable_interactive_mode
   exit repl.run
 end
