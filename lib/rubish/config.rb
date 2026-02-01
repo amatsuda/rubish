@@ -243,7 +243,9 @@ module Rubish
       return false unless File.exist?(path)
 
       begin
-        Builtins.source([path])
+        prof("source #{path}") do
+          Builtins.source([path])
+        end
         true
       rescue SyntaxError => e
         $stderr.puts "rubish: #{path}: #{e.message}"

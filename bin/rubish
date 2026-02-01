@@ -1,17 +1,41 @@
 #!/usr/bin/env ruby
 # frozen_string_literal: true
 
-# For system Ruby where reline isn't bundled,
-# add user-installed reline path directly to bypass dependency checks
-begin
-  require 'reline'
-rescue LoadError
-  require 'rubygems'
-  reline_lib = Dir.glob(File.join(Gem.user_dir, 'gems', 'reline-*', 'lib')).max
-  $LOAD_PATH.unshift(reline_lib) if reline_lib
+# Check for profiling early, before loading anything
+rubish_prof = ENV['RUBISH_PROF'] == '1' || ARGV.include?('--prof')
+
+if rubish_prof
+  require_relative '../lib/rubish/startup_profiler'
+  Rubish::StartupProfiler.start!
 end
 
-require_relative '../lib/rubish'
+# For system Ruby where reline isn't bundled,
+# add user-installed reline path directly to bypass dependency checks
+if rubish_prof
+  Rubish::StartupProfiler.measure('require reline') do
+    begin
+      require 'reline'
+    rescue LoadError
+      require 'rubygems'
+      reline_lib = Dir.glob(File.join(Gem.user_dir, 'gems', 'reline-*', 'lib')).max
+      $LOAD_PATH.unshift(reline_lib) if reline_lib
+    end
+  end
+
+  Rubish::StartupProfiler.measure('require rubish') do
+    require_relative '../lib/rubish'
+  end
+else
+  begin
+    require 'reline'
+  rescue LoadError
+    require 'rubygems'
+    reline_lib = Dir.glob(File.join(Gem.user_dir, 'gems', 'reline-*', 'lib')).max
+    $LOAD_PATH.unshift(reline_lib) if reline_lib
+  end
+
+  require_relative '../lib/rubish'
+end
 
 # Detect login shell from $0 (starts with '-')
 # This is the traditional way shells detect login mode
@@ -72,6 +96,9 @@ while i < ARGV.length
   when /\A--rcfile=(.+)\z/, /\A--init-file=(.+)\z/
     # Handle --rcfile=FILE syntax
     rcfile = $1
+    i += 1
+  when '--prof'
+    # Enable startup profiling (already handled above, just skip)
     i += 1
   when '--'
     # End of options

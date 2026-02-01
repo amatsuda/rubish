@@ -3089,7 +3089,7 @@ module Rubish
           # - no unclosed quotes in the buffer
           if depth == 0 && !pending_function_def && !has_unclosed_quotes(buffer)
             begin
-              @state.executor.call(buffer)
+              execute_sourced_command(buffer, file, buffer_start_line)
             rescue SyntaxError => e
               puts "source: #{file}:#{buffer_start_line}: syntax error: #{e.message}"
             end
@@ -3122,7 +3122,7 @@ module Rubish
           end
 
           begin
-            @state.executor.call(buffer)
+            execute_sourced_command(buffer, file, buffer_start_line)
           rescue SyntaxError => e
             puts "source: #{file}: syntax error (starting at line #{buffer_start_line}): #{e.message}"
           end
@@ -3138,6 +3138,20 @@ module Rubish
       @state.sourcing_file = old_sourcing
 
       return_code.nil? || return_code == 0
+    end
+
+    # Execute a command from a sourced file, with optional profiling
+    def execute_sourced_command(buffer, file, line_number)
+      if defined?(Rubish::StartupProfiler) && Rubish::StartupProfiler.enabled
+        # Truncate long commands for display, show file:line prefix
+        display_cmd = buffer.gsub(/\s+/, ' ').strip
+        display_cmd = "#{display_cmd[0, 50]}..." if display_cmd.length > 53
+        Rubish::StartupProfiler.measure("  #{File.basename(file)}:#{line_number}: #{display_cmd}") do
+          @state.executor.call(buffer)
+        end
+      else
+        @state.executor.call(buffer)
+      end
     end
 
     def shift(args)

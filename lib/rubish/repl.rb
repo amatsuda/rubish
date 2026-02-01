@@ -129,14 +129,14 @@ module Rubish
       start_stdin_buffering
 
       begin
-        setup_job_control
-        setup_reline
-        setup_signals
-        setup_terminal_title
+        prof('setup_job_control') { setup_job_control }
+        prof('setup_reline') { setup_reline }
+        prof('setup_signals') { setup_signals }
+        prof('setup_terminal_title') { setup_terminal_title }
         Builtins.notify_terminal_of_cwd
-        load_history
-        setup_default_aliases
-        load_config
+        prof('load_history') { load_history }
+        prof('setup_default_aliases') { setup_default_aliases }
+        prof('load_config') { load_config }
         # Enable restricted mode AFTER startup files are sourced
         # This allows profile/rc files to set PATH and other variables
         Builtins.enable_restricted_mode if @restricted
@@ -146,12 +146,24 @@ module Rubish
         inject_buffered_input
       end
 
+      # Print profiling report after terminal is restored (so output isn't garbled)
+      StartupProfiler.report if defined?(StartupProfiler)
+
       exit_code = catch(:exit) do
         loop { process_line }
       end
       save_history
       load_logout_config
       exit_code
+    end
+
+    # Helper for startup profiling
+    def prof(name, &block)
+      if defined?(StartupProfiler) && StartupProfiler.enabled
+        StartupProfiler.measure(name, &block)
+      else
+        yield
+      end
     end
 
     # Buffer stdin input during startup so typed characters aren't lost
