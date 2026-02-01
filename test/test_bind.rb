@@ -506,4 +506,44 @@ class TestBind < Test::Unit::TestCase
     assert has_default || has_custom,
       'bind -p should show either default or custom bindings'
   end
+
+  def test_readline_line_can_be_set_and_read
+    # Regression test: verify readline_line= and readline_line work together
+    # Set up the callbacks that the REPL normally provides
+    line_value = nil
+    Rubish::Builtins.current_state.readline_line_getter = -> { line_value }
+    Rubish::Builtins.current_state.readline_line_setter = ->(v) { line_value = v }
+
+    Rubish::Builtins.readline_line = 'test input'
+    assert_equal 'test input', Rubish::Builtins.readline_line
+  end
+
+  def test_readline_point_can_be_set_and_read
+    # Regression test: verify readline_point= and readline_point work together
+    point_value = nil
+    Rubish::Builtins.current_state.readline_point_getter = -> { point_value }
+    Rubish::Builtins.current_state.readline_point_setter = ->(v) { point_value = v }
+
+    Rubish::Builtins.readline_point = 5
+    assert_equal 5, Rubish::Builtins.readline_point
+  end
+
+  def test_readline_point_modified_can_be_set_and_read
+    # Regression test: verify readline_point_modified accessors work
+    Rubish::Builtins.readline_point_modified = false
+    assert_equal false, Rubish::Builtins.readline_point_modified
+
+    Rubish::Builtins.readline_point_modified = true
+    assert_equal true, Rubish::Builtins.readline_point_modified
+  end
+
+  def test_bind_x_executor_can_be_set_and_called
+    # Regression test: verify bind_x_executor can be set and invoked
+    executed = false
+    Rubish::Builtins.bind_x_executor = ->(cmd) { executed = true }
+
+    assert_not_nil Rubish::Builtins.bind_x_executor
+    Rubish::Builtins.bind_x_executor.call('test')
+    assert executed, 'bind_x_executor should be callable'
+  end
 end

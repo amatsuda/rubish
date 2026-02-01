@@ -5734,6 +5734,24 @@ module Rubish
       @state.readline_mark_setter&.call(value.to_i)
     end
 
+    # Track if READLINE_POINT was explicitly modified during bind -x
+    def readline_point_modified
+      @state.readline_point_modified
+    end
+
+    def readline_point_modified=(value)
+      @state.readline_point_modified = value
+    end
+
+    # Executor for bind -x commands
+    def bind_x_executor
+      @state.bind_x_executor
+    end
+
+    def bind_x_executor=(value)
+      @state.bind_x_executor = value
+    end
+
     # Track dynamically loaded builtins
     @loaded_builtins = {}  # name => { file: path, proc: callable }
 
@@ -9119,9 +9137,9 @@ module Rubish
         current_point = byte_pointer
 
         # Set READLINE_LINE, READLINE_POINT, READLINE_MARK
-        builtins.readline_line_setter&.call(current_line)
-        builtins.readline_point_setter&.call(current_point)
-        builtins.readline_mark_setter&.call(0)  # Mark is typically 0
+        builtins.readline_line = current_line
+        builtins.readline_point = current_point
+        builtins.readline_mark = 0
 
         # Track if READLINE_POINT is explicitly modified
         builtins.readline_point_modified = false
@@ -9136,8 +9154,8 @@ module Rubish
         end
 
         # Check if READLINE_LINE was modified
-        new_line = builtins.readline_line_getter&.call || current_line
-        new_point = builtins.readline_point_getter&.call
+        new_line = builtins.readline_line || current_line
+        new_point = builtins.readline_point
         point_was_modified = builtins.readline_point_modified
 
         # Update the line buffer if it changed
