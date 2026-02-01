@@ -713,8 +713,8 @@ module Rubish
 
       # Otherwise fetch as regular variable
       value = __fetch_var(var_name)
-      # Return empty array if value is empty (so it gets removed from args)
-      value.empty? ? [] : [value]
+      # Return empty array if value is nil or empty (so it gets removed from args)
+      value.nil? || value.empty? ? [] : [value]
     end
 
     def __glob(pattern)
@@ -1024,9 +1024,15 @@ module Rubish
       # Handle array assignment: VAR=(a b c) or VAR+=(d e)
       # var_part includes the = or +=, e.g., "arr=" or "arr+="
 
-      # Build the assignment string and use handle_bare_assignments
-      assignment_str = "#{var_part}(#{elements.join(' ')})"
-      handle_bare_assignments([assignment_str])
+      if var_part.end_with?('+=')
+        # Append: arr+=(d e)
+        var_name = var_part.chomp('+=')
+        array_append(var_name, elements)
+      else
+        # Assign: arr=(a b c)
+        var_name = var_part.chomp('=')
+        set_array(var_name, elements)
+      end
 
       ExitStatus.new(0)
     end

@@ -92,15 +92,15 @@ class TestLogout < Test::Unit::TestCase
     Rubish::Builtins.current_state.traps[0] = 'echo trap'
 
     # Mock the executor to track trap execution
-    original_executor = Rubish::Builtins.executor
-    Rubish::Builtins.executor = ->(cmd) { trap_executed = true if cmd == 'echo trap' }
+    original_executor = Rubish::Builtins.current_state.executor
+    Rubish::Builtins.current_state.executor = ->(cmd) { trap_executed = true if cmd == 'echo trap' }
 
     $stderr = StringIO.new  # Suppress any warnings
     catch(:exit) { Rubish::Builtins.logout([]) }
 
     assert_true trap_executed
   ensure
-    Rubish::Builtins.executor = original_executor
+    Rubish::Builtins.current_state.executor = original_executor
     Rubish::Builtins.current_state.traps.delete(0)
   end
 

@@ -4,16 +4,17 @@ require_relative 'test_helper'
 
 class TestAutoCompletion < Test::Unit::TestCase
   def setup
-    Rubish::Builtins.instance_variable_set(:@compreply, [])
-    Rubish::Builtins.instance_variable_set(:@help_completion_cache, {})
+    @repl = Rubish::REPL.new
+    Rubish::Builtins.set_array('COMPREPLY', [])
+    Rubish::Builtins.context.instance_variable_set(:@help_completion_cache, {})
     Rubish::Builtins.clear_completions
     Rubish::Builtins.setup_default_completions
   end
 
   def teardown
     Rubish::Builtins.clear_completion_context
-    Rubish::Builtins.instance_variable_set(:@compreply, [])
-    Rubish::Builtins.instance_variable_set(:@help_completion_cache, {})
+    Rubish::Builtins.set_array('COMPREPLY', [])
+    Rubish::Builtins.context.instance_variable_set(:@help_completion_cache, {})
   end
 
   # ==========================================================================
@@ -187,7 +188,8 @@ class TestAutoCompletion < Test::Unit::TestCase
 
   def test_parse_help_caches_results
     # Manually populate cache
-    Rubish::Builtins.instance_variable_get(:@help_completion_cache)['testcmd'] = {
+    ctx = Rubish::Builtins.context
+    ctx.instance_variable_get(:@help_completion_cache)['testcmd'] = {
       subcommands: ['cached_sub'],
       options: ['--cached'],
       timestamp: Time.now
@@ -200,7 +202,7 @@ class TestAutoCompletion < Test::Unit::TestCase
 
   def test_parse_help_cache_expires
     # Populate cache with old timestamp
-    Rubish::Builtins.instance_variable_get(:@help_completion_cache)['expiredcmd'] = {
+    Rubish::Builtins.context.instance_variable_get(:@help_completion_cache)['expiredcmd'] = {
       subcommands: ['old_sub'],
       options: ['--old'],
       timestamp: Time.now - 3600  # 1 hour ago, beyond 30 min TTL
@@ -217,7 +219,7 @@ class TestAutoCompletion < Test::Unit::TestCase
 
   def test_auto_completion_subcommands
     # Pre-populate cache to avoid actual command execution
-    Rubish::Builtins.instance_variable_get(:@help_completion_cache)['testcli'] = {
+    Rubish::Builtins.context.instance_variable_get(:@help_completion_cache)['testcli'] = {
       subcommands: ['init', 'build', 'test', 'deploy'],
       options: ['--help', '--version'],
       timestamp: Time.now
@@ -240,7 +242,7 @@ class TestAutoCompletion < Test::Unit::TestCase
   end
 
   def test_auto_completion_subcommands_with_prefix
-    Rubish::Builtins.instance_variable_get(:@help_completion_cache)['testcli'] = {
+    Rubish::Builtins.context.instance_variable_get(:@help_completion_cache)['testcli'] = {
       subcommands: ['init', 'install', 'info', 'build'],
       options: ['--help'],
       timestamp: Time.now
@@ -263,7 +265,7 @@ class TestAutoCompletion < Test::Unit::TestCase
   end
 
   def test_auto_completion_options
-    Rubish::Builtins.instance_variable_get(:@help_completion_cache)['testcli'] = {
+    Rubish::Builtins.context.instance_variable_get(:@help_completion_cache)['testcli'] = {
       subcommands: ['init', 'build'],
       options: ['--help', '--version', '--verbose', '-h', '-v'],
       timestamp: Time.now
@@ -286,7 +288,7 @@ class TestAutoCompletion < Test::Unit::TestCase
   end
 
   def test_auto_completion_options_short
-    Rubish::Builtins.instance_variable_get(:@help_completion_cache)['testcli'] = {
+    Rubish::Builtins.context.instance_variable_get(:@help_completion_cache)['testcli'] = {
       subcommands: ['init'],
       options: ['--help', '-h', '-v', '-q'],
       timestamp: Time.now
@@ -429,7 +431,7 @@ class TestAutoCompletion < Test::Unit::TestCase
 
   def test_zsh_completion_preferred_over_help_when_available
     # Pre-populate cache with zsh result
-    Rubish::Builtins.instance_variable_get(:@help_completion_cache)['zshcmd'] = {
+    Rubish::Builtins.context.instance_variable_get(:@help_completion_cache)['zshcmd'] = {
       subcommands: ['zsh-sub1', 'zsh-sub2', 'zsh-sub3'],
       options: ['--zsh-opt'],
       source: :zsh,
@@ -478,7 +480,7 @@ class TestAutoCompletion < Test::Unit::TestCase
     Dir.mktmpdir do |tmpdir|
       Dir.chdir(tmpdir) do
         # Clear cache to force help command execution
-        Rubish::Builtins.instance_variable_set(:@help_completion_cache, {})
+        Rubish::Builtins.context.instance_variable_set(:@help_completion_cache, {})
 
         # Record files before completion
         files_before = Dir.glob('*', base: tmpdir)
@@ -514,7 +516,7 @@ class TestAutoCompletion < Test::Unit::TestCase
 
       Dir.chdir(tmpdir) do
         # Clear cache to force help command execution
-        Rubish::Builtins.instance_variable_set(:@help_completion_cache, {})
+        Rubish::Builtins.context.instance_variable_set(:@help_completion_cache, {})
 
         # Trigger completion for rm command (simulates typing "rm ")
         Rubish::Builtins.set_completion_context(

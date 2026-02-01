@@ -43,9 +43,9 @@ class TestLocal < Test::Unit::TestCase
   def test_local_with_value
     Rubish::Builtins.push_local_scope
     Rubish::Builtins.run('local', ['x=hello'])
-    assert_equal 'hello', ENV['x']
+    assert_equal 'hello', Rubish::Builtins.get_var('x')
     Rubish::Builtins.pop_local_scope
-    assert_nil ENV['x']
+    assert_nil Rubish::Builtins.get_var('x')
   end
 
   # Test local preserves and restores global

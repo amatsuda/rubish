@@ -20,93 +20,59 @@ module Rubish
       _upvars _usergroup setopt unsetopt autoload compinit compdef git_ps1 require
     ]).freeze
 
-    # Global state (shared across all sessions)
-    @disabled_builtins = Set.new  # Set of disabled builtin names
-    @dynamic_commands = []  # Array of dynamically loaded builtin names
-    @call_stack = []  # Stack of [line_number, function_name, filename] for caller builtin
-    @coprocs = {}  # Hash of coproc names to {pid:, read_fd:, write_fd:, reader:, writer:}
-    @named_directories = {}  # Hash of names to paths for zsh-style ~name expansion
-    @builtin_completion_functions = {}  # Hash of function names to lambdas for builtin completions
-
-    # Per-session state (variables, options, aliases, completions, callbacks, etc.)
-    @current_state = ShellState.new
+    # Global state (shared across all sessions) - accessed via Builtins.xxx
+    @disabled_builtins = Set.new
+    @dynamic_commands = []
+    @call_stack = []
+    @coprocs = {}
+    @named_directories = {}
+    @builtin_completion_functions = {}
+    @current_state = nil
 
     class << self
-      attr_accessor :current_state
       attr_reader :disabled_builtins, :call_stack, :coprocs, :builtin_completion_functions, :named_directories
+      attr_accessor :dynamic_commands, :current_state
 
-      # Delegate callbacks to current_state (used by REPL to set up callbacks)
-      def executor; @current_state.executor; end
-      def executor=(val); @current_state.executor = val; end
-      def command_executor; @current_state.command_executor; end
-      def command_executor=(val); @current_state.command_executor = val; end
-      def heredoc_content_setter; @current_state.heredoc_content_setter; end
-      def heredoc_content_setter=(val); @current_state.heredoc_content_setter = val; end
-      def script_name_getter; @current_state.script_name_getter; end
-      def script_name_getter=(val); @current_state.script_name_getter = val; end
-      def script_name_setter; @current_state.script_name_setter; end
-      def script_name_setter=(val); @current_state.script_name_setter = val; end
-      def positional_params_getter; @current_state.positional_params_getter; end
-      def positional_params_getter=(val); @current_state.positional_params_getter = val; end
-      def positional_params_setter; @current_state.positional_params_setter; end
-      def positional_params_setter=(val); @current_state.positional_params_setter = val; end
-      def lineno_getter; @current_state.lineno_getter; end
-      def lineno_getter=(val); @current_state.lineno_getter = val; end
-      def function_checker; @current_state.function_checker; end
-      def function_checker=(val); @current_state.function_checker = val; end
-      def function_remover; @current_state.function_remover; end
-      def function_remover=(val); @current_state.function_remover = val; end
-      def function_lister; @current_state.function_lister; end
-      def function_lister=(val); @current_state.function_lister = val; end
-      def function_getter; @current_state.function_getter; end
-      def function_getter=(val); @current_state.function_getter = val; end
-      def function_caller; @current_state.function_caller; end
-      def function_caller=(val); @current_state.function_caller = val; end
-      def autoload_functions; @current_state.autoload_functions; end
-      def autoload_functions=(val); @current_state.autoload_functions = val; end
-      def history_file_getter; @current_state.history_file_getter; end
-      def history_file_getter=(val); @current_state.history_file_getter = val; end
-      def history_loader; @current_state.history_loader; end
-      def history_loader=(val); @current_state.history_loader = val; end
-      def history_saver; @current_state.history_saver; end
-      def history_saver=(val); @current_state.history_saver = val; end
-      def history_appender; @current_state.history_appender; end
-      def history_appender=(val); @current_state.history_appender = val; end
-      def last_history_line; @current_state.last_history_line; end
-      def last_history_line=(val); @current_state.last_history_line = val; end
-      def source_file_getter; @current_state.source_file_getter; end
-      def source_file_getter=(val); @current_state.source_file_getter = val; end
-      def source_file_setter; @current_state.source_file_setter; end
-      def source_file_setter=(val); @current_state.source_file_setter = val; end
-      def readline_line_getter; @current_state.readline_line_getter; end
-      def readline_line_getter=(val); @current_state.readline_line_getter = val; end
-      def readline_line_setter; @current_state.readline_line_setter; end
-      def readline_line_setter=(val); @current_state.readline_line_setter = val; end
-      def readline_point_getter; @current_state.readline_point_getter; end
-      def readline_point_getter=(val); @current_state.readline_point_getter = val; end
-      def readline_point_setter; @current_state.readline_point_setter; end
-      def readline_point_setter=(val); @current_state.readline_point_setter = val; end
-      def readline_mark_getter; @current_state.readline_mark_getter; end
-      def readline_mark_getter=(val); @current_state.readline_mark_getter = val; end
-      def readline_mark_setter; @current_state.readline_mark_setter; end
-      def readline_mark_setter=(val); @current_state.readline_mark_setter = val; end
-      def readline_point_modified; @current_state.readline_point_modified; end
-      def readline_point_modified=(val); @current_state.readline_point_modified = val; end
-      def bash_argv0_unsetter; @current_state.bash_argv0_unsetter; end
-      def bash_argv0_unsetter=(val); @current_state.bash_argv0_unsetter = val; end
-      def bind_x_executor; @current_state.bind_x_executor; end
-      def bind_x_executor=(val); @current_state.bind_x_executor = val; end
-      def bind_x_counter; @current_state.bind_x_counter; end
-      def bind_x_counter=(val); @current_state.bind_x_counter = val; end
-      def exit_blocked_by_jobs; @current_state.exit_blocked_by_jobs; end
-      def exit_blocked_by_jobs=(val); @current_state.exit_blocked_by_jobs = val; end
-      def sourcing_file; @current_state.sourcing_file; end
-      def sourcing_file=(val); @current_state.sourcing_file = val; end
+      # Create a context for class method calls that delegates to instance methods
+      def context
+        return nil if @current_state.nil?
+        @context ||= nil
+        if @context.nil? || @context.state != @current_state
+          require_relative '../execution_context'
+          @context = ExecutionContext.new(@current_state)
+        end
+        @context
+      end
+
+      # Allow REPL to set its context as the shared context
+      def context=(ctx)
+        @context = ctx
+      end
+
+      # Delegate commonly-used methods to the context for backward compatibility
+      # These allow code like `Builtins.run(...)` to work
+      def method_missing(method_name, *args, **kwargs, &block)
+        ctx = context
+        if ctx && ctx.respond_to?(method_name)
+          if kwargs.empty?
+            ctx.send(method_name, *args, &block)
+          else
+            ctx.send(method_name, *args, **kwargs, &block)
+          end
+        else
+          super
+        end
+      end
+
+      def respond_to_missing?(method_name, include_private = false)
+        ctx = context
+        (ctx && ctx.respond_to?(method_name, include_private)) || super
+      end
     end
 
     # Notify the terminal of the current working directory using OSC 7
     # This enables features like "new tab opens in same directory" in terminal emulators
-    def self.notify_terminal_of_cwd
+    def notify_terminal_of_cwd
       return unless $stdout.tty?
 
       hostname = Socket.gethostname rescue 'localhost'
@@ -121,7 +87,7 @@ module Rubish
     # Format error message based on gnu_errfmt setting
     # Standard format: "rubish: message"
     # GNU format: "rubish:source:lineno: message"
-    def self.format_error(message, command: nil)
+    def format_error(message, command: nil)
       prefix = if command
                  "rubish: #{command}: "
                else
@@ -129,8 +95,8 @@ module Rubish
                end
 
       if shopt_enabled?('gnu_errfmt')
-        source = @current_state.source_file_getter&.call || 'rubish'
-        lineno = @current_state.lineno_getter&.call || 0
+        source = @state.source_file_getter&.call || 'rubish'
+        lineno = @state.lineno_getter&.call || 0
         "#{source}:#{lineno}: #{prefix.sub(/\Arubish: /, '')}#{message}"
       else
         "#{prefix}#{message}"
@@ -138,108 +104,108 @@ module Rubish
     end
 
     # Array variable methods
-    def self.array?(name)
-      @current_state.arrays.key?(name)
+    def array?(name)
+      @state.arrays.key?(name)
     end
 
-    def self.get_array(name)
-      @current_state.arrays[name] || []
+    def get_array(name)
+      @state.arrays[name] || []
     end
 
-    def self.set_array(name, values)
-      @current_state.arrays[name] = values.is_a?(Array) ? values : [values]
+    def set_array(name, values)
+      @state.arrays[name] = values.is_a?(Array) ? values : [values]
     end
 
-    def self.get_array_element(name, index)
-      arr = @current_state.arrays[name]
+    def get_array_element(name, index)
+      arr = @state.arrays[name]
       return '' unless arr
       arr[index.to_i] || ''
     end
 
-    def self.set_array_element(name, index, value)
-      @current_state.arrays[name] ||= []
-      @current_state.arrays[name][index.to_i] = value
+    def set_array_element(name, index, value)
+      @state.arrays[name] ||= []
+      @state.arrays[name][index.to_i] = value
     end
 
-    def self.indexed_array?(name)
-      @current_state.arrays.key?(name)
+    def indexed_array?(name)
+      @state.arrays.key?(name)
     end
 
-    def self.array_length(name)
-      (@current_state.arrays[name] || []).length
+    def array_length(name)
+      (@state.arrays[name] || []).length
     end
 
-    def self.array_append(name, values)
-      @current_state.arrays[name] ||= []
-      @current_state.arrays[name].concat(values.is_a?(Array) ? values : [values])
+    def array_append(name, values)
+      @state.arrays[name] ||= []
+      @state.arrays[name].concat(values.is_a?(Array) ? values : [values])
     end
 
-    def self.unset_array(name)
-      @current_state.arrays.delete(name)
+    def unset_array(name)
+      @state.arrays.delete(name)
     end
 
-    def self.unset_array_element(name, index)
-      return unless @current_state.arrays[name]
-      @current_state.arrays[name][index.to_i] = nil
+    def unset_array_element(name, index)
+      return unless @state.arrays[name]
+      @state.arrays[name][index.to_i] = nil
     end
 
     # Associative array methods
-    def self.assoc_array?(name)
-      @current_state.assoc_arrays.key?(name)
+    def assoc_array?(name)
+      @state.assoc_arrays.key?(name)
     end
 
-    def self.declare_assoc_array(name)
-      @current_state.assoc_arrays[name] ||= {}
+    def declare_assoc_array(name)
+      @state.assoc_arrays[name] ||= {}
     end
 
-    def self.get_assoc_array(name)
-      @current_state.assoc_arrays[name] || {}
+    def get_assoc_array(name)
+      @state.assoc_arrays[name] || {}
     end
 
-    def self.set_assoc_array(name, hash)
-      @current_state.assoc_arrays[name] = hash.is_a?(Hash) ? hash : {}
+    def set_assoc_array(name, hash)
+      @state.assoc_arrays[name] = hash.is_a?(Hash) ? hash : {}
     end
 
-    def self.get_assoc_element(name, key)
-      hash = @current_state.assoc_arrays[name]
+    def get_assoc_element(name, key)
+      hash = @state.assoc_arrays[name]
       return '' unless hash
       hash[key] || ''
     end
 
-    def self.set_assoc_element(name, key, value)
-      @current_state.assoc_arrays[name] ||= {}
-      @current_state.assoc_arrays[name][key] = value
+    def set_assoc_element(name, key, value)
+      @state.assoc_arrays[name] ||= {}
+      @state.assoc_arrays[name][key] = value
     end
 
-    def self.assoc_keys(name)
-      (@current_state.assoc_arrays[name] || {}).keys
+    def assoc_keys(name)
+      (@state.assoc_arrays[name] || {}).keys
     end
 
-    def self.assoc_values(name)
-      (@current_state.assoc_arrays[name] || {}).values
+    def assoc_values(name)
+      (@state.assoc_arrays[name] || {}).values
     end
 
-    def self.assoc_length(name)
-      (@current_state.assoc_arrays[name] || {}).length
+    def assoc_length(name)
+      (@state.assoc_arrays[name] || {}).length
     end
 
-    def self.unset_assoc_array(name)
-      @current_state.assoc_arrays.delete(name)
+    def unset_assoc_array(name)
+      @state.assoc_arrays.delete(name)
     end
 
-    def self.unset_assoc_element(name, key)
-      return unless @current_state.assoc_arrays[name]
-      @current_state.assoc_arrays[name].delete(key)
+    def unset_assoc_element(name, key)
+      return unless @state.assoc_arrays[name]
+      @state.assoc_arrays[name].delete(key)
     end
 
     # Nameref (reference variable) methods
-    def self.nameref?(name)
-      (@current_state.var_attributes[name] || Set.new).include?(:nameref)
+    def nameref?(name)
+      (@state.var_attributes[name] || Set.new).include?(:nameref)
     end
 
-    def self.resolve_nameref(name, visited = Set.new)
+    def resolve_nameref(name, visited = Set.new)
       # Resolve nameref chain, detecting circular references
-      return name unless @current_state.namerefs.key?(name)
+      return name unless @state.namerefs.key?(name)
 
       if visited.include?(name)
         $stderr.puts format_error('circular name reference', command: name)
@@ -247,26 +213,26 @@ module Rubish
       end
 
       visited << name
-      target = @current_state.namerefs[name]
+      target = @state.namerefs[name]
       resolve_nameref(target, visited)
     end
 
-    def self.get_nameref_target(name)
-      @current_state.namerefs[name]
+    def get_nameref_target(name)
+      @state.namerefs[name]
     end
 
-    def self.set_nameref(name, target)
-      @current_state.namerefs[name] = target
-      @current_state.var_attributes[name] ||= Set.new
-      @current_state.var_attributes[name] << :nameref
+    def set_nameref(name, target)
+      @state.namerefs[name] = target
+      @state.var_attributes[name] ||= Set.new
+      @state.var_attributes[name] << :nameref
     end
 
-    def self.unset_nameref(name)
-      @current_state.namerefs.delete(name)
-      @current_state.var_attributes[name]&.delete(:nameref)
+    def unset_nameref(name)
+      @state.namerefs.delete(name)
+      @state.var_attributes[name]&.delete(:nameref)
     end
 
-    def self.get_var_through_nameref(name)
+    def get_var_through_nameref(name)
       # If it's a nameref, get the value of the target variable
       if nameref?(name)
         target = resolve_nameref(name)
@@ -283,7 +249,7 @@ module Rubish
       get_var(name) || ''
     end
 
-    def self.set_var_through_nameref(name, value)
+    def set_var_through_nameref(name, value)
       # If it's a nameref, set the value of the target variable
       if nameref?(name)
         target = resolve_nameref(name)
@@ -303,11 +269,11 @@ module Rubish
       true
     end
 
-    def self.clear_namerefs
-      @current_state.namerefs.each_key do |name|
-        @current_state.var_attributes[name]&.delete(:nameref)
+    def clear_namerefs
+      @state.namerefs.each_key do |name|
+        @state.var_attributes[name]&.delete(:nameref)
       end
-      @current_state.namerefs.clear
+      @state.namerefs.clear
     end
 
     # IFS (Internal Field Separator) methods
@@ -316,7 +282,7 @@ module Rubish
     # COMP_WORDBREAKS - characters that separate words for completion
     DEFAULT_COMP_WORDBREAKS = " \t\n\"'><=;|&(:"
 
-    def self.comp_wordbreaks
+    def comp_wordbreaks
       ENV['COMP_WORDBREAKS'] || DEFAULT_COMP_WORDBREAKS
     end
 
@@ -330,10 +296,24 @@ module Rubish
     @compreply = []       # COMPREPLY - array of completion results
 
     class << self
-      attr_accessor :comp_words, :comp_cword, :comp_line, :comp_point, :comp_type, :comp_key, :compreply
+      # Completion variable accessors - delegate to context
+      def comp_words; context&.instance_variable_get(:@comp_words) || []; end
+      def comp_words=(val); context&.instance_variable_set(:@comp_words, val); end
+      def comp_cword; context&.instance_variable_get(:@comp_cword) || 0; end
+      def comp_cword=(val); context&.instance_variable_set(:@comp_cword, val); end
+      def comp_line; context&.instance_variable_get(:@comp_line) || ''; end
+      def comp_line=(val); context&.instance_variable_set(:@comp_line, val); end
+      def comp_point; context&.instance_variable_get(:@comp_point) || 0; end
+      def comp_point=(val); context&.instance_variable_set(:@comp_point, val); end
+      def comp_type; context&.instance_variable_get(:@comp_type) || 0; end
+      def comp_type=(val); context&.instance_variable_set(:@comp_type, val); end
+      def comp_key; context&.instance_variable_get(:@comp_key) || 0; end
+      def comp_key=(val); context&.instance_variable_set(:@comp_key, val); end
+      def compreply; context&.get_array('COMPREPLY') || []; end
+      def compreply=(val); context&.set_array('COMPREPLY', val); end
     end
 
-    def self.set_completion_context(line:, point:, words:, cword:, type: 9, key: 9)
+    def set_completion_context(line:, point:, words:, cword:, type: 9, key: 9)
       # Set internal class variables
       @comp_line = line
       @comp_point = point
@@ -362,7 +342,7 @@ module Rubish
       set_array('COMPREPLY', [])
     end
 
-    def self.clear_completion_context
+    def clear_completion_context
       # Clear internal class variables
       @comp_words = []
       @comp_cword = 0
@@ -386,34 +366,34 @@ module Rubish
 
     # Check if we're currently in a completion context
     # Used to suppress stderr during command substitution in completion functions
-    def self.in_completion_context?
+    def in_completion_context?
       @comp_words && !@comp_words.empty?
     end
 
     # TMOUT - timeout for read builtin (in seconds)
-    def self.tmout
+    def tmout
       tmout_val = ENV['TMOUT']
       return nil if tmout_val.nil? || tmout_val.empty?
       tmout_val.to_f
     end
 
-    def self.ifs
+    def ifs
       ENV['IFS'] || DEFAULT_IFS
     end
 
-    def self.ifs_whitespace
+    def ifs_whitespace
       # Returns the whitespace characters in IFS (space, tab, newline)
       current_ifs = ifs
       current_ifs.chars.select { |c| c == ' ' || c == "\t" || c == "\n" }.join
     end
 
-    def self.ifs_non_whitespace
+    def ifs_non_whitespace
       # Returns the non-whitespace characters in IFS
       current_ifs = ifs
       current_ifs.chars.reject { |c| c == ' ' || c == "\t" || c == "\n" }.join
     end
 
-    def self.split_by_ifs(str)
+    def split_by_ifs(str)
       # Split string according to IFS rules:
       # 1. Leading/trailing IFS whitespace is ignored
       # 2. Sequences of IFS whitespace act as single delimiter
@@ -449,7 +429,7 @@ module Rubish
       str.split(pattern).reject(&:empty?)
     end
 
-    def self.split_by_ifs_n(str, n)
+    def split_by_ifs_n(str, n)
       # Split string by IFS into at most n parts
       # The last part contains the remainder (preserving delimiters)
       return [] if str.nil? || str.empty?
@@ -515,7 +495,7 @@ module Rubish
       parts
     end
 
-    def self.join_by_ifs(words)
+    def join_by_ifs(words)
       # Join words using first character of IFS (for $*)
       current_ifs = ifs
       separator = current_ifs.empty? ? '' : current_ifs[0]
@@ -523,16 +503,16 @@ module Rubish
     end
 
     # Coproc methods
-    def self.coproc?(name)
-      @coprocs.key?(name)
+    def coproc?(name)
+      Builtins.coprocs.key?(name)
     end
 
-    def self.get_coproc(name)
-      @coprocs[name]
+    def get_coproc(name)
+      Builtins.coprocs[name]
     end
 
-    def self.set_coproc(name, pid:, read_fd:, write_fd:, reader:, writer:)
-      @coprocs[name] = {
+    def set_coproc(name, pid:, read_fd:, write_fd:, reader:, writer:)
+      Builtins.coprocs[name] = {
         pid: pid,
         read_fd: read_fd,
         write_fd: write_fd,
@@ -545,8 +525,8 @@ module Rubish
       ENV["#{name}_PID"] = pid.to_s
     end
 
-    def self.remove_coproc(name)
-      coproc = @coprocs.delete(name)
+    def remove_coproc(name)
+      coproc = Builtins.coprocs.delete(name)
       return unless coproc
 
       # Close file descriptors
@@ -557,24 +537,24 @@ module Rubish
       ENV.delete("#{name}_PID")
     end
 
-    def self.coproc_read_fd(name)
-      @coprocs.dig(name, :read_fd)
+    def coproc_read_fd(name)
+      Builtins.coprocs.dig(name, :read_fd)
     end
 
-    def self.coproc_write_fd(name)
-      @coprocs.dig(name, :write_fd)
+    def coproc_write_fd(name)
+      Builtins.coprocs.dig(name, :write_fd)
     end
 
-    def self.coproc_pid(name)
-      @coprocs.dig(name, :pid)
+    def coproc_pid(name)
+      Builtins.coprocs.dig(name, :pid)
     end
 
-    def self.coproc_reader(name)
-      @coprocs.dig(name, :reader)
+    def coproc_reader(name)
+      Builtins.coprocs.dig(name, :reader)
     end
 
-    def self.coproc_writer(name)
-      @coprocs.dig(name, :writer)
+    def coproc_writer(name)
+      Builtins.coprocs.dig(name, :writer)
     end
 
     # Valid shell options with their default values and descriptions
@@ -823,21 +803,21 @@ module Rubish
       'zle' => [true, 'use zsh line editor']
     }.freeze
 
-    def self.builtin?(name)
-      builtin_exists?(name) && !@disabled_builtins.include?(name)
+    def builtin?(name)
+      builtin_exists?(name) && !Builtins.disabled_builtins.include?(name)
     end
 
-    def self.builtin_exists?(name)
+    def builtin_exists?(name)
       method_name = NAME_TO_METHOD[name] || name.to_sym
-      BUILTIN_METHODS.include?(method_name) || @dynamic_commands.include?(name)
+      BUILTIN_METHODS.include?(method_name) || Builtins.dynamic_commands.include?(name)
     end
 
-    def self.builtin_enabled?(name)
-      builtin_exists?(name) && !@disabled_builtins.include?(name)
+    def builtin_enabled?(name)
+      builtin_exists?(name) && !Builtins.disabled_builtins.include?(name)
     end
 
-    def self.all_commands
-      COMMANDS + @dynamic_commands
+    def all_commands
+      COMMANDS + Builtins.dynamic_commands
     end
 
     # Mapping from builtin names to method names for special cases
@@ -856,14 +836,14 @@ module Rubish
       '__ltrim_colon_completions' => :_ltrim_colon_completions
     }.freeze
 
-    def self.run(name, args)
+    def run(name, args)
       method_name = NAME_TO_METHOD[name] || name.to_sym
 
       if respond_to?(method_name, false)
         send(method_name, args)
-      elsif @loaded_builtins.key?(name)
+      elsif Builtins.loaded_builtins.key?(name)
         # Check for dynamically loaded builtins
-        callable = @loaded_builtins[name][:callable]
+        callable = Builtins.loaded_builtins[name][:callable]
         if callable.respond_to?(:call)
           callable.call(args)
         else
@@ -874,7 +854,7 @@ module Rubish
       end
     end
 
-    def self.cd(args)
+    def cd(args)
       # cd [-L|-P] [dir]
       # -L: follow symbolic links (default)
       # -P: use physical directory structure (don't follow symlinks)
@@ -978,7 +958,7 @@ module Rubish
     end
 
     # Correct minor spelling errors in directory path for cdspell
-    def self.correct_directory_spelling(path)
+    def correct_directory_spelling(path)
       # Split path into components
       components = path.split('/')
       return nil if components.empty?
@@ -1023,7 +1003,7 @@ module Rubish
     end
 
     # Find a directory similar to the given name (within edit distance 1)
-    def self.find_similar_directory(parent, name)
+    def find_similar_directory(parent, name)
       return nil unless File.directory?(parent)
 
       begin
@@ -1046,7 +1026,7 @@ module Rubish
     end
 
     # Check if two strings have edit distance of 1
-    def self.edit_distance_one?(s1, s2)
+    def edit_distance_one?(s1, s2)
       len1 = s1.length
       len2 = s2.length
 
@@ -1092,7 +1072,7 @@ module Rubish
       false
     end
 
-    def self.pushd(args)
+    def pushd(args)
       # pushd [-n] [+N | -N | dir]
       # -n: Suppress the normal change of directory; only manipulate the stack
       # +N: Rotate the stack so that the Nth directory (counting from left, starting at 0) is at the top
@@ -1112,13 +1092,13 @@ module Rubish
 
       if remaining_args.empty?
         # Swap top two directories
-        if @current_state.dir_stack.empty?
+        if @state.dir_stack.empty?
           puts 'pushd: no other directory'
           return false
         end
         current = Dir.pwd
-        target = @current_state.dir_stack.shift
-        @current_state.dir_stack.unshift(current)
+        target = @state.dir_stack.shift
+        @state.dir_stack.unshift(current)
         unless no_cd
           begin
             Dir.chdir(target)
@@ -1134,7 +1114,7 @@ module Rubish
         # Stack rotation: +N or -N
         arg = remaining_args.first
         n = arg[1..].to_i
-        full_stack = [Dir.pwd] + @current_state.dir_stack
+        full_stack = [Dir.pwd] + @state.dir_stack
 
         if n >= full_stack.length
           puts "pushd: #{arg}: directory stack index out of range"
@@ -1156,7 +1136,7 @@ module Rubish
         end
 
         target = rotated.first
-        @current_state.dir_stack = rotated[1..]
+        @state.dir_stack = rotated[1..]
 
         unless no_cd
           begin
@@ -1180,7 +1160,7 @@ module Rubish
           return false
         end
 
-        @current_state.dir_stack.unshift(current)
+        @state.dir_stack.unshift(current)
         unless no_cd
           begin
             Dir.chdir(dir)
@@ -1195,7 +1175,7 @@ module Rubish
       end
     end
 
-    def self.popd(args)
+    def popd(args)
       # popd [-n] [+N | -N]
       # -n: Suppress the normal change of directory; only manipulate the stack
       # +N: Remove the Nth directory (counting from left, starting at 0)
@@ -1215,12 +1195,12 @@ module Rubish
         end
       end
 
-      if @current_state.dir_stack.empty? && index_arg.nil?
+      if @state.dir_stack.empty? && index_arg.nil?
         puts 'popd: directory stack empty'
         return false
       end
 
-      full_stack = [Dir.pwd] + @current_state.dir_stack
+      full_stack = [Dir.pwd] + @state.dir_stack
 
       if index_arg
         n = index_arg[1..].to_i
@@ -1245,7 +1225,7 @@ module Rubish
             return false
           end
           target = full_stack[1]
-          @current_state.dir_stack = full_stack[2..] || []
+          @state.dir_stack = full_stack[2..] || []
           unless no_cd
             begin
               Dir.chdir(target)
@@ -1258,16 +1238,16 @@ module Rubish
         else
           # Removing from stack (not current dir)
           full_stack.delete_at(index)
-          @current_state.dir_stack = full_stack[1..] || []
+          @state.dir_stack = full_stack[1..] || []
         end
       else
         # Default: pop top of stack and cd there
-        if @current_state.dir_stack.empty?
+        if @state.dir_stack.empty?
           puts 'popd: directory stack empty'
           return false
         end
 
-        target = @current_state.dir_stack.shift
+        target = @state.dir_stack.shift
         unless no_cd
           begin
             Dir.chdir(target)
@@ -1283,18 +1263,18 @@ module Rubish
       true
     end
 
-    def self.dirs(args)
+    def dirs(args)
       print_dir_stack
       true
     end
 
-    def self.print_dir_stack
-      stack = [Dir.pwd] + @current_state.dir_stack
+    def print_dir_stack
+      stack = [Dir.pwd] + @state.dir_stack
       puts stack.map { |d| d.sub(ENV['HOME'], '~') }.join(' ')
     end
 
-    def self.clear_dir_stack
-      @current_state.dir_stack.clear
+    def clear_dir_stack
+      @state.dir_stack.clear
     end
 
     # Signal name mapping
@@ -1345,10 +1325,10 @@ module Rubish
     # Signals that cannot be trapped (for error messages)
     UNTRAPABLE_SIGNALS = %w[KILL STOP].freeze
 
-    def self.trap(args)
+    def trap(args)
       if args.empty?
         # List all traps
-        @current_state.traps.each do |sig, cmd|
+        @state.traps.each do |sig, cmd|
           sig_name = sig == 0 ? 'EXIT' : sig
           puts "trap -- #{cmd.inspect} #{sig_name}"
         end
@@ -1380,7 +1360,7 @@ module Rubish
       if args.first == '-p'
         signals = args[1..] || []
         if signals.empty?
-          @current_state.traps.each do |sig, cmd|
+          @state.traps.each do |sig, cmd|
             sig_name = sig == 0 ? 'EXIT' : sig
             puts "trap -- #{cmd.inspect} #{sig_name}"
           end
@@ -1389,9 +1369,9 @@ module Rubish
             sig = normalize_signal(sig_arg)
             next unless sig
 
-            if @current_state.traps.key?(sig)
+            if @state.traps.key?(sig)
               sig_name = sig == 0 ? 'EXIT' : sig
-              puts "trap -- #{@current_state.traps[sig].inspect} #{sig_name}"
+              puts "trap -- #{@state.traps[sig].inspect} #{sig_name}"
             end
           end
         end
@@ -1436,7 +1416,7 @@ module Rubish
       true
     end
 
-    def self.normalize_signal(sig_arg)
+    def normalize_signal(sig_arg)
       sig_str = sig_arg.to_s
 
       # Look up in SIGNALS hash (handles both numeric and named signals)
@@ -1455,7 +1435,7 @@ module Rubish
     # Pseudo-signals that are not real OS signals
     PSEUDO_SIGNALS = [0, 'ERR', 'DEBUG', 'RETURN'].freeze
 
-    def self.set_trap(sig, command)
+    def set_trap(sig, command)
       # KILL and STOP cannot be trapped or ignored
       sig_name = sig.is_a?(Integer) ? nil : sig.to_s.upcase
       if UNTRAPABLE_SIGNALS.include?(sig_name)
@@ -1464,13 +1444,13 @@ module Rubish
       end
 
       # Store the trap command
-      @current_state.traps[sig] = command
+      @state.traps[sig] = command
 
       # Pseudo-signals are handled by the shell, not the OS
       return true if PSEUDO_SIGNALS.include?(sig)
 
       # Save original handler if not already saved
-      @current_state.original_traps[sig] ||= Signal.trap(sig, 'DEFAULT') rescue nil
+      @state.original_traps[sig] ||= Signal.trap(sig, 'DEFAULT') rescue nil
 
       if command.empty?
         # Ignore the signal
@@ -1480,11 +1460,11 @@ module Rubish
         # Capture signal name for RUBISH_TRAPSIG/BASH_TRAPSIG
         sig_name = sig.is_a?(Integer) ? Signal.signame(sig) : sig.to_s.sub(/^SIG/, '')
         Signal.trap(sig) do
-          @current_state.current_trapsig = sig_name
+          @state.current_trapsig = sig_name
           begin
-            @current_state.executor&.call(command) if @current_state.executor
+            @state.executor&.call(command) if @state.executor
           ensure
-            @current_state.current_trapsig = ''
+            @state.current_trapsig = ''
           end
         end
       end
@@ -1494,15 +1474,15 @@ module Rubish
       false
     end
 
-    def self.reset_trap(sig)
-      @current_state.traps.delete(sig)
+    def reset_trap(sig)
+      @state.traps.delete(sig)
 
       # Pseudo-signals have no OS signal to reset
       return if PSEUDO_SIGNALS.include?(sig)
 
       # Restore original handler
-      if @current_state.original_traps.key?(sig)
-        Signal.trap(sig, @current_state.original_traps.delete(sig) || 'DEFAULT')
+      if @state.original_traps.key?(sig)
+        Signal.trap(sig, @state.original_traps.delete(sig) || 'DEFAULT')
       else
         Signal.trap(sig, 'DEFAULT')
       end
@@ -1510,115 +1490,115 @@ module Rubish
       puts "trap: #{e.message}"
     end
 
-    def self.exit_traps
-      return unless @current_state.traps.key?(0)
+    def exit_traps
+      return unless @state.traps.key?(0)
 
-      @current_state.current_trapsig = 'EXIT'
+      @state.current_trapsig = 'EXIT'
       begin
-        @current_state.executor&.call(@current_state.traps[0]) if @current_state.executor
+        @state.executor&.call(@state.traps[0]) if @state.executor
       ensure
-        @current_state.current_trapsig = ''
+        @state.current_trapsig = ''
       end
     end
 
     @in_err_trap = false
 
-    def self.err_trap
-      return unless @current_state.traps.key?('ERR')
+    def err_trap
+      return unless @state.traps.key?('ERR')
       return if @in_err_trap  # Prevent recursion
 
       @in_err_trap = true
-      @current_state.current_trapsig = 'ERR'
+      @state.current_trapsig = 'ERR'
       begin
-        @current_state.executor&.call(@current_state.traps['ERR']) if @current_state.executor
+        @state.executor&.call(@state.traps['ERR']) if @state.executor
       ensure
         @in_err_trap = false
-        @current_state.current_trapsig = ''
+        @state.current_trapsig = ''
       end
     end
 
-    def self.err_trap_set?
-      @current_state.traps.key?('ERR') && !@current_state.traps['ERR'].empty?
+    def err_trap_set?
+      @state.traps.key?('ERR') && !@state.traps['ERR'].empty?
     end
 
-    def self.save_and_clear_err_trap
+    def save_and_clear_err_trap
       # Save ERR trap and clear it (for functions/subshells when errtrace is off)
-      saved = @current_state.traps.delete('ERR')
+      saved = @state.traps.delete('ERR')
       saved
     end
 
-    def self.restore_err_trap(saved)
+    def restore_err_trap(saved)
       # Restore a previously saved ERR trap
       if saved
-        @current_state.traps['ERR'] = saved
+        @state.traps['ERR'] = saved
       end
     end
 
     @in_debug_trap = false
 
-    def self.debug_trap
-      return unless @current_state.traps.key?('DEBUG')
+    def debug_trap
+      return unless @state.traps.key?('DEBUG')
       return if @in_debug_trap  # Prevent recursion
 
       @in_debug_trap = true
-      @current_state.current_trapsig = 'DEBUG'
+      @state.current_trapsig = 'DEBUG'
       begin
-        @current_state.executor&.call(@current_state.traps['DEBUG']) if @current_state.executor
+        @state.executor&.call(@state.traps['DEBUG']) if @state.executor
       ensure
         @in_debug_trap = false
-        @current_state.current_trapsig = ''
+        @state.current_trapsig = ''
       end
     end
 
-    def self.debug_trap_set?
-      @current_state.traps.key?('DEBUG') && !@current_state.traps['DEBUG'].empty?
+    def debug_trap_set?
+      @state.traps.key?('DEBUG') && !@state.traps['DEBUG'].empty?
     end
 
     @in_return_trap = false
 
-    def self.return_trap
-      return unless @current_state.traps.key?('RETURN')
+    def return_trap
+      return unless @state.traps.key?('RETURN')
       return if @in_return_trap  # Prevent recursion
 
       @in_return_trap = true
-      @current_state.current_trapsig = 'RETURN'
+      @state.current_trapsig = 'RETURN'
       begin
-        @current_state.executor&.call(@current_state.traps['RETURN']) if @current_state.executor
+        @state.executor&.call(@state.traps['RETURN']) if @state.executor
       ensure
         @in_return_trap = false
-        @current_state.current_trapsig = ''
+        @state.current_trapsig = ''
       end
     end
 
-    def self.return_trap_set?
-      @current_state.traps.key?('RETURN') && !@current_state.traps['RETURN'].empty?
+    def return_trap_set?
+      @state.traps.key?('RETURN') && !@state.traps['RETURN'].empty?
     end
 
-    def self.save_and_clear_functrace_traps
+    def save_and_clear_functrace_traps
       # Save DEBUG and RETURN traps and clear them (for functions when functrace is off)
       saved = {}
-      saved['DEBUG'] = @current_state.traps.delete('DEBUG') if @current_state.traps.key?('DEBUG')
-      saved['RETURN'] = @current_state.traps.delete('RETURN') if @current_state.traps.key?('RETURN')
+      saved['DEBUG'] = @state.traps.delete('DEBUG') if @state.traps.key?('DEBUG')
+      saved['RETURN'] = @state.traps.delete('RETURN') if @state.traps.key?('RETURN')
       saved.empty? ? nil : saved
     end
 
-    def self.restore_functrace_traps(saved)
+    def restore_functrace_traps(saved)
       # Restore previously saved DEBUG and RETURN traps
       return unless saved
 
-      @current_state.traps['DEBUG'] = saved['DEBUG'] if saved['DEBUG']
-      @current_state.traps['RETURN'] = saved['RETURN'] if saved['RETURN']
+      @state.traps['DEBUG'] = saved['DEBUG'] if saved['DEBUG']
+      @state.traps['RETURN'] = saved['RETURN'] if saved['RETURN']
     end
 
-    def self.clear_traps
-      @current_state.traps.each_key do |sig|
+    def clear_traps
+      @state.traps.each_key do |sig|
         reset_trap(sig) unless PSEUDO_SIGNALS.include?(sig)
       end
-      @current_state.traps.clear
-      @current_state.original_traps.clear
+      @state.traps.clear
+      @state.original_traps.clear
     end
 
-    def self.getopts(args)
+    def getopts(args)
       # getopts optstring name [args...]
       # Returns true if option found, false when done
       if args.length < 2
@@ -1633,7 +1613,7 @@ module Rubish
       if args.length > 2
         parse_args = args[2..]
       else
-        parse_args = @current_state.positional_params_getter&.call || []
+        parse_args = @state.positional_params_getter&.call || []
       end
 
       # Get current OPTIND (1-based index)
@@ -1737,22 +1717,22 @@ module Rubish
       true
     end
 
-    def self.reset_getopts
+    def reset_getopts
       ENV['OPTIND'] = '1'
       ENV['_OPTPOS'] = '1'
       ENV.delete('OPTARG')
     end
 
-    def self.local(args)
+    def local(args)
       # local [-n] var=value or local var
       # -n: create a nameref (reference to another variable)
       # Only valid inside a function (when scope stack is not empty)
-      if @current_state.local_scope_stack.empty?
+      if @state.local_scope_stack.empty?
         $stderr.puts 'local: can only be used in a function'
         return false
       end
 
-      current_scope = @current_state.local_scope_stack.last
+      current_scope = @state.local_scope_stack.last
       nameref_mode = false
       remaining_args = []
 
@@ -1823,8 +1803,8 @@ module Rubish
           if nameref_mode
             # Create nameref without target (will be set later via assignment)
             # For now, just mark it as a nameref with nil target
-            @current_state.var_attributes[name] ||= Set.new
-            @current_state.var_attributes[name] << :nameref
+            @state.var_attributes[name] ||= Set.new
+            @state.var_attributes[name] << :nameref
           else
             # localvar_inherit: inherit value and attributes from outer scope
             if shopt_enabled?('localvar_inherit')
@@ -1843,14 +1823,14 @@ module Rubish
       true
     end
 
-    def self.push_local_scope
-      @current_state.local_scope_stack.push({})
+    def push_local_scope
+      @state.local_scope_stack.push({})
     end
 
-    def self.pop_local_scope
-      return if @current_state.local_scope_stack.empty?
+    def pop_local_scope
+      return if @state.local_scope_stack.empty?
 
-      scope = @current_state.local_scope_stack.pop
+      scope = @state.local_scope_stack.pop
       # Restore original values
       scope.each do |name, original_value|
         if original_value.is_a?(Hash)
@@ -1880,31 +1860,31 @@ module Rubish
       end
     end
 
-    def self.in_function?
-      !@current_state.local_scope_stack.empty?
+    def in_function?
+      !@state.local_scope_stack.empty?
     end
 
     # Set a local variable from a function parameter (for Ruby-style def with named args)
-    def self.set_local_from_param(name, value)
+    def set_local_from_param(name, value)
       return unless in_function?
 
-      current_scope = @current_state.local_scope_stack.last
+      current_scope = @state.local_scope_stack.last
       unless current_scope.key?(name)
         current_scope[name] = var_set?(name) ? get_var(name) : :unset
       end
       set_var(name, value.to_s)
     end
 
-    def self.clear_local_scopes
-      @current_state.local_scope_stack.clear
+    def clear_local_scopes
+      @state.local_scope_stack.clear
     end
 
-    def self.warn_shadow(name)
+    def warn_shadow(name)
       # Print warning to stderr when local variable shadows outer scope variable
       $stderr.puts "local: warning: #{name}: shadows variable in outer scope"
     end
 
-    def self.unset(args)
+    def unset(args)
       # unset [-fv] name [name ...]
       # -f: treat names as function names
       # -v: treat names as variable names (default)
@@ -1938,7 +1918,7 @@ module Rubish
       names.each do |name|
         if mode == :function
           # Remove function
-          @current_state.function_remover&.call(name)
+          @state.function_remover&.call(name)
         else
           # Check for array element reference: arr[index] or arr[key]
           if name =~ /\A([a-zA-Z_][a-zA-Z0-9_]*)\[(.+)\]\z/
@@ -1970,8 +1950,8 @@ module Rubish
 
           # localvar_unset: when unsetting a local variable, remove it from local scope
           # and restore the outer scope's value
-          if shopt_enabled?('localvar_unset') && !@current_state.local_scope_stack.empty?
-            current_scope = @current_state.local_scope_stack.last
+          if shopt_enabled?('localvar_unset') && !@state.local_scope_stack.empty?
+            current_scope = @state.local_scope_stack.last
             if current_scope.key?(name)
               # Remove from local scope and restore original value
               original_value = current_scope.delete(name)
@@ -1986,7 +1966,7 @@ module Rubish
 
           # Special handling for BASH_ARGV0: loses special properties when unset
           if name == 'BASH_ARGV0'
-            @current_state.bash_argv0_unsetter&.call
+            @state.bash_argv0_unsetter&.call
           end
 
           # Standard behavior: remove from shell_vars and ENV (if exported)
@@ -1997,13 +1977,13 @@ module Rubish
       true
     end
 
-    def self.readonly(args)
+    def readonly(args)
       # readonly [-p] [name[=value] ...]
       # -p: print all readonly variables in reusable format
 
       if args.empty? || args == ['-p']
         # List all readonly variables
-        @current_state.readonly_vars.each do |name, _|
+        @state.readonly_vars.each do |name, _|
           value = get_var(name)
           if value
             puts "readonly #{name}=#{value.inspect}"
@@ -2021,78 +2001,82 @@ module Rubish
         if arg.include?('=')
           name, value = arg.split('=', 2)
           # Check if already readonly with different value
-          if @current_state.readonly_vars.key?(name) && ENV[name] != value
+          if @state.readonly_vars.key?(name) && ENV[name] != value
             puts "readonly: #{name}: readonly variable"
             next
           end
           ENV[name] = value
-          @current_state.readonly_vars[name] = true
+          @state.readonly_vars[name] = true
         else
           # Mark existing variable as readonly
-          @current_state.readonly_vars[arg] = true
+          @state.readonly_vars[arg] = true
         end
       end
 
       true
     end
 
-    def self.readonly?(name)
-      @current_state.readonly_vars.key?(name)
+    def readonly?(name)
+      @state.readonly_vars.key?(name)
     end
 
-    def self.clear_readonly_vars
-      @current_state.readonly_vars.clear
+    def clear_readonly_vars
+      @state.readonly_vars.clear
     end
 
-    def self.exported?(name)
-      @current_state.var_attributes[name]&.include?(:export)
+    def exported?(name)
+      @state.var_attributes[name]&.include?(:export)
     end
 
     # Get a shell variable's value
     # Checks shell_vars first (for variables set in this shell),
     # then falls back to ENV (for inherited environment variables)
-    def self.get_var(name)
-      if @current_state.shell_vars.key?(name)
-        @current_state.shell_vars[name]
+    def get_var(name)
+      if @state.shell_vars.key?(name)
+        @state.shell_vars[name]
       else
         ENV[name]
       end
     end
 
+    # Locale variables and POSIX mode variable are automatically exported to ENV
+    AUTO_EXPORT_VARS = %w[LANG LC_ALL LC_COLLATE LC_CTYPE LC_MESSAGES LC_MONETARY LC_NUMERIC LC_TIME POSIXLY_CORRECT].freeze
+
     # Set a shell variable's value
     # If the variable is exported or already exists in ENV (inherited), also updates ENV
-    def self.set_var(name, value)
-      @current_state.shell_vars[name] = value
-      # If variable is exported or was inherited from parent env, also update ENV
-      ENV[name] = value if exported?(name) || ENV.key?(name)
+    # Locale variables (LANG, LC_*) are automatically exported
+    def set_var(name, value)
+      @state.shell_vars[name] = value
+      # If variable is exported, was inherited from parent env, or is an auto-export variable, also update ENV
+      ENV[name] = value if exported?(name) || ENV.key?(name) || AUTO_EXPORT_VARS.include?(name)
     end
 
     # Delete a shell variable (from both shell_vars and ENV)
-    def self.delete_var(name)
-      @current_state.shell_vars.delete(name)
+    def delete_var(name)
+      @state.shell_vars.delete(name)
       ENV.delete(name)
-      @current_state.var_attributes.delete(name)
+      @state.var_attributes.delete(name)
     end
 
     # Check if a shell variable is set (in shell_vars or ENV)
-    def self.var_set?(name)
-      @current_state.shell_vars.key?(name) || ENV.key?(name)
+    def var_set?(name)
+      @state.shell_vars.key?(name) || ENV.key?(name)
     end
 
     # Clear all shell variables (for testing)
-    def self.clear_shell_vars
-      @current_state.shell_vars.clear
+    def clear_shell_vars
+      @state.shell_vars.clear
     end
 
     # Export a variable (add to ENV if it has a value)
-    def self.export_var(name)
-      @current_state.var_attributes[name] ||= Set.new
-      @current_state.var_attributes[name] << :export
+    def export_var(name)
+      @state.var_attributes[name] ||= Set.new
+      @state.var_attributes[name] << :export
       # If variable has a value in shell_vars, copy to ENV
-      ENV[name] = @current_state.shell_vars[name] if @current_state.shell_vars.key?(name)
+      ENV[name] = @state.shell_vars[name] if @state.shell_vars.key?(name)
     end
 
-    def self.declare(args)
+    def declare(args)
       # declare [-aAfFgIilnrtux] [-p] [name[=value] ...]
       # -a: indexed array
       # -A: associative array
@@ -2222,7 +2206,7 @@ module Rubish
         # Track in local scope if inside a function and -g not specified
         # This makes declare behave like local by default in functions
         if in_function? && !global_mode
-          current_scope = @current_state.local_scope_stack.last
+          current_scope = @state.local_scope_stack.last
           unless current_scope.key?(name)
             current_scope[name] = ENV.key?(name) ? ENV[name] : :unset
           end
@@ -2231,8 +2215,8 @@ module Rubish
         # Handle -I: inherit attributes and value from previous scope
         if inherit_mode && in_function?
           # Copy existing attributes if variable exists
-          if @current_state.var_attributes[name]
-            add_attrs = add_attrs | @current_state.var_attributes[name]
+          if @state.var_attributes[name]
+            add_attrs = add_attrs | @state.var_attributes[name]
           end
           # Inherit value if not specified and variable exists
           if value.nil? && ENV.key?(name)
@@ -2241,30 +2225,30 @@ module Rubish
         end
 
         # Initialize attributes set for this variable
-        @current_state.var_attributes[name] ||= Set.new
+        @state.var_attributes[name] ||= Set.new
 
         # Add new attributes
-        add_attrs.each { |attr| @current_state.var_attributes[name] << attr }
+        add_attrs.each { |attr| @state.var_attributes[name] << attr }
 
         # Remove attributes (except readonly)
-        remove_attrs.each { |attr| @current_state.var_attributes[name].delete(attr) }
+        remove_attrs.each { |attr| @state.var_attributes[name].delete(attr) }
 
         # Handle nameref attribute
         if add_attrs.include?(:nameref)
           if value
             # Set the nameref to point to the target variable
-            @current_state.namerefs[name] = value
+            @state.namerefs[name] = value
           end
         end
 
         # Handle removing nameref attribute
         if remove_attrs.include?(:nameref)
-          @current_state.namerefs.delete(name)
+          @state.namerefs.delete(name)
         end
 
         # Handle readonly attribute
         if add_attrs.include?(:readonly)
-          @current_state.readonly_vars[name] = true
+          @state.readonly_vars[name] = true
         end
 
         # Handle export attribute
@@ -2285,7 +2269,7 @@ module Rubish
     end
 
     # Strip surrounding quotes from a value (single or double)
-    def self.strip_quotes(value)
+    def strip_quotes(value)
       return value if value.nil? || value.empty?
 
       # $'...' ANSI-C quoting
@@ -2306,8 +2290,8 @@ module Rubish
       value
     end
 
-    def self.apply_attributes(name, value)
-      attrs = @current_state.var_attributes[name] || Set.new
+    def apply_attributes(name, value)
+      attrs = @state.var_attributes[name] || Set.new
 
       # Apply integer attribute
       if attrs.include?(:integer)
@@ -2331,7 +2315,7 @@ module Rubish
       value
     end
 
-    def self.set_var_with_attributes(name, value)
+    def set_var_with_attributes(name, value)
       # If it's a nameref, set the target variable instead
       if nameref?(name)
         target = resolve_nameref(name)
@@ -2340,14 +2324,14 @@ module Rubish
       end
 
       # Apply attributes when setting a variable
-      if @current_state.var_attributes[name]
+      if @state.var_attributes[name]
         value = apply_attributes(name, value)
       end
       ENV[name] = value
     end
 
-    def self.print_declaration(name)
-      attrs = @current_state.var_attributes[name] || Set.new
+    def print_declaration(name)
+      attrs = @state.var_attributes[name] || Set.new
       flags = +''
       flags << 'i' if attrs.include?(:integer)
       flags << 'l' if attrs.include?(:lowercase)
@@ -2359,7 +2343,7 @@ module Rubish
 
       # For namerefs, show the target variable name
       if attrs.include?(:nameref)
-        target = @current_state.namerefs[name]
+        target = @state.namerefs[name]
         if flags.empty?
           if target
             puts "declare -- #{name}=#{target.inspect}"
@@ -2391,16 +2375,16 @@ module Rubish
       end
     end
 
-    def self.print_all_declarations(filter_attrs)
+    def print_all_declarations(filter_attrs)
       # Collect all variables with attributes
       vars_to_print = Set.new
 
-      @current_state.var_attributes.each_key { |name| vars_to_print << name }
-      @current_state.readonly_vars.each_key { |name| vars_to_print << name }
-      @current_state.namerefs.each_key { |name| vars_to_print << name }
+      @state.var_attributes.each_key { |name| vars_to_print << name }
+      @state.readonly_vars.each_key { |name| vars_to_print << name }
+      @state.namerefs.each_key { |name| vars_to_print << name }
 
       vars_to_print.each do |name|
-        attrs = @current_state.var_attributes[name] || Set.new
+        attrs = @state.var_attributes[name] || Set.new
         attrs = attrs.dup
         attrs << :readonly if readonly?(name)
         attrs << :nameref if nameref?(name)
@@ -2412,9 +2396,9 @@ module Rubish
       end
     end
 
-    def self.print_functions(names, names_only)
+    def print_functions(names, names_only)
       # Get all functions via callback
-      functions = @current_state.function_lister&.call || {}
+      functions = @state.function_lister&.call || {}
 
       if names.empty?
         # List all functions
@@ -2424,7 +2408,7 @@ module Rubish
       else
         # List specific functions
         names.each do |name|
-          info = @current_state.function_getter&.call(name)
+          info = @state.function_getter&.call(name)
           if info
             print_function(name, info, names_only)
           else
@@ -2436,7 +2420,7 @@ module Rubish
       true
     end
 
-    def self.print_function(name, info, names_only)
+    def print_function(name, info, names_only)
       if names_only
         # -F: just print the name (optionally with file info)
         # extdebug: when enabled, output in bash format "funcname lineno filename"
@@ -2460,24 +2444,24 @@ module Rubish
       end
     end
 
-    def self.get_var_attributes(name)
-      @current_state.var_attributes[name] || Set.new
+    def get_var_attributes(name)
+      @state.var_attributes[name] || Set.new
     end
 
-    def self.has_attribute?(name, attr)
-      (@current_state.var_attributes[name] || Set.new).include?(attr)
+    def has_attribute?(name, attr)
+      (@state.var_attributes[name] || Set.new).include?(attr)
     end
 
-    def self.mark_exported(name)
-      @current_state.var_attributes[name] ||= Set.new
-      @current_state.var_attributes[name] << :export
+    def mark_exported(name)
+      @state.var_attributes[name] ||= Set.new
+      @state.var_attributes[name] << :export
     end
 
-    def self.clear_var_attributes
-      @current_state.var_attributes.clear
+    def clear_var_attributes
+      @state.var_attributes.clear
     end
 
-    def self.let(args)
+    def let(args)
       # let expression [expression ...]
       # Evaluates arithmetic expressions
       # Returns 0 (true) if last expression is non-zero, 1 (false) if zero
@@ -2497,7 +2481,7 @@ module Rubish
       last_result != 0
     end
 
-    def self.evaluate_arithmetic(expr)
+    def evaluate_arithmetic(expr)
       # Handle assignment operators (but not ==, !=, <=, >=)
       if expr =~ /\A([a-zA-Z_][a-zA-Z0-9_]*)\s*([\+\-\*\/%]?=)(?!=)\s*(.+)\z/
         var_name = $1
@@ -2577,7 +2561,7 @@ module Rubish
       evaluate_arithmetic_expr(expr)
     end
 
-    def self.evaluate_arithmetic_expr(expr)
+    def evaluate_arithmetic_expr(expr)
       # Replace variable references with their values
       # Handle $VAR, ${VAR}, and bare variable names
       expanded = expr.gsub(/\$\{([^}]+)\}|\$([a-zA-Z_][a-zA-Z0-9_]*)|([a-zA-Z_][a-zA-Z0-9_]*)/) do |match|
@@ -2618,7 +2602,7 @@ module Rubish
       end
     end
 
-    def self.export(args)
+    def export(args)
       if args.empty?
         # List all exported variables (from ENV, which contains only exported vars)
         ENV.each { |k, v| puts "#{k}=#{v}" }
@@ -2639,11 +2623,11 @@ module Rubish
             # Apply attributes if any
             value = apply_attributes(key, value)
             # Store in shell_vars and ENV (since we're exporting)
-            @current_state.shell_vars[key] = value
+            @state.shell_vars[key] = value
             ENV[key] = value
             # Mark as exported
-            @current_state.var_attributes[key] ||= Set.new
-            @current_state.var_attributes[key] << :export
+            @state.var_attributes[key] ||= Set.new
+            @state.var_attributes[key] << :export
           else
             # Just export existing variable - copy from shell_vars to ENV if it exists
             export_var(arg)
@@ -2653,7 +2637,7 @@ module Rubish
       true
     end
 
-    def self.pwd(args)
+    def pwd(args)
       # pwd [-L|-P]
       # -L: print logical path (may contain symlinks, default)
       # -P: print physical path (no symlinks)
@@ -2683,37 +2667,37 @@ module Rubish
     end
 
     # Record timestamp for a history entry
-    def self.record_history_timestamp(index, time = Time.now)
-      @current_state.history_timestamps[index] = time
+    def record_history_timestamp(index, time = Time.now)
+      @state.history_timestamps[index] = time
     end
 
     # Get timestamp for a history entry
-    def self.get_history_timestamp(index)
-      @current_state.history_timestamps[index]
+    def get_history_timestamp(index)
+      @state.history_timestamps[index]
     end
 
     # Clear all history timestamps
-    def self.clear_history_timestamps
-      @current_state.history_timestamps.clear
+    def clear_history_timestamps
+      @state.history_timestamps.clear
     end
 
     # Remove timestamp for a specific index and reindex remaining
-    def self.remove_history_timestamp(index)
-      @current_state.history_timestamps.delete(index)
+    def remove_history_timestamp(index)
+      @state.history_timestamps.delete(index)
       # Reindex: shift all timestamps after deleted index down by 1
       new_timestamps = {}
-      @current_state.history_timestamps.each do |idx, time|
+      @state.history_timestamps.each do |idx, time|
         if idx > index
           new_timestamps[idx - 1] = time
         else
           new_timestamps[idx] = time
         end
       end
-      @current_state.history_timestamps.clear
-      @current_state.history_timestamps.merge!(new_timestamps)
+      @state.history_timestamps.clear
+      @state.history_timestamps.merge!(new_timestamps)
     end
 
-    def self.history(args)
+    def history(args)
       # Parse options
       clear = false
       delete_offset = nil
@@ -2768,7 +2752,7 @@ module Rubish
       if clear
         Reline::HISTORY.clear
         clear_history_timestamps
-        @current_state.last_history_line = 0
+        @state.last_history_line = 0
         return true
       end
 
@@ -2787,23 +2771,23 @@ module Rubish
 
       # Handle -a: append new lines to history file
       if append_to_file
-        @current_state.history_appender&.call
+        @state.history_appender&.call
         return true
       end
 
       # Handle -n: read new lines from history file
       if read_new
-        file = @current_state.history_file_getter&.call
+        file = @state.history_file_getter&.call
         return true unless file && File.exist?(file)
 
         begin
           lines = File.readlines(file, chomp: true)
           # Read lines after what we've already read
-          file_last_line = @current_state.last_history_line
+          file_last_line = @state.last_history_line
           new_lines = lines[file_last_line..]
           if new_lines && !new_lines.empty?
             new_lines.each { |line| Reline::HISTORY << line }
-            @current_state.last_history_line = lines.size
+            @state.last_history_line = lines.size
           end
         rescue => e
           $stderr.puts "history: #{e.message}"
@@ -2816,14 +2800,14 @@ module Rubish
       if read_all
         Reline::HISTORY.clear
         clear_history_timestamps
-        @current_state.last_history_line = 0
-        @current_state.history_loader&.call
+        @state.last_history_line = 0
+        @state.history_loader&.call
         return true
       end
 
       # Handle -w: write history to file
       if write_all
-        @current_state.history_saver&.call
+        @state.history_saver&.call
         return true
       end
 
@@ -2874,21 +2858,21 @@ module Rubish
       true
     end
 
-    def self.alias(args)
+    def alias(args)
       if args.empty?
         # List all aliases
-        @current_state.aliases.each { |name, value| puts "alias #{name}='#{value}'" }
+        @state.aliases.each { |name, value| puts "alias #{name}='#{value}'" }
       else
         args.each do |arg|
           if arg.include?('=')
             name, value = arg.split('=', 2)
             # Remove surrounding quotes if present
             value = value.sub(/\A(['"])(.*)\1\z/, '\2')
-            @current_state.aliases[name] = value
+            @state.aliases[name] = value
           else
             # Show specific alias
-            if @current_state.aliases.key?(arg)
-              puts "alias #{arg}='#{@current_state.aliases[arg]}'"
+            if @state.aliases.key?(arg)
+              puts "alias #{arg}='#{@state.aliases[arg]}'"
             else
               puts "alias: #{arg}: not found"
             end
@@ -2898,15 +2882,15 @@ module Rubish
       true
     end
 
-    def self.unalias(args)
+    def unalias(args)
       if args.empty?
         puts 'unalias: usage: unalias name [name ...]'
         return false
       end
 
       args.each do |name|
-        if @current_state.aliases.key?(name)
-          @current_state.aliases.delete(name)
+        if @state.aliases.key?(name)
+          @state.aliases.delete(name)
         else
           puts "unalias: #{name}: not found"
         end
@@ -2914,7 +2898,7 @@ module Rubish
       true
     end
 
-    def self.expand_alias(line)
+    def expand_alias(line)
       return line if line.empty?
 
       # expand_aliases: when disabled, don't expand aliases
@@ -2924,19 +2908,19 @@ module Rubish
       first_word = line.split(/\s/, 2).first
       return line unless first_word
 
-      if @current_state.aliases.key?(first_word)
+      if @state.aliases.key?(first_word)
         rest = line[first_word.length..]
-        "#{@current_state.aliases[first_word]}#{rest}"
+        "#{@state.aliases[first_word]}#{rest}"
       else
         line
       end
     end
 
-    def self.clear_aliases
-      @current_state.aliases.clear
+    def clear_aliases
+      @state.aliases.clear
     end
 
-    def self.source(args)
+    def source(args)
       if args.empty?
         puts 'source: usage: source filename [arguments]'
         return false
@@ -2976,24 +2960,24 @@ module Rubish
         return false
       end
 
-      unless @current_state.executor
+      unless @state.executor
         puts 'source: executor not configured'
         return false
       end
 
       # Save and set script name, positional params, and source file
-      old_script_name = @current_state.script_name_getter&.call
-      old_positional_params = @current_state.positional_params_getter&.call
-      old_source_file = @current_state.source_file_getter&.call
-      @current_state.script_name_setter&.call(file)
-      @current_state.positional_params_setter&.call(args[1..] || [])
+      old_script_name = @state.script_name_getter&.call
+      old_positional_params = @state.positional_params_getter&.call
+      old_source_file = @state.source_file_getter&.call
+      @state.script_name_setter&.call(file)
+      @state.positional_params_setter&.call(args[1..] || [])
       # bash_source_fullpath: when enabled, store full path; when disabled, use filename as specified
       source_file_value = shopt_enabled?('bash_source_fullpath') ? file : original_file
-      @current_state.source_file_setter&.call(source_file_value)
+      @state.source_file_setter&.call(source_file_value)
 
       # Disable history expansion while sourcing (bash behavior)
-      old_sourcing = @current_state.sourcing_file
-      @current_state.sourcing_file = true
+      old_sourcing = @state.sourcing_file
+      @state.sourcing_file = true
 
       return_code = catch(:return) do
         buffer = +''
@@ -3032,7 +3016,7 @@ module Rubish
             end
             # Set heredoc content before executing
             content = heredoc_lines.join("\n") + (heredoc_lines.empty? ? '' : "\n")
-            @current_state.heredoc_content_setter&.call(content)
+            @state.heredoc_content_setter&.call(content)
           end
 
           # Remember if we're waiting for function body BEFORE processing this line
@@ -3105,7 +3089,7 @@ module Rubish
           # - no unclosed quotes in the buffer
           if depth == 0 && !pending_function_def && !has_unclosed_quotes(buffer)
             begin
-              @current_state.executor.call(buffer)
+              @state.executor.call(buffer)
             rescue SyntaxError => e
               puts "source: #{file}:#{buffer_start_line}: syntax error: #{e.message}"
             end
@@ -3138,7 +3122,7 @@ module Rubish
           end
 
           begin
-            @current_state.executor.call(buffer)
+            @state.executor.call(buffer)
           rescue SyntaxError => e
             puts "source: #{file}: syntax error (starting at line #{buffer_start_line}): #{e.message}"
           end
@@ -3148,20 +3132,20 @@ module Rubish
       end
 
       # Restore script name, positional params, source file, and sourcing flag
-      @current_state.script_name_setter&.call(old_script_name) if old_script_name
-      @current_state.positional_params_setter&.call(old_positional_params) if old_positional_params
-      @current_state.source_file_setter&.call(old_source_file) if old_source_file
-      @current_state.sourcing_file = old_sourcing
+      @state.script_name_setter&.call(old_script_name) if old_script_name
+      @state.positional_params_setter&.call(old_positional_params) if old_positional_params
+      @state.source_file_setter&.call(old_source_file) if old_source_file
+      @state.sourcing_file = old_sourcing
 
       return_code.nil? || return_code == 0
     end
 
-    def self.shift(args)
+    def shift(args)
       n = args.first&.to_i || 1
 
       return false if n < 0
 
-      params = @current_state.positional_params_getter&.call || []
+      params = @state.positional_params_getter&.call || []
 
       if n > params.length
         # shift_verbose: print error if shift count exceeds positional parameters
@@ -3171,45 +3155,45 @@ module Rubish
         return false
       end
 
-      @current_state.positional_params_setter&.call(params.drop(n))
+      @state.positional_params_setter&.call(params.drop(n))
       true
     end
 
-    def self.set_option?(flag)
-      @current_state.set_options[flag] || false
+    def set_option?(flag)
+      @state.set_options[flag] || false
     end
 
     # Check if shell is in restricted mode
-    def self.restricted_mode?
-      @current_state.set_options['r'] || @current_state.shell_options['restricted_shell']
+    def restricted_mode?
+      @state.set_options['r'] || @state.shell_options['restricted_shell']
     end
 
     # Enable restricted mode (cannot be disabled once set)
-    def self.enable_restricted_mode
-      @current_state.set_options['r'] = true
-      @current_state.shell_options['restricted_shell'] = true
+    def enable_restricted_mode
+      @state.set_options['r'] = true
+      @state.shell_options['restricted_shell'] = true
     end
 
     # Check if shell is interactive
-    def self.interactive_mode?
-      @current_state.set_options['i']
+    def interactive_mode?
+      @state.set_options['i']
     end
 
     # Enable interactive mode (read-only, set at startup)
     # Also enables monitor mode (job control) as per bash behavior
-    def self.enable_interactive_mode
-      @current_state.set_options['i'] = true
-      @current_state.set_options['m'] = true  # Job control enabled for interactive shells
+    def enable_interactive_mode
+      @state.set_options['i'] = true
+      @state.set_options['m'] = true  # Job control enabled for interactive shells
     end
 
     # List of variables that cannot be modified in restricted mode
     RESTRICTED_VARIABLES = %w[SHELL ENV PATH BASH_ENV SHELLOPTS RUBISHOPTS].freeze
 
-    def self.set(args)
+    def set(args)
       # set [-+abCefhmnuvx] [-o option] [--] [arg...]
       # With no args, clear positional params (original behavior)
       if args.empty?
-        @current_state.positional_params_setter&.call([])
+        @state.positional_params_setter&.call([])
         return true
       end
 
@@ -3219,7 +3203,7 @@ module Rubish
 
         if arg == '--'
           # Everything after -- is positional params
-          @current_state.positional_params_setter&.call(args[i + 1..] || [])
+          @state.positional_params_setter&.call(args[i + 1..] || [])
           return true
         elsif arg == '-o'
           # Long option form: set -o errexit, or just set -o to list
@@ -3245,7 +3229,7 @@ module Rubish
         elsif arg.start_with?('-') && arg.length > 1 && arg != '-'
           # Short options: -e, -x, -ex
           arg[1..].each_char do |c|
-            if @current_state.set_options.key?(c)
+            if @state.set_options.key?(c)
               if c == 'r'
                 # Enable restricted mode (syncs with restricted_shell shopt)
                 enable_restricted_mode
@@ -3254,14 +3238,14 @@ module Rubish
                 $stderr.puts 'rubish: set: interactive: cannot modify at runtime'
                 return false
               else
-                @current_state.set_options[c] = true
+                @state.set_options[c] = true
               end
             end
           end
         elsif arg.start_with?('+') && arg.length > 1
           # Disable short options: +e, +x
           arg[1..].each_char do |c|
-            if @current_state.set_options.key?(c)
+            if @state.set_options.key?(c)
               if c == 'r' && restricted_mode?
                 # Cannot disable restricted mode once enabled
                 $stderr.puts 'rubish: set: restricted: cannot modify in restricted mode'
@@ -3271,13 +3255,13 @@ module Rubish
                 $stderr.puts 'rubish: set: interactive: cannot modify at runtime'
                 return false
               else
-                @current_state.set_options[c] = false
+                @state.set_options[c] = false
               end
             end
           end
         else
           # Positional parameters
-          @current_state.positional_params_setter&.call(args[i..])
+          @state.positional_params_setter&.call(args[i..])
           return true
         end
         i += 1
@@ -3285,7 +3269,7 @@ module Rubish
       true
     end
 
-    def self.list_set_options
+    def list_set_options
       # Print current option settings
       long_names = {
         'B' => 'braceexpand', 'H' => 'histexpand',
@@ -3300,7 +3284,7 @@ module Rubish
         'p' => 'privileged', 'history' => 'history', 'nolog' => 'nolog',
         'r' => 'restricted'
       }
-      @current_state.set_options.each do |flag, value|
+      @state.set_options.each do |flag, value|
         name = long_names[flag] || flag
         state = value ? '-o' : '+o'
         puts "set #{state} #{name}"
@@ -3309,7 +3293,7 @@ module Rubish
     end
 
     # SHELLOPTS: colon-separated list of enabled set -o options
-    def self.shellopts
+    def shellopts
       long_names = {
         'B' => 'braceexpand', 'H' => 'histexpand',
         'e' => 'errexit', 'E' => 'errtrace', 'T' => 'functrace',
@@ -3323,16 +3307,16 @@ module Rubish
         'p' => 'privileged', 'history' => 'history', 'nolog' => 'nolog',
         'r' => 'restricted'
       }
-      enabled = @current_state.set_options.select { |_, v| v }.keys.map { |k| long_names[k] || k }
+      enabled = @state.set_options.select { |_, v| v }.keys.map { |k| long_names[k] || k }
       enabled.sort.join(':')
     end
 
     # RUBISHOPTS: colon-separated list of enabled shopt options (equivalent to BASHOPTS)
-    def self.rubishopts
+    def rubishopts
       enabled = []
       SHELL_OPTIONS.each_key do |name|
-        if @current_state.shell_options.key?(name)
-          enabled << name if @current_state.shell_options[name]
+        if @state.shell_options.key?(name)
+          enabled << name if @state.shell_options[name]
         elsif SHELL_OPTIONS[name][0]  # default value is true
           enabled << name
         end
@@ -3342,11 +3326,11 @@ module Rubish
 
     # BASHOPTS: colon-separated list of enabled shopt options (read-only)
     # This is the bash-standard name; RUBISHOPTS is the rubish-specific equivalent
-    def self.bashopts
+    def bashopts
       rubishopts
     end
 
-    def self.set_long_option(name, value)
+    def set_long_option(name, value)
       mapping = {
         'braceexpand' => 'B', 'histexpand' => 'H',
         'errexit' => 'e', 'errtrace' => 'E', 'functrace' => 'T',
@@ -3376,54 +3360,54 @@ module Rubish
 
       # vi and emacs are mutually exclusive
       if flag == 'vi' && value
-        @current_state.set_options['vi'] = true
-        @current_state.set_options['emacs'] = false
+        @state.set_options['vi'] = true
+        @state.set_options['emacs'] = false
         Reline.vi_editing_mode if defined?(Reline)
       elsif flag == 'emacs' && value
-        @current_state.set_options['emacs'] = true
-        @current_state.set_options['vi'] = false
+        @state.set_options['emacs'] = true
+        @state.set_options['vi'] = false
         Reline.emacs_editing_mode if defined?(Reline)
       elsif flag == 'vi' && !value
         # Disabling vi enables emacs
-        @current_state.set_options['vi'] = false
-        @current_state.set_options['emacs'] = true
+        @state.set_options['vi'] = false
+        @state.set_options['emacs'] = true
         Reline.emacs_editing_mode if defined?(Reline)
       elsif flag == 'emacs' && !value
         # Disabling emacs enables vi
-        @current_state.set_options['emacs'] = false
-        @current_state.set_options['vi'] = true
+        @state.set_options['emacs'] = false
+        @state.set_options['vi'] = true
         Reline.vi_editing_mode if defined?(Reline)
       else
-        @current_state.set_options[flag] = value
+        @state.set_options[flag] = value
       end
     end
 
-    def self.return_(args)
+    def return_(args)
       code = args.first&.to_i || 0
       throw :return, code
     end
 
-    def self.break_(args)
+    def break_(args)
       # Optional: break N to break out of N levels (default 1)
       levels = args.first&.to_i || 1
       throw :break_loop, levels
     end
 
-    def self.continue(args)
+    def continue(args)
       # Optional: continue N to continue Nth enclosing loop (default 1)
       levels = args.first&.to_i || 1
       throw :continue_loop, levels
     end
 
-    def self.true_(_args)
+    def true_(_args)
       true
     end
 
-    def self.false_(_args)
+    def false_(_args)
       false
     end
 
-    def self.test(args)
+    def test(args)
       # Remove trailing ] if called as [
       args = args[0...-1] if args.last == ']'
 
@@ -3550,7 +3534,9 @@ module Rubish
       false
     end
 
-    def self.echo(args)
+    def echo(args)
+      # Handle string argument (from Ruby code like echo("hello"))
+      args = [args] if args.is_a?(String)
       newline = true
       # xpg_echo: expand backslash escapes by default when enabled
       interpret_escapes = shopt_enabled?('xpg_echo')
@@ -3595,7 +3581,7 @@ module Rubish
     end
 
     # Process escape sequences for echo (slightly different from printf)
-    def self.process_echo_escapes(str)
+    def process_echo_escapes(str)
       result = +''
       i = 0
       while i < str.length
@@ -3645,7 +3631,7 @@ module Rubish
       result
     end
 
-    def self.printf(args)
+    def printf(*args)
       # printf [-v var] format [arguments...]
       # Supports: %s, %d, %i, %f, %e, %g, %x, %X, %o, %c, %b, %q, %%
       # Also supports width, precision, and flags: %-10s, %05d, %.2f, etc.
@@ -3653,6 +3639,8 @@ module Rubish
       # %(fmt)T: format time using strftime format (arg is epoch seconds, -1=now, -2=shell start)
       # -v var: assign output to shell variable var instead of printing
 
+      # Handle single array argument (from shell command) vs multiple args (from Ruby code)
+      args = args.first if args.length == 1 && args.first.is_a?(Array)
       var_name = nil
 
       # Parse -v option
@@ -3828,7 +3816,7 @@ module Rubish
       true
     end
 
-    def self.process_escape_sequences(str)
+    def process_escape_sequences(str)
       result = +''
       i = 0
       while i < str.length
@@ -3899,7 +3887,7 @@ module Rubish
       result
     end
 
-    def self.shell_quote(str)
+    def shell_quote(str)
       # Quote a string for safe reuse as shell input (like bash's printf %q)
       # Returns a string that, when parsed by the shell, yields the original string
 
@@ -3945,7 +3933,7 @@ module Rubish
       "'" + str + "'"
     end
 
-    def self.format_arg(specifier, arg, flags, width, precision)
+    def format_arg(specifier, arg, flags, width, precision)
       width_int = width.empty? ? nil : width.to_i
       prec_int = precision.nil? ? nil : (precision.empty? ? 0 : precision.to_i)
 
@@ -4049,7 +4037,7 @@ module Rubish
       result
     end
 
-    def self.type(args)
+    def type(args)
       # type [-afptP] name [name ...]
       # -a: display all locations containing an executable named name
       # -f: suppress function lookup
@@ -4098,12 +4086,12 @@ module Rubish
 
         # Check alias (unless force_path)
         unless force_path
-          if @current_state.aliases.key?(name)
+          if @state.aliases.key?(name)
             found = true
             if type_only
               puts 'alias'
             elsif !path_only
-              puts "#{name} is aliased to '#{@current_state.aliases[name]}'"
+              puts "#{name} is aliased to '#{@state.aliases[name]}'"
             end
             next unless show_all
           end
@@ -4111,7 +4099,7 @@ module Rubish
 
         # Check function (unless force_path or suppress_functions)
         unless force_path || suppress_functions
-          if @current_state.function_checker&.call(name)
+          if @state.function_checker&.call(name)
             found = true
             if type_only
               puts 'function'
@@ -4159,7 +4147,7 @@ module Rubish
 
     # Check if a path matches any EXECIGNORE pattern
     # EXECIGNORE is a colon-separated list of glob patterns
-    def self.execignore?(path)
+    def execignore?(path)
       execignore = ENV['EXECIGNORE']
       return false if execignore.nil? || execignore.empty?
 
@@ -4171,7 +4159,7 @@ module Rubish
       end
     end
 
-    def self.find_in_path(name)
+    def find_in_path(name)
       # If name contains a slash, check if it's executable
       if name.include?('/')
         return nil if execignore?(name)
@@ -4192,7 +4180,7 @@ module Rubish
 
     # Find a file in PATH (for source builtin with sourcepath)
     # Unlike find_in_path, this doesn't require the file to be executable
-    def self.find_file_in_path(name)
+    def find_file_in_path(name)
       path_dirs = (ENV['PATH'] || '').split(File::PATH_SEPARATOR)
       path_dirs.each do |dir|
         full_path = File.join(dir, name)
@@ -4201,7 +4189,7 @@ module Rubish
       nil
     end
 
-    def self.find_all_in_path(name)
+    def find_all_in_path(name)
       # Find all matching executables in PATH
       results = []
 
@@ -4224,7 +4212,7 @@ module Rubish
       results
     end
 
-    def self.disown(args)
+    def disown(args)
       # disown [-h] [-ar] [jobspec ...]
       # -h: mark jobs so SIGHUP is not sent (but keep in table)
       # -a: remove all jobs
@@ -4318,7 +4306,7 @@ module Rubish
       all_found
     end
 
-    def self.ulimit(args)
+    def ulimit(args)
       # ulimit [-HSabcdefiklmnpqrstuvxPRT] [limit]
       # -H: use hard limit
       # -S: use soft limit (default for display)
@@ -4492,7 +4480,7 @@ module Rubish
       end
     end
 
-    def self.suspend(args)
+    def suspend(args)
       # suspend [-f]
       # Suspend shell execution
       # -f: force suspend even if login shell
@@ -4538,7 +4526,7 @@ module Rubish
       'r' => 'restricted'
     }.freeze
 
-    def self.shopt(args)
+    def shopt(args)
       # shopt [-pqsu] [-o] [optname ...]
       # -s: enable (set) options
       # -u: disable (unset) options
@@ -4594,8 +4582,8 @@ module Rubish
 
       # Helper to get current value of an option
       get_option = lambda do |name|
-        if @current_state.shell_options.key?(name)
-          @current_state.shell_options[name]
+        if @state.shell_options.key?(name)
+          @state.shell_options[name]
         elsif SHELL_OPTIONS.key?(name)
           SHELL_OPTIONS[name][0]  # default value
         else
@@ -4666,20 +4654,20 @@ module Rubish
 
         # Compat options are mutually exclusive - enabling one disables others
         if set_mode && COMPAT_OPTIONS.include?(name)
-          COMPAT_OPTIONS.each { |opt| @current_state.shell_options[opt] = false }
+          COMPAT_OPTIONS.each { |opt| @state.shell_options[opt] = false }
         end
 
-        @current_state.shell_options[name] = set_mode
+        @state.shell_options[name] = set_mode
       end
 
       true
     end
 
     # Handle shopt -o for set -o style options
-    def self.shopt_set_o(set_mode, unset_mode, print_mode, quiet_mode, opt_names)
+    def shopt_set_o(set_mode, unset_mode, print_mode, quiet_mode, opt_names)
       # Build list of valid set -o option names (long names)
       valid_options = {}
-      @current_state.set_options.each_key do |key|
+      @state.set_options.each_key do |key|
         long_name = SET_O_LONG_NAMES[key] || key
         valid_options[long_name] = key
       end
@@ -4688,7 +4676,7 @@ module Rubish
       get_option = lambda do |name|
         key = valid_options[name]
         return nil unless key
-        @current_state.set_options[key]
+        @state.set_options[key]
       end
 
       # Helper to print an option
@@ -4747,18 +4735,18 @@ module Rubish
         end
 
         key = valid_options[name]
-        @current_state.set_options[key] = set_mode
+        @state.set_options[key] = set_mode
       end
 
       true
     end
 
-    def self.shopt_enabled?(name)
-      # Check @current_state.shell_options first (shopt -s)
-      if @current_state.shell_options.key?(name)
-        @current_state.shell_options[name]
-      # Also check @current_state.set_options for options that can be set via both shopt and set -o
-      elsif @current_state.set_options.key?(name) && @current_state.set_options[name]
+    def shopt_enabled?(name)
+      # Check @state.shell_options first (shopt -s)
+      if @state.shell_options.key?(name)
+        @state.shell_options[name]
+      # Also check @state.set_options for options that can be set via both shopt and set -o
+      elsif @state.set_options.key?(name) && @state.set_options[name]
         true
       elsif SHELL_OPTIONS.key?(name)
         SHELL_OPTIONS[name][0]
@@ -4768,18 +4756,18 @@ module Rubish
     end
 
     # Set a shell option directly (for internal use)
-    def self.set_shell_option(name, value)
-      @current_state.shell_options[name] = value
+    def set_shell_option(name, value)
+      @state.shell_options[name] = value
     end
 
     # Normalize zsh option name: lowercase and remove underscores
     # zsh options are case-insensitive and underscores are ignored
-    def self.normalize_zsh_option(name)
+    def normalize_zsh_option(name)
       name.downcase.gsub('_', '')
     end
 
     # Find the canonical zsh option name from a possibly non-canonical form
-    def self.find_zsh_option(name)
+    def find_zsh_option(name)
       normalized = normalize_zsh_option(name)
 
       # Check bash-compatible options first (via ZSH_TO_BASH_OPTIONS mapping)
@@ -4797,7 +4785,7 @@ module Rubish
     end
 
     # Get the current value of a zsh option
-    def self.zsh_option_enabled?(name)
+    def zsh_option_enabled?(name)
       result = find_zsh_option(name)
       return false unless result
 
@@ -4805,8 +4793,8 @@ module Rubish
       if type == :bash
         shopt_enabled?(canonical_name)
       else
-        if @current_state.zsh_options.key?(canonical_name)
-          @current_state.zsh_options[canonical_name]
+        if @state.zsh_options.key?(canonical_name)
+          @state.zsh_options[canonical_name]
         else
           ZSH_OPTIONS[canonical_name][0]  # default value
         end
@@ -4814,22 +4802,22 @@ module Rubish
     end
 
     # Set a zsh option directly (for internal use)
-    def self.set_zsh_option(name, value)
+    def set_zsh_option(name, value)
       result = find_zsh_option(name)
       return false unless result
 
       type, canonical_name = result
       if type == :bash
-        @current_state.shell_options[canonical_name] = value
+        @state.shell_options[canonical_name] = value
       else
-        @current_state.zsh_options[canonical_name] = value
+        @state.zsh_options[canonical_name] = value
       end
       true
     end
 
     # setopt [+-options] [name ...]
     # Enable shell options (zsh-style)
-    def self.setopt(args)
+    def setopt(args)
       # No arguments: list all enabled options
       if args.empty?
         list_enabled_zsh_options
@@ -4846,9 +4834,9 @@ module Rubish
           if result
             type, canonical_name = result
             if type == :bash
-              @current_state.shell_options[canonical_name] = false
+              @state.shell_options[canonical_name] = false
             else
-              @current_state.zsh_options[canonical_name] = false
+              @state.zsh_options[canonical_name] = false
             end
             next
           end
@@ -4858,9 +4846,9 @@ module Rubish
         if result
           type, canonical_name = result
           if type == :bash
-            @current_state.shell_options[canonical_name] = true
+            @state.shell_options[canonical_name] = true
           else
-            @current_state.zsh_options[canonical_name] = true
+            @state.zsh_options[canonical_name] = true
           end
         else
           $stderr.puts "setopt: no such option: #{arg}"
@@ -4873,7 +4861,7 @@ module Rubish
 
     # unsetopt [+-options] [name ...]
     # Disable shell options (zsh-style)
-    def self.unsetopt(args)
+    def unsetopt(args)
       # No arguments: list all disabled options
       if args.empty?
         list_disabled_zsh_options
@@ -4890,9 +4878,9 @@ module Rubish
           if result
             type, canonical_name = result
             if type == :bash
-              @current_state.shell_options[canonical_name] = true
+              @state.shell_options[canonical_name] = true
             else
-              @current_state.zsh_options[canonical_name] = true
+              @state.zsh_options[canonical_name] = true
             end
             next
           end
@@ -4902,9 +4890,9 @@ module Rubish
         if result
           type, canonical_name = result
           if type == :bash
-            @current_state.shell_options[canonical_name] = false
+            @state.shell_options[canonical_name] = false
           else
-            @current_state.zsh_options[canonical_name] = false
+            @state.zsh_options[canonical_name] = false
           end
         else
           $stderr.puts "unsetopt: no such option: #{arg}"
@@ -4927,7 +4915,7 @@ module Rubish
     #   bindkey -s key string      - bind key to output string (macro)
     #   bindkey key                - show binding for key
     #   bindkey key widget         - bind key to widget
-    def self.bindkey(args)
+    def bindkey(args)
       keymap = nil
       list_keymaps = false
       remove_key = nil
@@ -4990,7 +4978,7 @@ module Rubish
       # Remove binding
       if remove_key
         keyseq = parse_bindkey_keyseq(remove_key)
-        @current_state.key_bindings.delete(keyseq)
+        @state.key_bindings.delete(keyseq)
         return true
       end
 
@@ -5004,7 +4992,7 @@ module Rubish
       # One arg - show binding for that key
       if remaining_args.length == 1
         keyseq = parse_bindkey_keyseq(remaining_args[0])
-        binding = @current_state.key_bindings[keyseq]
+        binding = @state.key_bindings[keyseq]
         if binding
           puts "\"#{format_bindkey_keyseq(keyseq)}\" #{binding[:value]}"
         else
@@ -5019,17 +5007,17 @@ module Rubish
 
       if macro_binding
         # -s: bind to macro (string output)
-        @current_state.key_bindings[keyseq] = {type: :macro, value: parse_bindkey_keyseq(value), keymap: keymap || 'main'}
+        @state.key_bindings[keyseq] = {type: :macro, value: parse_bindkey_keyseq(value), keymap: keymap || 'main'}
       else
         # Bind to widget (function)
-        @current_state.key_bindings[keyseq] = {type: :function, value: value, keymap: keymap || 'main'}
+        @state.key_bindings[keyseq] = {type: :function, value: value, keymap: keymap || 'main'}
       end
 
       true
     end
 
     # Parse zsh-style key sequence (e.g., "^A", "^[a", "\e[A")
-    def self.parse_bindkey_keyseq(str)
+    def parse_bindkey_keyseq(str)
       return str if str.nil? || str.empty?
 
       result = +''
@@ -5107,7 +5095,7 @@ module Rubish
     end
 
     # Format key sequence for display
-    def self.format_bindkey_keyseq(keyseq)
+    def format_bindkey_keyseq(keyseq)
       return '' if keyseq.nil? || keyseq.empty?
 
       result = +''
@@ -5129,8 +5117,8 @@ module Rubish
     end
 
     # List all key bindings in bindkey format
-    def self.list_bindkey_bindings(keymap = nil)
-      if @current_state.key_bindings.empty?
+    def list_bindkey_bindings(keymap = nil)
+      if @state.key_bindings.empty?
         # Show some default bindings
         puts '"^A" beginning-of-line'
         puts '"^E" end-of-line'
@@ -5140,7 +5128,7 @@ module Rubish
         return true
       end
 
-      @current_state.key_bindings.each do |keyseq, binding|
+      @state.key_bindings.each do |keyseq, binding|
         next if keymap && binding[:keymap] != keymap
 
         formatted_key = format_bindkey_keyseq(keyseq)
@@ -5157,7 +5145,7 @@ module Rubish
     end
 
     # Select a keymap (emacs or vi)
-    def self.select_keymap(keymap)
+    def select_keymap(keymap)
       case keymap
       when 'emacs', 'main'
         apply_readline_variable('editing-mode', 'emacs')
@@ -5175,7 +5163,7 @@ module Rubish
     #   -t  turn on tracing for the function
     #   -X  immediately load the function (used inside function stub)
     #   +X  load function immediately without executing
-    def self.autoload(args)
+    def autoload(args)
       suppress_alias = false
       zsh_style = true
       ksh_style = false
@@ -5221,7 +5209,7 @@ module Rubish
 
       # No function names - list all autoloaded functions
       if func_names.empty?
-        @current_state.autoload_functions.each do |name, info|
+        @state.autoload_functions.each do |name, info|
           if info[:loaded]
             puts name
           else
@@ -5242,7 +5230,7 @@ module Rubish
           end
         else
           # Mark for autoloading
-          @current_state.autoload_functions[name] = {
+          @state.autoload_functions[name] = {
             suppress_alias: suppress_alias,
             zsh_style: zsh_style,
             ksh_style: ksh_style,
@@ -5256,12 +5244,12 @@ module Rubish
     end
 
     # Check if a function is marked for autoloading
-    def self.autoload_pending?(name)
-      @current_state.autoload_functions.key?(name) && !@current_state.autoload_functions[name][:loaded]
+    def autoload_pending?(name)
+      @state.autoload_functions.key?(name) && !@state.autoload_functions[name][:loaded]
     end
 
     # Get fpath - the function search path
-    def self.fpath
+    def fpath
       fpath_str = ENV['FPATH'] || ENV['fpath'] || ''
       return [] if fpath_str.empty?
 
@@ -5269,12 +5257,12 @@ module Rubish
     end
 
     # Set fpath
-    def self.fpath=(paths)
+    def fpath=(paths)
       ENV['FPATH'] = paths.is_a?(Array) ? paths.join(':') : paths.to_s
     end
 
     # Load a function from fpath
-    def self.load_autoload_function(name)
+    def load_autoload_function(name)
       fpath.each do |dir|
         func_file = File.join(dir, name)
         next unless File.exist?(func_file)
@@ -5284,7 +5272,7 @@ module Rubish
 
           # zsh-style: file contains function body directly
           # ksh-style: file contains function definition "name() { ... }"
-          info = @current_state.autoload_functions[name] || {}
+          info = @state.autoload_functions[name] || {}
 
           if info[:ksh_style]
             # ksh-style: source the file directly
@@ -5296,7 +5284,7 @@ module Rubish
             @source_executor&.call(nil, func_def)
           end
 
-          @current_state.autoload_functions[name] = info.merge(loaded: true)
+          @state.autoload_functions[name] = info.merge(loaded: true)
           return true
         rescue => e
           $stderr.puts "autoload: error loading #{name}: #{e.message}" if ENV['RUBISH_DEBUG']
@@ -5328,7 +5316,7 @@ module Rubish
     #   -u  use without checking for insecure directories
     #   -d  specify dump file for caching
     #   -C  skip checking for new completion functions
-    def self.compinit(args)
+    def compinit(args)
       # Parse options (mostly ignored for compatibility)
       i = 0
       while i < args.length
@@ -5356,36 +5344,36 @@ module Rubish
     end
 
     # Set up default zsh-style completions
-    def self.setup_zsh_default_completions
+    def setup_zsh_default_completions
       # Map common commands to their completion types
       # These integrate with the existing bash-style completion system
 
       # File/directory completions
       %w[cat less more head tail vim vi nano emacs].each do |cmd|
-        @current_state.completions[cmd] ||= {files: true}
+        @state.completions[cmd] ||= {files: true}
       end
 
       # Directory-only completions
       %w[cd pushd].each do |cmd|
-        @current_state.completions[cmd] ||= {directories: true}
+        @state.completions[cmd] ||= {directories: true}
       end
 
       # Git completions (if _git function exists or we have builtin)
-      @current_state.completions['git'] ||= {function: '_git'}
+      @state.completions['git'] ||= {function: '_git'}
 
       # SSH completions
-      @current_state.completions['ssh'] ||= {function: '_ssh'}
-      @current_state.completions['scp'] ||= {function: '_ssh'}
+      @state.completions['ssh'] ||= {function: '_ssh'}
+      @state.completions['scp'] ||= {function: '_ssh'}
 
       # Make completions
-      @current_state.completions['make'] ||= {function: '_make'}
+      @state.completions['make'] ||= {function: '_make'}
 
       # Man completions
-      @current_state.completions['man'] ||= {function: '_man'}
+      @state.completions['man'] ||= {function: '_man'}
 
       # Kill completions (process IDs)
-      @current_state.completions['kill'] ||= {function: '_kill'}
-      @current_state.completions['killall'] ||= {signals: true, running: true}
+      @state.completions['kill'] ||= {function: '_kill'}
+      @state.completions['killall'] ||= {signals: true, running: true}
     end
 
     # compdef - define zsh-style completion
@@ -5393,7 +5381,7 @@ module Rubish
     #        compdef -n function command...  (don't override existing)
     #        compdef -d command...           (delete completion)
     #        compdef -p pattern function     (pattern-based completion)
-    def self.compdef(args)
+    def compdef(args)
       return list_zsh_completions if args.empty?
 
       no_override = false
@@ -5424,7 +5412,7 @@ module Rubish
       if delete_mode
         # Delete completions for specified commands
         remaining.each do |cmd|
-          @current_state.completions.delete(cmd)
+          @state.completions.delete(cmd)
           @zsh_completions.delete(cmd)
         end
         return true
@@ -5447,14 +5435,14 @@ module Rubish
 
       remaining.each do |cmd|
         # Skip if no_override and completion already exists
-        next if no_override && (@current_state.completions.key?(cmd) || @zsh_completions.key?(cmd))
+        next if no_override && (@state.completions.key?(cmd) || @zsh_completions.key?(cmd))
 
         # Register the completion
         @zsh_completions[cmd] = func
 
         # Also register with bash-style system for integration
         # This allows the existing completion code to call the function
-        @current_state.completions[cmd] = {function: func}
+        @state.completions[cmd] = {function: func}
       end
 
       true
@@ -5470,7 +5458,7 @@ module Rubish
     #   GIT_PS1_SHOWUPSTREAM       - show <, >, <>, = for behind, ahead, diverged, up-to-date
     #   GIT_PS1_SHOWCOLORHINTS     - colorize the output
     #   GIT_PS1_DESCRIBE_STYLE     - how to show detached HEAD (contains, branch, describe, tag, default)
-    def self.git_ps1(args)
+    def git_ps1(args)
       # Check if we're in a git repo
       git_dir = `git rev-parse --git-dir 2>/dev/null`.chomp
       return true if git_dir.empty?
@@ -5559,7 +5547,7 @@ module Rubish
     end
 
     # List all zsh-style completions
-    def self.list_zsh_completions
+    def list_zsh_completions
       @zsh_completions.each do |cmd, func|
         puts "#{cmd}: #{func}"
       end
@@ -5567,17 +5555,17 @@ module Rubish
     end
 
     # Check if zsh completion is initialized
-    def self.zsh_completion_initialized?
+    def zsh_completion_initialized?
       @zsh_completion_initialized
     end
 
     # Get zsh completion function for a command
-    def self.get_zsh_completion(cmd)
+    def get_zsh_completion(cmd)
       @zsh_completions[cmd]
     end
 
     # List all currently enabled zsh options
-    def self.list_enabled_zsh_options
+    def list_enabled_zsh_options
       enabled = []
 
       # Bash-compatible options that are enabled
@@ -5587,7 +5575,7 @@ module Rubish
 
       # Zsh-specific options that are enabled
       ZSH_OPTIONS.each do |name, (default, _desc)|
-        value = @current_state.zsh_options.key?(name) ? @current_state.zsh_options[name] : default
+        value = @state.zsh_options.key?(name) ? @state.zsh_options[name] : default
         enabled << name if value
       end
 
@@ -5595,7 +5583,7 @@ module Rubish
     end
 
     # List all currently disabled zsh options
-    def self.list_disabled_zsh_options
+    def list_disabled_zsh_options
       disabled = []
 
       # Bash-compatible options that are disabled
@@ -5605,7 +5593,7 @@ module Rubish
 
       # Zsh-specific options that are disabled
       ZSH_OPTIONS.each do |name, (default, _desc)|
-        value = @current_state.zsh_options.key?(name) ? @current_state.zsh_options[name] : default
+        value = @state.zsh_options.key?(name) ? @state.zsh_options[name] : default
         disabled << name unless value
       end
 
@@ -5614,7 +5602,7 @@ module Rubish
 
     # Get current compatibility level from RUBISH_COMPAT or shopt compat* options
     # Returns a numeric version (e.g., 10 for 1.0) or nil if not set
-    def self.compat_level
+    def compat_level
       # Check RUBISH_COMPAT environment variable first, then BASH_COMPAT as fallback
       rubish_compat = ENV['RUBISH_COMPAT']
       rubish_compat = ENV['BASH_COMPAT'] if rubish_compat.nil? || rubish_compat.empty?
@@ -5640,14 +5628,14 @@ module Rubish
     end
 
     # Check if running in a specific compatibility mode
-    def self.compat_level?(level)
+    def compat_level?(level)
       current = compat_level
       current && current <= level
     end
 
     # Get BASH_COMPAT value as a string (e.g., "5.1" or "51")
     # Returns empty string if no compat level is set (default mode)
-    def self.bash_compat
+    def bash_compat
       level = compat_level
       return '' unless level
 
@@ -5659,7 +5647,7 @@ module Rubish
 
     # Set compatibility level from BASH_COMPAT value
     # Accepts: "5.1", "51", 5.1, 51
-    def self.set_bash_compat(value)
+    def set_bash_compat(value)
       return clear_compat_level if value.nil? || value.to_s.empty?
 
       str = value.to_s.strip
@@ -5681,21 +5669,21 @@ module Rubish
       end
 
       # Clear all compat options and enable the specified one
-      COMPAT_OPTIONS.each { |opt| @current_state.shell_options[opt] = false }
-      @current_state.shell_options[compat_opt] = true
+      COMPAT_OPTIONS.each { |opt| @state.shell_options[opt] = false }
+      @state.shell_options[compat_opt] = true
     end
 
     # Clear all compat levels (return to default)
-    def self.clear_compat_level
-      COMPAT_OPTIONS.each { |opt| @current_state.shell_options[opt] = false }
+    def clear_compat_level
+      COMPAT_OPTIONS.each { |opt| @state.shell_options[opt] = false }
     end
 
     # Set compatibility level (used when RUBISH_COMPAT is assigned)
-    def self.set_compat_level(version)
+    def set_compat_level(version)
       return unless version
 
       # Clear all compat options first
-      COMPAT_OPTIONS.each { |opt| @current_state.shell_options[opt] = false }
+      COMPAT_OPTIONS.each { |opt| @state.shell_options[opt] = false }
 
       # Parse version string
       parts = version.to_s.split('.')
@@ -5709,41 +5697,41 @@ module Rubish
 
       # Enable the appropriate compat option
       compat_opt = "compat#{level}"
-      @current_state.shell_options[compat_opt] = true if SHELL_OPTIONS.key?(compat_opt)
+      @state.shell_options[compat_opt] = true if SHELL_OPTIONS.key?(compat_opt)
     end
 
     # Check if POSIX mode is enabled via POSIXLY_CORRECT environment variable
     # In bash, POSIX mode is enabled when POSIXLY_CORRECT is set (even to empty string)
-    def self.posix_mode?
+    def posix_mode?
       ENV.key?('POSIXLY_CORRECT')
     end
 
     # READLINE_LINE - contents of the readline buffer during bind -x execution
-    def self.readline_line
-      @current_state.readline_line_getter&.call || ''
+    def readline_line
+      @state.readline_line_getter&.call || ''
     end
 
-    def self.readline_line=(value)
-      @current_state.readline_line_setter&.call(value.to_s)
+    def readline_line=(value)
+      @state.readline_line_setter&.call(value.to_s)
     end
 
     # READLINE_POINT - cursor position (index) in READLINE_LINE during bind -x execution
-    def self.readline_point
-      @current_state.readline_point_getter&.call || 0
+    def readline_point
+      @state.readline_point_getter&.call || 0
     end
 
-    def self.readline_point=(value)
-      @current_state.readline_point_setter&.call(value.to_i)
-      @current_state.readline_point_modified = true
+    def readline_point=(value)
+      @state.readline_point_setter&.call(value.to_i)
+      @state.readline_point_modified = true
     end
 
     # READLINE_MARK - mark position in READLINE_LINE during bind -x execution
-    def self.readline_mark
-      @current_state.readline_mark_getter&.call || 0
+    def readline_mark
+      @state.readline_mark_getter&.call || 0
     end
 
-    def self.readline_mark=(value)
-      @current_state.readline_mark_setter&.call(value.to_i)
+    def readline_mark=(value)
+      @state.readline_mark_setter&.call(value.to_i)
     end
 
     # Track dynamically loaded builtins
@@ -5753,7 +5741,7 @@ module Rubish
       attr_reader :loaded_builtins
     end
 
-    def self.enable(args)
+    def enable(args)
       # enable [-a] [-dnps] [-f filename] [name ...]
       # -a: list all builtins (enabled and disabled)
       # -n: disable builtins
@@ -5843,12 +5831,12 @@ module Rubish
             # Look for a method or constant with the builtin name
             method_name = "run_#{name.tr('-', '_')}"
             if mod.respond_to?(method_name)
-              @loaded_builtins[name] = {file: file_path, callable: mod.method(method_name)}
-              @dynamic_commands << name unless @dynamic_commands.include?(name)
+              Builtins.loaded_builtins[name] = {file: file_path, callable: mod.method(method_name)}
+              Builtins.dynamic_commands << name unless Builtins.dynamic_commands.include?(name)
             elsif mod.const_defined?(name.upcase.tr('-', '_'), false)
               callable = mod.const_get(name.upcase.tr('-', '_'))
-              @loaded_builtins[name] = {file: file_path, callable: callable}
-              @dynamic_commands << name unless @dynamic_commands.include?(name)
+              Builtins.loaded_builtins[name] = {file: file_path, callable: callable}
+              Builtins.dynamic_commands << name unless Builtins.dynamic_commands.include?(name)
             else
               puts "enable: #{name}: not found in #{load_file}"
               return false
@@ -5864,9 +5852,9 @@ module Rubish
       # Handle -d: delete (unload) loaded builtins
       if delete_mode && !names.empty?
         names.each do |name|
-          if @loaded_builtins.key?(name)
-            @loaded_builtins.delete(name)
-            @dynamic_commands.delete(name)
+          if Builtins.loaded_builtins.key?(name)
+            Builtins.loaded_builtins.delete(name)
+            Builtins.dynamic_commands.delete(name)
           else
             puts "enable: #{name}: not a dynamically loaded builtin"
             return false
@@ -5891,7 +5879,7 @@ module Rubish
         builtins_to_show.each do |name|
           next unless builtin_exists?(name)
 
-          enabled = !@disabled_builtins.include?(name)
+          enabled = !Builtins.disabled_builtins.include?(name)
 
           if show_all
             print_builtin.call(name, enabled)
@@ -5914,16 +5902,16 @@ module Rubish
         end
 
         if disable_mode
-          @disabled_builtins.add(name)
+          Builtins.disabled_builtins.add(name)
         else
-          @disabled_builtins.delete(name)
+          Builtins.disabled_builtins.delete(name)
         end
       end
 
       true
     end
 
-    def self.find_loadable_file(filename)
+    def find_loadable_file(filename)
       # If absolute path, use it directly
       return filename if filename.start_with?('/') && File.file?(filename)
 
@@ -5951,7 +5939,7 @@ module Rubish
       nil
     end
 
-    def self.caller(args)
+    def caller(args)
       # caller [expr]
       # Display the call stack of the current subroutine call
       # With expr: display stack frame at that depth (0 = current)
@@ -5975,18 +5963,18 @@ module Rubish
       end
 
       # Check if we have a call stack
-      if @call_stack.empty?
+      if Builtins.call_stack.empty?
         return false
       end
 
       # Check if frame is in range
-      if frame >= @call_stack.length
+      if frame >= Builtins.call_stack.length
         return false
       end
 
       # Get the frame (stack is stored with most recent first)
       # But caller 0 should be the immediate caller, so we need to reverse
-      stack_frame = @call_stack[-(frame + 1)]
+      stack_frame = Builtins.call_stack[-(frame + 1)]
       return false unless stack_frame
 
       line_number, function_name, filename = stack_frame
@@ -5994,19 +5982,19 @@ module Rubish
       true
     end
 
-    def self.push_call_frame(line_number, function_name, filename)
-      @call_stack.push([line_number, function_name, filename])
+    def push_call_frame(line_number, function_name, filename)
+      Builtins.call_stack.push([line_number, function_name, filename])
     end
 
-    def self.pop_call_frame
-      @call_stack.pop
+    def pop_call_frame
+      Builtins.call_stack.pop
     end
 
-    def self.clear_call_stack
-      @call_stack.clear
+    def clear_call_stack
+      Builtins.call_stack.clear
     end
 
-    def self.complete(args)
+    def complete(args)
       # complete [-abcdefgjksuv] [-o option] [-A action] [-G globpat] [-W wordlist]
       #          [-F function] [-C command] [-X filterpat] [-P prefix] [-S suffix]
       #          [-p] [-r] [name ...]
@@ -6102,14 +6090,14 @@ module Rubish
       if print_mode
         if names.empty?
           # Print all completions
-          @current_state.completions.each do |name, s|
+          @state.completions.each do |name, s|
             puts format_completion_spec(name, s)
           end
         else
           # Print specified completions
           names.each do |name|
-            if @current_state.completions.key?(name)
-              puts format_completion_spec(name, @current_state.completions[name])
+            if @state.completions.key?(name)
+              puts format_completion_spec(name, @state.completions[name])
             else
               puts "complete: #{name}: no completion specification"
               return false
@@ -6123,10 +6111,10 @@ module Rubish
       if remove_mode
         if names.empty?
           # Remove all completions
-          @current_state.completions.clear
+          @state.completions.clear
         else
           names.each do |name|
-            @current_state.completions.delete(name)
+            @state.completions.delete(name)
           end
         end
         return true
@@ -6139,13 +6127,13 @@ module Rubish
       end
 
       names.each do |name|
-        @current_state.completions[name] = spec.dup
+        @state.completions[name] = spec.dup
       end
 
       true
     end
 
-    def self.format_completion_spec(name, spec)
+    def format_completion_spec(name, spec)
       parts = ['complete']
 
       (spec[:actions] || []).each do |action|
@@ -6180,7 +6168,7 @@ module Rubish
       parts.join(' ')
     end
 
-    def self.compgen(args)
+    def compgen(args)
       # compgen [-abcdefgjksuv] [-o option] [-A action] [-G globpat] [-W wordlist]
       #         [-F function] [-C command] [-X filterpat] [-P prefix] [-S suffix] [word]
       # Generate completions matching word
@@ -6272,16 +6260,16 @@ module Rubish
       !completions.empty?
     end
 
-    def self.generate_completions(spec, word = '')
+    def generate_completions(spec, word = '')
       results = []
 
       (spec[:actions] || []).each do |action|
         case action
         when :alias
-          results.concat(@current_state.aliases.keys.select { |a| a.start_with?(word) })
+          results.concat(@state.aliases.keys.select { |a| a.start_with?(word) })
         when :arrayvar
           # Array variable names
-          results.concat(@current_state.arrays.keys.select { |a| a.start_with?(word) })
+          results.concat(@state.arrays.keys.select { |a| a.start_with?(word) })
         when :binding
           # Readline key binding names
           results.concat(READLINE_FUNCTIONS.select { |f| f.start_with?(word) })
@@ -6309,10 +6297,10 @@ module Rubish
           end
         when :disabled
           # Disabled builtin names
-          results.concat(@disabled_builtins.to_a.select { |b| b.start_with?(word) })
+          results.concat(Builtins.disabled_builtins.to_a.select { |b| b.start_with?(word) })
         when :enabled
           # Enabled builtin names (builtins not in disabled list)
-          enabled = COMMANDS.reject { |c| @disabled_builtins.include?(c) }
+          enabled = COMMANDS.reject { |c| Builtins.disabled_builtins.include?(c) }
           results.concat(enabled.select { |c| c.start_with?(word) })
         when :export
           ENV.keys.select { |k| k.start_with?(word) }.each { |k| results << k }
@@ -6321,7 +6309,7 @@ module Rubish
           results.concat(Dir.glob(pattern))
         when :function
           # Shell function names
-          functions = @current_state.function_lister&.call || {}
+          functions = @state.function_lister&.call || {}
           results.concat(functions.keys.select { |f| f.start_with?(word) })
         when :group
           begin
@@ -6453,7 +6441,7 @@ module Rubish
 
     # Expand abbreviated path for completion: l/r/re -> ["l/r/repl.rb"]
     # Returns abbreviated form that starts with the user's input (for Reline filtering)
-    def self.expand_abbreviated_path_for_completion(input, full_paths: false)
+    def expand_abbreviated_path_for_completion(input, full_paths: false)
       # Split into directory part and filename part
       if input.end_with?('/')
         dir_part = input.chomp('/')
@@ -6491,7 +6479,7 @@ module Rubish
 
     # Expand abbreviated path: l/r/repl.rb -> lib/rubish/repl.rb
     # Returns single expanded path or nil
-    def self.expand_abbreviated_path(path)
+    def expand_abbreviated_path(path)
       return path if File.exist?(path)
 
       dir = File.dirname(path)
@@ -6505,7 +6493,7 @@ module Rubish
     end
 
     # Expand abbreviated directory path: l/r -> lib/rubish
-    def self.expand_abbreviated_dir(dir_path)
+    def expand_abbreviated_dir(dir_path)
       return '.' if dir_path == '.'
       return dir_path if Dir.exist?(dir_path)
 
@@ -6542,11 +6530,12 @@ module Rubish
     end
 
     # Generate completions by calling a function (-F)
-    def self.generate_function_completions(function_name, word)
-      # Save current COMPREPLY
-      saved_compreply = @compreply.dup
+    def generate_function_completions(function_name, word)
+      # Save current COMPREPLY (from the array, not instance variable)
+      saved_compreply = get_array('COMPREPLY').dup
 
       # Clear COMPREPLY for the function
+      set_array('COMPREPLY', [])
       @compreply = []
 
       # Set up completion context if not already set
@@ -6558,21 +6547,22 @@ module Rubish
         # Try builtin completion function first
         if builtin_completion_function?(function_name)
           call_builtin_completion_function(function_name, cmd, word, prev)
-        elsif @current_state.function_caller
+        elsif @state.function_caller
           # Call user-defined function
-          @current_state.function_caller.call(function_name, [cmd, word, prev])
+          @state.function_caller.call(function_name, [cmd, word, prev])
         end
 
-        # Return the results from COMPREPLY
-        @compreply.dup
+        # Return the results from COMPREPLY (from the array)
+        get_array('COMPREPLY').dup
       ensure
         # Restore COMPREPLY
+        set_array('COMPREPLY', saved_compreply)
         @compreply = saved_compreply
       end
     end
 
     # Generate completions by executing a command (-C)
-    def self.generate_command_completions(command, word)
+    def generate_command_completions(command, word)
       results = []
 
       begin
@@ -6591,7 +6581,7 @@ module Rubish
     end
 
     # Convert a shell glob pattern to a regex for -X filter
-    def self.glob_to_regex(pattern)
+    def glob_to_regex(pattern)
       # Handle ! at the start (negation in bash, but for -X it means "remove if matches")
       pattern = pattern.sub(/^!/, '')
 
@@ -6605,7 +6595,7 @@ module Rubish
     end
 
     # Get hostnames from /etc/hosts and HOSTFILE
-    def self.get_hostnames
+    def get_hostnames
       hostnames = Set.new
 
       # Read /etc/hosts
@@ -6648,7 +6638,7 @@ module Rubish
     end
 
     # Get service names from /etc/services
-    def self.get_services
+    def get_services
       services = Set.new
 
       if File.exist?('/etc/services')
@@ -6669,64 +6659,68 @@ module Rubish
       services.to_a
     end
 
-    def self.get_completion_spec(name)
-      spec = @current_state.completions[name]
+    def get_completion_spec(name)
+      spec = @state.completions[name]
       return spec if spec
 
       # progcomp_alias: if name is an alias, use completion spec for the aliased command
-      if shopt_enabled?('progcomp_alias') && @current_state.aliases.key?(name)
+      if shopt_enabled?('progcomp_alias') && @state.aliases.key?(name)
         # Get the first word of the alias expansion
-        alias_value = @current_state.aliases[name]
+        alias_value = @state.aliases[name]
         first_word = alias_value.split(/\s+/).first
         # Avoid infinite loop if alias points to itself
         return nil if first_word == name
-        return @current_state.completions[first_word]
+        return @state.completions[first_word]
       end
 
       nil
     end
 
-    def self.clear_completions
-      @current_state.completions.clear
+    def clear_completions
+      @state.completions.clear
     end
 
     # Check if a function name is a builtin completion function
-    def self.builtin_completion_function?(name)
-      @builtin_completion_functions.key?(name)
+    def builtin_completion_function?(name)
+      Builtins.builtin_completion_functions.key?(name)
     end
 
     # Call a builtin completion function
     # Returns true if function was called, false if not found
-    def self.call_builtin_completion_function(name, cmd, cur, prev)
-      func = @builtin_completion_functions[name]
+    def call_builtin_completion_function(name, cmd, cur, prev)
+      func = Builtins.builtin_completion_functions[name]
       return false unless func
       ENV['cur'] = cur
+      # Sync @compreply from array before calling
+      @compreply = get_array('COMPREPLY')
       func.call(cmd, cur, prev)
+      # Sync array from @compreply after calling
+      set_array('COMPREPLY', @compreply)
       true
     end
 
-    # Register builtin completion functions
+    # Register builtin completion functions (class method for module loading)
     def self.register_builtin_completion_functions
       # _git - Git completion
-      @builtin_completion_functions['_git'] = ->(cmd, cur, prev) { _git_completion(cmd, cur, prev) }
+      Builtins.builtin_completion_functions['_git'] = ->(cmd, cur, prev) { Builtins.context._git_completion(cmd, cur, prev) }
 
       # _ssh - SSH completion
-      @builtin_completion_functions['_ssh'] = ->(cmd, cur, prev) { _ssh_completion(cmd, cur, prev) }
+      Builtins.builtin_completion_functions['_ssh'] = ->(cmd, cur, prev) { Builtins.context._ssh_completion(cmd, cur, prev) }
 
       # _cd - Directory completion
-      @builtin_completion_functions['_cd'] = ->(cmd, cur, prev) { _cd_completion(cmd, cur, prev) }
+      Builtins.builtin_completion_functions['_cd'] = ->(cmd, cur, prev) { Builtins.context._cd_completion(cmd, cur, prev) }
 
       # _make - Make target completion
-      @builtin_completion_functions['_make'] = ->(cmd, cur, prev) { _make_completion(cmd, cur, prev) }
+      Builtins.builtin_completion_functions['_make'] = ->(cmd, cur, prev) { Builtins.context._make_completion(cmd, cur, prev) }
 
       # _man - Man page completion
-      @builtin_completion_functions['_man'] = ->(cmd, cur, prev) { _man_completion(cmd, cur, prev) }
+      Builtins.builtin_completion_functions['_man'] = ->(cmd, cur, prev) { Builtins.context._man_completion(cmd, cur, prev) }
 
       # _kill - Process completion
-      @builtin_completion_functions['_kill'] = ->(cmd, cur, prev) { _kill_completion(cmd, cur, prev) }
+      Builtins.builtin_completion_functions['_kill'] = ->(cmd, cur, prev) { Builtins.context._kill_completion(cmd, cur, prev) }
 
       # _auto - Fish-style auto-completion by parsing --help
-      @builtin_completion_functions['_auto'] = ->(cmd, cur, prev) { _auto_completion(cmd, cur, prev) }
+      Builtins.builtin_completion_functions['_auto'] = ->(cmd, cur, prev) { Builtins.context._auto_completion(cmd, cur, prev) }
     end
 
     # Initialize builtin completion functions on load
@@ -6734,30 +6728,30 @@ module Rubish
 
     # Set up default completion specifications for common commands
     # This registers the builtin completion functions with the completion system
-    def self.setup_default_completions
+    def setup_default_completions
       # Git completion
-      @current_state.completions['git'] = {actions: [], function: '_git'}
+      @state.completions['git'] = {actions: [], function: '_git'}
 
       # SSH/SCP/SFTP completion
-      @current_state.completions['ssh'] = {actions: [], function: '_ssh'}
-      @current_state.completions['scp'] = {actions: [], function: '_ssh'}
-      @current_state.completions['sftp'] = {actions: [], function: '_ssh'}
+      @state.completions['ssh'] = {actions: [], function: '_ssh'}
+      @state.completions['scp'] = {actions: [], function: '_ssh'}
+      @state.completions['sftp'] = {actions: [], function: '_ssh'}
 
       # CD completion (directories only)
-      @current_state.completions['cd'] = {actions: [], function: '_cd'}
-      @current_state.completions['pushd'] = {actions: [], function: '_cd'}
+      @state.completions['cd'] = {actions: [], function: '_cd'}
+      @state.completions['pushd'] = {actions: [], function: '_cd'}
 
       # Make completion
-      @current_state.completions['make'] = {actions: [], function: '_make'}
-      @current_state.completions['gmake'] = {actions: [], function: '_make'}
+      @state.completions['make'] = {actions: [], function: '_make'}
+      @state.completions['gmake'] = {actions: [], function: '_make'}
 
       # Man page completion
-      @current_state.completions['man'] = {actions: [], function: '_man'}
+      @state.completions['man'] = {actions: [], function: '_man'}
 
       # Kill completion
-      @current_state.completions['kill'] = {actions: [], function: '_kill'}
-      @current_state.completions['killall'] = {actions: [], function: '_kill'}
-      @current_state.completions['pkill'] = {actions: [], function: '_kill'}
+      @state.completions['kill'] = {actions: [], function: '_kill'}
+      @state.completions['killall'] = {actions: [], function: '_kill'}
+      @state.completions['pkill'] = {actions: [], function: '_kill'}
     end
 
     # ==========================================================================
@@ -6793,7 +6787,7 @@ module Rubish
       --paginate --no-pager --config-env
     ].freeze
 
-    def self._git_completion(cmd, cur, prev)
+    def _git_completion(cmd, cur, prev)
       words = @comp_words
       cword = @comp_cword
 
@@ -6855,7 +6849,7 @@ module Rubish
       end
     end
 
-    def self._git_complete_add(cur, prev)
+    def _git_complete_add(cur, prev)
       case prev
       when '-p', '--patch'
         _git_complete_files(cur)
@@ -6873,7 +6867,7 @@ module Rubish
       end
     end
 
-    def self._git_complete_branch(cur, prev)
+    def _git_complete_branch(cur, prev)
       case prev
       when '-d', '-D', '--delete', '-m', '-M', '--move', '-c', '-C', '--copy'
         _git_complete_local_branches(cur)
@@ -6895,7 +6889,7 @@ module Rubish
       end
     end
 
-    def self._git_complete_checkout(cur, prev)
+    def _git_complete_checkout(cur, prev)
       case prev
       when '-b', '-B', '--orphan'
         # New branch name - don't complete
@@ -6915,7 +6909,7 @@ module Rubish
       end
     end
 
-    def self._git_complete_commit(cur, prev)
+    def _git_complete_commit(cur, prev)
       case prev
       when '-C', '-c', '--reuse-message', '--reedit-message', '--fixup', '--squash'
         _git_complete_refs(cur)
@@ -6945,7 +6939,7 @@ module Rubish
       end
     end
 
-    def self._git_complete_diff(cur, prev)
+    def _git_complete_diff(cur, prev)
       if cur.start_with?('-')
         opts = %w[-p -u --patch -U --unified= --raw --patch-with-raw --stat
                   --numstat --shortstat --dirstat --summary --patch-with-stat
@@ -6962,7 +6956,7 @@ module Rubish
       end
     end
 
-    def self._git_complete_remote_branch(cur, prev, subcommand)
+    def _git_complete_remote_branch(cur, prev, subcommand)
       if cur.start_with?('-')
         case subcommand
         when 'fetch'
@@ -6993,7 +6987,7 @@ module Rubish
       end
     end
 
-    def self._git_complete_log(cur, prev)
+    def _git_complete_log(cur, prev)
       if cur.start_with?('-')
         opts = %w[--follow -p --patch --stat --shortstat --numstat --summary
                   --name-only --name-status --pretty= --format= --abbrev-commit
@@ -7012,7 +7006,7 @@ module Rubish
       end
     end
 
-    def self._git_complete_remote(cur, prev, words, cword, subcommand_idx)
+    def _git_complete_remote(cur, prev, words, cword, subcommand_idx)
       # Determine remote subcommand
       remote_subcmd = nil
       words[(subcommand_idx + 1)..].each do |word|
@@ -7047,7 +7041,7 @@ module Rubish
       end
     end
 
-    def self._git_complete_reset(cur, prev)
+    def _git_complete_reset(cur, prev)
       if cur.start_with?('-')
         opts = %w[-q --quiet --soft --mixed --hard --merge --keep -p --patch -N
                   --intent-to-add --pathspec-from-file= --pathspec-file-nul]
@@ -7058,7 +7052,7 @@ module Rubish
       end
     end
 
-    def self._git_complete_stash(cur, prev, words, cword, subcommand_idx)
+    def _git_complete_stash(cur, prev, words, cword, subcommand_idx)
       # Determine stash subcommand
       stash_subcmd = nil
       words[(subcommand_idx + 1)..].each do |word|
@@ -7088,7 +7082,7 @@ module Rubish
       end
     end
 
-    def self._git_complete_tag(cur, prev)
+    def _git_complete_tag(cur, prev)
       case prev
       when '-m', '--message', '-F', '--file'
         @compreply = []  # Message or file
@@ -7109,7 +7103,7 @@ module Rubish
 
     # Helper methods for git completion
 
-    def self._git_complete_refs(cur)
+    def _git_complete_refs(cur)
       # Complete git refs (branches, tags, commits)
       @compreply ||= []
       return unless git_repo?
@@ -7125,7 +7119,7 @@ module Rubish
       end
     end
 
-    def self._git_complete_local_branches(cur)
+    def _git_complete_local_branches(cur)
       @compreply = []
       return unless git_repo?
 
@@ -7137,7 +7131,7 @@ module Rubish
       end
     end
 
-    def self._git_complete_remote_refs(cur)
+    def _git_complete_remote_refs(cur)
       @compreply = []
       return unless git_repo?
 
@@ -7149,7 +7143,7 @@ module Rubish
       end
     end
 
-    def self._git_complete_remotes(cur)
+    def _git_complete_remotes(cur)
       @compreply ||= []
       return unless git_repo?
 
@@ -7161,7 +7155,7 @@ module Rubish
       end
     end
 
-    def self._git_complete_tags(cur)
+    def _git_complete_tags(cur)
       @compreply ||= []
       return unless git_repo?
 
@@ -7173,7 +7167,7 @@ module Rubish
       end
     end
 
-    def self._git_complete_stash_refs(cur)
+    def _git_complete_stash_refs(cur)
       @compreply = []
       return unless git_repo?
 
@@ -7185,7 +7179,7 @@ module Rubish
       end
     end
 
-    def self._git_complete_files(cur)
+    def _git_complete_files(cur)
       @compreply ||= []
 
       # Get modified/untracked files for git commands
@@ -7211,14 +7205,14 @@ module Rubish
       @compreply.uniq!
     end
 
-    def self.git_repo?
+    def git_repo?
       system('git rev-parse --git-dir >/dev/null 2>&1')
     end
 
     # ==========================================================================
     # SSH completion function
     # ==========================================================================
-    def self._ssh_completion(cmd, cur, prev)
+    def _ssh_completion(cmd, cur, prev)
       case prev
       when '-F', '-i', '-S', '-E', '-c', '-o'
         # File/config completions
@@ -7254,7 +7248,7 @@ module Rubish
       end
     end
 
-    def self._ssh_complete_hosts(cur)
+    def _ssh_complete_hosts(cur)
       @compreply = []
       hosts = Set.new
 
@@ -7327,7 +7321,7 @@ module Rubish
     # ==========================================================================
     # CD completion function
     # ==========================================================================
-    def self._cd_completion(cmd, cur, prev)
+    def _cd_completion(cmd, cur, prev)
       if cur.start_with?('-')
         @compreply = %w[-L -P -e -@].select { |opt| opt.start_with?(cur) }
         return
@@ -7335,12 +7329,13 @@ module Rubish
 
       # Complete directories only
       _filedir(['-d'])
+      @compreply = get_array('COMPREPLY')
     end
 
     # ==========================================================================
     # Make completion function
     # ==========================================================================
-    def self._make_completion(cmd, cur, prev)
+    def _make_completion(cmd, cur, prev)
       case prev
       when '-f', '--file', '--makefile'
         _filedir([])
@@ -7375,7 +7370,7 @@ module Rubish
       _make_complete_targets(cur)
     end
 
-    def self._make_complete_targets(cur)
+    def _make_complete_targets(cur)
       @compreply = []
       targets = Set.new
 
@@ -7407,7 +7402,7 @@ module Rubish
     # ==========================================================================
     # Man completion function
     # ==========================================================================
-    def self._man_completion(cmd, cur, prev)
+    def _man_completion(cmd, cur, prev)
       case prev
       when '-C', '--config-file', '-H', '--html', '-p', '--preprocessor'
         @compreply = []
@@ -7436,7 +7431,7 @@ module Rubish
       _man_complete_pages(cur)
     end
 
-    def self._man_complete_pages(cur)
+    def _man_complete_pages(cur)
       @compreply = []
       pages = Set.new
 
@@ -7471,7 +7466,7 @@ module Rubish
     # ==========================================================================
     # Kill completion function
     # ==========================================================================
-    def self._kill_completion(cmd, cur, prev)
+    def _kill_completion(cmd, cur, prev)
       case prev
       when '-s', '-n', '--signal'
         _kill_complete_signals(cur)
@@ -7498,7 +7493,7 @@ module Rubish
       _kill_complete_pids(cur)
     end
 
-    def self._kill_complete_signals(cur)
+    def _kill_complete_signals(cur)
       @compreply = []
       signals = %w[HUP INT QUIT ILL TRAP ABRT BUS FPE KILL USR1 SEGV USR2 PIPE
                    ALRM TERM STKFLT CHLD CONT STOP TSTP TTIN TTOU URG XCPU XFSZ
@@ -7506,7 +7501,7 @@ module Rubish
       @compreply = signals.select { |s| s.start_with?(cur.upcase) }
     end
 
-    def self._kill_complete_pids(cur)
+    def _kill_complete_pids(cur)
       @compreply = []
 
       # Complete job specs
@@ -7546,7 +7541,7 @@ module Rubish
 
     # Get zsh's fpath for completion file directories
     @zsh_fpath = nil
-    def self.zsh_fpath
+    def zsh_fpath
       return @zsh_fpath if @zsh_fpath
 
       @zsh_fpath = `zsh -c 'print -l $fpath' 2>/dev/null`.split("\n").select { |d| Dir.exist?(d) }
@@ -7583,7 +7578,7 @@ module Rubish
 
     # Run a help command in a sandboxed environment with timeout
     # Returns [output, success] or [nil, false] on failure/timeout
-    def self.sandboxed_help_command(help_cmd)
+    def sandboxed_help_command(help_cmd)
       Kernel.require 'open3'
       Kernel.require 'tempfile'
 
@@ -7669,7 +7664,7 @@ module Rubish
       'rustup' => 'rustup --help'
     }.freeze
 
-    def self._auto_completion(cmd, cur, prev)
+    def _auto_completion(cmd, cur, prev)
       words = @comp_words
       cword = @comp_cword
       command = words[0]
@@ -7710,7 +7705,7 @@ module Rubish
       end
     end
 
-    def self.parse_help_for_command(command, subcommand = nil)
+    def parse_help_for_command(command, subcommand = nil)
       # Skip commands that look like shell operators or Ruby syntax
       return nil if command =~ /\A[-+:=<>|&!]\z/
 
@@ -7774,7 +7769,7 @@ module Rubish
       parsed
     end
 
-    def self.parse_help_output(text)
+    def parse_help_output(text)
       subcommands = []
       options = []
 
@@ -7859,7 +7854,7 @@ module Rubish
     # ==========================================================================
 
     # Find zsh completion file for a command
-    def self.find_zsh_completion_file(command)
+    def find_zsh_completion_file(command)
       zsh_fpath.each do |dir|
         path = File.join(dir, "_#{command}")
         return path if File.exist?(path)
@@ -7870,7 +7865,7 @@ module Rubish
     # Parse zsh completion file to extract subcommands and options
     # First tries to find and execute the actual commands zsh uses,
     # then falls back to static parsing
-    def self.parse_zsh_completion_file(command)
+    def parse_zsh_completion_file(command)
       path = find_zsh_completion_file(command)
       return nil unless path
 
@@ -7935,7 +7930,7 @@ module Rubish
     end
 
     # Extract shell commands from zsh completion file that fetch subcommands
-    def self.extract_zsh_completion_commands(content, command)
+    def extract_zsh_completion_commands(content, command)
       cmds = []
 
       # Pattern: _call_program <tag> <command>
@@ -7972,7 +7967,7 @@ module Rubish
     end
 
     # Execute a command with timeout, returns output or nil
-    def self.with_timeout(cmd, timeout = 2)
+    def with_timeout(cmd, timeout = 2)
       output = nil
       begin
         Timeout.timeout(timeout) do
@@ -7989,7 +7984,7 @@ module Rubish
       bashdefault default dirnames filenames noquote nosort nospace plusdirs
     ].freeze
 
-    def self.compopt(args)
+    def compopt(args)
       # compopt [-o option] [-DE] [+o option] [name ...]
       # Modify completion options for each name, or for the currently executing completion
       # -o option: Enable option
@@ -8061,8 +8056,8 @@ module Rubish
       # Apply options
       if names.empty? && !apply_default && !apply_empty
         # Apply to currently executing completion
-        enable_opts.each { |opt| @current_state.current_completion_options.add(opt) }
-        disable_opts.each { |opt| @current_state.current_completion_options.delete(opt) }
+        enable_opts.each { |opt| @state.current_completion_options.add(opt) }
+        disable_opts.each { |opt| @state.current_completion_options.delete(opt) }
       else
         # Apply to named commands
         targets = []
@@ -8071,16 +8066,16 @@ module Rubish
         targets.concat(names)
 
         targets.each do |name|
-          @current_state.completion_options[name] ||= Set.new
-          enable_opts.each { |opt| @current_state.completion_options[name].add(opt) }
-          disable_opts.each { |opt| @current_state.completion_options[name].delete(opt) }
+          @state.completion_options[name] ||= Set.new
+          enable_opts.each { |opt| @state.completion_options[name].add(opt) }
+          disable_opts.each { |opt| @state.completion_options[name].delete(opt) }
         end
       end
 
       true
     end
 
-    def self.print_compopt_options(names, apply_default, apply_empty)
+    def print_compopt_options(names, apply_default, apply_empty)
       targets = []
       targets << :default if apply_default
       targets << :empty if apply_empty
@@ -8088,14 +8083,14 @@ module Rubish
 
       if targets.empty?
         # Print current completion options
-        if @current_state.current_completion_options.empty?
+        if @state.current_completion_options.empty?
           puts 'compopt: no options set'
         else
-          @current_state.current_completion_options.each { |opt| puts "compopt -o #{opt}" }
+          @state.current_completion_options.each { |opt| puts "compopt -o #{opt}" }
         end
       else
         targets.each do |name|
-          opts = @current_state.completion_options[name] || Set.new
+          opts = @state.completion_options[name] || Set.new
           display_name = name.is_a?(Symbol) ? "-#{name.to_s[0].upcase}" : name
           if opts.empty?
             puts "compopt #{display_name}: no options"
@@ -8107,12 +8102,12 @@ module Rubish
       true
     end
 
-    def self.get_completion_options(name)
-      @current_state.completion_options[name] || Set.new
+    def get_completion_options(name)
+      @state.completion_options[name] || Set.new
     end
 
-    def self.completion_option?(name, option)
-      (@current_state.completion_options[name] || Set.new).include?(option)
+    def completion_option?(name, option)
+      (@state.completion_options[name] || Set.new).include?(option)
     end
 
     # Readline function names for -l option
@@ -8170,7 +8165,7 @@ module Rubish
     #   -p VAR      - Store previous word in VAR (default: prev)
     #   -w VAR      - Store words array in VAR (default: words)
     #   -i VAR      - Store cword index in VAR (default: cword)
-    def self._get_comp_words_by_ref(args)
+    def _get_comp_words_by_ref(args)
       exclude_chars = ''
       cur_var = 'cur'
       prev_var = 'prev'
@@ -8232,7 +8227,7 @@ module Rubish
     end
 
     # Helper to re-split completion words with different wordbreaks
-    def self.resplit_comp_words(line, point, wordbreaks)
+    def resplit_comp_words(line, point, wordbreaks)
       words = []
       current = +''
       in_quote = nil
@@ -8279,7 +8274,7 @@ module Rubish
     # Options:
     #   -n EXCLUDE  - Characters to exclude from COMP_WORDBREAKS
     #   -s          - Split on = for --option=value
-    def self._init_completion(args)
+    def _init_completion(args)
       exclude_chars = ''
       split_on_equals = false
 
@@ -8319,7 +8314,7 @@ module Rubish
 
     # Get list of system users for ~username completion
     # Only returns users with home directories in typical user locations
-    def self.get_system_users
+    def get_system_users
       users = []
       # Try /etc/passwd (works on most Unix-like systems)
       if File.exist?('/etc/passwd')
@@ -8345,7 +8340,7 @@ module Rubish
     # Arguments: [extension_pattern]
     # Options:
     #   -d  - Only directories
-    def self._filedir(args)
+    def _filedir(args)
       dirs_only = false
       pattern = nil
 
@@ -8363,9 +8358,10 @@ module Rubish
       if cur.start_with?('~') && !cur.include?('/')
         prefix = cur[1..]  # Remove leading ~
         users = get_system_users.select { |u| u.start_with?(prefix) }
-        @compreply = users.map { |u| "~#{u}/" }
+        results = users.map { |u| "~#{u}/" }
         # Add ~/ at the top if prefix is empty
-        @compreply.unshift('~/') if prefix.empty?
+        results.unshift('~/') if prefix.empty?
+        set_array('COMPREPLY', results)
         return true
       end
 
@@ -8424,12 +8420,13 @@ module Rubish
       end
 
       # Add to COMPREPLY
-      @compreply = (@compreply || []) + results.sort
+      current = get_array('COMPREPLY')
+      set_array('COMPREPLY', current + results.sort)
       true
     end
 
     # _have - Check if a command exists in PATH
-    def self._have(args)
+    def _have(args)
       return false if args.empty?
 
       cmd = args[0]
@@ -8447,7 +8444,7 @@ module Rubish
 
     # _split_longopt - Handle --option=value completion
     # Sets prev to option, cur to value after =
-    def self._split_longopt(args)
+    def _split_longopt(args)
       cur = ENV['cur'] || ''
 
       return false unless cur.include?('=')
@@ -8465,7 +8462,7 @@ module Rubish
 
     # __ltrim_colon_completions - Remove colon prefix from completions
     # Handles the case where cur contains colons (e.g., package:version)
-    def self._ltrim_colon_completions(args)
+    def _ltrim_colon_completions(args)
       cur = args[0] || ENV['cur'] || ''
 
       return true unless cur.include?(':')
@@ -8477,19 +8474,20 @@ module Rubish
       prefix = cur[0..colon_pos]
 
       # Trim prefix from all completions
-      @compreply = (@compreply || []).map do |comp|
+      trimmed = get_array('COMPREPLY').map do |comp|
         if comp.start_with?(prefix)
           comp[prefix.length..]
         else
           comp
         end
       end
+      set_array('COMPREPLY', trimmed)
 
       true
     end
 
     # _variables - Complete variable names
-    def self._variables(args)
+    def _variables(args)
       cur = ENV['cur'] || ''
 
       # Remove leading $ if present
@@ -8503,16 +8501,17 @@ module Rubish
       end
 
       # Shell arrays
-      @current_state.arrays.keys.each do |key|
+      @state.arrays.keys.each do |key|
         results << "$#{key}" if key.start_with?(prefix)
       end
 
-      @compreply = (@compreply || []) + results.sort
+      current = get_array('COMPREPLY')
+      set_array('COMPREPLY', current + results.sort)
       true
     end
 
     # _tilde - Complete tilde expressions (~username)
-    def self._tilde(args)
+    def _tilde(args)
       cur = ENV['cur'] || ''
 
       return true unless cur.start_with?('~')
@@ -8544,13 +8543,14 @@ module Rubish
         # getent not available
       end
 
-      @compreply = (@compreply || []) + results.sort.uniq
+      current = get_array('COMPREPLY')
+      set_array('COMPREPLY', current + results.sort.uniq)
       true
     end
 
     # _quote_readline_by_ref - Quote a string for readline
     # Sets the named variable to the quoted string
-    def self._quote_readline_by_ref(args)
+    def _quote_readline_by_ref(args)
       return false if args.length < 2
 
       varname = args[0]
@@ -8565,7 +8565,7 @@ module Rubish
 
     # _parse_help - Parse --help output to extract options
     # Usage: _parse_help command [option]
-    def self._parse_help(args)
+    def _parse_help(args)
       return false if args.empty?
 
       cmd = args[0]
@@ -8604,7 +8604,7 @@ module Rubish
 
     # _upvars - Set variables in caller's scope (simplified implementation)
     # Usage: _upvars [-v varname value]... [-a arrayname values...]...
-    def self._upvars(args)
+    def _upvars(args)
       i = 0
       while i < args.length
         case args[i]
@@ -8636,7 +8636,7 @@ module Rubish
     # Options:
     #   -u  - Complete usernames only
     #   -g  - Complete groups only
-    def self._usergroup(args)
+    def _usergroup(args)
       users_only = args.include?('-u')
       groups_only = args.include?('-g')
 
@@ -8677,7 +8677,7 @@ module Rubish
       true
     end
 
-    def self.bind(args)
+    def bind(args)
       # bind [-m keymap] [-lpsvPSVX]
       # bind [-m keymap] [-q function] [-u function] [-r keyseq]
       # bind [-m keymap] -f filename
@@ -8786,7 +8786,7 @@ module Rubish
           puts "\"#{escape_keyseq(keyseq)}\": #{action}"
         end
         # Then show any additional bindings from @key_bindings
-        @current_state.key_bindings.each do |keyseq, binding|
+        @state.key_bindings.each do |keyseq, binding|
           next if binding[:type] == :macro || binding[:type] == :command
 
           puts "\"#{escape_keyseq(keyseq)}\": #{binding[:value]}"
@@ -8801,7 +8801,7 @@ module Rubish
           puts "#{escape_keyseq(keyseq)} can be found in #{action}."
         end
         # Then show any additional bindings from @key_bindings
-        @current_state.key_bindings.each do |keyseq, binding|
+        @state.key_bindings.each do |keyseq, binding|
           next if binding[:type] == :macro || binding[:type] == :command
 
           puts "#{escape_keyseq(keyseq)} can be found in #{binding[:value]}."
@@ -8811,7 +8811,7 @@ module Rubish
 
       # Print macros in reusable format
       if print_macros_readable
-        @current_state.key_bindings.each do |keyseq, binding|
+        @state.key_bindings.each do |keyseq, binding|
           next unless binding[:type] == :macro
 
           puts "\"#{escape_keyseq(keyseq)}\": \"#{binding[:value]}\""
@@ -8821,7 +8821,7 @@ module Rubish
 
       # Print macros
       if print_macros
-        @current_state.key_bindings.each do |keyseq, binding|
+        @state.key_bindings.each do |keyseq, binding|
           next unless binding[:type] == :macro
 
           puts "#{escape_keyseq(keyseq)} outputs #{binding[:value]}"
@@ -8849,7 +8849,7 @@ module Rubish
 
       # Print shell command bindings
       if print_shell_bindings
-        @current_state.key_bindings.each do |keyseq, binding|
+        @state.key_bindings.each do |keyseq, binding|
           next unless binding[:type] == :command
 
           puts "\"#{escape_keyseq(keyseq)}\": \"#{binding[:value]}\""
@@ -8860,7 +8860,7 @@ module Rubish
       # Query which keys invoke a function
       if query_function
         found = false
-        @current_state.key_bindings.each do |keyseq, binding|
+        @state.key_bindings.each do |keyseq, binding|
           if binding[:value] == query_function && binding[:type] == :function
             puts "#{query_function} can be invoked via \"#{escape_keyseq(keyseq)}\"."
             found = true
@@ -8872,13 +8872,13 @@ module Rubish
 
       # Unbind all keys for a function
       if unbind_function
-        @current_state.key_bindings.delete_if { |_, binding| binding[:value] == unbind_function }
+        @state.key_bindings.delete_if { |_, binding| binding[:value] == unbind_function }
         return true
       end
 
       # Remove binding for keyseq
       if remove_keyseq
-        @current_state.key_bindings.delete(remove_keyseq)
+        @state.key_bindings.delete(remove_keyseq)
         return true
       end
 
@@ -8915,7 +8915,7 @@ module Rubish
           keyseq, command = shell_command_binding.split(':', 2)
           keyseq = unescape_keyseq(keyseq.delete('"'))
           command = command.delete('"').strip
-          @current_state.key_bindings[keyseq] = {type: :command, value: command, keymap: keymap}
+          @state.key_bindings[keyseq] = {type: :command, value: command, keymap: keymap}
           # Register with Reline for actual execution
           register_bind_x_with_reline(keyseq, command, keymap)
         else
@@ -8941,7 +8941,7 @@ module Rubish
       true
     end
 
-    def self.parse_and_add_binding(binding_str, keymap = 'emacs')
+    def parse_and_add_binding(binding_str, keymap = 'emacs')
       keyseq, value = binding_str.split(':', 2)
       return unless keyseq && value
 
@@ -8951,17 +8951,17 @@ module Rubish
       # Determine if it's a function or macro
       if value.start_with?('"') && value.end_with?('"')
         # Macro
-        @current_state.key_bindings[keyseq] = {type: :macro, value: value[1..-2], keymap: keymap}
+        @state.key_bindings[keyseq] = {type: :macro, value: value[1..-2], keymap: keymap}
       else
         # Function
-        @current_state.key_bindings[keyseq] = {type: :function, value: value, keymap: keymap}
+        @state.key_bindings[keyseq] = {type: :function, value: value, keymap: keymap}
       end
     end
 
     # Get Reline's actual key bindings as a hash of keyseq string => action symbol
     # Combines bindings from both @additional_key_bindings (higher priority, from inputrc/custom)
     # and @default_key_bindings (lower priority, built-in defaults)
-    def self.get_reline_key_bindings
+    def get_reline_key_bindings
       result = {}
       begin
         config = Reline.core.config
@@ -8994,7 +8994,7 @@ module Rubish
       result
     end
 
-    def self.escape_keyseq(keyseq)
+    def escape_keyseq(keyseq)
       result = +''
       keyseq.each_char do |c|
         case c.ord
@@ -9026,7 +9026,7 @@ module Rubish
       result
     end
 
-    def self.unescape_keyseq(keyseq)
+    def unescape_keyseq(keyseq)
       result = keyseq.dup
 
       # Handle meta escape sequences first (\M-x)
@@ -9090,25 +9090,25 @@ module Rubish
       result
     end
 
-    def self.get_key_binding(keyseq)
-      @current_state.key_bindings[keyseq]
+    def get_key_binding(keyseq)
+      @state.key_bindings[keyseq]
     end
 
-    def self.clear_key_bindings
-      @current_state.key_bindings.clear
-      @current_state.readline_variables.clear
+    def clear_key_bindings
+      @state.key_bindings.clear
+      @state.readline_variables.clear
     end
 
     # Register a bind -x shell command with Reline for actual execution
-    def self.register_bind_x_with_reline(keyseq, command, keymap)
+    def register_bind_x_with_reline(keyseq, command, keymap)
       return unless defined?(Reline)
 
       # Generate a unique method name for this binding
-      method_name = :"__rubish_bind_x_#{@current_state.bind_x_counter}"
-      @current_state.bind_x_counter += 1
+      method_name = :"__rubish_bind_x_#{@state.bind_x_counter}"
+      @state.bind_x_counter += 1
 
       # Store the command in the binding for lookup
-      @current_state.key_bindings[keyseq][:method_name] = method_name
+      @state.key_bindings[keyseq][:method_name] = method_name
 
       # Define the method on Reline::LineEditor
       # We need to capture 'command' and 'self' (Builtins) in the closure
@@ -9171,8 +9171,8 @@ module Rubish
     end
 
     # Apply a readline variable to Reline (if applicable)
-    def self.apply_readline_variable(var, value)
-      @current_state.readline_variables[var] = value
+    def apply_readline_variable(var, value)
+      @state.readline_variables[var] = value
 
       # Sync with Reline where possible
       begin
@@ -9202,7 +9202,7 @@ module Rubish
     end
 
     # Get a readline variable value
-    def self.get_readline_variable(var)
+    def get_readline_variable(var)
       # Check Reline state first for live values
       begin
         case var
@@ -9218,10 +9218,10 @@ module Rubish
       rescue
         # Fall through to stored value
       end
-      @current_state.readline_variables[var]
+      @state.readline_variables[var]
     end
 
-    def self.hash(args)
+    def hash(args)
       # hash [-lr] [-p path] [-dt] [name ...]
       # -r: forget all cached paths
       # -d: named directories (zsh) or forget cached path (bash)
@@ -9236,10 +9236,10 @@ module Rubish
 
       if args.empty?
         # List all cached paths
-        if @current_state.command_hash.empty?
+        if @state.command_hash.empty?
           puts 'hash: hash table empty'
         else
-          @current_state.command_hash.each do |name, path|
+          @state.command_hash.each do |name, path|
             puts "#{name}=#{path}"
           end
         end
@@ -9301,13 +9301,13 @@ module Rubish
 
       # Handle -r (clear all)
       if clear_all
-        @current_state.command_hash.clear
+        @state.command_hash.clear
         return true
       end
 
       # Handle -l (list mode) with no names
       if list_mode && names.empty?
-        @current_state.command_hash.each do |name, path|
+        @state.command_hash.each do |name, path|
           puts "hash -p #{path} #{name}"
         end
         return true
@@ -9318,10 +9318,10 @@ module Rubish
 
       if names.empty? && !set_path
         # No names and no path to set, just list
-        if @current_state.command_hash.empty?
+        if @state.command_hash.empty?
           puts 'hash: hash table empty'
         else
-          @current_state.command_hash.each do |name, path|
+          @state.command_hash.each do |name, path|
             puts "#{name}=#{path}"
           end
         end
@@ -9331,21 +9331,21 @@ module Rubish
       names.each do |name|
         if delete_mode
           # Forget cached path
-          if @current_state.command_hash.key?(name)
-            @current_state.command_hash.delete(name)
+          if @state.command_hash.key?(name)
+            @state.command_hash.delete(name)
           else
             puts "hash: #{name}: not found"
             all_found = false
           end
         elsif print_mode
           # Print cached path
-          if @current_state.command_hash.key?(name)
-            puts @current_state.command_hash[name]
+          if @state.command_hash.key?(name)
+            puts @state.command_hash[name]
           else
             # Try to find and cache
             path = find_in_path(name)
             if path
-              @current_state.command_hash[name] = path
+              @state.command_hash[name] = path
               puts path
             else
               puts "hash: #{name}: not found"
@@ -9354,12 +9354,12 @@ module Rubish
           end
         elsif set_path
           # Set specific path
-          @current_state.command_hash[name] = set_path
+          @state.command_hash[name] = set_path
         else
           # Cache the command
           path = find_in_path(name)
           if path
-            @current_state.command_hash[name] = path
+            @state.command_hash[name] = path
           else
             puts "hash: #{name}: not found"
             all_found = false
@@ -9370,20 +9370,20 @@ module Rubish
       all_found
     end
 
-    def self.hash_lookup(name)
-      @current_state.command_hash[name]
+    def hash_lookup(name)
+      @state.command_hash[name]
     end
 
-    def self.hash_store(name, path)
-      @current_state.command_hash[name] = path
+    def hash_store(name, path)
+      @state.command_hash[name] = path
     end
 
-    def self.hash_delete(name)
-      @current_state.command_hash.delete(name)
+    def hash_delete(name)
+      @state.command_hash.delete(name)
     end
 
-    def self.clear_hash
-      @current_state.command_hash.clear
+    def clear_hash
+      @state.command_hash.clear
     end
 
     # Handle -d option: named directories (zsh) or delete from hash (bash)
@@ -9392,14 +9392,14 @@ module Rubish
     # - hash -d name      → if name is in command_hash, delete it (bash)
     #                       if name is a named directory, show path (zsh)
     #                       otherwise, error
-    def self.hash_named_directories(names, list_mode = false)
+    def hash_named_directories(names, list_mode = false)
       # No names: list all named directories
       if names.empty?
-        if @named_directories.empty?
+        if Builtins.named_directories.empty?
           # Don't print anything when empty (zsh behavior)
           return true
         end
-        @named_directories.each do |name, path|
+        Builtins.named_directories.each do |name, path|
           if list_mode
             puts "hash -d #{name}=#{path}"
           else
@@ -9423,13 +9423,13 @@ module Rubish
           end
           # Expand ~ in path
           path = File.expand_path(path) if path.start_with?('~')
-          @named_directories[name] = path
-        elsif @current_state.command_hash.key?(arg)
+          Builtins.named_directories[name] = path
+        elsif @state.command_hash.key?(arg)
           # Bash-style: delete from command hash
-          @current_state.command_hash.delete(arg)
-        elsif @named_directories.key?(arg)
+          @state.command_hash.delete(arg)
+        elsif Builtins.named_directories.key?(arg)
           # zsh-style: show named directory path
-          puts @named_directories[arg]
+          puts Builtins.named_directories[arg]
         else
           # Not found in either
           puts "hash: #{arg}: not found"
@@ -9441,23 +9441,23 @@ module Rubish
     end
 
     # Get a named directory path
-    def self.get_named_directory(name)
-      @named_directories[name]
+    def get_named_directory(name)
+      Builtins.named_directories[name]
     end
 
     # Set a named directory
-    def self.set_named_directory(name, path)
-      @named_directories[name] = path
+    def set_named_directory(name, path)
+      Builtins.named_directories[name] = path
     end
 
     # Remove a named directory
-    def self.remove_named_directory(name)
-      @named_directories.delete(name)
+    def remove_named_directory(name)
+      Builtins.named_directories.delete(name)
     end
 
     # Expand ~name to the named directory path
     # Returns nil if not a named directory
-    def self.expand_named_directory(str)
+    def expand_named_directory(str)
       return nil unless str.start_with?('~')
       return nil if str == '~' || str.start_with?('~/')
 
@@ -9473,14 +9473,14 @@ module Rubish
       return nil if name.empty?
 
       # Check for named directory
-      if @named_directories.key?(name)
-        @named_directories[name] + rest
+      if Builtins.named_directories.key?(name)
+        Builtins.named_directories[name] + rest
       else
         nil  # Not a named directory, let normal expansion handle it
       end
     end
 
-    def self.times(_args)
+    def times(_args)
       # times
       # Display accumulated user and system times for shell and children
       # Format: user system (for shell), then user system (for children)
@@ -9502,7 +9502,7 @@ module Rubish
       true
     end
 
-    def self.exec(args)
+    def exec(args)
       # exec [-cl] [-a name] [command [arguments]]
       # -c: execute command with empty environment
       # -l: place dash at beginning of argv[0] (login shell)
@@ -9612,7 +9612,7 @@ module Rubish
       end
     end
 
-    def self.umask(args)
+    def umask(args)
       # umask [-p] [-S] [mode]
       # -p: output in a form that can be reused as input
       # -S: output in symbolic form
@@ -9665,7 +9665,7 @@ module Rubish
       end
     end
 
-    def self.parse_umask(mode)
+    def parse_umask(mode)
       if mode =~ /\A[0-7]{1,4}\z/
         # Octal mode
         mode.to_i(8)
@@ -9677,7 +9677,7 @@ module Rubish
       end
     end
 
-    def self.parse_symbolic_umask(mode)
+    def parse_symbolic_umask(mode)
       current = File.umask
       # Convert umask to permission bits (inverted)
       perms = 0o777 - current
@@ -9723,7 +9723,7 @@ module Rubish
       0o777 - perms
     end
 
-    def self.umask_to_symbolic(mask)
+    def umask_to_symbolic(mask)
       # Convert umask to symbolic format
       perms = 0o777 - mask
 
@@ -9740,7 +9740,7 @@ module Rubish
       parts.join(',')
     end
 
-    def self.kill(args)
+    def kill(args)
       # kill [-s signal | -signal] pid|%jobspec ...
       # kill -l [signal]
       # Send signals to processes or jobs
@@ -9851,7 +9851,7 @@ module Rubish
       all_success
     end
 
-    def self.wait(args)
+    def wait(args)
       # wait [-fn] [-p VARNAME] [pid|%jobspec ...]
       # Wait for background jobs to complete
       # -n: wait for any single job to complete (bash 4.3+)
@@ -10075,7 +10075,7 @@ module Rubish
       last_status
     end
 
-    def self.builtin(args)
+    def builtin(args)
       # builtin command [arguments...]
       # Run a shell builtin directly, bypassing functions and aliases
       # Returns error if command is not a builtin
@@ -10096,7 +10096,7 @@ module Rubish
       run(cmd_name, cmd_args)
     end
 
-    def self.command(args)
+    def command(args)
       # command [-pVv] command [arguments...]
       # -p: use default PATH to search for command
       # -v: print pathname or command type (similar to type -t)
@@ -10171,31 +10171,31 @@ module Rubish
       end
 
       # Execute command bypassing functions and aliases
-      if @current_state.command_executor
-        @current_state.command_executor.call(cmd_args)
+      if @state.command_executor
+        @state.command_executor.call(cmd_args)
         true
       else
         # Fallback: just use regular executor with the command
         # This won't bypass functions but at least runs something
-        @current_state.executor&.call(cmd_args.join(' '))
+        @state.executor&.call(cmd_args.join(' '))
         true
       end
     end
 
-    def self.eval(args)
+    def eval(args)
       # eval [arg ...]
       # Concatenate arguments and execute as a shell command
       return true if args.empty?
 
       command = args.join(' ')
 
-      unless @current_state.executor
+      unless @state.executor
         puts 'eval: executor not configured'
         return false
       end
 
       begin
-        @current_state.executor.call(command)
+        @state.executor.call(command)
         true
       rescue => e
         puts "eval: #{e.message}"
@@ -10203,7 +10203,7 @@ module Rubish
       end
     end
 
-    def self.which(args)
+    def which(args)
       # which [-a] name [name ...]
       # -a: print all matching executables in PATH, not just the first
 
@@ -10254,7 +10254,7 @@ module Rubish
       all_found
     end
 
-    def self.read(args)
+    def read(args)
       # Options
       opts = {
         prompt: nil,
@@ -10341,7 +10341,7 @@ module Rubish
       true
     end
 
-    def self.read_input_line(opts)
+    def read_input_line(opts)
       input_stream = opts[:fd] ? IO.new(opts[:fd]) : $stdin
 
       # Use readline if -e specified
@@ -10378,7 +10378,7 @@ module Rubish
       read_until_delimiter(input_stream, opts[:delimiter])
     end
 
-    def self.read_with_readline(opts)
+    def read_with_readline(opts)
       prompt = opts[:prompt] || ''
 
       if opts[:initial_text]
@@ -10399,7 +10399,7 @@ module Rubish
       end
     end
 
-    def self.read_silent(input_stream, opts)
+    def read_silent(input_stream, opts)
       line = +''
       delimiter = opts[:delimiter]
       nchars = opts[:nchars] || opts[:nchars_exact]
@@ -10434,7 +10434,7 @@ module Rubish
       end
     end
 
-    def self.read_with_timeout(input_stream, opts)
+    def read_with_timeout(input_stream, opts)
       begin
         Timeout.timeout(opts[:timeout]) do
           if opts[:nchars_exact]
@@ -10450,12 +10450,12 @@ module Rubish
       end
     end
 
-    def self.read_exact_chars(input_stream, count)
+    def read_exact_chars(input_stream, count)
       # -N: read exactly count chars, ignoring delimiters
       input_stream.read(count)
     end
 
-    def self.read_nchars(input_stream, count, delimiter)
+    def read_nchars(input_stream, count, delimiter)
       # -n: read up to count chars or until delimiter
       line = +''
       count.times do
@@ -10467,7 +10467,7 @@ module Rubish
       line
     end
 
-    def self.read_until_delimiter(input_stream, delimiter)
+    def read_until_delimiter(input_stream, delimiter)
       if delimiter == "\n"
         line = input_stream.gets
         return nil unless line
@@ -10484,7 +10484,7 @@ module Rubish
       end
     end
 
-    def self.process_read_escapes(line)
+    def process_read_escapes(line)
       # Process backslash escapes (line continuation)
       # In read without -r, backslash at end of line continues to next line
       # and backslash before any char removes special meaning
@@ -10509,7 +10509,7 @@ module Rubish
       result
     end
 
-    def self.store_read_array(array_name, line)
+    def store_read_array(array_name, line)
       # Split line into words using IFS and store as array
       words = split_by_ifs(line)
       clear_read_array(array_name)
@@ -10520,7 +10520,7 @@ module Rubish
       ENV["#{array_name}_LENGTH"] = words.length.to_s
     end
 
-    def self.clear_read_array(array_name)
+    def clear_read_array(array_name)
       # Clear existing array elements
       length = ENV["#{array_name}_LENGTH"]&.to_i || 0
       length.times do |i|
@@ -10529,7 +10529,7 @@ module Rubish
       ENV.delete("#{array_name}_LENGTH")
     end
 
-    def self.store_read_variables(vars, line)
+    def store_read_variables(vars, line)
       # If only one variable, assign the whole line (with IFS whitespace trimmed)
       if vars.length == 1
         ws_chars = ifs_whitespace
@@ -10547,19 +10547,19 @@ module Rubish
       end
     end
 
-    def self.exit(args)
+    def exit(args)
       code = args.first&.to_i || 0
 
       # Check for active jobs if checkjobs is enabled
       if shopt_enabled?('checkjobs')
         active_jobs = JobManager.instance.active
         if active_jobs.any?
-          if @current_state.exit_blocked_by_jobs
+          if @state.exit_blocked_by_jobs
             # Second exit attempt - proceed with exit
-            @current_state.exit_blocked_by_jobs = false
+            @state.exit_blocked_by_jobs = false
           else
             # First exit attempt - warn and block
-            @current_state.exit_blocked_by_jobs = true
+            @state.exit_blocked_by_jobs = true
             running = active_jobs.count(&:running?)
             stopped = active_jobs.count(&:stopped?)
             parts = []
@@ -10569,7 +10569,7 @@ module Rubish
             return false
           end
         else
-          @current_state.exit_blocked_by_jobs = false
+          @state.exit_blocked_by_jobs = false
         end
       end
 
@@ -10584,12 +10584,12 @@ module Rubish
     end
 
     # Reset the exit blocked flag (call after any non-exit command)
-    def self.clear_exit_blocked
-      @current_state.exit_blocked_by_jobs = false
+    def clear_exit_blocked
+      @state.exit_blocked_by_jobs = false
     end
 
     # Send SIGHUP to all active jobs (for huponexit)
-    def self.send_hup_to_active_jobs
+    def send_hup_to_active_jobs
       active_jobs = JobManager.instance.active
       active_jobs.each do |job|
         begin
@@ -10608,18 +10608,18 @@ module Rubish
       end
     end
 
-    def self.logout(args)
+    def logout(args)
       # In bash, logout only works in login shells
       # For simplicity, we treat rubish as always being a login shell
       # and logout behaves the same as exit
-      unless @current_state.shell_options['login_shell']
+      unless @state.shell_options['login_shell']
         # If not a login shell, warn but still exit (bash behavior varies)
         $stderr.puts 'logout: not login shell: use `exit\''
       end
       exit(args)
     end
 
-    def self.jobs(_args)
+    def jobs(_args)
       jobs = JobManager.instance.active
       if jobs.empty?
         # No output when no jobs
@@ -10629,7 +10629,7 @@ module Rubish
       true
     end
 
-    def self.fg(args)
+    def fg(args)
       unless set_option?('m')
         puts 'fg: no job control'
         return false
@@ -10681,7 +10681,7 @@ module Rubish
       true
     end
 
-    def self.bg(args)
+    def bg(args)
       unless set_option?('m')
         puts 'bg: no job control'
         return false
@@ -10701,7 +10701,7 @@ module Rubish
       true
     end
 
-    def self.find_job(args)
+    def find_job(args)
       manager = JobManager.instance
 
       if args.empty?
@@ -11436,7 +11436,7 @@ module Rubish
       }
     }.freeze
 
-    def self.help(args)
+    def help(args)
       # Parse options
       short_desc = false
       manpage = false
@@ -11486,7 +11486,7 @@ module Rubish
       found_any
     end
 
-    def self.print_all_builtins(short_desc)
+    def print_all_builtins(short_desc)
       puts 'Shell builtin commands:'
       puts
 
@@ -11513,7 +11513,7 @@ module Rubish
       end
     end
 
-    def self.print_help_for(cmd, short_desc: false, manpage: false, synopsis_only: false)
+    def print_help_for(cmd, short_desc: false, manpage: false, synopsis_only: false)
       info = BUILTIN_HELP[cmd]
 
       unless info
@@ -11538,7 +11538,7 @@ module Rubish
       end
     end
 
-    def self.print_standard_format(cmd, info)
+    def print_standard_format(cmd, info)
       puts "#{cmd}: #{info[:synopsis]}"
       puts "    #{info[:description]}"
 
@@ -11552,7 +11552,7 @@ module Rubish
       puts
     end
 
-    def self.print_manpage_format(cmd, info)
+    def print_manpage_format(cmd, info)
       puts 'NAME'
       short_desc = info[:description].split('.').first
       puts "    #{cmd} - #{short_desc.downcase}"
@@ -11577,7 +11577,7 @@ module Rubish
       puts
     end
 
-    def self.wrap_text(text, width)
+    def wrap_text(text, width)
       return [text] if text.length <= width
 
       lines = []
@@ -11596,7 +11596,7 @@ module Rubish
       lines
     end
 
-    def self.fc(args)
+    def fc(args)
       # Parse options
       list_mode = false
       suppress_numbers = false
@@ -11667,7 +11667,7 @@ module Rubish
       end
     end
 
-    def self.fc_reexecute(args, history)
+    def fc_reexecute(args, history)
       # fc -s [pat=rep] [command]
       substitution = nil
       command_spec = nil
@@ -11708,11 +11708,11 @@ module Rubish
 
       # Display and execute the command
       puts cmd
-      @current_state.executor&.call(cmd) if @current_state.executor
+      @state.executor&.call(cmd) if @state.executor
       true
     end
 
-    def self.fc_resolve_range(first_arg, last_arg, history, list_mode)
+    def fc_resolve_range(first_arg, last_arg, history, list_mode)
       hist_size = history.size
 
       # Default range for list mode: last 16 commands
@@ -11749,7 +11749,7 @@ module Rubish
       [first_idx, last_idx]
     end
 
-    def self.fc_parse_history_ref(ref, history)
+    def fc_parse_history_ref(ref, history)
       hist_size = history.size
 
       if ref =~ /\A-?\d+\z/
@@ -11772,7 +11772,7 @@ module Rubish
       end
     end
 
-    def self.fc_get_range(history, first_idx, last_idx)
+    def fc_get_range(history, first_idx, last_idx)
       if first_idx <= last_idx
         (first_idx..last_idx).map { |i| [i + 1, history[i]] }
       else
@@ -11780,7 +11780,7 @@ module Rubish
       end
     end
 
-    def self.fc_list_commands(commands, first_idx, last_idx, reverse_order, suppress_numbers)
+    def fc_list_commands(commands, first_idx, last_idx, reverse_order, suppress_numbers)
       commands.each do |num, cmd|
         if suppress_numbers
           puts cmd
@@ -11790,7 +11790,7 @@ module Rubish
       end
     end
 
-    def self.fc_edit_and_execute(commands, editor)
+    def fc_edit_and_execute(commands, editor)
       # Determine editor
       editor ||= ENV['FCEDIT'] || ENV['EDITOR'] || 'vi'
 
@@ -11811,7 +11811,7 @@ module Rubish
           line = line.chomp
           next if line.empty? || line.start_with?('#')
           puts line
-          @current_state.executor&.call(line) if @current_state.executor
+          @state.executor&.call(line) if @state.executor
         end
 
         true
@@ -11820,7 +11820,7 @@ module Rubish
       end
     end
 
-    def self.mapfile(args)
+    def mapfile(args)
       # Parse options
       delimiter = "\n"
       max_count = 0  # 0 means unlimited
@@ -11942,7 +11942,7 @@ module Rubish
 
         # Call callback if specified
         if callback && ((i + 1) % quantum == 0)
-          @current_state.executor&.call("#{callback} #{idx} #{line.inspect}")
+          @state.executor&.call("#{callback} #{idx} #{line.inspect}")
         end
       end
 
@@ -11953,17 +11953,17 @@ module Rubish
     end
 
     # Helper to get mapfile array contents
-    def self.get_mapfile_array(name = 'MAPFILE')
+    def get_mapfile_array(name = 'MAPFILE')
       length = ENV["#{name}_LENGTH"]&.to_i || 0
       (0...length).map { |i| ENV["#{name}_#{i}"] }
     end
 
     # Helper to clear mapfile array
-    def self.clear_mapfile_array(name = 'MAPFILE')
+    def clear_mapfile_array(name = 'MAPFILE')
       ENV.keys.select { |k| k.start_with?("#{name}_") }.each { |k| ENV.delete(k) }
     end
 
-    def self.basename(args)
+    def basename(args)
       # basename NAME [SUFFIX]
       # basename -a [-s SUFFIX] NAME...
       # basename -s SUFFIX NAME...
@@ -12024,7 +12024,7 @@ module Rubish
       true
     end
 
-    def self.dirname(args)
+    def dirname(args)
       # dirname NAME...
       # -z: end each line with NUL instead of newline
       null_terminated = false
@@ -12061,7 +12061,7 @@ module Rubish
       true
     end
 
-    def self.realpath(args)
+    def realpath(args)
       # realpath [OPTION]... FILE...
       # -e, --canonicalize-existing: all components must exist
       # -m, --canonicalize-missing: no components need exist
@@ -12140,7 +12140,7 @@ module Rubish
       success
     end
 
-    def self.require(args)
+    def require(args)
       # require NAME
       # Calls Ruby's require method to load a library
       if args.empty?
@@ -12162,17 +12162,17 @@ module Rubish
     end
 
     # Wrapper for head command to support Ruby-like syntax: head(5) -> head -5
-    def self.head(args)
+    def head(args)
       head_tail_wrapper('head', args)
     end
 
     # Wrapper for tail command to support Ruby-like syntax: tail(5) -> tail -5
-    def self.tail(args)
+    def tail(args)
       head_tail_wrapper('tail', args)
     end
 
     # Common wrapper for head/tail that converts bare positive integers to -n form
-    def self.head_tail_wrapper(cmd, args)
+    def head_tail_wrapper(cmd, args)
       # Transform args: convert bare positive integers to -n form
       # e.g., head(5) -> head -n 5, tail(10) -> tail -n 10
       # But don't transform if preceded by -n or -c (already has the flag)
@@ -12204,7 +12204,7 @@ module Rubish
       false
     end
 
-    def self.extract_unquoted_keywords(line)
+    def extract_unquoted_keywords(line)
       # Extract shell keywords and braces from a line while respecting quotes
       # Returns array of keywords found outside of quoted sections
       # This prevents counting { } inside awk scripts like: awk '{ print $1 }'
@@ -12254,7 +12254,7 @@ module Rubish
       keywords.select { |w| %w[if unless while until for case def fi done esac end { }].include?(w) }
     end
 
-    def self.has_unclosed_quotes(text)
+    def has_unclosed_quotes(text)
       # Check if the text has unclosed single or double quotes
       # Returns true if there are unclosed quotes (meaning we need more input)
       in_single_quotes = false
@@ -12281,7 +12281,7 @@ module Rubish
       in_single_quotes || in_double_quotes
     end
 
-    def self.detect_heredoc(line)
+    def detect_heredoc(line)
       # Detect heredoc in a line: <<WORD, <<-WORD, <<'WORD', <<"WORD"
       # Does not match herestrings (<<<)
       # Returns [delimiter, strip_tabs] or nil

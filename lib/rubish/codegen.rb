@@ -113,7 +113,7 @@ module Rubish
         # Special case: $@ or "$@" as standalone arg should expand to array
         # so it becomes nothing when empty (not an empty string argument)
         if arg == '$@' || arg == '"$@"'
-          return '@positional_params'
+          return 'positional_params'
         end
         # Special case: unquoted $varname as standalone arg
         # In bash, unquoted empty variable expansion is removed (word splitting)
@@ -165,7 +165,7 @@ module Rubish
     def generate_string_arg_with_glob(str)
       # $'...' ANSI-C quoting: process escape sequences
       if str.start_with?("$'") && str.end_with?("'")
-        return "Builtins.process_escape_sequences(#{str[2...-1].inspect})"
+        return "process_escape_sequences(#{str[2...-1].inspect})"
       end
 
       # Single-quoted strings: no expansion at all
@@ -220,7 +220,7 @@ module Rubish
     def generate_string_arg(str)
       # $'...' ANSI-C quoting: process escape sequences
       if str.start_with?("$'") && str.end_with?("'")
-        return "Builtins.process_escape_sequences(#{str[2...-1].inspect})"
+        return "process_escape_sequences(#{str[2...-1].inspect})"
       end
 
       # Single-quoted strings: no expansion, strip quotes
@@ -255,21 +255,21 @@ module Rubish
     def generate_special_variable(str)
       case str
       when '$?'
-        '@last_status.to_s'
+        'last_status.to_s'
       when '$$'
         'Process.pid.to_s'
       when '$!'
-        '(@last_bg_pid ? @last_bg_pid.to_s : "")'
+        '(last_bg_pid ? last_bg_pid.to_s : "")'
       when '$0'
-        '((a0 = Builtins.get_var("RUBISH_ARGV0")) && !a0.empty? ? a0 : @script_name)'
+        '((a0 = get_var("RUBISH_ARGV0")) && !a0.empty? ? a0 : script_name)'
       when /\A\$([1-9])\z/
-        "(@positional_params[#{$1.to_i - 1}] || '')"
+        "(positional_params[#{$1.to_i - 1}] || '')"
       when '$#'
-        '@positional_params.length.to_s'
+        'positional_params.length.to_s'
       when '$@'
-        '@positional_params.join(" ")'
+        'positional_params.join(" ")'
       when '$*'
-        'Builtins.join_by_ifs(@positional_params)'
+        'join_by_ifs(positional_params)'
       else
         nil
       end
@@ -391,22 +391,22 @@ module Rubish
       two_char = str[pos, 2]
       case two_char
       when '$?'
-        return ['@last_status.to_s', 2]
+        return ['last_status.to_s', 2]
       when '$$'
         return ['Process.pid.to_s', 2]
       when '$!'
-        return ['(@last_bg_pid ? @last_bg_pid.to_s : "")', 2]
+        return ['(last_bg_pid ? last_bg_pid.to_s : "")', 2]
       when '$0'
-        return ['((a0 = Builtins.get_var("RUBISH_ARGV0")) && !a0.empty? ? a0 : @script_name)', 2]
+        return ['((a0 = get_var("RUBISH_ARGV0")) && !a0.empty? ? a0 : script_name)', 2]
       when '$#'
-        return ['@positional_params.length.to_s', 2]
+        return ['positional_params.length.to_s', 2]
       when '$@'
-        return ['@positional_params.join(" ")', 2]
+        return ['positional_params.join(" ")', 2]
       when '$*'
-        return ['Builtins.join_by_ifs(@positional_params)', 2]
+        return ['join_by_ifs(positional_params)', 2]
       when /\$[1-9]/
         n = str[pos + 1].to_i
-        return ["(@positional_params[#{n - 1}] || '')", 2]
+        return ["(positional_params[#{n - 1}] || '')", 2]
       end
 
       # ${VAR} or ${VAR:operation} form

@@ -199,7 +199,7 @@ class TestPS0 < Test::Unit::TestCase
 
   def test_ps0_can_be_set
     execute('PS0=">>> "')
-    assert_equal '>>> ', ENV['PS0']
+    assert_equal '>>> ', Rubish::Builtins.get_var('PS0')
   end
 
   def test_ps0_can_be_read

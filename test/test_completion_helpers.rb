@@ -16,7 +16,9 @@ class TestCompletionHelpers < Test::Unit::TestCase
     FileUtils.mkdir('subdir1')
     FileUtils.mkdir('subdir2')
 
-    Rubish::Builtins.instance_variable_set(:@compreply, [])
+    # Create a REPL to initialize the context
+    @repl = Rubish::REPL.new
+    Rubish::Builtins.set_array('COMPREPLY', [])
   end
 
   def teardown
@@ -120,7 +122,7 @@ class TestCompletionHelpers < Test::Unit::TestCase
 
   def test_filedir_all_files
     ENV['cur'] = ''
-    Rubish::Builtins.instance_variable_set(:@compreply, [])
+    Rubish::Builtins.set_array('COMPREPLY', [])
 
     result = Rubish::Builtins.run('_filedir', [])
     assert result
@@ -133,7 +135,7 @@ class TestCompletionHelpers < Test::Unit::TestCase
 
   def test_filedir_directories_only
     ENV['cur'] = ''
-    Rubish::Builtins.instance_variable_set(:@compreply, [])
+    Rubish::Builtins.set_array('COMPREPLY', [])
 
     result = Rubish::Builtins.run('_filedir', ['-d'])
     assert result
@@ -146,7 +148,7 @@ class TestCompletionHelpers < Test::Unit::TestCase
 
   def test_filedir_with_prefix
     ENV['cur'] = 'file'
-    Rubish::Builtins.instance_variable_set(:@compreply, [])
+    Rubish::Builtins.set_array('COMPREPLY', [])
 
     result = Rubish::Builtins.run('_filedir', [])
     assert result
@@ -159,7 +161,7 @@ class TestCompletionHelpers < Test::Unit::TestCase
 
   def test_filedir_with_pattern
     ENV['cur'] = ''
-    Rubish::Builtins.instance_variable_set(:@compreply, [])
+    Rubish::Builtins.set_array('COMPREPLY', [])
 
     result = Rubish::Builtins.run('_filedir', ['*.txt'])
     assert result
@@ -223,7 +225,7 @@ class TestCompletionHelpers < Test::Unit::TestCase
   # ==========================================================================
 
   def test_ltrim_colon_completions
-    Rubish::Builtins.instance_variable_set(:@compreply, ['pkg:v1', 'pkg:v2', 'pkg:v3'])
+    Rubish::Builtins.set_array('COMPREPLY', ['pkg:v1', 'pkg:v2', 'pkg:v3'])
 
     result = Rubish::Builtins.run('__ltrim_colon_completions', ['pkg:'])
     assert result
@@ -233,7 +235,7 @@ class TestCompletionHelpers < Test::Unit::TestCase
   end
 
   def test_ltrim_colon_completions_no_colon
-    Rubish::Builtins.instance_variable_set(:@compreply, %w[alpha beta gamma])
+    Rubish::Builtins.set_array('COMPREPLY', %w[alpha beta gamma])
 
     result = Rubish::Builtins.run('__ltrim_colon_completions', ['alpha'])
     assert result
@@ -250,7 +252,7 @@ class TestCompletionHelpers < Test::Unit::TestCase
   def test_variables_completion
     ENV['MY_UNIQUE_TEST_VAR'] = 'value'
     ENV['cur'] = 'MY_UNIQUE'
-    Rubish::Builtins.instance_variable_set(:@compreply, [])
+    Rubish::Builtins.set_array('COMPREPLY', [])
 
     result = Rubish::Builtins.run('_variables', [])
     assert result
@@ -262,7 +264,7 @@ class TestCompletionHelpers < Test::Unit::TestCase
   def test_variables_with_dollar_prefix
     ENV['MY_DOLLAR_TEST'] = 'value'
     ENV['cur'] = '$MY_DOLLAR'
-    Rubish::Builtins.instance_variable_set(:@compreply, [])
+    Rubish::Builtins.set_array('COMPREPLY', [])
 
     result = Rubish::Builtins.run('_variables', [])
     assert result
@@ -277,7 +279,7 @@ class TestCompletionHelpers < Test::Unit::TestCase
 
   def test_tilde_completion
     ENV['cur'] = '~'
-    Rubish::Builtins.instance_variable_set(:@compreply, [])
+    Rubish::Builtins.set_array('COMPREPLY', [])
 
     result = Rubish::Builtins.run('_tilde', [])
     assert result
@@ -290,7 +292,7 @@ class TestCompletionHelpers < Test::Unit::TestCase
 
   def test_tilde_no_tilde
     ENV['cur'] = 'path'
-    Rubish::Builtins.instance_variable_set(:@compreply, [])
+    Rubish::Builtins.set_array('COMPREPLY', [])
 
     result = Rubish::Builtins.run('_tilde', [])
     assert result
@@ -324,7 +326,7 @@ class TestCompletionHelpers < Test::Unit::TestCase
 
   def test_parse_help_with_ls
     ENV['cur'] = ''
-    Rubish::Builtins.instance_variable_set(:@compreply, [])
+    Rubish::Builtins.set_array('COMPREPLY', [])
 
     # This will run ls --help and parse options
     result = Rubish::Builtins.run('_parse_help', ['ls'])
@@ -361,7 +363,7 @@ class TestCompletionHelpers < Test::Unit::TestCase
 
   def test_usergroup_users
     ENV['cur'] = ''
-    Rubish::Builtins.instance_variable_set(:@compreply, [])
+    Rubish::Builtins.set_array('COMPREPLY', [])
 
     result = Rubish::Builtins.run('_usergroup', ['-u'])
     assert result
@@ -390,7 +392,7 @@ class TestCompletionHelpers < Test::Unit::TestCase
     assert_equal 'mycommand', ENV['prev']
 
     # Generate some completions
-    Rubish::Builtins.instance_variable_set(:@compreply,
+    Rubish::Builtins.set_array('COMPREPLY',
       %w[--option1 --option2 --optional])
 
     # Completions should be set

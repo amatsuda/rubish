@@ -9,7 +9,9 @@ class TestBuiltinCompletions < Test::Unit::TestCase
     @original_dir = Dir.pwd
     Dir.chdir(@tempdir)
 
-    Rubish::Builtins.instance_variable_set(:@compreply, [])
+    # Create a REPL to initialize the context
+    @repl = Rubish::REPL.new
+    Rubish::Builtins.set_array('COMPREPLY', [])
     Rubish::Builtins.clear_completions
     Rubish::Builtins.setup_default_completions
   end
@@ -20,7 +22,7 @@ class TestBuiltinCompletions < Test::Unit::TestCase
     ENV.clear
     @original_env.each { |k, v| ENV[k] = v }
     Rubish::Builtins.clear_completion_context
-    Rubish::Builtins.instance_variable_set(:@compreply, [])
+    Rubish::Builtins.set_array('COMPREPLY', [])
   end
 
   # ==========================================================================

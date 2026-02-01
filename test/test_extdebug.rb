@@ -182,7 +182,7 @@ class TestExtdebug < Test::Unit::TestCase
     @repl.instance_variable_set(:@lineno, 55)
     execute('getterfunc() { echo getter; }')
 
-    info = Rubish::Builtins.function_getter.call('getterfunc')
+    info = Rubish::Builtins.current_state.function_getter.call('getterfunc')
     assert_not_nil info
     assert_equal '/path/to/file.sh', info[:file]
     assert_equal 55, info[:lineno]

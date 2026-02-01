@@ -22,7 +22,7 @@ class TestIGNOREEOF < Test::Unit::TestCase
 
   def test_ignoreeof_can_be_set
     execute('IGNOREEOF=5')
-    assert_equal '5', ENV['IGNOREEOF']
+    assert_equal '5', Rubish::Builtins.get_var('IGNOREEOF')
   end
 
   def test_ignoreeof_can_be_read

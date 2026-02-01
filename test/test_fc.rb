@@ -87,7 +87,7 @@ class TestFc < Test::Unit::TestCase
   # Test fc -s re-executes last command
   def test_fc_s_reexecutes_last
     executed = nil
-    Rubish::Builtins.executor = ->(cmd) { executed = cmd }
+    Rubish::Builtins.current_state.executor = ->(cmd) { executed = cmd }
 
     output = capture_output { Rubish::Builtins.run('fc', ['-s']) }
     assert_match(/echo world/, output)
@@ -97,7 +97,7 @@ class TestFc < Test::Unit::TestCase
   # Test fc -s with specific command
   def test_fc_s_with_command
     executed = nil
-    Rubish::Builtins.executor = ->(cmd) { executed = cmd }
+    Rubish::Builtins.current_state.executor = ->(cmd) { executed = cmd }
 
     output = capture_output { Rubish::Builtins.run('fc', ['-s', 'ls']) }
     assert_match(/ls -la/, output)
@@ -107,7 +107,7 @@ class TestFc < Test::Unit::TestCase
   # Test fc -s with substitution
   def test_fc_s_with_substitution
     executed = nil
-    Rubish::Builtins.executor = ->(cmd) { executed = cmd }
+    Rubish::Builtins.current_state.executor = ->(cmd) { executed = cmd }
 
     # Use command spec to find 'echo hello' and substitute
     output = capture_output { Rubish::Builtins.run('fc', ['-s', 'hello=goodbye', '1']) }
@@ -118,7 +118,7 @@ class TestFc < Test::Unit::TestCase
   # Test fc -s with number
   def test_fc_s_with_number
     executed = nil
-    Rubish::Builtins.executor = ->(cmd) { executed = cmd }
+    Rubish::Builtins.current_state.executor = ->(cmd) { executed = cmd }
 
     output = capture_output { Rubish::Builtins.run('fc', ['-s', '2']) }
     assert_match(/ls -la/, output)

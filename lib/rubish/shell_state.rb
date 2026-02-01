@@ -58,6 +58,7 @@ module Rubish
     attr_accessor :bind_x_executor, :bind_x_counter
     attr_accessor :exit_blocked_by_jobs
     attr_accessor :sourcing_file
+    attr_accessor :source_executor
 
     def initialize
       # Variables state
@@ -144,6 +145,7 @@ module Rubish
       @bind_x_counter = 0
       @exit_blocked_by_jobs = false
       @sourcing_file = nil
+      @source_executor = nil
     end
 
     def clear_variables

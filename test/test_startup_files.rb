@@ -8,6 +8,8 @@ class TestStartupFiles < Test::Unit::TestCase
     @original_home = ENV['HOME']
     @tempdir = Dir.mktmpdir('rubish_startup_test')
     ENV['HOME'] = @tempdir
+    # Create REPL to initialize context (needed for Builtins calls)
+    @repl = Rubish::REPL.new
     # Reset shell options
     Rubish::Builtins.set_shell_option('login_shell', false)
   end
@@ -252,11 +254,10 @@ class TestStartupFiles < Test::Unit::TestCase
     File.write(File.join(@tempdir, '.profile'), 'PROFILE_SOURCED=yes')
     File.write(File.join(@tempdir, '.bashrc'), 'BASHRC_SOURCED=yes')
 
-    # Enable privileged mode
-    Rubish::Builtins.current_state.set_options['p'] = true
-
     begin
       repl = create_test_repl(login_shell: true)
+      # Enable privileged mode on this REPL's state
+      Rubish::Builtins.current_state.set_options['p'] = true
       repl.send(:load_config)
 
       assert_nil Rubish::Builtins.get_var('PROFILE_SOURCED')

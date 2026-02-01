@@ -7,6 +7,8 @@ require_relative 'config'
 require_relative 'arithmetic'
 require_relative 'expansion'
 require_relative 'runtime'
+require_relative 'shell_state'
+require_relative 'execution_context'
 
 module Rubish
   class NounsetError < StandardError; end
@@ -22,8 +24,12 @@ module Rubish
     include Runtime
 
     def initialize(login_shell: false, no_profile: false, no_rc: false, restricted: false, rcfile: nil)
-      # Clear shell variables from previous REPL instance (shell vars are per-instance)
-      Builtins.clear_shell_vars
+      # Create shell state and execution context for this REPL instance
+      @state = ShellState.new
+      @context = ExecutionContext.new(@state)
+      # Set current_state and context for backward compatibility with Builtins.xxx class method calls
+      Builtins.current_state = @state
+      Builtins.context = @context
       @lexer_class = Lexer
       @parser_class = Parser
       @codegen = Codegen.new
@@ -63,49 +69,49 @@ module Rubish
       @restricted = restricted    # Start in restricted mode (-r or rbash)
       @rcfile = rcfile            # Custom RC file (--rcfile, --init-file)
       # Set the login_shell shopt option (read-only)
-      Builtins.set_shell_option('login_shell', login_shell)
+      @context.set_shell_option('login_shell', login_shell)
       # SHLVL - shell nesting level (stored in ENV for inheritance)
       current_shlvl = ENV['SHLVL'].to_i
       ENV['SHLVL'] = (current_shlvl + 1).to_s
       # SHELL - full pathname of the shell
       # Set to the rubish binary path if not already set or if running rubish
       set_shell_variable
-      Builtins.executor = ->(line) { execute(line) }
-      Builtins.script_name_getter = -> { @script_name }
-      Builtins.script_name_setter = ->(name) { @script_name = name }
-      Builtins.positional_params_getter = -> { @positional_params }
-      Builtins.positional_params_setter = ->(params) { @positional_params = params }
-      Builtins.function_checker = ->(name) { @functions.key?(name) }
-      Builtins.function_remover = ->(name) { @functions.delete(name) }
-      Builtins.function_lister = -> { @functions.transform_values { |v| {source: v[:source_code], file: v[:source], lineno: v[:lineno]} } }
-      Builtins.function_getter = ->(name) { f = @functions[name]; f ? {source: f[:source_code], file: f[:source], lineno: f[:lineno]} : nil }
-      Builtins.heredoc_content_setter = ->(content) { @heredoc_content = content }
-      Builtins.command_executor = ->(args) { execute_command_directly(args) }
-      Builtins.source_file_getter = -> { @current_source_file }
-      Builtins.source_file_setter = ->(file) { @current_source_file = file }
-      Builtins.lineno_getter = -> { @lineno }
-      Builtins.bash_argv0_unsetter = -> { @bash_argv0_unset = true }
+      @state.executor = ->(line) { execute(line) }
+      @state.script_name_getter = -> { @script_name }
+      @state.script_name_setter = ->(name) { @script_name = name }
+      @state.positional_params_getter = -> { @positional_params }
+      @state.positional_params_setter = ->(params) { @positional_params = params }
+      @state.function_checker = ->(name) { @functions.key?(name) }
+      @state.function_remover = ->(name) { @functions.delete(name) }
+      @state.function_lister = -> { @functions.transform_values { |v| {source: v[:source_code], file: v[:source], lineno: v[:lineno]} } }
+      @state.function_getter = ->(name) { f = @functions[name]; f ? {source: f[:source_code], file: f[:source], lineno: f[:lineno]} : nil }
+      @state.heredoc_content_setter = ->(content) { @heredoc_content = content }
+      @state.command_executor = ->(args) { execute_command_directly(args) }
+      @state.source_file_getter = -> { @current_source_file }
+      @state.source_file_setter = ->(file) { @current_source_file = file }
+      @state.lineno_getter = -> { @lineno }
+      @state.bash_argv0_unsetter = -> { @bash_argv0_unset = true }
       # Readline state callbacks
-      Builtins.readline_line_getter = -> { @readline_line }
-      Builtins.readline_line_setter = ->(line) { @readline_line = line }
-      Builtins.readline_point_getter = -> { @readline_point }
-      Builtins.readline_point_setter = ->(point) { @readline_point = point }
-      Builtins.readline_mark_getter = -> { @readline_mark }
-      Builtins.readline_mark_setter = ->(mark) { @readline_mark = mark }
+      @state.readline_line_getter = -> { @readline_line }
+      @state.readline_line_setter = ->(line) { @readline_line = line }
+      @state.readline_point_getter = -> { @readline_point }
+      @state.readline_point_setter = ->(point) { @readline_point = point }
+      @state.readline_mark_getter = -> { @readline_mark }
+      @state.readline_mark_setter = ->(mark) { @readline_mark = mark }
       # bind -x executor: execute shell commands from key bindings
-      Builtins.bind_x_executor = ->(command) { execute_bind_x_command(command) }
+      @state.bind_x_executor = ->(command) { execute_bind_x_command(command) }
       # History callbacks
-      Builtins.history_file_getter = -> { history_file }
-      Builtins.history_loader = -> { load_history }
-      Builtins.history_saver = -> { save_history }
-      Builtins.history_appender = -> { append_history }
+      @state.history_file_getter = -> { history_file }
+      @state.history_loader = -> { load_history }
+      @state.history_saver = -> { save_history }
+      @state.history_appender = -> { append_history }
       # Set up Command class to handle functions in pipelines
       Command.function_checker = ->(name) { @functions.key?(name) }
       Command.function_caller = ->(name, args) { call_function(name, args) }
-      # Set up Builtins to call functions (for compgen -F)
-      Builtins.function_caller = ->(name, args) { call_function(name, args) }
+      # Set up state to call functions (for compgen -F)
+      @state.function_caller = ->(name, args) { call_function(name, args) }
       # Source executor for autoload: source a file or execute code string
-      Builtins.source_executor = ->(file, code = nil) {
+      @state.source_executor = ->(file, code = nil) {
         if code
           # Execute code string directly
           execute(code)
@@ -624,7 +630,7 @@ module Rubish
       # Exclude shell variable assignments (VAR=value, VAR+=value, VAR[n]=value)
       if line =~ /\A[A-Z]/ && line !~ /\A[A-Z_][A-Z0-9_]*(\[[^\]]*\])?\+?=/
         begin
-          result = binding.eval(line)
+          result = @context.instance_eval(line)
           p result
         rescue SyntaxError, StandardError => e
           $stderr.puts "rubish: #{e.message}"
@@ -632,14 +638,14 @@ module Rubish
           return
         end
         @last_status = 0
-        Builtins.clear_exit_blocked
+        @context.clear_exit_blocked
         return
       end
 
       # Check if input is a Ruby lambda literal (-> { ... } or ->(args) { ... })
       if line =~ /\A->/
         begin
-          result = binding.eval(line)
+          result = @context.instance_eval(line)
           # Auto-call lambdas with no required arguments
           result = result.call if result.is_a?(Proc) && result.arity <= 0
           p result
@@ -649,7 +655,7 @@ module Rubish
           return
         end
         @last_status = 0
-        Builtins.clear_exit_blocked
+        @context.clear_exit_blocked
         return
       end
 
@@ -902,6 +908,8 @@ module Rubish
       # Save current positional params and set new ones
       saved_params = @positional_params
       @positional_params = args
+      # Sync positional params to context so function body can access them
+      @context.instance_variable_set(:@positional_params, @positional_params)
 
       # Push a new local scope for this function
       Builtins.push_local_scope
@@ -955,6 +963,8 @@ module Rubish
         # Pop local scope and restore variables
         Builtins.pop_local_scope
         @positional_params = saved_params
+        # Sync restored params back to context
+        @context.instance_variable_set(:@positional_params, @positional_params)
 
         # Pop function name from FUNCNAME stack, line number from RUBISH_LINENO stack, source from RUBISH_SOURCE stack
         @funcname_stack.shift
@@ -968,7 +978,30 @@ module Rubish
 
 
     def eval_in_context(code)
-      result = binding.eval(code)
+      # Sync REPL state to context before eval
+      @context.last_status = @last_status
+      @context.last_bg_pid = @last_bg_pid
+      @context.lineno = @lineno
+      @context.pipestatus = @pipestatus
+      @context.functions = @functions
+      @context.heredoc_content = @heredoc_content
+      @context.instance_variable_set(:@positional_params, @positional_params)
+      @context.instance_variable_set(:@argv0, @script_name)
+      @context.instance_variable_set(:@script_name, @script_name)
+      @context.instance_variable_set(:@funcname_stack, @funcname_stack)
+      @context.instance_variable_set(:@rubish_lineno_stack, @rubish_lineno_stack)
+      @context.instance_variable_set(:@rubish_source_stack, @rubish_source_stack)
+      @context.instance_variable_set(:@rubish_argc_stack, @rubish_argc_stack)
+      @context.instance_variable_set(:@rubish_argv_stack, @rubish_argv_stack)
+      @context.instance_variable_set(:@rubish_command, @rubish_command)
+      @context.instance_variable_set(:@current_source_file, @current_source_file)
+      @context.instance_variable_set(:@command_number, @command_number)
+      @context.instance_variable_set(:@seconds_base, @seconds_base)
+      @context.instance_variable_set(:@random_generator, @random_generator)
+      @context.instance_variable_set(:@bash_argv0_unset, @bash_argv0_unset)
+      @context.subshell_level = @subshell_level
+
+      result = @context.instance_eval(code)
       if result.is_a?(Command) && result.name == 'exec'
         # Don't auto-run exec - it's handled specially in execute method
         # to support redirections without command replacement
@@ -994,6 +1027,12 @@ module Rubish
           end
         end
       end
+
+      # Sync context state back to REPL
+      @seconds_base = @context.instance_variable_get(:@seconds_base)
+      @random_generator = @context.instance_variable_get(:@random_generator)
+      @last_bg_pid = @context.last_bg_pid
+
       result
     end
 

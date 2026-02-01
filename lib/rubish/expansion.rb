@@ -345,7 +345,8 @@ module Rubish
       return __array_element($1, $2) if content =~ /\A([a-zA-Z_][a-zA-Z0-9_]*)\[([^\]]+)\]\z/
 
       # ${var:-default}, ${var-default}, etc.
-      return __param_expand($1, $2, $3 || '') if content =~ /\A([a-zA-Z_][a-zA-Z0-9_]*)(:-|:=|:\+|:\?|-|=|\+|\?)(.*)?\z/
+      # Also handles positional parameters: ${1:-default}, ${10:-default}, etc.
+      return __param_expand($1, $2, $3 || '') if content =~ /\A([a-zA-Z_][a-zA-Z0-9_]*|\d+)(:-|:=|:\+|:\?|-|=|\+|\?)(.*)?\z/
 
       # ${#var} - length
       return __param_length($1) if content =~ /\A#([a-zA-Z_][a-zA-Z0-9_]*)\z/
@@ -947,7 +948,7 @@ module Rubish
       when 'DIRSTACK' then [Dir.pwd] + Builtins.current_state.dir_stack
       when 'COMP_WORDS' then Builtins.comp_words
       when 'COMPREPLY' then Builtins.compreply
-      when 'RUBISH_REMATCH', 'BASH_REMATCH' then Builtins.get_array('RUBISH_REMATCH')
+      when 'RUBISH_REMATCH', 'BASH_REMATCH' then @state.arrays['RUBISH_REMATCH'] || []
       when 'RUBISH_ALIASES', 'BASH_ALIASES', 'RUBISH_CMDS', 'BASH_CMDS' then :assoc
       end
     end

@@ -110,20 +110,20 @@ class TestDeclareFunction < Test::Unit::TestCase
   def test_function_lister_callback
     execute('fn1() { echo 1; }')
     execute('fn2() { echo 2; }')
-    functions = Rubish::Builtins.function_lister.call
+    functions = Rubish::Builtins.current_state.function_lister.call
     assert functions.key?('fn1')
     assert functions.key?('fn2')
   end
 
   def test_function_getter_callback
     execute('myfn() { echo test; }')
-    info = Rubish::Builtins.function_getter.call('myfn')
+    info = Rubish::Builtins.current_state.function_getter.call('myfn')
     assert_not_nil info
     assert info[:source]
   end
 
   def test_function_getter_returns_nil_for_nonexistent
-    info = Rubish::Builtins.function_getter.call('nonexistent')
+    info = Rubish::Builtins.current_state.function_getter.call('nonexistent')
     assert_nil info
   end
 
@@ -131,14 +131,14 @@ class TestDeclareFunction < Test::Unit::TestCase
 
   def test_function_checker
     execute('testfunc() { echo test; }')
-    assert Rubish::Builtins.function_checker.call('testfunc')
-    assert_false Rubish::Builtins.function_checker.call('nonexistent')
+    assert Rubish::Builtins.current_state.function_checker.call('testfunc')
+    assert_false Rubish::Builtins.current_state.function_checker.call('nonexistent')
   end
 
   def test_function_remover
     execute('removeme() { echo remove; }')
     assert @repl.functions.key?('removeme')
-    Rubish::Builtins.function_remover.call('removeme')
+    Rubish::Builtins.current_state.function_remover.call('removeme')
     assert_false @repl.functions.key?('removeme')
   end
 

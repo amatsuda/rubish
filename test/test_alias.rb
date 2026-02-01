@@ -4,6 +4,7 @@ require_relative 'test_helper'
 
 class TestAlias < Test::Unit::TestCase
   def setup
+    @repl = Rubish::REPL.new
     Rubish::Builtins.clear_aliases
   end
 
@@ -140,12 +141,12 @@ class TestAlias < Test::Unit::TestCase
   end
 
   def test_setup_default_aliases_does_not_overwrite_existing
+    # Use the existing REPL's state (created in setup)
     # Set custom aliases first
     Rubish::Builtins.current_state.aliases['ls'] = 'ls -la'
     Rubish::Builtins.current_state.aliases['grep'] = 'grep -n'
 
-    repl = Rubish::REPL.new
-    repl.send(:setup_default_aliases)
+    @repl.send(:setup_default_aliases)
 
     # Should preserve the existing aliases
     assert_equal 'ls -la', Rubish::Builtins.current_state.aliases['ls']

@@ -9,6 +9,9 @@ class TestRUBISH_LOADABLES_PATH < Test::Unit::TestCase
     @tempdir = Dir.mktmpdir('rubish_loadables_test')
     Dir.chdir(@tempdir)
 
+    # Create REPL to initialize context (needed for Builtins calls)
+    @repl = Rubish::REPL.new
+
     # Create a loadables directory
     @loadables_dir = File.join(@tempdir, 'loadables')
     FileUtils.mkdir_p(@loadables_dir)

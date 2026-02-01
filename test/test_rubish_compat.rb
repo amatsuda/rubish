@@ -27,7 +27,7 @@ class TestRUBISH_COMPAT < Test::Unit::TestCase
 
   def test_rubish_compat_can_be_set
     execute('RUBISH_COMPAT=1.0')
-    assert_equal '1.0', ENV['RUBISH_COMPAT']
+    assert_equal '1.0', Rubish::Builtins.get_var('RUBISH_COMPAT')
   end
 
   def test_rubish_compat_can_be_exported

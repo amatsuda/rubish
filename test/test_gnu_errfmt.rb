@@ -149,11 +149,11 @@ class TestGnuErrfmt < Test::Unit::TestCase
   # Test that format_error works when getters are not set
   def test_format_error_without_getters
     # Temporarily unset the getters
-    original_source_getter = Rubish::Builtins.source_file_getter
-    original_lineno_getter = Rubish::Builtins.lineno_getter
+    original_source_getter = Rubish::Builtins.current_state.source_file_getter
+    original_lineno_getter = Rubish::Builtins.current_state.lineno_getter
 
-    Rubish::Builtins.source_file_getter = nil
-    Rubish::Builtins.lineno_getter = nil
+    Rubish::Builtins.current_state.source_file_getter = nil
+    Rubish::Builtins.current_state.lineno_getter = nil
 
     execute('shopt -s gnu_errfmt')
 
@@ -161,7 +161,7 @@ class TestGnuErrfmt < Test::Unit::TestCase
     # Should fallback to 'rubish' and 0
     assert_equal 'rubish:0: test error', msg
   ensure
-    Rubish::Builtins.source_file_getter = original_source_getter
-    Rubish::Builtins.lineno_getter = original_lineno_getter
+    Rubish::Builtins.current_state.source_file_getter = original_source_getter
+    Rubish::Builtins.current_state.lineno_getter = original_lineno_getter
   end
 end
