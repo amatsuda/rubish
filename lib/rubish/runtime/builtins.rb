@@ -10680,9 +10680,9 @@ module Rubish
       # Use 'IGNORE' for SIGTTOU/SIGTTIN so tcsetpgrp works from background
       # Use a noop proc for SIGCHLD because 'IGNORE' causes OS to auto-reap children
       noop = proc {}
-      old_chld = trap('CHLD', noop)
-      old_ttou = trap('TTOU', 'IGNORE')
-      old_ttin = trap('TTIN', 'IGNORE')
+      old_chld = Kernel.trap('CHLD', noop)
+      old_ttou = Kernel.trap('TTOU', 'IGNORE')
+      old_ttin = Kernel.trap('TTIN', 'IGNORE')
 
       # Give terminal control to the job's process group
       Terminal.set_foreground(job.pgid) if Terminal.tty?
@@ -10697,9 +10697,9 @@ module Rubish
         Terminal.set_foreground(shell_pgid) if Terminal.tty?
 
         # Restore signal handlers
-        trap('CHLD', old_chld || 'DEFAULT')
-        trap('TTOU', old_ttou || 'DEFAULT')
-        trap('TTIN', old_ttin || 'DEFAULT')
+        Kernel.trap('CHLD', old_chld || 'DEFAULT')
+        Kernel.trap('TTOU', old_ttou || 'DEFAULT')
+        Kernel.trap('TTIN', old_ttin || 'DEFAULT')
       end
 
       if status.nil? || !status.stopped?

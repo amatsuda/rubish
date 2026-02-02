@@ -283,9 +283,9 @@ module Rubish
           # Create new process group with this process as leader
           Process.setpgid(0, 0)
           # Reset signal handlers so Ctrl-Z works
-          trap('TSTP', 'DEFAULT')
-          trap('TTIN', 'DEFAULT')
-          trap('TTOU', 'DEFAULT')
+          Kernel.trap('TSTP', 'DEFAULT')
+          Kernel.trap('TTIN', 'DEFAULT')
+          Kernel.trap('TTOU', 'DEFAULT')
         end
 
         # Handle stdin redirection
@@ -347,9 +347,9 @@ module Rubish
         # Use 'IGNORE' for SIGTTOU/SIGTTIN (maps to SIG_IGN) so tcsetpgrp works from background
         # Use a noop proc for SIGCHLD because 'IGNORE' causes OS to auto-reap children
         noop = proc {}
-        old_chld = trap('CHLD', noop)
-        old_ttou = trap('TTOU', 'IGNORE')
-        old_ttin = trap('TTIN', 'IGNORE')
+        old_chld = Kernel.trap('CHLD', noop)
+        old_ttou = Kernel.trap('TTOU', 'IGNORE')
+        old_ttin = Kernel.trap('TTIN', 'IGNORE')
 
         # Give terminal control to the child process group
         # This allows the child to receive Ctrl-Z (SIGTSTP)
@@ -363,9 +363,9 @@ module Rubish
           Terminal.set_foreground(shell_pgid) if Terminal.tty?
 
           # Restore signal handlers after we have terminal control back
-          trap('CHLD', old_chld || 'DEFAULT')
-          trap('TTOU', old_ttou || 'DEFAULT')
-          trap('TTIN', old_ttin || 'DEFAULT')
+          Kernel.trap('CHLD', old_chld || 'DEFAULT')
+          Kernel.trap('TTOU', old_ttou || 'DEFAULT')
+          Kernel.trap('TTIN', old_ttin || 'DEFAULT')
         end
 
         # If the process was stopped, add it to the job manager
@@ -594,9 +594,9 @@ module Rubish
               Process.setpgid(0, 0)
             end
             # Reset signal handlers so Ctrl-Z works
-            trap('TSTP', 'DEFAULT')
-            trap('TTIN', 'DEFAULT')
-            trap('TTOU', 'DEFAULT')
+            Kernel.trap('TSTP', 'DEFAULT')
+            Kernel.trap('TTIN', 'DEFAULT')
+            Kernel.trap('TTOU', 'DEFAULT')
           end
 
           # Close unused pipe ends
@@ -708,9 +708,9 @@ module Rubish
         # Use 'IGNORE' for SIGTTOU/SIGTTIN (maps to SIG_IGN) so tcsetpgrp works from background
         # Use a noop proc for SIGCHLD because 'IGNORE' causes OS to auto-reap children
         noop = proc {}
-        old_chld = trap('CHLD', noop)
-        old_ttou = trap('TTOU', 'IGNORE')
-        old_ttin = trap('TTIN', 'IGNORE')
+        old_chld = Kernel.trap('CHLD', noop)
+        old_ttou = Kernel.trap('TTOU', 'IGNORE')
+        old_ttin = Kernel.trap('TTIN', 'IGNORE')
 
         # Give terminal control to the pipeline's process group
         Terminal.set_foreground(pgid) if Terminal.tty?
@@ -727,9 +727,9 @@ module Rubish
           Terminal.set_foreground(shell_pgid) if Terminal.tty?
 
           # Restore signal handlers
-          trap('CHLD', old_chld || 'DEFAULT')
-          trap('TTOU', old_ttou || 'DEFAULT')
-          trap('TTIN', old_ttin || 'DEFAULT')
+          Kernel.trap('CHLD', old_chld || 'DEFAULT')
+          Kernel.trap('TTOU', old_ttou || 'DEFAULT')
+          Kernel.trap('TTIN', old_ttin || 'DEFAULT')
         end
       else
         # Wait for all forked children and collect statuses
