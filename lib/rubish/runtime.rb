@@ -909,6 +909,66 @@ module Rubish
       HeredocCommand.new(content, &block)
     end
 
+    # Thread-safe lazy_load for eval "$(cmd)" pattern
+    # Runs the command using Open3 (no fork from thread)
+    def __lazy_load_eval(cmd)
+      require_relative 'lazy_loader'
+
+      LazyLoader.register(cmd, @state.executor) do
+        # Run command using Open3 - thread-safe, no fork issues
+        output, status = Open3.capture2(cmd)
+        output.chomp
+      end
+
+      true
+    end
+
+    # Generic lazy_load for arbitrary blocks (may hang if block uses fork)
+    def __lazy_load(&block)
+      require_relative 'lazy_loader'
+
+      # Derive name from caller location
+      caller_loc = caller_locations(1, 1).first
+      name = if caller_loc
+               "#{File.basename(caller_loc.path)}:#{caller_loc.lineno}"
+             else
+               'lazy'
+             end
+
+      LazyLoader.register(name, @state.executor) do
+        # Execute the block - it returns generated code result
+        result = block.call
+
+        # Handle the result based on type
+        if result.is_a?(Command) && result.name == 'eval' && result.args.any?
+          # For eval "$(cmd)" - the args contain the output to be eval'd
+          # Return the first arg as shell code to execute in main thread
+          result.args.first.to_s
+        elsif result.is_a?(String)
+          # Direct string result - execute as shell code
+          result
+        else
+          # For other commands, run them and capture stdout
+          if result.respond_to?(:run)
+            old_stdout = $stdout
+            captured = StringIO.new
+            begin
+              $stdout = captured
+              result.run
+            ensure
+              $stdout = old_stdout
+            end
+            output = captured.string
+            output.empty? ? nil : output
+          else
+            nil
+          end
+        end
+      end
+
+      true
+    end
+
     def __coproc(name, &block)
       # Check if a coproc with this name already exists
       if Builtins.coproc?(name)

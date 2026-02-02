@@ -267,6 +267,14 @@ module Rubish
 
     private
 
+    # Apply completed lazy_load background tasks
+    def apply_lazy_loads
+      return unless defined?(Rubish::LazyLoader)
+
+      executor = ->(code) { execute(code) }
+      LazyLoader.apply_completed(executor)
+    end
+
     def setup_reline
       repl = self
 
@@ -317,7 +325,7 @@ module Rubish
         /Expected ['"]fi['"].*close if/,
         /Expected ['"]done['"].*close (while|until|for|select)/,
         /Expected ['"]esac['"].*close case/,
-        /Expected ['"][}]['"].*close function/,
+        /Expected ['"][}]['"].*close (function|lazy_load)/,
         /Expected ['"]end['"].*close (def|unless)/,
         /Expected ['"][)]?['"].*close (subshell|conditional)/,
         /Expected ['"]then['"]/,
@@ -458,6 +466,9 @@ module Rubish
     def process_line
       # Check for completed background jobs
       JobManager.instance.check_background_jobs
+
+      # Apply any completed lazy_load tasks
+      apply_lazy_loads
 
       # Check for new mail (before prompt)
       check_mail

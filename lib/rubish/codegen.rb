@@ -58,6 +58,8 @@ module Rubish
         generate_array_assign(node)
       when AST::RubyCondition
         generate_ruby_condition(node)
+      when AST::LazyLoad
+        generate_lazy_load(node)
       else
         raise "Unknown AST node: #{node.class}"
       end
@@ -935,6 +937,24 @@ module Rubish
     def generate_coproc(node)
       cmd_code = generate(node.command)
       "__coproc(#{node.name.inspect}) { #{cmd_code} }"
+    end
+
+    def generate_lazy_load(node)
+      # Check for eval "$(cmd)" pattern - the most common lazy_load use case
+      # We extract the command and run it thread-safely (without fork)
+      if node.body.is_a?(AST::Command) && node.body.name == 'eval' && node.body.args.length == 1
+        arg = node.body.args.first
+        # Match patterns like "$(cmd)" or '$(cmd)'
+        if arg =~ /\A["']\$\((.+)\)["']\z/
+          cmd = $1
+          return "__lazy_load_eval(#{cmd.inspect})"
+        end
+      end
+
+      # Fallback: generate the body code normally
+      # Note: this may hang if the body contains command substitutions that use fork
+      body_code = node.body ? generate(node.body) : 'nil'
+      "__lazy_load { #{body_code} }"
     end
 
     def generate_time(node)

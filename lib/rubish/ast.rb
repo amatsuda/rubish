@@ -159,5 +159,10 @@ module Rubish
     # RubyCode: raw Ruby code for prompt functions
     # code: the Ruby code string to be evaluated
     RubyCode = Data.define(:code)
+
+    # LazyLoad: lazy_load { commands } - run commands in background thread
+    # body: the shell commands to execute in background
+    # The commands' output (if eval "$(...)") is captured and applied to main thread
+    LazyLoad = Data.define(:body)
   end
 end

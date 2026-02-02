@@ -226,6 +226,8 @@ module Rubish
                        parse_subshell
                      elsif peek(:COPROC)
                        parse_coproc
+                     elsif peek(:LAZY_LOAD)
+                       parse_lazy_load
                      elsif peek(:DOUBLE_LBRACKET)
                        parse_conditional_expr
                      elsif peek(:ARITH_CMD)
@@ -960,6 +962,35 @@ module Rubish
       raise 'Expected command after coproc' unless command
 
       AST::Coproc.new(name: name, command: command)
+    end
+
+    # lazy_load : LAZY_LOAD '{' commands '}'
+    # Parses lazy_load block to run commands in background
+    def parse_lazy_load
+      consume(:LAZY_LOAD)
+
+      unless peek(:LBRACE)
+        raise "Expected '{' after lazy_load"
+      end
+      consume(:LBRACE)
+
+      # Skip leading semicolons/newlines (from source joining lines with "; ")
+      consume(:SEMICOLON) while peek(:SEMICOLON)
+      consume(:NEWLINE) while peek(:NEWLINE)
+
+      # Parse the body as a command list
+      body = parse_list
+
+      # Skip trailing semicolons before closing brace
+      consume(:SEMICOLON) while peek(:SEMICOLON)
+      consume(:NEWLINE) while peek(:NEWLINE)
+
+      unless peek(:RBRACE)
+        raise "Expected '}' to close lazy_load"
+      end
+      consume(:RBRACE)
+
+      AST::LazyLoad.new(body: body)
     end
 
     # conditional_expr : '[[' expression ']]'

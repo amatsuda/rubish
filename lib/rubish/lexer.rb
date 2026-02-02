@@ -49,7 +49,8 @@ module Rubish
       'when' => :WHEN,
       'esac' => :ESAC,
       'coproc' => :COPROC,
-      'time' => :TIME
+      'time' => :TIME,
+      'lazy_load' => :LAZY_LOAD
       # Note: 'do', 'done', 'in', 'end' are handled as WORD tokens and checked by parser
       # to allow them as command arguments (e.g., "echo done")
     }.freeze
