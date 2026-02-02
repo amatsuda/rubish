@@ -5806,22 +5806,6 @@ module Rubish
       }
       names = []
 
-      # Action flags mapping
-      action_flags = {
-        'a' => :alias,
-        'b' => :builtin,
-        'c' => :command,
-        'd' => :directory,
-        'e' => :export,
-        'f' => :file,
-        'g' => :group,
-        'j' => :job,
-        'k' => :keyword,
-        's' => :service,
-        'u' => :user,
-        'v' => :variable
-      }
-
       i = 0
       while i < args.length
         arg = args[i]
@@ -5862,8 +5846,8 @@ module Rubish
           else
             # Handle combined flags like -df
             arg[1..].each_char do |c|
-              if action_flags.key?(c)
-                spec[:actions] << action_flags[c]
+              if COMPLETION_ACTION_FLAGS.key?(c)
+                spec[:actions] << COMPLETION_ACTION_FLAGS[c]
               else
                 puts "complete: -#{c}: invalid option"
                 return false
@@ -5976,21 +5960,6 @@ module Rubish
       }
       word = ''
 
-      action_flags = {
-        'a' => :alias,
-        'b' => :builtin,
-        'c' => :command,
-        'd' => :directory,
-        'e' => :export,
-        'f' => :file,
-        'g' => :group,
-        'j' => :job,
-        'k' => :keyword,
-        's' => :service,
-        'u' => :user,
-        'v' => :variable
-      }
-
       i = 0
       parsing_options = true
       while i < args.length
@@ -6030,8 +5999,8 @@ module Rubish
             spec[:suffix] = args[i]
           else
             arg[1..].each_char do |c|
-              if action_flags.key?(c)
-                spec[:actions] << action_flags[c]
+              if COMPLETION_ACTION_FLAGS.key?(c)
+                spec[:actions] << COMPLETION_ACTION_FLAGS[c]
               else
                 puts "compgen: -#{c}: invalid option"
                 return false
