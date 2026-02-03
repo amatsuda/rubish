@@ -16,14 +16,7 @@ module Rubish
       #   hash -d            - list all named directories
 
       if args.empty?
-        # List all cached paths
-        if @state.command_hash.empty?
-          puts 'hash: hash table empty'
-        else
-          @state.command_hash.each do |name, path|
-            puts "#{name}=#{path}"
-          end
-        end
+        print_command_hash
         return true
       end
 
@@ -98,14 +91,7 @@ module Rubish
       all_found = true
 
       if names.empty? && !set_path
-        # No names and no path to set, just list
-        if @state.command_hash.empty?
-          puts 'hash: hash table empty'
-        else
-          @state.command_hash.each do |name, path|
-            puts "#{name}=#{path}"
-          end
-        end
+        print_command_hash
         return true
       end
 
@@ -258,6 +244,16 @@ module Rubish
         Builtins.named_directories[name] + rest
       else
         nil  # Not a named directory, let normal expansion handle it
+      end
+    end
+
+    private
+
+    def print_command_hash
+      if @state.command_hash.empty?
+        puts 'hash: hash table empty'
+      else
+        @state.command_hash.each { |name, path| puts "#{name}=#{path}" }
       end
     end
   end
