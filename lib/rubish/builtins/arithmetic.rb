@@ -62,44 +62,33 @@ module Rubish
       end
 
       # Handle increment/decrement operators
-      if expr =~ /\A\+\+([a-zA-Z_][a-zA-Z0-9_]*)\z/
-        # Pre-increment
-        var_name = $1
-        return 0 if readonly?(var_name)
-        val = (ENV[var_name] || '0').to_i + 1
-        ENV[var_name] = val.to_s
-        return val
-      end
-
-      if expr =~ /\A--([a-zA-Z_][a-zA-Z0-9_]*)\z/
-        # Pre-decrement
-        var_name = $1
-        return 0 if readonly?(var_name)
-        val = (ENV[var_name] || '0').to_i - 1
-        ENV[var_name] = val.to_s
-        return val
-      end
-
-      if expr =~ /\A([a-zA-Z_][a-zA-Z0-9_]*)\+\+\z/
-        # Post-increment
-        var_name = $1
-        return 0 if readonly?(var_name)
-        old_val = (ENV[var_name] || '0').to_i
-        ENV[var_name] = (old_val + 1).to_s
-        return old_val
-      end
-
-      if expr =~ /\A([a-zA-Z_][a-zA-Z0-9_]*)--\z/
-        # Post-decrement
-        var_name = $1
-        return 0 if readonly?(var_name)
-        old_val = (ENV[var_name] || '0').to_i
-        ENV[var_name] = (old_val - 1).to_s
-        return old_val
-      end
+      result = apply_increment_decrement(expr)
+      return result unless result.nil?
 
       # Just evaluate the expression
       evaluate_arithmetic_expr(expr)
+    end
+
+    def apply_increment_decrement(expr)
+      # Pre-increment/decrement: ++var, --var
+      if expr =~ /\A(\+\+|--)([a-zA-Z_][a-zA-Z0-9_]*)\z/
+        op, var_name = $1, $2
+        return 0 if readonly?(var_name)
+        val = (ENV[var_name] || '0').to_i + (op == '++' ? 1 : -1)
+        ENV[var_name] = val.to_s
+        return val
+      end
+
+      # Post-increment/decrement: var++, var--
+      if expr =~ /\A([a-zA-Z_][a-zA-Z0-9_]*)(\+\+|--)\z/
+        var_name, op = $1, $2
+        return 0 if readonly?(var_name)
+        old_val = (ENV[var_name] || '0').to_i
+        ENV[var_name] = (old_val + (op == '++' ? 1 : -1)).to_s
+        return old_val
+      end
+
+      nil
     end
 
     def evaluate_arithmetic_expr(expr)
