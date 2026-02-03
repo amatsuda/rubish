@@ -159,8 +159,9 @@ module Rubish
     end
 
     def print_dir_stack
+      home = ENV['HOME'] || Dir.home
       stack = [Dir.pwd] + @state.dir_stack
-      puts stack.map { |d| d.sub(ENV['HOME'], '~') }.join(' ')
+      puts stack.map { |d| d.sub(home, '~') }.join(' ')
     end
 
     def clear_dir_stack
