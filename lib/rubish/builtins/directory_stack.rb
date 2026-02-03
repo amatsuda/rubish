@@ -29,15 +29,7 @@ module Rubish
         current = Dir.pwd
         target = @state.dir_stack.shift
         @state.dir_stack.unshift(current)
-        unless no_cd
-          begin
-            Dir.chdir(target)
-            notify_terminal_of_cwd
-          rescue Errno::ENOENT => e
-            puts "pushd: #{e.message}"
-            return false
-          end
-        end
+        return false unless no_cd || chdir_safe(target, 'pushd')
         print_dir_stack
         true
       elsif remaining_args.first =~ /^[+-]\d+$/
@@ -68,15 +60,7 @@ module Rubish
         target = rotated.first
         @state.dir_stack = rotated[1..]
 
-        unless no_cd
-          begin
-            Dir.chdir(target)
-            notify_terminal_of_cwd
-          rescue Errno::ENOENT => e
-            puts "pushd: #{e.message}"
-            return false
-          end
-        end
+        return false unless no_cd || chdir_safe(target, 'pushd')
         print_dir_stack
         true
       else
@@ -91,15 +75,7 @@ module Rubish
         end
 
         @state.dir_stack.unshift(current)
-        unless no_cd
-          begin
-            Dir.chdir(dir)
-            notify_terminal_of_cwd
-          rescue Errno::ENOENT => e
-            puts "pushd: #{e.message}"
-            return false
-          end
-        end
+        return false unless no_cd || chdir_safe(dir, 'pushd')
         print_dir_stack
         true
       end
@@ -156,15 +132,7 @@ module Rubish
           end
           target = full_stack[1]
           @state.dir_stack = full_stack[2..] || []
-          unless no_cd
-            begin
-              Dir.chdir(target)
-              notify_terminal_of_cwd
-            rescue Errno::ENOENT => e
-              puts "popd: #{e.message}"
-              return false
-            end
-          end
+          return false unless no_cd || chdir_safe(target, 'popd')
         else
           # Removing from stack (not current dir)
           full_stack.delete_at(index)
@@ -178,15 +146,7 @@ module Rubish
         end
 
         target = @state.dir_stack.shift
-        unless no_cd
-          begin
-            Dir.chdir(target)
-            notify_terminal_of_cwd
-          rescue Errno::ENOENT => e
-            puts "popd: #{e.message}"
-            return false
-          end
-        end
+        return false unless no_cd || chdir_safe(target, 'popd')
       end
 
       print_dir_stack
@@ -205,6 +165,17 @@ module Rubish
 
     def clear_dir_stack
       @state.dir_stack.clear
+    end
+
+    private
+
+    def chdir_safe(target, cmd_name)
+      Dir.chdir(target)
+      notify_terminal_of_cwd
+      true
+    rescue Errno::ENOENT => e
+      puts "#{cmd_name}: #{e.message}"
+      false
     end
   end
 end
