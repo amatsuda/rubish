@@ -281,7 +281,8 @@ module Rubish
       # If only one variable, assign the whole line (with IFS whitespace trimmed)
       if vars.length == 1
         ws_chars = ifs_whitespace
-        trimmed = ws_chars.empty? ? line : line.gsub(/\A[#{Regexp.escape(ws_chars)}]+|[#{Regexp.escape(ws_chars)}]+\z/, '')
+        escaped = Regexp.escape(ws_chars)
+        trimmed = ws_chars.empty? ? line : line.gsub(/\A[#{escaped}]+|[#{escaped}]+\z/, '')
         ENV[vars[0]] = trimmed
         return
       end
