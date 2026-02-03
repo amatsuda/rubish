@@ -120,12 +120,6 @@ module Rubish
         end
       end
 
-      # Handle comparison operators (convert to Ruby equivalents)
-      expanded = expanded.gsub('==', '==')
-      expanded = expanded.gsub('!=', '!=')
-      expanded = expanded.gsub('<=', '<=')
-      expanded = expanded.gsub('>=', '>=')
-
       # Handle logical operators
       expanded = expanded.gsub('&&', ' && ')
       expanded = expanded.gsub('||', ' || ')
