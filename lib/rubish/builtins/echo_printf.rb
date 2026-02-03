@@ -2,6 +2,8 @@
 
 module Rubish
   module Builtins
+    ECHO_STOP_OUTPUT = "\x00STOP_OUTPUT\x00"
+
     def echo(args)
       # Handle string argument (from Ruby code like echo("hello"))
       args = [args] if args.is_a?(String)
@@ -33,8 +35,8 @@ module Rubish
       if interpret_escapes
         output = process_echo_escapes(output)
         # Check for \c which stops output
-        if output.include?("\x00STOP_OUTPUT\x00")
-          output = output.split("\x00STOP_OUTPUT\x00").first || ''
+        if output.include?(ECHO_STOP_OUTPUT)
+          output = output.split(ECHO_STOP_OUTPUT).first || ''
           newline = false
         end
       end
@@ -66,7 +68,7 @@ module Rubish
           when 'e', 'E' then result << "\e"; i += 2  # escape character
           when 'c'
             # \c stops output (no further characters printed, no newline)
-            result << "\x00STOP_OUTPUT\x00"
+            result << ECHO_STOP_OUTPUT
             break
           when '0'
             # Octal escape \0nnn (up to 3 octal digits)
