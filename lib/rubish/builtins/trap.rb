@@ -54,7 +54,7 @@ module Rubish
       if args.empty?
         # List all traps
         @state.traps.each do |sig, cmd|
-          sig_name = sig == 0 ? 'EXIT' : sig
+          sig_name = signal_display_name(sig)
           puts "trap -- #{cmd.inspect} #{sig_name}"
         end
         return true
@@ -86,7 +86,7 @@ module Rubish
         signals = args[1..] || []
         if signals.empty?
           @state.traps.each do |sig, cmd|
-            sig_name = sig == 0 ? 'EXIT' : sig
+            sig_name = signal_display_name(sig)
             puts "trap -- #{cmd.inspect} #{sig_name}"
           end
         else
@@ -95,7 +95,7 @@ module Rubish
             next unless sig
 
             if @state.traps.key?(sig)
-              sig_name = sig == 0 ? 'EXIT' : sig
+              sig_name = signal_display_name(sig)
               puts "trap -- #{@state.traps[sig].inspect} #{sig_name}"
             end
           end
@@ -139,22 +139,6 @@ module Rubish
       end
 
       true
-    end
-
-    def normalize_signal(sig_arg)
-      sig_str = sig_arg.to_s
-
-      # Look up in SIGNALS hash (handles both numeric and named signals)
-      sig_upper = sig_str.upcase
-      result = SIGNALS[sig_upper]
-      return result if result
-
-      # For pure numeric input not in SIGNALS, return as integer
-      if sig_str =~ /\A\d+\z/
-        return sig_str.to_i
-      end
-
-      nil
     end
 
     # Pseudo-signals that are not real OS signals
@@ -315,6 +299,26 @@ module Rubish
       end
       @state.traps.clear
       @state.original_traps.clear
+    end
+
+    def normalize_signal(sig_arg)
+      sig_str = sig_arg.to_s
+
+      # Look up in SIGNALS hash (handles both numeric and named signals)
+      sig_upper = sig_str.upcase
+      result = SIGNALS[sig_upper]
+      return result if result
+
+      # For pure numeric input not in SIGNALS, return as integer
+      return sig_str.to_i if sig_str =~ /\A\d+\z/
+
+      nil
+    end
+
+    private
+
+    def signal_display_name(sig)
+      sig == 0 ? 'EXIT' : sig
     end
   end
 end
