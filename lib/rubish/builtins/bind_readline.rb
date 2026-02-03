@@ -359,7 +359,7 @@ module Rubish
             result[keyseq] = action
           end
         end
-      rescue
+      rescue StandardError
         # Reline not available or error accessing bindings
       end
       result
