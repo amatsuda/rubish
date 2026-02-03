@@ -129,7 +129,7 @@ module Rubish
         if command == '-'
           # Reset to default
           reset_trap(sig)
-        elsif command.empty? || command == ''
+        elsif command.empty?
           # Ignore signal
           set_trap(sig, '')
         else
