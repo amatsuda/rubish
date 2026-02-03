@@ -226,8 +226,6 @@ module Rubish
       end
     end
 
-    @in_err_trap = false
-
     def err_trap
       return unless @state.traps.key?('ERR')
       return if @in_err_trap  # Prevent recursion
@@ -259,8 +257,6 @@ module Rubish
       end
     end
 
-    @in_debug_trap = false
-
     def debug_trap
       return unless @state.traps.key?('DEBUG')
       return if @in_debug_trap  # Prevent recursion
@@ -278,8 +274,6 @@ module Rubish
     def debug_trap_set?
       @state.traps.key?('DEBUG') && !@state.traps['DEBUG'].empty?
     end
-
-    @in_return_trap = false
 
     def return_trap
       return unless @state.traps.key?('RETURN')
