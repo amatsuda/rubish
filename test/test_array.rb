@@ -370,4 +370,15 @@ class TestArray < Test::Unit::TestCase
     assert_equal "arg2\n", File.read(output_file)
     Rubish::Builtins.clear_completion_context
   end
+
+  def test_array_assignment_with_command_substitution
+    execute('arr=( $(echo "one two three") )')
+    assert_equal %w[one two three], Rubish::Builtins.get_array('arr')
+  end
+
+  def test_array_assignment_with_nested_command_substitution
+    ENV['WORDS'] = 'alpha beta gamma'
+    execute('arr=( $(echo $WORDS) )')
+    assert_equal %w[alpha beta gamma], Rubish::Builtins.get_array('arr')
+  end
 end

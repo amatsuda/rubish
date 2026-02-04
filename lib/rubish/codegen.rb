@@ -1009,8 +1009,8 @@ module Rubish
     # Generate code for an array element, with special handling for command substitution
     # In array context, $(cmd) should be word-split into multiple elements
     def generate_array_element(str)
-      # Check if this element is purely a command substitution
-      if str =~ /\A\$\([^)]+\)\z/
+      # Check if this element is purely a command substitution (handles nested $(...))
+      if pure_command_substitution?(str)
         # Pure command substitution: $(cmd) - word-split the result
         cmd = str[2...-1]
         return "__run_subst(#{cmd.inspect}).split"
@@ -1024,6 +1024,38 @@ module Rubish
 
       # No command substitution - use normal string arg generation
       generate_string_arg(str)
+    end
+
+    # Check if str is purely a $(...) command substitution, handling nested parens and quotes
+    def pure_command_substitution?(str)
+      return false unless str.start_with?('$(') && str.end_with?(')')
+
+      depth = 1
+      i = 2
+      while i < str.length
+        c = str[i]
+        if c == "'"
+          # Skip single-quoted string
+          i += 1
+          i += 1 while i < str.length && str[i] != "'"
+        elsif c == '"'
+          # Skip double-quoted string (backslash escapes inside)
+          i += 1
+          while i < str.length && str[i] != '"'
+            i += 1 if str[i] == '\\'
+            i += 1
+          end
+        elsif c == '\\'
+          i += 1 # skip escaped char
+        elsif c == '('
+          depth += 1
+        elsif c == ')'
+          depth -= 1
+          return i == str.length - 1 if depth == 0
+        end
+        i += 1
+      end
+      false
     end
 
     def escape_string(str)
