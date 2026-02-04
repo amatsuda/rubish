@@ -63,13 +63,6 @@ module Rubish
       expand_prompt(rprompt)
     end
 
-    # Set Reline's rprompt for right-side prompt display
-    def setup_rprompt
-      return unless Reline.respond_to?(:rprompt=)
-
-      Reline.rprompt = right_prompt
-    end
-
     # Calculate visible length of a string (excluding ANSI escape codes)
     def visible_length(str)
       # Remove ANSI escape sequences

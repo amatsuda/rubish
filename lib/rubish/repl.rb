@@ -489,11 +489,12 @@ module Rubish
       # Get the left prompt
       left_prompt = prompt
 
-      # Set Reline's rprompt for right-side prompt
-      setup_rprompt
-
       # Don't auto-add to history; we'll do it ourselves after checking HISTCONTROL/HISTIGNORE
-      line = Reline.readline(left_prompt, false)
+      line = if Reline::Core.instance_method(:readline).parameters.any? { |_, name| name == :rprompt }
+               Reline.readline(prompt: left_prompt, rprompt: right_prompt)
+             else
+               Reline.readline(left_prompt, false)
+             end
       unless line
         # EOF received (Ctrl+D)
         # Check IGNOREEOF variable first, then fall back to set -o ignoreeof
