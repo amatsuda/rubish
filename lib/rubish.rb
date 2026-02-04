@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require_relative 'rubish/version'
+
 require 'set'
 require 'stringio'
 require 'tempfile'
@@ -41,8 +43,6 @@ require_relative 'rubish/runtime/builtins'
 require_relative 'rubish/repl'
 
 module Rubish
-  VERSION = '0.0.1'
-
   # Set a custom prompt function
   # Usage: Rubish.set_prompt { "#{Dir.pwd}> " }
   def self.set_prompt(&block)

@@ -1,7 +1,9 @@
 # frozen_string_literal: true
 
-require 'test/unit'
-require_relative '../lib/rubish'
+$LOAD_PATH.unshift File.expand_path('../lib', __dir__)
+require 'rubish'
+
+require 'test-unit'
 
 # Common test helper methods
 module TestHelper

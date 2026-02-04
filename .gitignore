@@ -1,1 +1,6 @@
 Gemfile.lock
+/.bundle/
+/coverage/
+/doc/
+/pkg/
+/tmp/
