@@ -1300,6 +1300,11 @@ module Rubish
       @state.shell_vars.key?(name) || ENV.key?(name)
     end
 
+    # Get all shell variable names (not in ENV)
+    def shell_var_names
+      @state.shell_vars.keys
+    end
+
     # Clear all shell variables (for testing)
     def clear_shell_vars
       @state.shell_vars.clear

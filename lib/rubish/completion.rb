@@ -196,6 +196,30 @@ module Rubish
         return []
       end
 
+      # Environment variable completion: $PA -> $PATH
+      # Also handle ${PA -> ${PATH} (Reline splits on { so we only get PA)
+      if input.start_with?('$')
+        return complete_variable(input)
+      end
+
+      # Check if we're inside ${...} by looking at context before current word
+      # Reline splits on { so input might be just "PA" when user typed "${PA"
+      # We need to return "PATH}" (not "${PATH}") so Reline replaces "PA" correctly
+      line_to_point = line[0, point] || ''
+      if line_to_point =~ /\$\{([A-Za-z_][A-Za-z0-9_]*)?\z/
+        # We're completing inside ${...}, return VAR} format
+        prefix = input
+        results = []
+        ENV.keys.each do |key|
+          results << "#{key}}" if key.start_with?(prefix)
+        end
+        Builtins.shell_var_names.each do |key|
+          candidate = "#{key}}"
+          results << candidate if key.start_with?(prefix) && !results.include?(candidate)
+        end
+        return results.uniq.sort
+      end
+
       # hostcomplete: attempt hostname completion when input starts with @
       if Builtins.shopt_enabled?('hostcomplete') && input.start_with?('@')
         hostname_prefix = input[1..]  # Remove the @ prefix
@@ -599,6 +623,36 @@ module Rubish
       end
 
       hostnames.to_a.sort
+    end
+
+    # Complete environment and shell variable names
+    def complete_variable(input)
+      # Handle ${VAR} form - complete inside braces
+      if input.start_with?('${')
+        prefix = input[2..]  # Remove ${
+        closing = '}'
+        dollar_prefix = '${'
+      else
+        # Handle $VAR form
+        prefix = input[1..]  # Remove $
+        closing = ''
+        dollar_prefix = '$'
+      end
+
+      results = []
+
+      # Environment variables
+      ENV.keys.each do |key|
+        results << "#{dollar_prefix}#{key}#{closing}" if key.start_with?(prefix)
+      end
+
+      # Shell variables (from Builtins.shell_vars)
+      Builtins.shell_var_names.each do |key|
+        candidate = "#{dollar_prefix}#{key}#{closing}"
+        results << candidate if key.start_with?(prefix) && !results.include?(candidate)
+      end
+
+      results.uniq.sort
     end
 
     def complete_command(input)
