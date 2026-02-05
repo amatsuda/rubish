@@ -19,6 +19,7 @@ require 'syslog'
 require 'fiddle'
 require 'fiddle/import'
 require 'reline'
+require 'did_you_mean'
 
 # Suppress deprecation warnings for Data class on Ruby < 3.2
 if RUBY_VERSION < '3.2'

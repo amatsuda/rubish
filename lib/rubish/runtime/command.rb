@@ -87,10 +87,46 @@ module Rubish
       exec(cmd_path, *args)
     rescue Errno::ENOENT
       $stderr.puts "rubish: #{cmd_name}: command not found"
+      suggestions = suggest_similar_commands(cmd_name)
+      unless suggestions.empty?
+        $stderr.puts "Did you mean?  #{suggestions.join("\n               ")}"
+      end
       exit(127)
     rescue Errno::EACCES
       $stderr.puts "rubish: #{cmd_path}: Permission denied"
       exit(126)
+    end
+
+    # Get all available commands from PATH directories
+    def self.available_commands
+      @available_commands_cache ||= begin
+        commands = Set.new
+        path_dirs = (ENV['PATH'] || '').split(File::PATH_SEPARATOR)
+        path_dirs.each do |dir|
+          next unless File.directory?(dir)
+          begin
+            Dir.foreach(dir) do |entry|
+              next if entry.start_with?('.')
+              full_path = File.join(dir, entry)
+              commands << entry if File.executable?(full_path) && !File.directory?(full_path)
+            end
+          rescue Errno::ENOENT, Errno::EACCES
+            # Skip directories we can't read
+          end
+        end
+        commands.to_a
+      end
+    end
+
+    # Suggest similar command names using did_you_mean
+    def self.suggest_similar_commands(cmd_name)
+      spell_checker = DidYouMean::SpellChecker.new(dictionary: available_commands)
+      spell_checker.correct(cmd_name)
+    end
+
+    # Clear the available commands cache (useful when PATH changes)
+    def self.clear_command_cache
+      @available_commands_cache = nil
     end
 
     def initialize(name, *args, skip_functions: false, &block)
