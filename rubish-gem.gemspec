@@ -3,7 +3,7 @@
 require_relative 'lib/rubish/version'
 
 Gem::Specification.new do |spec|
-  spec.name = 'rubish'
+  spec.name = 'rubish-gem'
   spec.version = Rubish::VERSION
   spec.authors = ['Akira Matsuda']
   spec.email = ['ronnie@dio.jp']
