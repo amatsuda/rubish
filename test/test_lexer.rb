@@ -161,19 +161,19 @@ class TestLexer < Test::Unit::TestCase
     assert_equal './bin/', tokens[1].value
   end
 
-  # Regexp with metacharacters should be REGEXP
-  def test_regexp_with_metacharacters
+  # Patterns with metacharacters are treated as WORD (no regexp support)
+  def test_pattern_with_metacharacters_is_word
     tokens = tokenize('grep /foo.*bar/')
     assert_equal 2, tokens.length
-    assert_equal :REGEXP, tokens[1].type
+    assert_equal :WORD, tokens[1].type
     assert_equal '/foo.*bar/', tokens[1].value
   end
 
-  # Regexp with anchors should be REGEXP
-  def test_regexp_with_anchors
+  # Patterns with anchors are treated as WORD
+  def test_pattern_with_anchors_is_word
     tokens = tokenize('grep /^start/')
     assert_equal 2, tokens.length
-    assert_equal :REGEXP, tokens[1].type
+    assert_equal :WORD, tokens[1].type
     assert_equal '/^start/', tokens[1].value
   end
 
@@ -233,26 +233,6 @@ class TestLexer < Test::Unit::TestCase
     assert_equal :WORD, tokens[1].type
   end
 
-  # Regexp with capture groups should be REGEXP
-  def test_regexp_with_capture_groups
-    tokens = tokenize('grep /(foo|bar)/')
-    assert_equal 2, tokens.length
-    assert_equal :REGEXP, tokens[1].type
-  end
-
-  # Regexp with character class should be REGEXP
-  def test_regexp_with_character_class
-    tokens = tokenize('grep /[a-z]+/')
-    assert_equal 2, tokens.length
-    assert_equal :REGEXP, tokens[1].type
-  end
-
-  # Regexp with quantifiers should be REGEXP
-  def test_regexp_with_quantifiers
-    tokens = tokenize('grep /fo+ba?r/')
-    assert_equal 2, tokens.length
-    assert_equal :REGEXP, tokens[1].type
-  end
 
   # ==========================================================================
   # Function call syntax: cmd(arg1, arg2)

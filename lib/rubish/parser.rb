@@ -48,7 +48,7 @@ module Rubish
       commands = [first]
       while peek(:SEMICOLON) || peek(:AMPERSAND)
         op = consume
-        if op.type == :AMPERSAND && !peek_any(:WORD, :ARRAY, :REGEXP, :IF, :WHILE, :FOR)
+        if op.type == :AMPERSAND && !peek_any(:WORD, :ARRAY, :IF, :WHILE, :FOR)
           # Trailing &, make last command background
           commands[-1] = AST::Background.new(commands[-1])
           break
@@ -201,7 +201,7 @@ module Rubish
     end
 
     # command : if_statement | while_statement | until_statement | for_statement | case_statement | function_def | subshell | coproc | conditional_expr | array_assign | WORD arg* block? (redirection)*
-    # arg : WORD | ARRAY | REGEXP
+    # arg : WORD | ARRAY
     def parse_command
       # Check for control structures (compound commands support redirections)
       compound_cmd = if peek(:IF)
@@ -255,7 +255,7 @@ module Rubish
         # If there's no next WORD, this is a bare assignment, not a prefix env
         next_pos = @pos + 1
         next_token = @tokens[next_pos]
-        if next_pos < @tokens.length && [:WORD, :ARRAY, :REGEXP, :PROC_SUB_IN, :PROC_SUB_OUT].include?(next_token&.type)
+        if next_pos < @tokens.length && [:WORD, :ARRAY, :PROC_SUB_IN, :PROC_SUB_OUT].include?(next_token&.type)
           # Check if the next token is also an assignment - if it's followed by
           # nothing or by end-of-input, then ALL of these are bare assignments, not prefix env
           # This handles: A=1 B=2 C=3 (all assignments, no command)
@@ -267,7 +267,7 @@ module Rubish
               tok = @tokens[look_pos]
               if tok.type == :WORD && assignment?(tok.value)
                 look_pos += 1
-              elsif [:WORD, :ARRAY, :REGEXP, :PROC_SUB_IN, :PROC_SUB_OUT].include?(tok.type)
+              elsif [:WORD, :ARRAY, :PROC_SUB_IN, :PROC_SUB_OUT].include?(tok.type)
                 found_command = true
                 break
               else
@@ -299,7 +299,7 @@ module Rubish
       args = []
 
       # Parse arguments (WORD, ARRAY, REGEXP, PROC_SUB_IN, PROC_SUB_OUT)
-      while peek_any(:WORD, :ARRAY, :REGEXP, :PROC_SUB_IN, :PROC_SUB_OUT)
+      while peek_any(:WORD, :ARRAY, :PROC_SUB_IN, :PROC_SUB_OUT)
         args << parse_arg
       end
 
@@ -1116,8 +1116,6 @@ module Rubish
         token.value
       when :ARRAY
         AST::ArrayLiteral.new(token.value)
-      when :REGEXP
-        AST::RegexpLiteral.new(token.value)
       when :PROC_SUB_IN
         AST::ProcessSubstitution.new(token.value, :in)
       when :PROC_SUB_OUT

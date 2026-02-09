@@ -45,7 +45,6 @@ module Rubish
 
     # Ruby literals as arguments
     ArrayLiteral = Data.define(:value)   # [1, 2, 3]
-    RegexpLiteral = Data.define(:value)  # /pattern/
 
     # Process substitution: <(cmd) or >(cmd)
     # direction: :in for <(cmd), :out for >(cmd)

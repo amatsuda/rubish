@@ -134,8 +134,6 @@ module Rubish
         generate_string_arg_with_glob(arg)
       when AST::ArrayLiteral
         arg.value  # Already valid Ruby: [1, 2, 3]
-      when AST::RegexpLiteral
-        arg.value  # Already valid Ruby: /pattern/
       when AST::ProcessSubstitution
         generate_process_substitution(arg)
       else

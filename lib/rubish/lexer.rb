@@ -224,7 +224,7 @@ module Rubish
           read_array
         end
       when '/'
-        read_regexp_or_word
+        read_word
       when '{'
         # Check if this is a brace expansion pattern like {a,b,c} or {1..5}
         if looks_like_brace_expansion?
@@ -375,66 +375,6 @@ module Rubish
         @pos += 1
       end
       Token.new(:ARRAY, @input[start...@pos])
-    end
-
-    def read_regexp_or_word
-      # Look ahead to see if this is a regexp or a path
-      # Regexp: /pattern/ followed by whitespace, operator, or end
-      # Path: /foo/bar (continues after the closing /) or /bin/ (trailing slash)
-      lookahead = @pos + 1
-      while lookahead < @input.length
-        char = @input[lookahead]
-        break if char =~ /[ \t]/
-        if char == '/' && lookahead > @pos + 1
-          # Check what comes after the potential closing /
-          after_slash = lookahead + 1
-          # Skip optional regexp flags
-          after_slash += 1 while after_slash < @input.length && @input[after_slash] =~ /[imxo]/
-          # If followed by whitespace, operator (except {), or end, it might be a regexp
-          # Exclude { because it could be brace expansion in a path like /tmp/{a,b}
-          next_char = @input[after_slash]
-          if next_char.nil? || next_char =~ /[ \t]/ || (OPERATORS.key?(next_char) && next_char != '{')
-            # Check if content looks like a path (no regex metacharacters) or a regexp
-            # Paths like /bin/ or /opt/homebrew/ contain alphanumeric, underscore, dash, dot, slash
-            # Regexps typically have metacharacters like * + ? ^ $ [ ] ( ) | \
-            content = @input[@pos + 1...lookahead]
-            if content =~ /\A[a-zA-Z0-9_.\-\/]+\z/
-              # Looks like a path component, not a regexp - treat as word
-              break
-            end
-            return read_regexp
-          end
-          # Otherwise continue - it's a path like /tmp/file
-        end
-        # Check for escape in regexp
-        if char == '\\'
-          lookahead += 2
-          next
-        end
-        lookahead += 1
-      end
-      # Not a regexp, treat as word
-      read_word
-    end
-
-    def read_regexp
-      start = @pos
-      @pos += 1 # skip opening /
-      while @pos < @input.length
-        char = @input[@pos]
-        if char == '\\'
-          @pos += 2 # skip escaped char
-          next
-        end
-        if char == '/'
-          @pos += 1
-          # Read optional flags (i, m, x, etc.)
-          @pos += 1 while @pos < @input.length && @input[@pos] =~ /[imxo]/
-          break
-        end
-        @pos += 1
-      end
-      Token.new(:REGEXP, @input[start...@pos])
     end
 
     def read_block
