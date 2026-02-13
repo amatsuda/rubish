@@ -5,6 +5,12 @@ require 'rubish'
 
 require 'test-unit'
 
+# Initialize Builtins with a default ShellState so that tests calling
+# Builtins.run() directly (without creating a REPL) work correctly.
+unless Rubish::Builtins.current_state
+  Rubish::Builtins.current_state = Rubish::ShellState.new
+end
+
 # Common test helper methods
 module TestHelper
   # Get a shell variable value (from shell_vars or ENV)
