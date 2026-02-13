@@ -814,8 +814,13 @@ module Rubish
           $stdout.reopen(fifo)
           $stderr.reopen('/dev/null', 'w')
 
-          # Execute the command via shell
-          Kernel.exec('/bin/sh', '-c', command)
+          begin
+            execute(command, skip_history_expansion: true)
+            Kernel.exit(@last_status || 0)
+          rescue => e
+            $stderr.puts "rubish: #{e.message}"
+            Kernel.exit(1)
+          end
         end
         Process.detach(pid)
       else
@@ -827,8 +832,13 @@ module Rubish
           $stdin.reopen(fifo)
           $stderr.reopen('/dev/null', 'w')
 
-          # Execute the command via shell
-          Kernel.exec('/bin/sh', '-c', command)
+          begin
+            execute(command, skip_history_expansion: true)
+            Kernel.exit(@last_status || 0)
+          rescue => e
+            $stderr.puts "rubish: #{e.message}"
+            Kernel.exit(1)
+          end
         end
         Process.detach(pid)
       end

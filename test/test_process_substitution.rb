@@ -169,4 +169,18 @@ class TestProcessSubstitution < Test::Unit::TestCase
     result = File.read(output_file).strip
     assert_equal '3', result
   end
+
+  def test_proc_sub_in_uses_shell_function
+    execute('greet() { echo hello; }')
+    execute("cat <(greet) > #{output_file}")
+    sleep 0.3
+    assert_equal "hello\n", File.read(output_file)
+  end
+
+  def test_proc_sub_out_uses_shell_function
+    execute('upper() { tr a-z A-Z; }')
+    execute("echo hello | tee >(upper > #{output_file})")
+    sleep 0.5
+    assert_equal "HELLO\n", File.read(output_file)
+  end
 end
