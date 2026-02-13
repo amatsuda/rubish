@@ -653,6 +653,11 @@ module Rubish
       # UNIX commands rarely start with capitals, but Ruby constants/classes do
       # Exclude shell variable assignments (VAR=value, VAR+=value, VAR[n]=value)
       if line =~ /\A[A-Z]/ && line !~ /\A[A-Z_][A-Z0-9_]*(\[[^\]]*\])?\+?=/
+        if Builtins.restricted_mode?
+          $stderr.puts 'rubish: restricted: cannot execute Ruby code'
+          @last_status = 1
+          return
+        end
         begin
           result = @context.instance_eval(line)
           p result unless result.nil?
@@ -668,6 +673,11 @@ module Rubish
 
       # Check if input is a Ruby lambda literal (-> { ... } or ->(args) { ... })
       if line =~ /\A->/
+        if Builtins.restricted_mode?
+          $stderr.puts 'rubish: restricted: cannot execute Ruby code'
+          @last_status = 1
+          return
+        end
         begin
           result = @context.instance_eval(line)
           # Auto-call lambdas with no required arguments
@@ -695,6 +705,14 @@ module Rubish
       # Handle multi-line commands (cmdhist): collect continuation lines if parse fails
       accumulated_lines = [line]
       tokens = @lexer_class.new(line).tokenize
+
+      # Restricted mode: block Ruby literal tokens (blocks, conditions, arrays)
+      if Builtins.restricted_mode? && tokens.any? { |t| %i[BLOCK RUBY_CONDITION ARRAY].include?(t.type) }
+        $stderr.puts 'rubish: restricted: cannot execute Ruby code'
+        @last_status = 1
+        return
+      end
+
       begin
         ast = @parser_class.new(tokens).parse
       rescue => e

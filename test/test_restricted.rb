@@ -256,6 +256,45 @@ class TestRestricted < Test::Unit::TestCase
     assert Rubish::Builtins.restricted_mode?
   end
 
+  # ==========================================================================
+  # Ruby literal restriction tests
+  # ==========================================================================
+
+  def test_capital_letter_ruby_code_blocked_in_restricted_mode
+    execute('set -r')
+    stderr = capture_stderr { execute('File.exist?("/tmp")') }
+    assert_match(/restricted/, stderr)
+    assert_match(/Ruby code/, stderr)
+  end
+
+  def test_lambda_literal_blocked_in_restricted_mode
+    execute('set -r')
+    stderr = capture_stderr { execute('-> { puts "hello" }') }
+    assert_match(/restricted/, stderr)
+    assert_match(/Ruby code/, stderr)
+  end
+
+  def test_block_token_blocked_in_restricted_mode
+    execute('set -r')
+    stderr = capture_stderr { execute('ls { |f| puts f }') }
+    assert_match(/restricted/, stderr)
+    assert_match(/Ruby code/, stderr)
+  end
+
+  def test_ruby_condition_blocked_in_restricted_mode
+    execute('set -r')
+    stderr = capture_stderr { execute('if { true }; then echo yes; fi') }
+    assert_match(/restricted/, stderr)
+    assert_match(/Ruby code/, stderr)
+  end
+
+  def test_array_literal_blocked_in_restricted_mode
+    execute('set -r')
+    stderr = capture_stderr { execute('echo [1, 2, 3]') }
+    assert_match(/restricted/, stderr)
+    assert_match(/Ruby code/, stderr)
+  end
+
   def test_restricted_mode_enabled_after_startup_files
     # This tests that startup files can modify PATH before restricted mode kicks in
     tempdir = Dir.mktmpdir('rubish_restricted_startup')
