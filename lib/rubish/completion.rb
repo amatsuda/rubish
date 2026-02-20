@@ -140,11 +140,12 @@ module Rubish
           line = whole_buffer
           point = @byte_pointer
 
-          # Find the current word
+          # Find the current word (convert byte pointer to character offset for string operations)
           line_to_cursor = line.byteslice(0, point) || ''
-          word_start = line_to_cursor.rindex(/[ \t]/)
-          word_start = word_start ? word_start + 1 : 0
-          word = line_to_cursor.byteslice(word_start..-1) || ''
+          word_start_char = line_to_cursor.rindex(/[ \t]/)
+          word_start_char = word_start_char ? word_start_char + 1 : 0
+          word = line_to_cursor[word_start_char..] || ''
+          word_start_byte = line_to_cursor[0, word_start_char].bytesize
 
           # Check if it's an abbreviated path that needs expansion
           if word.include?('/') && !word.start_with?('/') && !Dir.glob("#{word}*").any?
@@ -153,10 +154,10 @@ module Rubish
               # Single match - expand inline
               expanded = expanded_paths.first
               # Replace the word in the buffer
-              new_line = line.byteslice(0, word_start).to_s + expanded + (line.byteslice(point..-1) || '')
+              new_line = line.byteslice(0, word_start_byte).to_s + expanded + (line.byteslice(point..-1) || '')
               @buffer_of_lines = [new_line]
-              @byte_pointer = word_start + expanded.bytesize
-              @cursor = word_start + expanded.length
+              @byte_pointer = word_start_byte + expanded.bytesize
+              @cursor = word_start_char + expanded.length
               @cursor_max = new_line.length
               return
             elsif expanded_paths && expanded_paths.length > 1
@@ -166,10 +167,10 @@ module Rubish
                 common = common.chars.zip(path.chars).take_while { |a, b| a == b }.map(&:first).join
               end
               if common.length > word.length
-                new_line = line.byteslice(0, word_start).to_s + common + (line.byteslice(point..-1) || '')
+                new_line = line.byteslice(0, word_start_byte).to_s + common + (line.byteslice(point..-1) || '')
                 @buffer_of_lines = [new_line]
-                @byte_pointer = word_start + common.bytesize
-                @cursor = word_start + common.length
+                @byte_pointer = word_start_byte + common.bytesize
+                @cursor = word_start_char + common.length
                 @cursor_max = new_line.length
                 return
               end
@@ -189,7 +190,8 @@ module Rubish
 
     def complete(input)
       line = Reline.line_buffer
-      point = Reline.point rescue line.length
+      byte_point = Reline.point rescue line.bytesize
+      point = line.byteslice(0, byte_point)&.length || 0
 
       # no_empty_cmd_completion: do not complete on empty command line
       if Builtins.shopt_enabled?('no_empty_cmd_completion') && line.strip.empty?
