@@ -303,13 +303,7 @@ module Rubish
         args << parse_arg
       end
 
-      # Parse optional block
-      block = nil
-      if peek(:BLOCK)
-        block = consume(:BLOCK).value
-      end
-
-      cmd = AST::Command.new(name: name, args: args, block: block, env: prefix_env)
+      cmd = AST::Command.new(name: name, args: args, env: prefix_env)
       parse_redirections(cmd)
     end
 
