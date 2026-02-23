@@ -1,9 +1,7 @@
 # frozen_string_literal: true
 
 # Polyfill Data.define for Ruby < 3.2
-data_has_define = Data.respond_to?(:define)
-
-unless data_has_define
+unless defined?(Data) && Data.respond_to?(:define)
   class Data
     def self.define(*keys, &block)
       # Use a module for initialize so that custom initialize can call super
