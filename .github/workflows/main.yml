@@ -30,7 +30,7 @@ jobs:
         uses: ruby/setup-ruby@v1
         with:
           ruby-version: ${{ matrix.ruby }}
-          rubygems: ${{ (matrix.ruby_version < '2.7' && 'default') || (matrix.ruby_version < '3' && '3.4.22') || 'latest' }}
+          rubygems: ${{ (matrix.ruby_version < '3' && '3.4.22') || 'latest' }}
           bundler-cache: true
       - name: Run the default task
         run: bundle exec rake
