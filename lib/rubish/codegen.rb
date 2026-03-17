@@ -1159,7 +1159,7 @@ module Rubish
         var_name = $1
         operator = $2
         operand = $3
-        return "__param_expand(#{var_name.inspect}, #{operator.inspect}, #{operand.inspect})"
+        return "__param_expand(#{var_name.inspect}, #{operator.inspect}, #{generate_param_operand(operand)})"
       end
 
       # Handle ${var#pattern} and ${var%pattern} - non-greedy versions
@@ -1167,7 +1167,7 @@ module Rubish
         var_name = $1
         operator = $2
         operand = $3
-        return "__param_expand(#{var_name.inspect}, #{operator.inspect}, #{operand.inspect})"
+        return "__param_expand(#{var_name.inspect}, #{operator.inspect}, #{generate_param_operand(operand)})"
       end
 
       # Handle ${var:-default}, ${var:=default}, ${var:+value}, ${var:?message}
@@ -1176,7 +1176,7 @@ module Rubish
         var_name = $1
         operator = $2
         operand = $3 || ''
-        return "__param_expand(#{var_name.inspect}, #{operator.inspect}, #{operand.inspect})"
+        return "__param_expand(#{var_name.inspect}, #{operator.inspect}, #{generate_param_operand(operand)})"
       end
 
       # Handle ${var-default}, ${var=default}, ${var+value}, ${var?message} (unset only, not null)
@@ -1185,7 +1185,7 @@ module Rubish
         var_name = $1
         operator = $2
         operand = $3 || ''
-        return "__param_expand(#{var_name.inspect}, #{operator.inspect}, #{operand.inspect})"
+        return "__param_expand(#{var_name.inspect}, #{operator.inspect}, #{generate_param_operand(operand)})"
       end
 
       # Handle ${var@operator} - transformation operators (Q, E, P, A, a, U, u, L, K)
@@ -1197,6 +1197,16 @@ module Rubish
 
       # Simple ${VAR}
       "__fetch_var(#{content.inspect})"
+    end
+
+    # Generate Ruby expression for a parameter expansion operand.
+    # Operands can contain $VAR, ${VAR}, backtick substitution, etc.
+    def generate_param_operand(operand)
+      if operand.include?('$') || operand.include?('`')
+        generate_interpolated_string(operand)
+      else
+        operand.inspect
+      end
     end
 
     # Convert AST back to shell source (for declare -f)
