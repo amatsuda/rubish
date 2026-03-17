@@ -137,8 +137,13 @@ module Rubish
       # privileged mode: don't read startup files
       return if Builtins.set_option?('p')
 
+      # Ensure system PATH is set on macOS.
+      # /etc/profile runs `eval \`/usr/libexec/path_helper -s\`` but rubish's eval
+      # doesn't correctly handle the semicolon-separated output from path_helper,
+      # so we initialize system PATH directly via Ruby.
       if @login_shell
         load_login_config
+        load_interactive_config
       else
         load_interactive_config
       end
@@ -153,6 +158,11 @@ module Rubish
 
       # System-wide profile
       source_if_exists('/etc/profile')
+
+      # Fix PATH after /etc/profile: its `eval \`path_helper\`` produces broken output
+      # in rubish ("; export PATH;" gets appended to the value). Re-run path_helper
+      # via Ruby and update both ENV and shell variables.
+      ensure_system_path
 
       # Try rubish-specific profile first
       xdg_profile = File.join(xdg_config_dir, 'profile')
@@ -235,6 +245,17 @@ module Rubish
       else
         # Fall back to bash logout for compatibility
         source_if_exists(File.expand_path('~/.bash_logout'))
+      end
+    end
+
+    # Initialize system PATH via path_helper on macOS
+    def ensure_system_path
+      return unless File.executable?('/usr/libexec/path_helper')
+
+      output = `/usr/libexec/path_helper -s`.to_s
+      output.scan(/(\w+)="([^"]*)"; export \1;/) do |name, value|
+        ENV[name] = value
+        @state.shell_vars[name] = value if @state.shell_vars.key?(name)
       end
     end
 
