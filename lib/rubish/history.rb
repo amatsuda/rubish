@@ -234,15 +234,16 @@ module Rubish
     #   ignoreboth   - ignorespace + ignoredups
     #   erasedups    - erase all previous duplicates before adding
     # HISTIGNORE: colon-separated patterns to ignore
-    def add_to_history(line)
+    def add_to_history(line, started_with_space: false)
       return if line.empty?
 
       histcontrol = ENV['HISTCONTROL'] || ''
       controls = histcontrol.split(':').map(&:strip)
 
       # Check ignorespace / ignoreboth / hist_ignore_space
-      if controls.include?('ignorespace') || controls.include?('ignoreboth') || Builtins.zsh_option_enabled?('hist_ignore_space')
-        return if line.start_with?(' ')
+      # The caller may pass started_with_space when the line has already been stripped
+      if (started_with_space || line.start_with?(' ')) && (controls.include?('ignorespace') || controls.include?('ignoreboth') || Builtins.zsh_option_enabled?('hist_ignore_space'))
+        return
       end
 
       # Check hist_no_store: don't record the history command itself

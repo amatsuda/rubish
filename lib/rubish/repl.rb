@@ -526,6 +526,7 @@ module Rubish
         end
       end
 
+      ignore_history = line.start_with?(' ')
       line = line.strip
       return if line.empty?
 
@@ -551,7 +552,7 @@ module Rubish
       puts expanded_line if was_expanded
 
       # Add the EXPANDED command to history (like bash does)
-      add_to_history(expanded_line)
+      add_to_history(expanded_line, started_with_space: ignore_history)
 
       # Print PS0 before executing command (bash 4.4+ feature)
       print_ps0
