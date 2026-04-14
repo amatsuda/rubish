@@ -41,7 +41,7 @@ module Rubish
         lines.each { |line| Reline::HISTORY << line }
         # Track where we are for history -a (append)
         Builtins.last_history_line = Reline::HISTORY.size
-      rescue => e
+      rescue SystemCallError, IOError => e
         $stderr.puts "rubish: cannot read history file: #{e.message}"
       end
     end
@@ -97,7 +97,7 @@ module Rubish
             history.each { |line| f.puts(line) }
           end
         end
-      rescue => e
+      rescue SystemCallError, IOError => e
         $stderr.puts "rubish: cannot write history file: #{e.message}"
       end
     end
@@ -179,7 +179,7 @@ module Rubish
         end
 
         Builtins.last_history_line = history.size
-      rescue => e
+      rescue SystemCallError, IOError => e
         $stderr.puts "rubish: cannot append to history file: #{e.message}"
       end
     end
@@ -294,8 +294,8 @@ module Rubish
       Syslog.open('rubish', Syslog::LOG_PID, Syslog::LOG_USER) do |s|
         s.info('HISTORY: PID=%d UID=%d %s', Process.pid, Process.uid, command)
       end
-    rescue StandardError
-      # Silently ignore syslog errors
+    rescue SystemCallError
+      # Syslog may not be available on all platforms
     end
 
     # Check if command matches any HISTIGNORE pattern

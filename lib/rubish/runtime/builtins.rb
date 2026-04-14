@@ -2579,10 +2579,10 @@ module Rubish
                  when 0 then $stdin
                  when 1 then $stdout
                  when 2 then $stderr
-                 else IO.new(fd) rescue nil
+                 else IO.new(fd) rescue Errno::EBADF; nil
                  end
             return io&.tty? || false
-          rescue
+          rescue SystemCallError, IOError
             return false
           end
         # File permission tests

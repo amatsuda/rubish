@@ -14,21 +14,21 @@ module Rubish
     # Give terminal control to a process group
     def self.set_foreground(pgid)
       tcsetpgrp(STDIN_FD, pgid)
-    rescue
-      # Ignore errors (e.g., not a tty)
+    rescue Fiddle::DLError, SystemCallError
+      # Not a tty or no terminal control
     end
 
     # Get current foreground process group
     def self.get_foreground
       tcgetpgrp(STDIN_FD)
-    rescue
+    rescue Fiddle::DLError, SystemCallError
       nil
     end
 
     # Check if stdin is a tty
     def self.tty?
       $stdin.tty?
-    rescue
+    rescue IOError
       false
     end
   end

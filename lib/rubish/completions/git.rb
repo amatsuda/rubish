@@ -333,8 +333,8 @@ module Rubish
         refs.concat(`git rev-parse --symbolic --branches --tags --remotes 2>/dev/null`.split("\n"))
         refs.uniq!
         @compreply.concat(refs.select { |r| r.start_with?(cur) })
-      rescue
-        # Git command failed
+      rescue Errno::ENOENT, IOError
+        # Git command not found or I/O error
       end
     end
 
@@ -345,8 +345,8 @@ module Rubish
       begin
         branches = `git for-each-ref --format='%(refname:short)' refs/heads/ 2>/dev/null`.split("\n")
         @compreply = branches.select { |b| b.start_with?(cur) }
-      rescue
-        # Git command failed
+      rescue Errno::ENOENT, IOError
+        # Git command not found or I/O error
       end
     end
 
@@ -357,8 +357,8 @@ module Rubish
       begin
         refs = `git for-each-ref --format='%(refname:short)' refs/remotes/ 2>/dev/null`.split("\n")
         @compreply = refs.select { |r| r.start_with?(cur) }
-      rescue
-        # Git command failed
+      rescue Errno::ENOENT, IOError
+        # Git command not found or I/O error
       end
     end
 
@@ -369,8 +369,8 @@ module Rubish
       begin
         remotes = `git remote 2>/dev/null`.split("\n")
         @compreply.concat(remotes.select { |r| r.start_with?(cur) })
-      rescue
-        # Git command failed
+      rescue Errno::ENOENT, IOError
+        # Git command not found or I/O error
       end
     end
 
@@ -381,8 +381,8 @@ module Rubish
       begin
         tags = `git tag -l 2>/dev/null`.split("\n")
         @compreply.concat(tags.select { |t| t.start_with?(cur) })
-      rescue
-        # Git command failed
+      rescue Errno::ENOENT, IOError
+        # Git command not found or I/O error
       end
     end
 
@@ -393,8 +393,8 @@ module Rubish
       begin
         stashes = `git stash list 2>/dev/null`.each_line.map { |l| l.split(':').first }.compact
         @compreply = stashes.select { |s| s.start_with?(cur) }
-      rescue
-        # Git command failed
+      rescue Errno::ENOENT, IOError
+        # Git command not found or I/O error
       end
     end
 
@@ -413,8 +413,8 @@ module Rubish
 
           files = (modified + staged + untracked).uniq
           @compreply.concat(files.select { |f| f.start_with?(cur) })
-        rescue
-          # Git command failed, fall back to regular file completion
+        rescue Errno::ENOENT, IOError
+          # Git command not found or I/O error
         end
       end
 

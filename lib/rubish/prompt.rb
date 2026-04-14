@@ -75,7 +75,7 @@ module Rubish
         begin
           _rows, cols = $stdout.winsize
           cols
-        rescue
+        rescue SystemCallError, IOError
           ENV['COLUMNS']&.to_i || 80
         end
       else
@@ -693,9 +693,8 @@ module Rubish
       # Execute the command silently (don't affect $?)
       begin
         execute(cmd)
-      rescue => e
-        # Silently ignore errors in PROMPT_COMMAND
-        $stderr.puts "rubish: PROMPT_COMMAND: #{e.message}" if Builtins.set_option?('x')
+      rescue SyntaxError, StandardError => e
+        $stderr.puts "rubish: PROMPT_COMMAND: #{e.message}"
       end
 
       # Restore the exit status (PROMPT_COMMAND shouldn't affect $?)

@@ -176,7 +176,7 @@ module Rubish
       # Save original terminal settings
       begin
         @original_termios = `stty -g`.chomp
-      rescue
+      rescue Errno::ENOENT, IOError
         @original_termios = nil
       end
 
@@ -197,8 +197,8 @@ module Rubish
               end
             end
           end
-        rescue => e
-          # Silently ignore errors in buffering thread
+        rescue IOError, SystemCallError
+          # Terminal I/O may fail (e.g., not a tty, pipe closed)
         ensure
           # Restore terminal settings
           system("stty #{@original_termios}") if @original_termios
@@ -210,7 +210,11 @@ module Rubish
     def inject_buffered_input
       # Always restore terminal settings first, even if no thread was started
       if @original_termios
-        system("stty #{@original_termios}") rescue nil
+        begin
+          system("stty #{@original_termios}")
+        rescue Errno::ENOENT, IOError
+          # stty may not be available
+        end
         @original_termios = nil
       end
 
@@ -221,14 +225,14 @@ module Rubish
 
         begin
           @stdin_buffer_thread.join(0.2)  # Wait briefly for thread to finish
-        rescue
-          # Ignore join errors
+        rescue ThreadError
+          # Thread may have already terminated
         end
 
         begin
           @stdin_buffer_thread.kill if @stdin_buffer_thread.alive?
-        rescue
-          # Ignore kill errors
+        rescue ThreadError
+          # Thread may have already terminated
         end
         @stdin_buffer_thread = nil
       end
@@ -604,8 +608,8 @@ module Rubish
       rescue Interrupt
         # User interrupted the command
         puts
-      rescue => e
-        $stderr.puts "bind -x: #{e.message}" if ENV['RUBISH_DEBUG']
+      rescue SyntaxError, StandardError => e
+        $stderr.puts "bind -x: #{e.message}"
       end
 
       # Redraw the prompt - Reline will handle this when we return
@@ -876,7 +880,7 @@ module Rubish
             # Invalid file descriptor, fall back to stderr
             $stderr.puts "rubish: #{fd_num}: Bad file descriptor"
             $stderr.puts output
-          rescue => e
+          rescue SystemCallError, IOError => e
             $stderr.puts output
           end
         else
@@ -2047,7 +2051,7 @@ module Rubish
       when '-v' then ENV.key?(arg) || instance_variable_defined?("@#{arg}") rescue false
       else false
       end
-    rescue
+    rescue SystemCallError
       false
     end
 
@@ -2085,7 +2089,7 @@ module Rubish
       else
         false
       end
-    rescue
+    rescue SystemCallError, RegexpError
       false
     end
 

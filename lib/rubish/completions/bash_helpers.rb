@@ -389,7 +389,7 @@ module Rubish
           next unless username
           results << "~#{username}/" if username.start_with?(prefix)
         end
-      rescue
+      rescue Errno::ENOENT, IOError
         # getent not available
       end
 
@@ -438,8 +438,8 @@ module Rubish
             results << opt unless results.include?(opt)
           end
         end
-      rescue
-        # Command failed
+      rescue Errno::ENOENT, IOError
+        # Command not found or I/O error
       end
 
       # Filter by current word if set

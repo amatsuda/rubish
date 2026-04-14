@@ -650,7 +650,7 @@ module Rubish
       when '-v' then ENV.key?(arg)
       else false
       end
-    rescue
+    rescue SystemCallError
       false
     end
 
@@ -672,7 +672,7 @@ module Rubish
       when '-ef' then File.exist?(left) && File.exist?(right) && File.stat(left).ino == File.stat(right).ino
       else false
       end
-    rescue
+    rescue SystemCallError, RegexpError
       false
     end
 
