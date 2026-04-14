@@ -76,8 +76,22 @@ module Rubish
         else
           # Default: overwrite history file
           history = Reline::HISTORY.to_a
+
+          # hist_save_no_dups: remove duplicates before saving (keep last occurrence)
+          if Builtins.zsh_option_enabled?('hist_save_no_dups')
+            seen = Set.new
+            history = history.reverse.reject { |line| !seen.add?(line) }.reverse
+          end
+
           # Only keep the last HISTFILESIZE entries
-          history = history.last(max_lines) if history.size > max_lines
+          if history.size > max_lines
+            # hist_expire_dups_first: when trimming, remove duplicates before oldest unique entries
+            if Builtins.zsh_option_enabled?('hist_expire_dups_first')
+              history = expire_dups_first(history, max_lines)
+            else
+              history = history.last(max_lines)
+            end
+          end
 
           File.open(file, 'w') do |f|
             history.each { |line| f.puts(line) }
@@ -88,16 +102,59 @@ module Rubish
       end
     end
 
+    # Trim history to max_lines, removing duplicates first before oldest unique entries
+    def expire_dups_first(history, max_lines)
+      excess = history.size - max_lines
+      return history if excess <= 0
+
+      # Find duplicate entries (entries that appear more than once), preferring to remove earlier ones
+      indices_to_remove = []
+      seen = {}
+      history.each_with_index do |line, i|
+        if seen.key?(line)
+          indices_to_remove << seen[line]  # mark earlier occurrence for removal
+          seen[line] = i
+        else
+          seen[line] = i
+        end
+      end
+
+      # Remove enough duplicates, oldest first
+      indices_to_remove.sort!
+      indices_to_remove = indices_to_remove.first(excess)
+
+      if indices_to_remove.size >= excess
+        # We can trim enough by removing duplicates alone
+        result = []
+        remove_set = indices_to_remove.to_set
+        history.each_with_index { |line, i| result << line unless remove_set.include?(i) }
+        result
+      else
+        # Remove all duplicates we found, then trim from the front
+        result = []
+        remove_set = indices_to_remove.to_set
+        history.each_with_index { |line, i| result << line unless remove_set.include?(i) }
+        result.last(max_lines)
+      end
+    end
+
     # Truncate history file to max_lines if needed
     def truncate_history_file(file, max_lines)
       return unless File.exist?(file)
 
-      lines = File.readlines(file)
+      lines = File.readlines(file, chomp: true)
+
+      # hist_save_no_dups: deduplicate before writing (keep last occurrence)
+      if Builtins.zsh_option_enabled?('hist_save_no_dups')
+        seen = Set.new
+        lines = lines.reverse.reject { |line| !seen.add?(line) }.reverse
+      end
+
       return if lines.size <= max_lines
 
       # Keep only the last max_lines
       File.open(file, 'w') do |f|
-        lines.last(max_lines).each { |line| f.print(line) }
+        lines.last(max_lines).each { |line| f.puts(line) }
       end
     end
 
@@ -183,13 +240,23 @@ module Rubish
       histcontrol = ENV['HISTCONTROL'] || ''
       controls = histcontrol.split(':').map(&:strip)
 
-      # Check ignorespace / ignoreboth
-      if controls.include?('ignorespace') || controls.include?('ignoreboth')
+      # Check ignorespace / ignoreboth / hist_ignore_space
+      if controls.include?('ignorespace') || controls.include?('ignoreboth') || Builtins.zsh_option_enabled?('hist_ignore_space')
         return if line.start_with?(' ')
       end
 
-      # Check ignoredups / ignoreboth
-      if controls.include?('ignoredups') || controls.include?('ignoreboth')
+      # Check hist_no_store: don't record the history command itself
+      if Builtins.zsh_option_enabled?('hist_no_store')
+        return if line.strip == 'history' || line.strip.match?(/\Ahistory\s/)
+      end
+
+      # Check hist_reduce_blanks: normalize whitespace before storing
+      if Builtins.zsh_option_enabled?('hist_reduce_blanks')
+        line = line.strip.gsub(/\s+/, ' ')
+      end
+
+      # Check ignoredups / ignoreboth / hist_ignore_dups
+      if controls.include?('ignoredups') || controls.include?('ignoreboth') || Builtins.zsh_option_enabled?('hist_ignore_dups')
         last_entry = Reline::HISTORY.to_a.last
         return if last_entry == line
       end
@@ -199,8 +266,8 @@ module Rubish
         return
       end
 
-      # Handle erasedups - remove all previous occurrences
-      if controls.include?('erasedups')
+      # Handle erasedups / hist_ignore_all_dups - remove all previous occurrences
+      if controls.include?('erasedups') || Builtins.zsh_option_enabled?('hist_ignore_all_dups')
         # Find and remove all duplicates
         indices_to_remove = []
         Reline::HISTORY.each_with_index do |entry, i|

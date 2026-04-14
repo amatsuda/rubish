@@ -534,7 +534,7 @@ module Rubish
       return unless expanded_line
 
       # histverify: if history expansion occurred, let user verify before executing
-      if was_expanded && Builtins.shopt_enabled?('histverify')
+      if was_expanded && (Builtins.shopt_enabled?('histverify') || Builtins.zsh_option_enabled?('hist_verify'))
         # Pre-fill the expanded command for user to verify/edit
         Reline.pre_input_hook = -> {
           Reline.insert_text(expanded_line)
