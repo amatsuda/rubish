@@ -1798,6 +1798,31 @@ module Rubish
       @state.history_timestamps.merge!(new_timestamps)
     end
 
+    def mark_history_transient(index)
+      @state.history_transient.add(index)
+    end
+
+    def history_transient?(index)
+      @state.history_transient.include?(index)
+    end
+
+    def remove_history_transient(index)
+      @state.history_transient.delete(index)
+      new_set = Set.new
+      @state.history_transient.each do |idx|
+        if idx > index
+          new_set.add(idx - 1)
+        else
+          new_set.add(idx)
+        end
+      end
+      @state.history_transient.replace(new_set)
+    end
+
+    def clear_history_transient
+      @state.history_transient.clear
+    end
+
     def history(args)
       # Parse options
       clear = false
@@ -1853,6 +1878,7 @@ module Rubish
       if clear
         Reline::HISTORY.clear
         clear_history_timestamps
+        clear_history_transient
         @state.last_history_line = 0
         return true
       end
@@ -1867,6 +1893,7 @@ module Rubish
         end
         Reline::HISTORY.delete_at(index)
         remove_history_timestamp(index)
+        remove_history_transient(index)
         return true
       end
 
@@ -1901,6 +1928,7 @@ module Rubish
       if read_all
         Reline::HISTORY.clear
         clear_history_timestamps
+        clear_history_transient
         @state.last_history_line = 0
         @state.history_loader&.call
         return true

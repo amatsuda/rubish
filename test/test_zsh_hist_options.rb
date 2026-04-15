@@ -18,25 +18,47 @@ class TestZshHistOptions < Test::Unit::TestCase
     Rubish::Builtins.current_state.zsh_options.clear
     @original_zsh_options.each { |k, v| Rubish::Builtins.current_state.zsh_options[k] = v }
     Reline::HISTORY.clear
+    Rubish::Builtins.clear_history_transient
     FileUtils.rm_rf(@tempdir)
   end
 
   # hist_ignore_space
 
-  def test_hist_ignore_space_skips_space_prefixed
+  def test_hist_ignore_space_keeps_in_memory_for_ctrl_p
     Rubish::Builtins.run('setopt', ['hist_ignore_space'])
     @repl.send(:add_to_history, ' secret')
     @repl.send(:add_to_history, 'visible')
-    assert_equal 1, Reline::HISTORY.length
-    assert_equal 'visible', Reline::HISTORY[0]
+    # Both entries are in memory (ctrl-p works)
+    assert_equal 2, Reline::HISTORY.length
+    assert_equal ' secret', Reline::HISTORY[0]
+    assert_equal 'visible', Reline::HISTORY[1]
+    # But the space-prefixed entry is marked transient (won't be saved to file)
+    assert Rubish::Builtins.history_transient?(0)
+    refute Rubish::Builtins.history_transient?(1)
   end
 
   def test_hist_ignore_space_with_started_with_space_flag
     Rubish::Builtins.run('setopt', ['hist_ignore_space'])
     @repl.send(:add_to_history, 'stripped', started_with_space: true)
     @repl.send(:add_to_history, 'normal')
-    assert_equal 1, Reline::HISTORY.length
-    assert_equal 'normal', Reline::HISTORY[0]
+    # Both in memory, but started_with_space entry is transient
+    assert_equal 2, Reline::HISTORY.length
+    assert Rubish::Builtins.history_transient?(0)
+    refute Rubish::Builtins.history_transient?(1)
+  end
+
+  def test_hist_ignore_space_not_saved_to_file
+    histfile = File.join(@tempdir, 'history')
+    ENV['HISTFILE'] = histfile
+    ENV['HISTFILESIZE'] = '1000'
+
+    Rubish::Builtins.run('setopt', ['hist_ignore_space'])
+    @repl.send(:add_to_history, ' secret')
+    @repl.send(:add_to_history, 'visible')
+    @repl.send(:save_history)
+
+    lines = File.readlines(histfile, chomp: true)
+    assert_equal ['visible'], lines
   end
 
   def test_hist_ignore_space_disabled_keeps_all
@@ -44,6 +66,8 @@ class TestZshHistOptions < Test::Unit::TestCase
     @repl.send(:add_to_history, ' secret')
     @repl.send(:add_to_history, 'visible')
     assert_equal 2, Reline::HISTORY.length
+    refute Rubish::Builtins.history_transient?(0)
+    refute Rubish::Builtins.history_transient?(1)
   end
 
   # hist_ignore_dups
@@ -167,8 +191,12 @@ class TestZshHistOptions < Test::Unit::TestCase
     @repl.send(:add_to_history, 'ls')
     @repl.send(:add_to_history, 'pwd')
     @repl.send(:add_to_history, 'ls')
-    assert_equal 2, Reline::HISTORY.length
-    assert_equal ['pwd', 'ls'], Reline::HISTORY.to_a
+    # secret is transient (in memory but won't persist), dups are removed
+    assert_equal 3, Reline::HISTORY.length
+    assert_equal [' secret', 'pwd', 'ls'], Reline::HISTORY.to_a
+    assert Rubish::Builtins.history_transient?(0)
+    refute Rubish::Builtins.history_transient?(1)
+    refute Rubish::Builtins.history_transient?(2)
   end
 
   def test_hist_reduce_blanks_and_hist_ignore_dups

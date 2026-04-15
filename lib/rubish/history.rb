@@ -66,8 +66,11 @@ module Rubish
           new_entries = history[last_line..]
 
           if new_entries && !new_entries.empty?
+            # Filter out transient entries (hist_ignore_space)
             File.open(file, 'a') do |f|
-              new_entries.each { |line| f.puts(line) }
+              new_entries.each_with_index do |line, i|
+                f.puts(line) unless Builtins.history_transient?(last_line + i)
+              end
             end
           end
 
@@ -75,7 +78,9 @@ module Rubish
           truncate_history_file(file, max_lines)
         else
           # Default: overwrite history file
+          # Filter out transient entries (hist_ignore_space)
           history = Reline::HISTORY.to_a
+          history = history.each_with_index.reject { |_, i| Builtins.history_transient?(i) }.map(&:first)
 
           # hist_save_no_dups: remove duplicates before saving (keep last occurrence)
           if Builtins.zsh_option_enabled?('hist_save_no_dups')
@@ -240,11 +245,15 @@ module Rubish
       histcontrol = ENV['HISTCONTROL'] || ''
       controls = histcontrol.split(':').map(&:strip)
 
-      # Check ignorespace / ignoreboth / hist_ignore_space
+      # Check ignorespace / ignoreboth (bash: skip entirely)
       # The caller may pass started_with_space when the line has already been stripped
-      if (started_with_space || line.start_with?(' ')) && (controls.include?('ignorespace') || controls.include?('ignoreboth') || Builtins.zsh_option_enabled?('hist_ignore_space'))
+      space_prefixed = started_with_space || line.start_with?(' ')
+      if space_prefixed && (controls.include?('ignorespace') || controls.include?('ignoreboth'))
         return
       end
+
+      # hist_ignore_space (zsh: add to in-memory history for ctrl-p, but don't persist to file)
+      transient = space_prefixed && Builtins.zsh_option_enabled?('hist_ignore_space')
 
       # Check hist_no_store: don't record the history command itself
       if Builtins.zsh_option_enabled?('hist_no_store')
@@ -278,6 +287,7 @@ module Rubish
         indices_to_remove.reverse_each do |i|
           Reline::HISTORY.delete_at(i)
           Builtins.remove_history_timestamp(i)
+          Builtins.remove_history_transient(i)
         end
       end
 
@@ -285,9 +295,10 @@ module Rubish
       index = Reline::HISTORY.size
       Reline::HISTORY << line
       Builtins.record_history_timestamp(index)
+      Builtins.mark_history_transient(index) if transient
 
       # Send to syslog if syslog_history is enabled
-      log_to_syslog(line) if Builtins.shopt_enabled?('syslog_history')
+      log_to_syslog(line) if Builtins.shopt_enabled?('syslog_history') && !transient
     end
 
     # Log command to syslog (for syslog_history shopt)

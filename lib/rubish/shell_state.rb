@@ -27,6 +27,7 @@ module Rubish
 
     # History state
     attr_accessor :history_timestamps
+    attr_accessor :history_transient
 
     # Execution callbacks
     attr_accessor :executor, :command_executor, :heredoc_content_setter
@@ -98,6 +99,7 @@ module Rubish
 
       # History state
       @history_timestamps = {}
+      @history_transient = Set.new
 
       # Execution callbacks (nil by default, set by REPL)
       @executor = nil
