@@ -53,4 +53,65 @@ class TestCodegen < Test::Unit::TestCase
     code = generate('echo a; echo b')
     assert_equal '__run_cmd { __cmd("echo", *["a"].flatten) }; __run_cmd { __cmd("echo", *["b"].flatten) }', code
   end
+
+  # Backslash escapes in unquoted words (shell semantics: \X means literal X)
+
+  def test_escaped_space_in_filename
+    code = generate('rm a\\ b')
+    assert_equal '__cmd("rm", *["a b"].flatten)', code
+  end
+
+  def test_escaped_space_with_path
+    code = generate('ls /tmp/foo\\ bar')
+    assert_equal '__cmd("ls", *["/tmp/foo bar"].flatten)', code
+  end
+
+  def test_multiple_escaped_spaces
+    code = generate('cat a\\ b\\ c')
+    assert_equal '__cmd("cat", *["a b c"].flatten)', code
+  end
+
+  def test_escaped_tab_in_unquoted_word
+    code = generate("cat a\\\tb")
+    # Tab is inspected as \t in Ruby string literal form
+    assert_equal '__cmd("cat", *["a\tb"].flatten)', code
+  end
+
+  def test_escaped_dollar_prevents_variable_expansion
+    code = generate('echo \\$HOME')
+    assert_equal '__cmd("echo", *["$HOME"].flatten)', code
+  end
+
+  def test_escaped_backtick_prevents_command_substitution
+    code = generate('echo \\`cmd\\`')
+    assert_equal '__cmd("echo", *["`cmd`"].flatten)', code
+  end
+
+  def test_escaped_backslash_produces_single_backslash
+    code = generate('echo a\\\\b')
+    assert_equal '__cmd("echo", *["a\\\\b"].flatten)', code
+  end
+
+  def test_escaped_space_with_variable_in_word
+    # \ before space + $VAR later: space is escaped, var still expands
+    code = generate('echo a\\ $HOME')
+    assert_equal '__cmd("echo", *["a #{__fetch_var("HOME")}"].flatten)', code
+  end
+
+  def test_single_quoted_preserves_backslash
+    code = generate("echo 'a\\ b'")
+    assert_equal '__cmd("echo", *["a\\\\ b"].flatten)', code
+  end
+
+  def test_double_quoted_backslash_before_special
+    # In double quotes, \$ should become literal $
+    code = generate('echo "\\$HOME"')
+    assert_equal '__cmd("echo", *["$HOME"].flatten)', code
+  end
+
+  def test_double_quoted_backslash_before_non_special
+    # In double quotes, \X for non-special X keeps the backslash
+    code = generate('echo "a\\zb"')
+    assert_equal '__cmd("echo", *["a\\\\zb"].flatten)', code
+  end
 end

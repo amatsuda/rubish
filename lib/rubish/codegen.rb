@@ -194,7 +194,7 @@ module Rubish
       if has_glob_chars?(str)
         # If it also has variables, expand variables first then glob
         if str.include?('$')
-          return "__glob(#{generate_interpolated_string(str)})"
+          return "__glob(#{generate_interpolated_string(str, unquoted: true)})"
         else
           return "__glob(#{str.inspect})"
         end
@@ -246,9 +246,10 @@ module Rubish
 
       # Check if string contains any variables or backtick substitution
       if str.include?('$') || str.include?('`')
-        generate_interpolated_string(str)
+        generate_interpolated_string(str, unquoted: true)
       else
-        str.inspect
+        # Unquoted: strip escape backslashes (\ followed by any char becomes just that char)
+        shell_unescape(str).inspect
       end
     end
 
@@ -275,7 +276,7 @@ module Rubish
       end
     end
 
-    def generate_interpolated_string(str)
+    def generate_interpolated_string(str, unquoted: false)
       # Build a Ruby string with interpolation for variables
       result = +'"'
       i = 0
@@ -283,10 +284,28 @@ module Rubish
       while i < str.length
         char = str[i]
 
-        if char == '\\'
-          # Escape backslash for Ruby string
+        if char == '\\' && i + 1 < str.length
+          next_char = str[i + 1]
+          if unquoted
+            # Unquoted: backslash escapes any following character (remove backslash)
+            append_escaped_char(result, next_char)
+            i += 2
+            next
+          elsif ['$', '`', '"', '\\'].include?(next_char)
+            # Double-quoted: only these chars are escapable
+            append_escaped_char(result, next_char)
+            i += 2
+            next
+          else
+            # Double-quoted, non-special next char: keep the backslash
+            result << '\\\\'
+            i += 1
+            next
+          end
+        elsif char == '\\'
           result << '\\\\'
           i += 1
+          next
         elsif char == '`'
           # Backtick command substitution
           cmd_expr, consumed = parse_backtick_substitution(str, i)
@@ -318,6 +337,22 @@ module Rubish
 
       result << '"'
       result
+    end
+
+    # Remove escape backslashes from unquoted shell words
+    # In shell, \X in unquoted context means just X
+    def shell_unescape(str)
+      str.gsub(/\\(.)/, '\1')
+    end
+
+    # Append a character to a Ruby string literal, escaping as needed
+    def append_escaped_char(result, char)
+      case char
+      when '"' then result << '\\"'
+      when '\\' then result << '\\\\'
+      when '#' then result << '\\#'
+      else result << char
+      end
     end
 
     def parse_variable(str, pos)
