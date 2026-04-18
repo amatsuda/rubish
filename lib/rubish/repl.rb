@@ -279,6 +279,45 @@ module Rubish
       LazyLoader.apply_completed(executor)
     end
 
+    # Drain any typeahead input that was buffered in the terminal during command execution.
+    # Complete lines (terminated by enter) are queued for immediate execution.
+    def drain_typeahead
+      return unless $stdin.tty?
+      return unless IO.select([$stdin], nil, nil, 0)
+
+      buffer = +''
+      loop do
+        break unless IO.select([$stdin], nil, nil, 0)
+        begin
+          buffer << $stdin.read_nonblock(4096)
+        rescue IO::WaitReadable, EOFError
+          break
+        end
+      end
+
+      return if buffer.empty?
+
+      buffer.gsub!("\r", "\n")
+
+      if buffer.include?("\n")
+        lines = buffer.split("\n", -1)
+        incomplete = lines.pop
+
+        @pending_commands ||= []
+        @pending_commands.concat(lines.reject(&:empty?))
+
+        buffer = incomplete
+      end
+
+      return if buffer.nil? || buffer.empty?
+      return if Reline.pre_input_hook
+
+      Reline.pre_input_hook = -> {
+        Reline.insert_text(buffer)
+        Reline.pre_input_hook = nil
+      }
+    end
+
     def setup_reline
       repl = self
 
@@ -477,7 +516,12 @@ module Rubish
       # Check for new mail (before prompt)
       check_mail
 
-      # Execute any commands that were typed during startup (before prompt appeared)
+      # Drain any input typed during the previous command's execution.
+      # Must happen before the @pending_commands check so drained commands
+      # are picked up immediately without waiting for the next readline.
+      drain_typeahead
+
+      # Execute any queued commands (from startup buffering or typeahead)
       if @pending_commands && !@pending_commands.empty?
         line = @pending_commands.shift
         # Show the command as if it was typed (with prompt)
