@@ -356,6 +356,25 @@ module Rubish
       $stdout.flush
     end
 
+    public
+
+    # Public: classify a candidate command line. Returns :ok if it
+    # parses to a complete AST, :incomplete if the parser is waiting
+    # for more input (e.g. `if true; then` without the matching
+    # `fi`), or :error for a real syntax error. Hosts that drive
+    # input directly (vs. via Reline) call this to decide whether to
+    # show a PS2 continuation prompt or submit the line for
+    # execution.
+    def try_parse(line)
+      tokens = @lexer_class.new(line).tokenize
+      @parser_class.new(tokens).parse
+      :ok
+    rescue => e
+      incomplete_command_error?(e.message) ? :incomplete : :error
+    end
+
+    private
+
     # Check if a parse error indicates incomplete input (needs more lines)
     def incomplete_command_error?(message)
       # These patterns indicate the parser is waiting for a closing keyword/delimiter
