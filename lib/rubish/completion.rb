@@ -188,10 +188,30 @@ module Rubish
       Builtins.expand_abbreviated_path_for_completion(input, full_paths: true)
     end
 
-    def complete(input)
-      line = Reline.line_buffer
-      byte_point = Reline.point rescue line.bytesize
-      point = line.byteslice(0, byte_point)&.length || 0
+    # Word-break characters used by Reline (and now also by complete_at)
+    # to determine where one completion "word" ends and another begins.
+    # Mirrors `Reline.completer_word_break_characters` in `setup_reline`.
+    COMPLETER_WORD_BREAK_CHARACTERS = " \t\n\"'><=;|&{("
+
+    # Public API for hosts that aren't Reline. Given the full input line
+    # and the cursor position (in characters from line start), returns
+    # an Array of candidate Strings.
+    def complete_at(line:, point:)
+      point = line.length if point > line.length
+      start = point
+      while start > 0 && !COMPLETER_WORD_BREAK_CHARACTERS.include?(line[start - 1])
+        start -= 1
+      end
+      input = line[start...point] || ''
+      complete(input, line: line, point: point)
+    end
+
+    def complete(input, line: nil, point: nil)
+      if line.nil? || point.nil?
+        line = Reline.line_buffer
+        byte_point = Reline.point rescue line.bytesize
+        point = line.byteslice(0, byte_point)&.length || 0
+      end
 
       # no_empty_cmd_completion: do not complete on empty command line
       if Builtins.shopt_enabled?('no_empty_cmd_completion') && line.strip.empty?
