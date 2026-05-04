@@ -1046,4 +1046,83 @@ class TestPrompt < Test::Unit::TestCase
   ensure
     Rubish::REPL.prompt_proc = nil
   end
+
+  # prompt_segments is the public API a non-Reline host (e.g. an
+  # in-process integration with a GUI terminal) uses to render the
+  # prompt natively, without parsing ANSI escape codes itself.
+
+  def test_prompt_segments_plain_text
+    Rubish::REPL.prompt_proc = nil
+    Rubish.set_prompt { 'plain> ' }
+    segs = @repl.prompt_segments
+    assert_equal 1, segs.size
+    assert_equal 'plain> ', segs[0][:text]
+    assert_nil segs[0][:fg]
+    assert_equal false, segs[0][:bold]
+  ensure
+    Rubish::REPL.prompt_proc = nil
+  end
+
+  def test_prompt_segments_with_color
+    Rubish::REPL.prompt_proc = nil
+    # green text, then default-color text
+    Rubish.set_prompt { "\e[32mhello\e[0m> " }
+    segs = @repl.prompt_segments
+    assert_equal 2, segs.size
+    assert_equal 'hello', segs[0][:text]
+    assert_equal 2, segs[0][:fg]
+    assert_equal '> ', segs[1][:text]
+    assert_nil segs[1][:fg]
+  ensure
+    Rubish::REPL.prompt_proc = nil
+  end
+
+  def test_prompt_segments_persisting_bold
+    Rubish::REPL.prompt_proc = nil
+    # bold+green for first run, bold survives the color change to blue
+    Rubish.set_prompt { "\e[32;1mA\e[34mB\e[0m " }
+    segs = @repl.prompt_segments
+    assert_equal 3, segs.size
+    assert_equal 'A', segs[0][:text]
+    assert_equal 2, segs[0][:fg]
+    assert_equal true, segs[0][:bold]
+    assert_equal 'B', segs[1][:text]
+    assert_equal 4, segs[1][:fg]
+    assert_equal true, segs[1][:bold]  # bold persists
+    assert_equal ' ', segs[2][:text]
+    assert_nil segs[2][:fg]
+    assert_equal false, segs[2][:bold]  # \e[0m reset
+  ensure
+    Rubish::REPL.prompt_proc = nil
+  end
+
+  def test_prompt_segments_256_color
+    Rubish::REPL.prompt_proc = nil
+    Rubish.set_prompt { "\e[38;5;208morange\e[0m" }
+    segs = @repl.prompt_segments
+    assert_equal 1, segs.size
+    assert_equal 'orange', segs[0][:text]
+    assert_equal 208, segs[0][:fg]
+  ensure
+    Rubish::REPL.prompt_proc = nil
+  end
+
+  def test_prompt_segments_rgb
+    Rubish::REPL.prompt_proc = nil
+    Rubish.set_prompt { "\e[38;2;255;128;0mrgb\e[0m" }
+    segs = @repl.prompt_segments
+    assert_equal 1, segs.size
+    assert_equal [:rgb, 255, 128, 0], segs[0][:fg]
+  ensure
+    Rubish::REPL.prompt_proc = nil
+  end
+
+  def test_right_prompt_segments_nil_when_unset
+    ENV.delete('RPROMPT')
+    ENV.delete('RPS1')
+    Rubish::REPL.right_prompt_proc = nil
+    assert_nil @repl.right_prompt_segments
+  ensure
+    Rubish::REPL.right_prompt_proc = nil
+  end
 end

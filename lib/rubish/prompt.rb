@@ -63,6 +63,89 @@ module Rubish
       expand_prompt(rprompt)
     end
 
+    # Public API for hosts that want to render the prompt without dealing
+    # with ANSI escape codes themselves: returns the prompt as an Array of
+    # `{text:, fg:, bg:, bold:, italic:, underline:, inverse:}` segments.
+    # `fg`/`bg` are nil (default), 0..15 (palette index), an Integer 16..255
+    # (xterm 256-color palette index), or [:rgb, r, g, b].
+    def prompt_segments
+      ansi_to_segments(prompt)
+    end
+
+    def right_prompt_segments
+      rp = right_prompt
+      rp ? ansi_to_segments(rp) : nil
+    end
+
+    EMPTY_SEGMENT_ATTRS = {
+      fg: nil, bg: nil,
+      bold: false, italic: false, underline: false, inverse: false,
+    }.freeze
+
+    # Parse a string containing CSI SGR escape sequences into an Array of
+    # styled-text segments. Only SGR (`\e[...m`) is interpreted; other CSI
+    # sequences are dropped (they'd be no-ops anyway in a prompt).
+    def ansi_to_segments(str)
+      segments = []
+      text = +''
+      attrs = EMPTY_SEGMENT_ATTRS.dup
+      i = 0
+      while i < str.length
+        if str[i] == "\e" && str[i + 1] == '['
+          unless text.empty?
+            segments << attrs.merge(text: text)
+            text = +''
+            attrs = attrs.dup
+          end
+          j = i + 2
+          j += 1 while j < str.length && !(('A'..'Z').cover?(str[j]) || ('a'..'z').cover?(str[j]))
+          apply_sgr!(attrs, str[(i + 2)...j]) if j < str.length && str[j] == 'm'
+          i = j + 1
+        else
+          text << str[i]
+          i += 1
+        end
+      end
+      segments << attrs.merge(text: text) unless text.empty?
+      segments
+    end
+
+    private def apply_sgr!(attrs, params)
+      codes = params.empty? ? [0] : params.split(';').map(&:to_i)
+      i = 0
+      while i < codes.length
+        code = codes[i]
+        case code
+        when 0  then EMPTY_SEGMENT_ATTRS.each { |k, v| attrs[k] = v }
+        when 1  then attrs[:bold] = true
+        when 3  then attrs[:italic] = true
+        when 4  then attrs[:underline] = true
+        when 7  then attrs[:inverse] = true
+        when 22 then attrs[:bold] = false
+        when 23 then attrs[:italic] = false
+        when 24 then attrs[:underline] = false
+        when 27 then attrs[:inverse] = false
+        when 30..37   then attrs[:fg] = code - 30
+        when 39       then attrs[:fg] = nil
+        when 40..47   then attrs[:bg] = code - 40
+        when 49       then attrs[:bg] = nil
+        when 90..97   then attrs[:fg] = code - 90 + 8
+        when 100..107 then attrs[:bg] = code - 100 + 8
+        when 38, 48
+          target = code == 38 ? :fg : :bg
+          mode = codes[i + 1]
+          if mode == 5 && codes[i + 2]
+            attrs[target] = codes[i + 2]
+            i += 2
+          elsif mode == 2 && codes[i + 4]
+            attrs[target] = [:rgb, codes[i + 2], codes[i + 3], codes[i + 4]]
+            i += 4
+          end
+        end
+        i += 1
+      end
+    end
+
     # Calculate visible length of a string (excluding ANSI escape codes)
     def visible_length(str)
       # Remove ANSI escape sequences
