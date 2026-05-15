@@ -19,7 +19,7 @@ require_relative '../builtins/bind_readline'
 
 module Rubish
   module Builtins
-    COMMANDS = %w(cd exit logout jobs fg bg export pwd history alias unalias source . shift set return read echo test [ break continue pushd popd dirs trap getopts local unset readonly declare typeset let printf type which true false : eval command builtin wait kill umask exec times hash disown ulimit suspend shopt enable caller complete compgen compopt bind bindkey help fc mapfile readarray basename dirname realpath _get_comp_words_by_ref _init_completion _filedir _have _split_longopt __ltrim_colon_completions _variables _tilde _quote_readline_by_ref _parse_help _upvars _usergroup setopt unsetopt autoload compinit compdef __git_ps1 require).freeze
+    COMMANDS = %w(cd exit logout jobs fg bg export pwd history alias unalias source . shift set return read echo test [ break continue pushd popd dirs trap getopts local unset readonly declare typeset let printf type which true false : eval command builtin wait kill umask exec times hash disown ulimit suspend shopt enable caller complete compgen compopt bind bindkey help fc mapfile readarray basename dirname realpath _get_comp_words_by_ref _init_completion _filedir _have _split_longopt __ltrim_colon_completions _variables _tilde _quote_readline_by_ref _parse_help _upvars _usergroup setopt unsetopt autoload compinit compdef __git_ps1 require reset_prompt).freeze
 
     # Method names for builtin commands (accounting for Ruby keyword conflicts)
     # Note: '.', ':', '[', 'typeset', 'readarray', '__git_ps1', '__ltrim_colon_completions'
@@ -33,6 +33,7 @@ module Rubish
       _get_comp_words_by_ref _init_completion _filedir _have _split_longopt
       _ltrim_colon_completions _variables _tilde _quote_readline_by_ref _parse_help
       _upvars _usergroup setopt unsetopt autoload compinit compdef git_ps1 require
+      reset_prompt
     ]).freeze
 
     # Global state (shared across all sessions) - accessed via Builtins.xxx
@@ -7102,6 +7103,25 @@ module Rubish
         $stderr.puts "require: #{name}: #{e.message}"
         false
       end
+    end
+
+    # Recompute PS1 / RPROMPT from the current shell state and tell the
+    # currently-running Reline.readline to repaint them. Use this inside
+    # a `bind -x` callback (or any function dispatched from one) when
+    # the callback mutates state the prompt depends on — most often a
+    # pwd-aware right prompt after `cd`. Equivalent to zsh's
+    # `zle reset-prompt`. No-op when not inside an interactive readline.
+    def reset_prompt(_args = [])
+      le = (defined?(Reline) && Reline.core.line_editor) || nil
+      return true unless le
+
+      if @state.prompt_provider
+        le.instance_variable_set(:@prompt, @state.prompt_provider.call.to_s)
+      end
+      if @state.right_prompt_provider && le.respond_to?(:rprompt=)
+        le.rprompt = @state.right_prompt_provider.call
+      end
+      true
     end
 
     # Wrapper for head command to support Ruby-like syntax: head(5) -> head -5
