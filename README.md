@@ -107,7 +107,7 @@ grep('pattern', file.txt)
 Commands can be chained with Ruby methods using dot notation, forming a pipeline:
 
 ```sh
-# Equitalent to `ls | sort`
+# Equivalent to `ls | sort`
 ls.sort
 
 # Equivalent to `cat file.txt | grep error`
