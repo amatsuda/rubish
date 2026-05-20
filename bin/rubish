@@ -14,7 +14,17 @@
 set -e
 
 SCRIPT="${BASH_SOURCE[0]}"
-SCRIPT_DIR="$(cd "$(dirname "$SCRIPT")" && pwd)"
+# Homebrew installs rubish behind a two-stage symlink, so BASH_SOURCE is the
+# invocation path, not the real file. Walk the symlink chain before computing
+# SCRIPT_DIR. Resolve one link at a time instead of relying on `readlink -f`
+# or `realpath`, which older macOS lacks -- this launcher must work in a
+# minimal environment.
+while [ -L "$SCRIPT" ]; do
+  DIR="$(cd -P "$(dirname "$SCRIPT")" && pwd)"
+  SCRIPT="$(readlink "$SCRIPT")"
+  case "$SCRIPT" in /*) ;; *) SCRIPT="$DIR/$SCRIPT" ;; esac
+done
+SCRIPT_DIR="$(cd -P "$(dirname "$SCRIPT")" && pwd)"
 RUBISH_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 RUBISH_BIN="$RUBISH_ROOT/exe/rubish"
 
