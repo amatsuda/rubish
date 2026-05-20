@@ -25,7 +25,7 @@ while [ -L "$SCRIPT" ]; do
   case "$SCRIPT" in /*) ;; *) SCRIPT="$DIR/$SCRIPT" ;; esac
 done
 SCRIPT_DIR="$(cd -P "$(dirname "$SCRIPT")" && pwd)"
-RUBISH_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+RUBISH_ROOT="$(cd -P "$SCRIPT_DIR/.." && pwd)"
 RUBISH_BIN="$RUBISH_ROOT/exe/rubish"
 
 # Pick a Ruby interpreter. Honor an explicit override via $RUBY;
