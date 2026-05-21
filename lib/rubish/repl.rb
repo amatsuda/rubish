@@ -182,6 +182,31 @@ module Rubish
       end
     end
 
+    # Run a `stty …` command with SIGTTOU/SIGTTIN ignored across
+    # the fork+exec. Ruby's `system` forks a child that inherits
+    # rubish's process group; stty in that child runs tcsetattr,
+    # which the macOS kernel blocks with `EIO` whenever the
+    # caller's pgrp is orphaned (`jobc == 0` — no live parent in
+    # a different pgrp within the same session). That's easy to
+    # hit in the brief window before `setup_job_control` runs:
+    # the terminal-emulator → login → bash → rubish chain can
+    # leave rubish transiently parentless / unowned by any
+    # foreground process group. Setting SIGTTOU/SIGTTIN to
+    # SIG_IGN before the fork makes the child inherit SIG_IGN
+    # (preserved across exec), which causes tcsetattr to
+    # short-circuit the orphan check and just succeed. Pattern
+    # mirrors `setup_job_control` / `Command#run` in this codebase.
+    def run_stty(cmd)
+      old_ttou = trap('TTOU', 'IGNORE')
+      old_ttin = trap('TTIN', 'IGNORE')
+      begin
+        system(cmd)
+      ensure
+        trap('TTOU', old_ttou || 'DEFAULT')
+        trap('TTIN', old_ttin || 'DEFAULT')
+      end
+    end
+
     # Buffer stdin input during startup so typed characters aren't lost
     def start_stdin_buffering
       return unless $stdin.tty?
@@ -200,7 +225,7 @@ module Rubish
       @stdin_buffer_thread = Thread.new do
         begin
           # Put terminal in raw mode to capture all keystrokes
-          system('stty raw -echo') if @original_termios
+          run_stty('stty raw -echo') if @original_termios
 
           while @stdin_buffering
             # Check if input is available (with short timeout)
@@ -217,7 +242,7 @@ module Rubish
           # Terminal I/O may fail (e.g., not a tty, pipe closed)
         ensure
           # Restore terminal settings
-          system("stty #{@original_termios}") if @original_termios
+          run_stty("stty #{@original_termios}") if @original_termios
         end
       end
     end
@@ -227,7 +252,7 @@ module Rubish
       # Always restore terminal settings first, even if no thread was started
       if @original_termios
         begin
-          system("stty #{@original_termios}")
+          run_stty("stty #{@original_termios}")
         rescue Errno::ENOENT, IOError
           # stty may not be available
         end
