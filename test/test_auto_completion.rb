@@ -312,6 +312,87 @@ class TestAutoCompletion < Test::Unit::TestCase
   end
 
   # ==========================================================================
+  # Nested sub-sub-command chain (parse_help_for_command splat)
+  # ==========================================================================
+
+  def test_parse_help_for_command_chain
+    # Stub the sandbox so we don't actually fork rails/gh/aws/etc.
+    # Each fake-help block is padded past the parser's 50-char floor.
+    ctx = Rubish::Builtins.context
+    invoked = []
+    ctx.define_singleton_method(:sandboxed_help_command) do |cmd|
+      invoked << cmd
+      case cmd
+      when 'fakecli --help'
+        ["Usage: fakecli [options] <command>\n\nCommands:\n  a   First subcommand of the fakecli tool\n  b   Second subcommand of the fakecli tool\n", true]
+      when 'fakecli a --help'
+        ["Usage: fakecli a [options] <subcommand>\n\nCommands:\n  x   Nested subcommand under a\n  y   Another nested subcommand under a\n", true]
+      when 'fakecli a x --help'
+        ["Usage: fakecli a x [options]\n\nOptions:\n  --foo  a foo flag\n  --bar  another flag\n", true]
+      else
+        [nil, false]
+      end
+    end
+    ctx.instance_variable_set(:@help_completion_cache, {})
+
+    top = Rubish::Builtins.parse_help_for_command('fakecli')
+    assert_includes top[:subcommands], 'a'
+    assert_includes top[:subcommands], 'b'
+
+    mid = Rubish::Builtins.parse_help_for_command('fakecli', 'a')
+    assert_includes mid[:subcommands], 'x'
+    assert_includes mid[:subcommands], 'y'
+
+    deep = Rubish::Builtins.parse_help_for_command('fakecli', 'a', 'x')
+    assert_includes deep[:options], '--foo'
+    assert_includes deep[:options], '--bar'
+
+    # Cache key is the full chain — repeating the deepest call must
+    # not re-invoke the sandbox.
+    invoked.clear
+    Rubish::Builtins.parse_help_for_command('fakecli', 'a', 'x')
+    assert_empty invoked, 'second deep lookup should be served from cache'
+  end
+
+  def test_parse_help_for_command_chain_falls_back_to_help_keyword
+    # When `cmd a b --help` fails, the implementation should also try
+    # `cmd help a b` (matches the rails/gem `cmd help <subcmd>` style).
+    ctx = Rubish::Builtins.context
+    invoked = []
+    ctx.define_singleton_method(:sandboxed_help_command) do |cmd|
+      invoked << cmd
+      if cmd == 'fakecli help a b'
+        ["Usage: fakecli a b [options]\n\nOptions:\n  --quiet  silent mode for the operation\n  --loud   verbose mode\n", true]
+      else
+        [nil, false]
+      end
+    end
+    ctx.instance_variable_set(:@help_completion_cache, {})
+
+    parsed = Rubish::Builtins.parse_help_for_command('fakecli', 'a', 'b')
+    assert_includes parsed[:options], '--quiet'
+    assert_includes invoked, 'fakecli a b --help'  # tried first
+    assert_includes invoked, 'fakecli help a b'    # then fell back
+  end
+
+  def test_parse_help_for_command_backward_compat_single_subcommand
+    # The old (command, subcommand) calling convention still has to
+    # work — splat captures the lone subcommand arg.
+    ctx = Rubish::Builtins.context
+    ctx.define_singleton_method(:sandboxed_help_command) do |cmd|
+      if cmd == 'fakecli a --help'
+        ["Usage: fakecli a [options] <subcommand>\n\nCommands:\n  x   First sub of a\n  y   Second sub of a\n", true]
+      else
+        [nil, false]
+      end
+    end
+    ctx.instance_variable_set(:@help_completion_cache, {})
+
+    parsed = Rubish::Builtins.parse_help_for_command('fakecli', 'a')
+    assert_includes parsed[:subcommands], 'x'
+  end
+
+  # ==========================================================================
   # Caching
   # ==========================================================================
 

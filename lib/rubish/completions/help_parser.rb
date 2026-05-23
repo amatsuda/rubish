@@ -161,40 +161,41 @@ module Rubish
       'yarn'      => 'yarn --help',
     }.freeze
 
+    # Depth cap for greedy chain descent in `_auto_completion`. Each
+    # extra level costs a sandbox help-command spawn on a cold cache
+    # (≤ HELP_COMMAND_TIMEOUT seconds). After the first invocation
+    # subsequent lookups in the same chain are served from cache for
+    # HELP_CACHE_TTL.
+    HELP_CHAIN_DEPTH_CAP = 5
+
     def _auto_completion(cmd, cur, prev)
       words = @comp_words
       cword = @comp_cword
       command = words[0]
 
-      # Parse help output for this command
       parsed = parse_help_for_command(command)
       return if parsed.nil?
 
-      # Find if we're completing a subcommand's arguments
-      subcommand = nil
-      words.each_with_index do |word, idx|
-        next if idx == 0
-        next if word.start_with?('-')
-        if parsed[:subcommands].include?(word)
-          subcommand = word
-          break
+      # Greedy descent through nested subcommands: keep parsing
+      # `cmd a b c --help` for as long as each next word is a known
+      # subcommand at the current level. Flags between subcommands
+      # (e.g. `rails -v g -d scaffold`) are skipped. Stops on unknown
+      # words, on `cword` (the position being completed), at the depth
+      # cap, or when help parsing returns nothing for a deeper chain.
+      chain = []
+      idx = 1
+      while idx < cword && chain.length < HELP_CHAIN_DEPTH_CAP
+        word = words[idx]
+        if word && !word.empty? && !word.start_with?('-') &&
+           parsed[:subcommands].include?(word)
+          chain << word
+          next_parsed = parse_help_for_command(command, *chain)
+          break if next_parsed.nil?
+          parsed = next_parsed
         end
+        idx += 1
       end
 
-      if subcommand && cword > 1
-        # Try to get help for the subcommand
-        sub_parsed = parse_help_for_command(command, subcommand)
-        if sub_parsed
-          if cur.start_with?('-')
-            @compreply = sub_parsed[:options].select { |o| o.start_with?(cur) }
-          else
-            @compreply = sub_parsed[:subcommands].select { |s| s.start_with?(cur) }
-          end
-          return
-        end
-      end
-
-      # Complete top-level
       if cur.start_with?('-')
         @compreply = parsed[:options].select { |o| o.start_with?(cur) }
       else
@@ -202,11 +203,11 @@ module Rubish
       end
     end
 
-    def parse_help_for_command(command, subcommand = nil)
+    def parse_help_for_command(command, *subcommand_chain)
       # Skip commands that look like shell operators or Ruby syntax
-      return nil if command =~ /\A[-+:=<>|&!]\z/
+      return nil if command.nil? || command =~ /\A[-+:=<>|&!]\z/
 
-      cache_key = subcommand ? "#{command} #{subcommand}" : command
+      cache_key = ([command] + subcommand_chain).join(' ')
 
       # Check cache
       cached = @help_completion_cache[cache_key]
@@ -217,7 +218,7 @@ module Rubish
       parsed = nil
 
       # Try zsh completion file first (for top-level commands only)
-      if subcommand.nil?
+      if subcommand_chain.empty?
         parsed = parse_zsh_completion_file(command)
         if parsed && parsed[:subcommands].length >= 3
           parsed[:timestamp] = Time.now
@@ -228,11 +229,17 @@ module Rubish
         parsed = nil
       end
 
-      # Fall back to help output parsing
-      # Note: We only try "command help" for known commands that support it,
-      # because for unknown commands like "touch", "touch help" would create a file!
-      help_commands = if subcommand
-        ["#{command} #{subcommand} --help", "#{command} help #{subcommand}"]
+      # Fall back to help output parsing.
+      # For nested calls (`rails g scaffold`) we always try
+      # `cmd a b c --help` and `cmd help a b c`. For top-level we use
+      # the curated invocation or fall back to --help/-h.
+      # Note: bare "command help" is only tried for known commands, so
+      # we don't accidentally invoke things like `touch help` (would
+      # create a file). Nested calls are always safe because the full
+      # chain disambiguates intent.
+      help_commands = if subcommand_chain.any?
+        rest = subcommand_chain.join(' ')
+        ["#{command} #{rest} --help", "#{command} help #{rest}"]
       elsif HELP_COMMAND_SOURCES.key?(command)
         # Use known source for popular commands
         [HELP_COMMAND_SOURCES[command]]
