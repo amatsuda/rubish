@@ -365,9 +365,12 @@ module Rubish
           end
         end
 
-        # Parse options - look for -x or --xxx patterns
-        if line =~ /(^|\s)(--?[a-zA-Z][-a-zA-Z0-9_]*)/
-          line.scan(/(?:^|\s)(--?[a-zA-Z][-a-zA-Z0-9_]*)(?:[,=\s\[]|$)/).flatten.each do |opt|
+        # Parse options - look for -x or --xxx patterns.
+        # Accept `[` as a leading char too: rails generate / Thor wraps each
+        # option in brackets like `[--skip-namespace]`; same for `]` as the
+        # trailing terminator.
+        if line =~ /(^|[\s\[])(--?[a-zA-Z][-a-zA-Z0-9_]*)/
+          line.scan(/(?:^|[\s\[])(--?[a-zA-Z][-a-zA-Z0-9_]*)(?:[,=\s\[\]]|$)/).flatten.each do |opt|
             options << opt unless opt =~ /^-\d/  # Skip things like -1, -2
           end
         end

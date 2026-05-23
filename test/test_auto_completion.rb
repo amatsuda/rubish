@@ -294,6 +294,32 @@ class TestAutoCompletion < Test::Unit::TestCase
     assert_includes result[:subcommands], 'test'
   end
 
+  def test_parse_help_output_bracketed_options_rails_style
+    # Rails / Thor wrap each option in brackets like `[--skip-namespace]`.
+    # The option-extractor must accept `[` before and `]` after the flag.
+    help_text = <<~HELP
+      Usage:
+        rails new APP_PATH [options]
+
+      Options:
+                   [--skip-namespace]                  # Skip namespace
+                   [--skip-collision-check]            # Skip collision check
+        -r,        [--ruby=PATH]                       # Path to Ruby
+        -d,        [--database=DATABASE]               # Database
+        -G,        [--skip-git]                        # Skip git init
+    HELP
+
+    result = Rubish::Builtins.parse_help_output(help_text)
+    assert_includes result[:options], '--skip-namespace'
+    assert_includes result[:options], '--skip-collision-check'
+    assert_includes result[:options], '--ruby'
+    assert_includes result[:options], '--database'
+    assert_includes result[:options], '--skip-git'
+    assert_includes result[:options], '-r'
+    assert_includes result[:options], '-d'
+    assert_includes result[:options], '-G'
+  end
+
   def test_parse_help_output_wider_indent_for_pnpm_style
     # pnpm --help uses 6-space indent (was previously rejected by \s{2,4})
     help_text = <<~HELP
