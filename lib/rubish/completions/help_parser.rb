@@ -118,21 +118,47 @@ module Rubish
       end
     end
 
-    # Known help sources for popular commands (command => help invocation)
-    # Note: git, ssh, make, man, kill have dedicated completion functions
+    # Known help sources for popular commands (command => help invocation).
+    # Required for any command whose subcommand listing lives behind a
+    # non-default invocation; the auto-fallback only tries `--help`/`-h`,
+    # never `cmd help` (which would risk side effects like `touch help`
+    # creating a file). Note: git, ssh, make, man, kill have dedicated
+    # completion functions elsewhere.
     HELP_COMMAND_SOURCES = {
-      'aws' => 'aws help',
-      'bundle' => 'bundle --help',
-      'gem' => 'gem help commands',
-      'rails' => 'rails --help',
-      'brew' => 'brew commands',
-      'npm' => 'npm help',
-      'yarn' => 'yarn --help',
-      'cargo' => 'cargo --list',
-      'docker' => 'docker --help',
-      'go' => 'go help',
-      'pip' => 'pip --help',
-      'rustup' => 'rustup --help'
+      # Required — default `--help` is missing, wrong, or much worse
+      'aws'       => 'aws help',
+      'brew'      => 'brew commands',
+      'cargo'     => 'cargo --list',
+      'composer'  => 'composer list',
+      'gem'       => 'gem help commands',
+      'go'        => 'go help',
+      'hg'        => 'hg help',
+      'launchctl' => 'launchctl help',     # launchctl rejects --help
+      'npm'       => 'npm help',
+      'pyenv'     => 'pyenv commands',
+      'rbenv'     => 'rbenv commands',
+
+      # `--help` works; entry pins the preferred invocation
+      'bun'       => 'bun --help',
+      'bundle'    => 'bundle --help',
+      'deno'      => 'deno --help',
+      'docker'    => 'docker --help',
+      'gcloud'    => 'gcloud --help',
+      'gh'        => 'gh --help',
+      'glab'      => 'glab --help',
+      'helm'      => 'helm --help',
+      'jj'        => 'jj --help',
+      'kubectl'   => 'kubectl --help',
+      'mise'      => 'mise --help',
+      'pip'       => 'pip --help',
+      'pnpm'      => 'pnpm --help',
+      'podman'    => 'podman --help',
+      'poetry'    => 'poetry --help',
+      'rails'     => 'rails --help',
+      'rustup'    => 'rustup --help',
+      'terraform' => 'terraform --help',
+      'uv'        => 'uv --help',
+      'yarn'      => 'yarn --help',
     }.freeze
 
     def _auto_completion(cmd, cur, prev)
@@ -258,10 +284,10 @@ module Rubish
 
       lines.each do |line|
         # Detect section headers
-        if line =~ /^(Commands|COMMANDS|Subcommands|SUBCOMMANDS|Available commands):/i ||
+        if line =~ /^(All\s+)?(Commands|COMMANDS|Subcommands|SUBCOMMANDS|Available commands):/i ||
            line =~ /commands are:$/i ||
            line =~ /^=+>\s*(Built-in\s+)?commands$/i ||
-           line =~ /^(PRIMARY|UTILITIES|BUNDLE)\s+COMMANDS$/i ||
+           line =~ /^[A-Z][A-Z ]*COMMANDS?$/ ||  # PRIMARY/CORE/ADDITIONAL/etc. COMMANDS (gh, bundle, etc.)
            line =~ /^AVAILABLE SERVICES$/  # AWS CLI style
           in_commands_section = true
           in_options_section = false
@@ -272,23 +298,34 @@ module Rubish
           in_options_section = true
           next
         elsif line =~ /^[A-Z][-A-Za-z_]+:$/ || line =~ /^[A-Z][-A-Za-z_]+\s+[-A-Za-z_]+:$/
-          # Short section header (1-2 words) that's not a commands section
+          # Short section header (1-2 words) that's not a commands section.
           # Set in_options_section to true to suppress subcommand detection
-          # (sections like "Features:", "Warning categories:", "Dump List:", "YJIT options:")
-          in_commands_section = false
-          in_options_section = true
+          # (sections like "Features:", "Warning categories:", "Dump List:",
+          # "YJIT options:"). Exception: "Usage:" / "Synopsis:" / "Description:"
+          # are preamble headers commonly followed by command lists (rails),
+          # so we don't suppress subcommand detection for them.
+          unless line =~ /\A(Usage|Synopsis|Description):\z/i
+            in_commands_section = false
+            in_options_section = true
+          end
         end
 
         # Parse subcommands in different formats:
         # 1. Simple list: one command per line (brew commands)
         # 2. Table format: "  command   description" (gem help commands)
         # 3. Man page format: "bundle install(1)"
+        # 4. Tab-indented table (launchctl): "\tname  description"
+        # 5. Comma-separated paragraph under "All commands:" (npm)
         if in_commands_section
           # Simple single-word per line (brew commands style)
           if line =~ /^([a-z][-a-z0-9_]*)$/
             subcommands << $1
-          # Table format with description
-          elsif line =~ /^\s{2,}([a-z][-a-z0-9_:]*)\s{2,}/
+          # Table format with description (trailing ':' on the name is gh-style)
+          elsif line =~ /^\s{2,}([a-z][-a-z0-9_]*):?\s{2,}/
+            cmd = $1
+            subcommands << cmd if cmd.length < 30 && !cmd.include?('=')
+          # Tab-indented table (launchctl style: "\tname  description")
+          elsif line =~ /^\t+([a-z][-a-z0-9_]*):?\s{2,}/
             cmd = $1
             subcommands << cmd if cmd.length < 30 && !cmd.include?('=')
           # Man page format: "bundle install(1)"
@@ -297,13 +334,25 @@ module Rubish
           # Bullet-point format: "       o service" (AWS CLI style, from man page)
           elsif line =~ /^\s+o\s+([a-z][-a-z0-9_]+)$/
             subcommands << $1
+          # Comma-separated paragraph (npm "All commands:" style)
+          elsif line =~ /^\s+[a-z][-a-z0-9_]+,/
+            line.split(',').each do |part|
+              part = part.strip
+              subcommands << part if part =~ /\A[a-z][-a-z0-9_]+\z/ && part.length < 25
+            end
           end
         elsif !in_options_section
           # Outside of explicit sections, try to detect command patterns
           # Table format with description (e.g., git's "   clone      Clone a repository")
-          if line =~ /^\s{2,4}([a-z][-a-z0-9_]*)\s{2,}\S/
+          # Indent widened to 2..8 spaces so pnpm-style 6-space lists are picked up.
+          if line =~ /^\s{2,8}([a-z][-a-z0-9_]*):?\s{2,}\S/
             cmd = $1
             # Skip common English words that appear in help text (e.g., "or  java [options]...")
+            next if %w[or and the for to in of on at by as is it if an are be do no so].include?(cmd)
+            subcommands << cmd if cmd.length < 25 && !cmd.include?('=')
+          # Tab-indented table without a section header (launchctl)
+          elsif line =~ /^\t+([a-z][-a-z0-9_]*):?\s{2,}\S/
+            cmd = $1
             next if %w[or and the for to in of on at by as is it if an are be do no so].include?(cmd)
             subcommands << cmd if cmd.length < 25 && !cmd.include?('=')
           end
@@ -314,6 +363,29 @@ module Rubish
           line.scan(/(?:^|\s)(--?[a-zA-Z][-a-zA-Z0-9_]*)(?:[,=\s\[]|$)/).flatten.each do |opt|
             options << opt unless opt =~ /^-\d/  # Skip things like -1, -2
           end
+        end
+      end
+
+      # Fallback: if structured parsing found nothing, treat the output as a
+      # bare command list (pyenv commands / rbenv commands style — no section
+      # headers, just one identifier per line). Conservative: only short
+      # lowercase identifiers, with an English-word skip list to filter
+      # accidental matches from prose lines like a bare "usage" or "version".
+      if subcommands.empty?
+        # Conservative English/prose skip list. Deliberately does NOT include
+        # words like "commands", "install", "version" — they're legitimate
+        # subcommand names for tools like pyenv / rbenv whose bare-list
+        # output we're trying to parse here.
+        bare_skip = %w[
+          or and the for to in of on at by as is it if an are be do no so
+          usage description options option example examples
+          name names note notes copyright author authors arguments synopsis
+        ].freeze
+        lines.each do |bare|
+          next unless bare =~ /\A([a-z][-a-z0-9_]+)\z/
+          cmd = $1
+          next if bare_skip.include?(cmd) || cmd.length > 25
+          subcommands << cmd
         end
       end
 

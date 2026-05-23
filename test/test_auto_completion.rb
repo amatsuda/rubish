@@ -182,6 +182,135 @@ class TestAutoCompletion < Test::Unit::TestCase
     assert_includes result[:options], '-h'
   end
 
+  def test_parse_help_output_x_commands_header
+    # gh --help style: "CORE COMMANDS" / "ADDITIONAL COMMANDS" with `name:` colon-suffix
+    help_text = <<~HELP
+      USAGE
+        gh <command> <subcommand> [flags]
+
+      CORE COMMANDS
+        auth:          Authenticate gh and git with GitHub
+        browse:        Open repositories, issues, pull requests
+        codespace:     Connect to and manage codespaces
+
+      ADDITIONAL COMMANDS
+        alias:         Create command shortcuts
+        completion:    Generate shell completion scripts
+    HELP
+
+    result = Rubish::Builtins.parse_help_output(help_text)
+    assert_includes result[:subcommands], 'auth'
+    assert_includes result[:subcommands], 'browse'
+    assert_includes result[:subcommands], 'codespace'
+    assert_includes result[:subcommands], 'alias'
+    assert_includes result[:subcommands], 'completion'
+    # The trailing colon must be stripped from the subcommand name
+    refute_includes result[:subcommands], 'auth:'
+  end
+
+  def test_parse_help_output_tab_indented
+    # launchctl help style: tab-indented "\tname  description" with no section header
+    help_text = "\tattach          Attach the debugger to a service\n" \
+                "\tdebug           Configures the next invocation\n" \
+                "\tkill            Sends a signal to the service instance\n" \
+                "\tblame           Prints the reason a service is running\n"
+
+    result = Rubish::Builtins.parse_help_output(help_text)
+    assert_includes result[:subcommands], 'attach'
+    assert_includes result[:subcommands], 'debug'
+    assert_includes result[:subcommands], 'kill'
+    assert_includes result[:subcommands], 'blame'
+  end
+
+  def test_parse_help_output_all_commands_comma_paragraph
+    # npm help style: "All commands:" followed by a paragraph of comma-separated names
+    help_text = <<~HELP
+      npm <command>
+
+      Usage:
+
+      All commands:
+
+          access, adduser, audit, bugs, cache, ci, completion,
+          config, dedupe, deprecate, diff, dist-tag, docs, doctor,
+          edit, exec, explain, explore, find-dupes, fund, get
+    HELP
+
+    result = Rubish::Builtins.parse_help_output(help_text)
+    assert_includes result[:subcommands], 'access'
+    assert_includes result[:subcommands], 'adduser'
+    assert_includes result[:subcommands], 'cache'
+    assert_includes result[:subcommands], 'dist-tag'
+    assert_includes result[:subcommands], 'doctor'
+    assert_includes result[:subcommands], 'find-dupes'
+  end
+
+  def test_parse_help_output_headerless_bare_list_fallback
+    # pyenv / rbenv commands style: bare identifier list with no section header.
+    # The fallback scan only kicks in when structured parsing finds nothing.
+    help_text = <<~HELP
+      --version
+      activate
+      commands
+      completions
+      deactivate
+      exec
+      global
+      install
+    HELP
+
+    result = Rubish::Builtins.parse_help_output(help_text)
+    assert_includes result[:subcommands], 'activate'
+    assert_includes result[:subcommands], 'commands'
+    assert_includes result[:subcommands], 'exec'
+    assert_includes result[:subcommands], 'install'
+    # Leading-dash items (--version) are not subcommands
+    refute_includes result[:subcommands], '--version'
+  end
+
+  def test_parse_help_output_usage_header_does_not_suppress_subcommands
+    # rails --help style: starts with "Usage:" — must NOT silence
+    # subsequent subcommand lines like sections such as "Features:" would.
+    help_text = <<~HELP
+      Usage:
+        rails COMMAND [options]
+
+      You must specify a command:
+
+        new          Create a new Rails application
+        plugin new   Create a new Rails railtie or engine
+
+      Inside a Rails application directory, some common commands are:
+
+        console      Start the Rails console
+        server       Start the Rails server
+        test         Run tests except system tests
+    HELP
+
+    result = Rubish::Builtins.parse_help_output(help_text)
+    assert_includes result[:subcommands], 'new'
+    assert_includes result[:subcommands], 'console'
+    assert_includes result[:subcommands], 'server'
+    assert_includes result[:subcommands], 'test'
+  end
+
+  def test_parse_help_output_wider_indent_for_pnpm_style
+    # pnpm --help uses 6-space indent (was previously rejected by \s{2,4})
+    help_text = <<~HELP
+      These are common pnpm commands, use 'pnpm help -a' to list all commands
+
+      Manage your dependencies:
+            add                  Installs a package
+            audit                Checks for known security issues
+            outdated             Check for outdated packages
+    HELP
+
+    result = Rubish::Builtins.parse_help_output(help_text)
+    assert_includes result[:subcommands], 'add'
+    assert_includes result[:subcommands], 'audit'
+    assert_includes result[:subcommands], 'outdated'
+  end
+
   # ==========================================================================
   # Caching
   # ==========================================================================
