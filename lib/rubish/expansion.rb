@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require_relative 'word_segments'
+
 module Rubish
   # String, variable, and parameter expansion for the shell REPL
   # Handles variable expansion, command substitution, tilde expansion, parameter expansion, etc.
@@ -614,6 +616,8 @@ module Rubish
     def expand_quoted_string(value)
       if value.start_with?("$'") && value.end_with?("'")
         Builtins.process_escape_sequences(value[2...-1])
+      elsif WordSegments.multi_segment?(value)
+        expand_multi_segment_word(value)
       elsif value.start_with?("'") && value.end_with?("'")
         value[1...-1]
       elsif value.start_with?('"') && value.end_with?('"')
@@ -621,6 +625,18 @@ module Rubish
       else
         yield  # Return nil or call the block for unquoted handling
       end
+    end
+
+    def expand_multi_segment_word(str)
+      parts = []
+      WordSegments.each_segment(str) do |type, content|
+        parts << case type
+                 when :single then content
+                 when :ansi_c then Builtins.process_escape_sequences(content)
+                 when :double, :bare then expand_string_content(content)
+                 end
+      end
+      parts.join
     end
 
     # Handle array assignment: arr=(a b c) or arr+=(d e) or map=([k]=v ...)

@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require_relative 'word_segments'
+
 module Rubish
   class Codegen
     def generate(node)
@@ -163,20 +165,10 @@ module Rubish
     end
 
     def generate_string_arg_with_glob(str)
-      # $'...' ANSI-C quoting: process escape sequences
-      if str.start_with?("$'") && str.end_with?("'")
-        return "process_escape_sequences(#{str[2...-1].inspect})"
-      end
-
-      # Single-quoted strings: no expansion at all
-      if str.start_with?("'") && str.end_with?("'")
-        return str[1...-1].inspect
-      end
-
-      # Double-quoted strings: variable expansion but no glob/brace
-      if str.start_with?('"') && str.end_with?('"')
-        inner = str[1...-1]
-        return generate_interpolated_string(inner)
+      # Quoted strings (any form) are handled entirely by generate_string_arg.
+      # Glob and brace expansion only apply to unquoted words.
+      if str.start_with?("'", '"', "$'") || WordSegments.multi_segment?(str)
+        return generate_string_arg(str)
       end
 
       # Check for brace expansion (happens before glob)
@@ -223,6 +215,8 @@ module Rubish
         return "process_escape_sequences(#{str[2...-1].inspect})"
       end
 
+      return generate_concatenated_segments(str) if WordSegments.multi_segment?(str)
+
       # Single-quoted strings: no expansion, strip quotes
       if str.start_with?("'") && str.end_with?("'")
         return str[1...-1].inspect
@@ -251,6 +245,27 @@ module Rubish
         # Unquoted: strip escape backslashes (\ followed by any char becomes just that char)
         shell_unescape(str).inspect
       end
+    end
+
+    # True when a WORD token contains adjacent or mixed quoted/unquoted segments,
+    # e.g. 'foo''bar', unquoted'suffix', or mixed'single'"double".
+    # Concatenate each adjacent quoted/unquoted segment of a mixed word.
+    def generate_concatenated_segments(str)
+      parts = []
+      WordSegments.each_segment(str) do |type, content|
+        parts << case type
+                 when :single then content.inspect
+                 when :ansi_c then "Builtins.process_escape_sequences(#{content.inspect})"
+                 when :double then generate_interpolated_string(content)
+                 when :bare
+                   if content.include?('$') || content.include?('`')
+                     generate_interpolated_string(content, unquoted: true)
+                   else
+                     shell_unescape(content).inspect
+                   end
+                 end
+      end
+      parts.empty? ? '""' : parts.length == 1 ? parts[0] : "(#{parts.join(' + ')})"
     end
 
     def generate_special_variable(str)

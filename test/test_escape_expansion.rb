@@ -110,4 +110,22 @@ class TestEscapeExpansion < Test::Unit::TestCase
     execute('echo "a\\zb" > ' + output_file)
     assert_equal "a\\zb\n", File.read(output_file)
   end
+
+  # Adjacent quoted segments are concatenated into one word (bash/POSIX behavior).
+  # eg. 'foo''bar' is two adjacent single-quoted tokens forming the word "foobar".
+
+  def test_adjacent_single_quoted_segments_concatenate
+    execute("echo 'two single-quoted pa''rts in one token' > #{output_file}")
+    assert_equal "two single-quoted parts in one token\n", File.read(output_file)
+  end
+
+  def test_unquoted_adjacent_to_single_quoted_concatenates
+    execute("echo unquoted' and single-quoted' > #{output_file}")
+    assert_equal "unquoted and single-quoted\n", File.read(output_file)
+  end
+
+  def test_mixed_quote_styles_in_one_word_concatenate
+    execute("echo unquoted'  single-quoted'\"  double-quoted  \"unquoted > #{output_file}")
+    assert_equal "unquoted  single-quoted  double-quoted  unquoted\n", File.read(output_file)
+  end
 end
