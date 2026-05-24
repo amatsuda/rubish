@@ -526,7 +526,15 @@ module Rubish
         begin
           result = @context.instance_eval(collected)
           result = result.call if auto_call_lambda && result.is_a?(Proc) && result.arity <= 0
-          p result unless result.nil?
+          # `p` the eval result only for one-line interactive Ruby —
+          # the IRB-style "type an expression, see its value" UX. For
+          # sourced rcfiles and for multi-line blocks (where the value
+          # is rarely interesting and almost always noise — `def`'s
+          # symbol return, `Reline::Face.config`'s Config object, etc.),
+          # stay silent.
+          if !result.nil? && !@state.sourcing_file && !collected.include?("\n")
+            p result
+          end
           @last_status = 0
           @context.clear_exit_blocked
           return

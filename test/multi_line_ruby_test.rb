@@ -186,6 +186,51 @@ class MultiLineRubyTest < Test::Unit::TestCase
     refute ctx.send(:ruby_input_incomplete_ast?, "Reline::Face.config(:x) { |c| c.define :default, foreground: :red }")
   end
 
+  def test_source_does_not_p_block_result
+    Tempfile.create(['rubishrc', '.rb']) do |t|
+      t.write(<<~RUBY)
+        Reline::Face.config(:completion_dialog) do |conf|
+          conf.define :default, foreground: :cyan
+        end
+        Time.now.year
+      RUBY
+      t.flush
+
+      out = capture_stdout { Rubish::Builtins.run('source', [t.path]) }
+      # No Config object dump, no integer year
+      refute_match(/Reline::Face::Config/, out)
+      refute_match(/\b20\d{2}\b/, out)
+    end
+  end
+
+  def test_interactive_multi_line_block_does_not_p_result
+    fake = FakeFrontend.new([
+      'conf.define :default, foreground: :red',
+      'end',
+    ])
+    @repl.instance_variable_set(:@frontend, fake)
+
+    out = capture_stdout do
+      @repl.send(:execute, 'Reline::Face.config(:completion_dialog) do |conf|')
+    end
+    refute_match(/Reline::Face::Config/, out)
+  end
+
+  def test_interactive_single_line_still_prints_result
+    # Plain `Time.now` typed at the REPL should still print its value —
+    # that's the IRB-style read-eval-PRINT-loop UX. We only suppress p
+    # for multi-line blocks and sourced files.
+    out = capture_stdout do
+      @repl.send(:execute, '1 + 2 + 3')  # avoid timestamp drift
+    end
+    # Wait, 1+2+3 starts with `1` not capital — wouldn't go through the
+    # Ruby path. Use Math::PI which starts with capital.
+    out2 = capture_stdout do
+      @repl.send(:execute, 'Math::PI.round(2)')
+    end
+    assert_match(/3\.14/, out2)
+  end
+
   def test_ruby_block_start_line_recognizes_constant_lines
     ctx = Rubish::Builtins.context
     assert ctx.send(:ruby_block_start_line?, 'Reline::Face.config(:foo) do |c|')
