@@ -8,6 +8,7 @@ class TestStartupFiles < Test::Unit::TestCase
     @original_home = ENV['HOME']
     @tempdir = Dir.mktmpdir('rubish_startup_test')
     ENV['HOME'] = @tempdir
+    ENV.delete('XDG_CONFIG_HOME')
     # Create REPL to initialize context (needed for Builtins calls)
     @repl = Rubish::REPL.new
     # Reset shell options

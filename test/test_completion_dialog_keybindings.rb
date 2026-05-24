@@ -4,6 +4,7 @@ require_relative 'test_helper'
 
 class TestCompletionDialogKeybindings < Test::Unit::TestCase
   def setup
+    @saved_reline_bindings = Reline.core.config.instance_variable_get(:@default_key_bindings) if defined?(Reline)
     # Reset Reline config to ensure a clean state
     Reline.core.config.reset_variables if defined?(Reline)
 
@@ -15,7 +16,10 @@ class TestCompletionDialogKeybindings < Test::Unit::TestCase
 
   def teardown
     # Reset Reline config to avoid affecting other tests
-    Reline.core.config.reset_variables if defined?(Reline)
+    if defined?(Reline)
+      Reline.core.config.reset_variables
+      Reline.core.config.instance_variable_set(:@default_key_bindings, @saved_reline_bindings)
+    end
   end
 
   # Test that keybindings are added to @additional_key_bindings (higher priority)

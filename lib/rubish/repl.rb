@@ -127,6 +127,11 @@ module Rubish
       Command.function_caller = ->(name, args) { call_function(name, args) }
       # Set up state to call functions (for compgen -F)
       @state.function_caller = ->(name, args) { call_function(name, args) }
+      @original_termios = nil
+      @proc_sub_fifos = nil
+      @stdin_buffer = nil
+      @stdin_buffer_thread = nil
+      @pending_commands = nil
       # Source executor for autoload: source a file or execute code string
       @state.source_executor = ->(file, code = nil) {
         if code
@@ -546,9 +551,18 @@ module Rubish
           return
         rescue SyntaxError => e
           if ruby_input_incomplete?(e.message) && !@state.sourcing_file
-            cont = (@frontend.read_continuation_line(continuation_prompt) rescue nil)
+            cancelled = false
+            cont = begin
+              @frontend.read_continuation_line(continuation_prompt)
+            rescue Interrupt
+              cancelled = true
+              nil
+            rescue StandardError
+              nil
+            end
             if cont.nil?
               # User cancelled (Ctrl-C / EOF) or no frontend available.
+              $stderr.puts "rubish: #{e.message}" unless cancelled
               @last_status = 1
               return
             end

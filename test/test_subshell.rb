@@ -24,8 +24,8 @@ class TestSubshell < Test::Unit::TestCase
 
   def test_parens_still_works_for_functions
     tokens = Rubish::Lexer.new('foo()').tokenize
-    assert_equal :WORD, tokens[0].type
-    assert_equal :PARENS, tokens[1].type
+    assert_equal 1, tokens.length
+    assert_equal :FUNC_CALL, tokens[0].type
   end
 
   def test_subshell_tokenization

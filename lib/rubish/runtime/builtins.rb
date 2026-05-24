@@ -3709,6 +3709,7 @@ module Rubish
     class << self
       attr_accessor :source_executor
     end
+    @source_executor = nil
 
     # ==========================================================================
     # zsh completion system emulation

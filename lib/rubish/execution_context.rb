@@ -60,6 +60,9 @@ module Rubish
       @named_directories = {}
       @builtin_completion_functions = {}
       @disabled_builtins = Set.new
+      @last_line = nil
+      @proc_sub_fifos = nil
+      @source_executor = nil
       @dynamic_commands = []
       @call_stack = []
       @comp_words = []

@@ -148,6 +148,10 @@ module Rubish
       @block = block
       @ran = false
       @skip_functions = skip_functions
+      @noclobber_failed = false
+      @restricted_failed = false
+      @prefix_env = nil
+      @status = nil
     end
 
     def args
@@ -897,6 +901,8 @@ module Rubish
       @stdout = nil
       @stderr = nil
       @ran = false
+      @noclobber_failed = false
+      @restricted_failed = false
     end
 
     def ran?
@@ -1039,6 +1045,8 @@ module Rubish
       @stdout = nil
       @stderr = nil
       @ran = false
+      @noclobber_failed = false
+      @restricted_failed = false
     end
 
     def ran?

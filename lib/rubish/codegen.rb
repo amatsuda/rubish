@@ -276,7 +276,7 @@ module Rubish
       end
     end
 
-    def generate_interpolated_string(str, unquoted: false)
+    def generate_interpolated_string(str, unquoted: false, extquote_aware: false)
       # Build a Ruby string with interpolation for variables
       result = +'"'
       i = 0
@@ -318,7 +318,7 @@ module Rubish
           end
         elsif char == '$'
           # Variable expansion
-          var_expr, consumed = parse_variable(str, i)
+          var_expr, consumed = parse_variable(str, i, extquote_aware: extquote_aware)
           if var_expr
             result << '#{' << var_expr << '}'
             i += consumed
@@ -355,7 +355,7 @@ module Rubish
       end
     end
 
-    def parse_variable(str, pos)
+    def parse_variable(str, pos, extquote_aware: false)
       return nil unless str[pos] == '$'
 
       # Check for arithmetic expansion $((...))
@@ -413,13 +413,36 @@ module Rubish
         if j < str.length && str[j] == '"'
           # Process any variable expansions in the content first
           if content.include?('$')
-            expanded = generate_interpolated_string(content)
-            return ["__translate(#{expanded})", j - pos + 1]
+            expanded = "__translate(#{generate_interpolated_string(content)})"
           else
-            return ["__translate(#{content.inspect})", j - pos + 1]
+            expanded = "__translate(#{content.inspect})"
           end
+          if extquote_aware
+            raw = str[pos..j].inspect
+            return ["(shopt_enabled?('extquote') ? #{expanded} : #{raw})", j - pos + 1]
+          end
+          return [expanded, j - pos + 1]
         end
         return nil  # Unclosed, treat as literal
+      end
+
+      # Check for $'...' ANSI-C quoting
+      if str[pos + 1] == "'"
+        j = pos + 2
+        while j < str.length
+          break if str[j] == "'"
+          j += str[j] == '\\' ? 2 : 1
+        end
+        if j < str.length
+          content = str[pos + 2...j]
+          expanded = "process_escape_sequences(#{content.inspect})"
+          if extquote_aware
+            raw = str[pos..j].inspect
+            return ["(shopt_enabled?('extquote') ? #{expanded} : #{raw})", j - pos + 1]
+          end
+          return [expanded, j - pos + 1]
+        end
+        return nil
       end
 
       # Check for special variables first
@@ -1238,7 +1261,7 @@ module Rubish
     # Operands can contain $VAR, ${VAR}, backtick substitution, etc.
     def generate_param_operand(operand)
       if operand.include?('$') || operand.include?('`')
-        generate_interpolated_string(operand)
+        generate_interpolated_string(operand, extquote_aware: true)
       else
         operand.inspect
       end

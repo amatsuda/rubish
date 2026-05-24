@@ -8,6 +8,7 @@ class TestBind < Test::Unit::TestCase
     @original_env = ENV.to_h.dup
     @tempdir = Dir.mktmpdir('rubish_bind_test')
     Rubish::Builtins.clear_key_bindings
+    @saved_reline_bindings = Reline.core.config.instance_variable_get(:@default_key_bindings) if defined?(Reline)
   end
 
   def teardown
@@ -16,7 +17,10 @@ class TestBind < Test::Unit::TestCase
     ENV.clear
     @original_env.each { |k, v| ENV[k] = v }
     # Reset Reline config to avoid affecting other tests
-    Reline.core.config.reset_variables if defined?(Reline)
+    if defined?(Reline)
+      Reline.core.config.reset_variables
+      Reline.core.config.instance_variable_set(:@default_key_bindings, @saved_reline_bindings)
+    end
   end
 
   # Test bind is a builtin

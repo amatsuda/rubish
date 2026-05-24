@@ -325,10 +325,14 @@ class TestLexer < Test::Unit::TestCase
     assert_equal :RPAREN, tokens[3].type
   end
 
-  # Empty parens should be function definition, not function call
-  def test_empty_parens_is_func_def
+  # foo() alone is a zero-arg Ruby-style function call; function defs
+  # use foo() { body } which still tokenizes as WORD + PARENS
+  def test_empty_parens_is_func_call
     tokens = tokenize('foo()')
-    assert_equal 2, tokens.length
+    assert_equal 1, tokens.length
+    assert_equal :FUNC_CALL, tokens[0].type
+
+    tokens = tokenize('foo() { echo hi; }')
     assert_equal :WORD, tokens[0].type
     assert_equal :PARENS, tokens[1].type
   end
@@ -371,6 +375,7 @@ class TestLexer < Test::Unit::TestCase
     assert_equal 3, tokens.length
     assert_equal :FUNC_CALL, tokens[0].type
     assert_equal :REDIRECT_OUT, tokens[1].type
+    assert_equal 'out.txt', tokens[2].value
   end
 
   # Ruby-style method calls with keyword args should NOT be func calls

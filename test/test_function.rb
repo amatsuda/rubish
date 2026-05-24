@@ -26,7 +26,13 @@ class TestFunction < Test::Unit::TestCase
   end
 
   def test_parens_token
+    # foo() alone is a zero-arg Ruby-style call (FUNC_CALL); function def
+    # requires a body: foo() { ... } which still tokenizes as WORD + PARENS
     tokens = Rubish::Lexer.new('foo()').tokenize
+    assert_equal 1, tokens.length
+    assert_equal :FUNC_CALL, tokens[0].type
+
+    tokens = Rubish::Lexer.new('foo() { echo hi; }').tokenize
     assert_equal :WORD, tokens[0].type
     assert_equal :PARENS, tokens[1].type
     assert_equal '()', tokens[1].value
