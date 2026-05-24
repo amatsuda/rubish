@@ -278,7 +278,10 @@ module Rubish
       help_commands.each do |help_cmd|
         # Run help command in sandbox with timeout for safety
         output, success = sandboxed_help_command(help_cmd)
-        next unless success && output && output.length > 50
+        next unless output && output.length > 50
+        # Accept non-zero exits when the captured output contains a usage: definition.
+        # macOS/BSD tools reject --help with non-zero status but still print usage.
+        next unless success || output =~ /\busage:/i
 
         help_output = output
         # Check if this output has good subcommand info
@@ -431,7 +434,18 @@ module Rubish
             options << opt unless opt =~ /^-\d/  # Skip things like -1, -2
           end
         end
+        # Bundled short flags from BSD-style usage: [-abc] -> -a, -b, -c.
+        # Allow `@%,` inside the bundle (BSD ls uses these) but only emit
+        # alphanumeric chars as individual flags.
+        line.scan(/\[-([A-Za-z0-9@%,]{2,})\]/).flatten.each do |bundle|
+          bundle.each_char { |c| options << "-#{c}" if c =~ /[A-Za-z0-9]/ }
+        end
       end
+
+      # Drop bundles that slipped past the bracket parser. Real short
+      # flags are 1-2 chars after a single dash; anything longer is
+      # almost certainly a bundle (e.g. BSD usage `[-aclpSsvXx]`).
+      options.reject! { |o| o =~ /\A-[A-Za-z]{3,}\z/ }
 
       # Fallback: if structured parsing found nothing, treat the output as a
       # bare command list (pyenv commands / rbenv commands style — no section
