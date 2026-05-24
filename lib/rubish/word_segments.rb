@@ -30,7 +30,7 @@ module Rubish
           yield :double, str[i + 1...j]
           i = j < str.length ? j + 1 : str.length
         else
-          j = str.index(/['"]/, i) || str.length
+          j = str.index(/\$'|['"]/, i) || str.length
           yield :bare, str[i...j]
           i = j
         end
