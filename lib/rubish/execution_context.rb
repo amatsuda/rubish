@@ -139,7 +139,7 @@ module Rubish
     end
 
     def check_errexit
-      return if @last_status == 0
+      return if @last_status == 0 || @errexit_suppressed
       throw(:exit, @last_status) if set_option?('e')
     end
 

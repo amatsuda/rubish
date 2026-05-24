@@ -1084,7 +1084,7 @@ module Rubish
     end
 
     def check_errexit
-      return if @last_status == 0
+      return if @last_status == 0 || @errexit_suppressed
 
       # Exit if errexit is set and last command failed
       # Note: ERR trap is run in __run_cmd at command execution time
