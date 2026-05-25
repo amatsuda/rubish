@@ -797,6 +797,80 @@ class TestAutoCompletion < Test::Unit::TestCase
     end
   end
 
+  # ==========================================================================
+  # complete() — merge help-parser results with file completion so a local
+  # path beats a help-parsed subcommand for the same prefix. This is the
+  # case the user hit with `bundle e<TAB>` in a Ruby gem source dir: they
+  # wanted `exe/` (the rubish exe directory) to win over `exec` (the
+  # bundle subcommand).
+  # ==========================================================================
+
+  def test_complete_merges_file_results_with_help_parser_results
+    # Pre-seed the cache so this test doesn't actually invoke `bundle`.
+    Rubish::Builtins.context.instance_variable_get(:@help_completion_cache)['bundle'] = {
+      subcommands: %w[exec install update cache],
+      options: [],
+      timestamp: Time.now
+    }
+
+    Dir.mktmpdir do |tmpdir|
+      Dir.mkdir(File.join(tmpdir, 'exe'))
+      Dir.chdir(tmpdir) do
+        result = @repl.send(:complete, 'e', line: 'bundle e', point: 8)
+        assert_includes result, 'exe/',
+                        'file completion should contribute exe/ alongside the help-parser results'
+        assert_includes result, 'exec',
+                        'help-parser completion (bundle subcommand) should still be present'
+        assert result.index('exe/') < result.index('exec'),
+               'file match must come first so fish-style inline picks the path over the subcommand'
+      end
+    end
+  end
+
+  def test_complete_empty_input_does_not_dump_cwd_entries
+    # `bundle <TAB>` (empty partial) used to fall through to file
+    # completion only when help-parser had nothing. With merging in
+    # place, we must still skip file completion on empty input —
+    # otherwise it would Dir.glob("*") and spam every CWD entry next
+    # to the bundle subcommands.
+    Rubish::Builtins.context.instance_variable_get(:@help_completion_cache)['bundle'] = {
+      subcommands: %w[exec install update],
+      options: [],
+      timestamp: Time.now
+    }
+
+    Dir.mktmpdir do |tmpdir|
+      Dir.mkdir(File.join(tmpdir, 'noisy_one'))
+      Dir.mkdir(File.join(tmpdir, 'noisy_two'))
+      Dir.chdir(tmpdir) do
+        result = @repl.send(:complete, '', line: 'bundle ', point: 7)
+        assert_includes result, 'exec'
+        refute(result.any? { |r| r.start_with?('noisy_') },
+               "empty-input completion leaked CWD entries: #{result.inspect}")
+      end
+    end
+  end
+
+  def test_complete_typical_case_with_no_matching_files
+    # `bundle i<TAB>` in a directory with nothing starting with `i`:
+    # should still suggest `install` etc. from the help parser
+    # (no regression on the common case).
+    Rubish::Builtins.context.instance_variable_get(:@help_completion_cache)['bundle'] = {
+      subcommands: %w[exec install init info],
+      options: [],
+      timestamp: Time.now
+    }
+
+    Dir.mktmpdir do |tmpdir|
+      Dir.chdir(tmpdir) do
+        result = @repl.send(:complete, 'i', line: 'bundle i', point: 8)
+        assert_includes result, 'install'
+        assert_includes result, 'init'
+        assert_includes result, 'info'
+      end
+    end
+  end
+
   # Regression test: completion should not delete files
   def test_sandbox_rm_completion_does_not_delete_files
     Dir.mktmpdir do |tmpdir|

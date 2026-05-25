@@ -323,7 +323,11 @@ module Rubish
           # Use spec without function (wordlist, actions, etc.)
           return Builtins.generate_completions(spec, input)
         else
-          # Try auto-completion by parsing --help output (fish-style)
+          # Try auto-completion by parsing --help output (fish-style),
+          # then merge with file/path completion. Files first so a
+          # local path matching the partial wins as the inline
+          # suggestion (e.g. `bundle e<TAB>` in a Ruby gem dir suggests
+          # `exe/` over `exec`). Tab cycling still surfaces both.
           cword = calculate_comp_cword(line, point, words)
           Builtins.set_completion_context(
             line: line,
@@ -334,21 +338,25 @@ module Rubish
             key: 9
           )
 
+          auto_results = []
           begin
             prev = words[cword - 1] || ''
             Builtins.call_builtin_completion_function('_auto', cmd, input, prev)
-            results = Builtins.compreply.dup
-
-            if results && !results.empty?
-              results.select! { |r| r.start_with?(input) } unless input.empty?
-              return results.uniq.sort
-            end
+            auto_results = Builtins.compreply.dup
+            auto_results.select! { |r| r.start_with?(input) } unless input.empty?
           ensure
             Builtins.clear_completion_context
           end
 
-          # Fall back to file completion
-          complete_file(input)
+          # Skip file completion on empty input — otherwise `bundle
+          # <TAB>` would dump every entry in CWD alongside the bundle
+          # subcommands. With a non-empty prefix, complete_file globs
+          # `prefix*` and only returns actual matches.
+          file_results = input.empty? ? [] : complete_file(input)
+
+          # Files first; uniq preserves first-occurrence order so a
+          # name appearing in both sources surfaces from the file side.
+          (file_results + auto_results).uniq
         end
       end
     end
