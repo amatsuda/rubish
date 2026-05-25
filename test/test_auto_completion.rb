@@ -758,7 +758,7 @@ class TestAutoCompletion < Test::Unit::TestCase
   end
 
   def test_sandbox_blocks_network
-    omit 'pre-existing failure: network sandbox not enforced in CI'
+    omit 'network sandbox only enforced on macOS via sandbox-exec' unless RUBY_PLATFORM.include?('darwin')
     # Verify network access is blocked
     output, success = Rubish::Builtins.sandboxed_help_command('curl -s --max-time 1 https://example.com')
     assert_false success

@@ -11,6 +11,14 @@ class TestPrompt < Test::Unit::TestCase
     @original_env = ENV.to_h.dup
     @original_dir = Dir.pwd
     @tempdir = Dir.mktmpdir('rubish_prompt_test')
+    # Initialize a git repo in tempdir so git_prompt_info tests work everywhere
+    Dir.chdir(@tempdir) do
+      system('git init -q 2>/dev/null')
+      system('git config user.email "test@test.com" 2>/dev/null')
+      system('git config user.name "Test" 2>/dev/null')
+      system('git commit --allow-empty -m "init" -q 2>/dev/null')
+    end
+    Dir.chdir(@tempdir)
   end
 
   def teardown
@@ -891,14 +899,12 @@ class TestPrompt < Test::Unit::TestCase
   # These tests run in the rubish repo which is a git repo
 
   def test_git_prompt_info_returns_branch
-    omit 'pre-existing failure on Ruby < 3.1' if RUBY_VERSION < '3.1'
     result = @repl.send(:git_prompt_info)
     # Should return something like "(master)" or "(main)" when in a git repo
     assert_match(/\A\(.+\)\z/, result)
   end
 
   def test_git_prompt_info_dirty_kwarg
-    omit 'pre-existing failure on Ruby < 3.1' if RUBY_VERSION < '3.1'
     # With dirty: true, should show dirty indicators if repo is dirty
     result = @repl.send(:git_prompt_info, dirty: true)
     assert_match(/\A\(.+\)\z/, result)
@@ -915,7 +921,6 @@ class TestPrompt < Test::Unit::TestCase
   end
 
   def test_git_prompt_info_stash_kwarg
-    omit 'pre-existing failure on Ruby < 3.1' if RUBY_VERSION < '3.1'
     result = @repl.send(:git_prompt_info, stash: true)
     assert_match(/\A\(.+\)\z/, result)
   end
@@ -932,20 +937,17 @@ class TestPrompt < Test::Unit::TestCase
   end
 
   def test_git_prompt_info_untracked_kwarg
-    omit 'pre-existing failure on Ruby < 3.1' if RUBY_VERSION < '3.1'
     result = @repl.send(:git_prompt_info, untracked: true)
     assert_match(/\A\(.+\)\z/, result)
   end
 
   def test_git_prompt_info_upstream_kwarg
-    omit 'pre-existing failure on Ruby < 3.1' if RUBY_VERSION < '3.1'
     result = @repl.send(:git_prompt_info, upstream: true)
     assert_match(/\A\(.+\)\z/, result)
     # May contain <, >, <>, or = if tracking upstream
   end
 
   def test_git_prompt_info_colorize_kwarg
-    omit 'pre-existing failure on Ruby < 3.1' if RUBY_VERSION < '3.1'
     result = @repl.send(:git_prompt_info, colorize: true)
     # Should contain ANSI color codes
     assert_match(/\e\[\d+m/, result)
@@ -958,20 +960,17 @@ class TestPrompt < Test::Unit::TestCase
   end
 
   def test_git_prompt_info_describe_kwarg
-    omit 'pre-existing failure on Ruby < 3.1' if RUBY_VERSION < '3.1'
     # Test that describe kwarg is accepted (actual output depends on repo state)
     result = @repl.send(:git_prompt_info, describe: 'default')
     assert_match(/\A\(.+\)\z/, result)
   end
 
   def test_git_prompt_info_multiple_kwargs
-    omit 'pre-existing failure on Ruby < 3.1' if RUBY_VERSION < '3.1'
     result = @repl.send(:git_prompt_info, dirty: true, stash: true, untracked: true, upstream: true)
     assert_match(/\A\(.+\)\z/, result)
   end
 
   def test_git_prompt_info_env_fallback_when_kwarg_nil
-    omit 'pre-existing failure on Ruby < 3.1' if RUBY_VERSION < '3.1'
     ENV['GIT_PS1_SHOWDIRTYSTATE'] = '1'
     # When kwarg is nil (default), should use env var
     result = @repl.send(:git_prompt_info)

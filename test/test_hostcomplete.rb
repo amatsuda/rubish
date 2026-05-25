@@ -104,7 +104,6 @@ class TestHostcomplete < Test::Unit::TestCase
   end
 
   def test_complete_hostname_skips_empty_lines
-    omit 'pre-existing failure on Ruby < 3.1' if RUBY_VERSION < '3.1'
     hosts_file = File.join(@tempdir, 'testhosts')
     File.write(hosts_file, <<~HOSTS)
       127.0.0.1 host1

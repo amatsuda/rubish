@@ -610,10 +610,19 @@ module Rubish
     def complete_hostname(prefix)
       hostnames = Set.new
 
-      # Read from /etc/hosts
-      if File.exist?('/etc/hosts')
+      hostfile = ENV['HOSTFILE']
+      sources = if hostfile
+                  # HOSTFILE overrides /etc/hosts, matching bash behavior
+                  [hostfile]
+                else
+                  ['/etc/hosts']
+                end
+
+      sources.each do |file|
+        next unless File.exist?(file)
+
         begin
-          File.readlines('/etc/hosts').each do |line|
+          File.readlines(file).each do |line|
             # Skip comments and empty lines
             line = line.split('#').first&.strip
             next if line.nil? || line.empty?
@@ -623,26 +632,6 @@ module Rubish
             next if parts.length < 2
 
             # Skip the IP address, collect hostnames
-            parts[1..].each do |hostname|
-              hostnames << hostname if hostname.start_with?(prefix)
-            end
-          end
-        rescue Errno::EACCES, Errno::ENOENT
-          # Can't read file, skip
-        end
-      end
-
-      # Also read from HOSTFILE if set
-      hostfile = ENV['HOSTFILE']
-      if hostfile && File.exist?(hostfile)
-        begin
-          File.readlines(hostfile).each do |line|
-            line = line.split('#').first&.strip
-            next if line.nil? || line.empty?
-
-            parts = line.split(/\s+/)
-            next if parts.length < 2
-
             parts[1..].each do |hostname|
               hostnames << hostname if hostname.start_with?(prefix)
             end

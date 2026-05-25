@@ -208,14 +208,12 @@ class TestTime < Test::Unit::TestCase
   end
 
   def test_timeformat_literal_percent
-    omit 'pre-existing failure on Ruby 2.x' if RUBY_VERSION < '3'
     ENV['TIMEFORMAT'] = '100%%'
     stderr = capture_stderr { execute('time true') }
     assert_equal "100%\n", stderr
   end
 
   def test_timeformat_newline_escape
-    omit 'pre-existing failure on Ruby 2.x' if RUBY_VERSION < '3'
     ENV['TIMEFORMAT'] = 'real=%R\nuser=%U'
     stderr = capture_stderr { execute('time true') }
     lines = stderr.strip.split("\n")
@@ -231,7 +229,6 @@ class TestTime < Test::Unit::TestCase
   end
 
   def test_timeformat_empty_suppresses_output
-    omit 'pre-existing failure on Ruby 2.x' if RUBY_VERSION < '3'
     ENV['TIMEFORMAT'] = ''
     stderr = capture_stderr { execute('time true') }
     assert_equal '', stderr

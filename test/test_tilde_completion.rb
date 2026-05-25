@@ -117,16 +117,22 @@ class TestTildeCompletion < Test::Unit::TestCase
   end
 
   def test_cd_completion_with_tilde_slash_lists_home_contents
-    omit 'pre-existing failure on Ruby < 3.1' if RUBY_VERSION < '3.1'
-    Rubish::Builtins.instance_variable_set(:@compreply, [])
-    Rubish::Builtins.call_builtin_completion_function('_cd', 'cd', '~/', '')
-    result = Rubish::Builtins.compreply
+    test_subdir = File.join(Dir.home, 'rubish_tilde_home_test_temp')
+    FileUtils.mkdir_p(test_subdir)
 
-    # Should have some results (home directory contents)
-    assert !result.empty?, 'Should list home directory contents'
-    # All results should start with ~/
-    result.each do |r|
-      assert r.start_with?('~/'), "#{r} should start with ~/"
+    begin
+      Rubish::Builtins.instance_variable_set(:@compreply, [])
+      Rubish::Builtins.call_builtin_completion_function('_cd', 'cd', '~/', '')
+      result = Rubish::Builtins.compreply
+
+      # Should have some results (home directory contents)
+      assert !result.empty?, 'Should list home directory contents'
+      # All results should start with ~/
+      result.each do |r|
+        assert r.start_with?('~/'), "#{r} should start with ~/"
+      end
+    ensure
+      FileUtils.rm_rf(test_subdir)
     end
   end
 end
