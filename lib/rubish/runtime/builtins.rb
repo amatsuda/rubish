@@ -696,7 +696,16 @@ module Rubish
       end
 
       # Save OLDPWD before changing
-      ENV['OLDPWD'] = ENV['PWD'] || Dir.pwd
+      old_pwd = Dir.pwd
+      ENV['OLDPWD'] = old_pwd
+
+      # auto_pushd: push old dir onto stack before changing
+      if zsh_option_enabled?('auto_pushd')
+        @state.dir_stack.delete(dir) if dir
+        unless zsh_option_enabled?('pushd_ignore_dups') && @state.dir_stack.include?(old_pwd)
+          @state.dir_stack.unshift(old_pwd)
+        end
+      end
 
       if physical
         # Resolve to physical path (no symlinks)
