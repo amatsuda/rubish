@@ -1,7 +1,8 @@
 # Dockerfile for running rubish tests in a clean environment
 # This avoids loading developer's local rc files during tests
 
-FROM ruby:4.0-slim
+ARG RUBY_VERSION=4.0
+FROM ruby:${RUBY_VERSION}-slim
 
 # Install build dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -20,14 +21,11 @@ RUN groupadd testgroup1 && \
 # Set working directory
 WORKDIR /app
 
-# Copy Gemfile first for layer caching
-COPY Gemfile Gemfile.lock* ./
-
-# Install dependencies
-RUN bundle install
-
-# Copy the rest of the application
+# Copy the application
 COPY . .
+
+# Install dependencies (drop lockfile so bundler resolves for this Ruby version)
+RUN rm -f Gemfile.lock && bundle install
 
 # Ensure clean home directory (no rc files)
 RUN rm -f /home/testuser/.bashrc \
