@@ -160,4 +160,18 @@ class TestArithmetic < Test::Unit::TestCase
     execute("echo $X > #{output_file}")
     assert_equal "10\n", File.read(output_file)
   end
+
+  # Shell variables (not exported to ENV) must be readable in arithmetic expansion
+  def test_arith_expansion_reads_shell_var
+    execute('x=5')
+    execute("echo $((x + 1)) > #{output_file}")
+    assert_equal "6\n", File.read(output_file)
+  end
+
+  def test_arith_expansion_reads_updated_shell_var
+    execute('x=3')
+    execute('x=$((x + 2))')
+    execute("echo $x > #{output_file}")
+    assert_equal "5\n", File.read(output_file)
+  end
 end
