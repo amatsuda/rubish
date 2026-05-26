@@ -117,15 +117,25 @@ class TestTildeCompletion < Test::Unit::TestCase
   end
 
   def test_cd_completion_with_tilde_slash_lists_home_contents
-    Rubish::Builtins.instance_variable_set(:@compreply, [])
-    Rubish::Builtins.call_builtin_completion_function('_cd', 'cd', '~/', '')
-    result = Rubish::Builtins.compreply
+    # Plant a directory in $HOME so we're not relying on whatever
+    # happens to be in the developer's actual home (which could be
+    # empty in a fresh container or full of files Ruby can't stat).
+    test_subdir = File.join(Dir.home, 'rubish_tilde_home_test_temp')
+    FileUtils.mkdir_p(test_subdir)
 
-    # Should have some results (home directory contents)
-    assert !result.empty?, 'Should list home directory contents'
-    # All results should start with ~/
-    result.each do |r|
-      assert r.start_with?('~/'), "#{r} should start with ~/"
+    begin
+      Rubish::Builtins.instance_variable_set(:@compreply, [])
+      Rubish::Builtins.call_builtin_completion_function('_cd', 'cd', '~/', '')
+      result = Rubish::Builtins.compreply
+
+      # Should have some results (home directory contents)
+      assert !result.empty?, 'Should list home directory contents'
+      # All results should start with ~/
+      result.each do |r|
+        assert r.start_with?('~/'), "#{r} should start with ~/"
+      end
+    ensure
+      FileUtils.rm_rf(test_subdir)
     end
   end
 end
