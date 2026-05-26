@@ -276,8 +276,18 @@ class TestTest < Test::Unit::TestCase
 
   # Terminal test
   def test_t_stdout_not_tty
-    # In test context, stdout is usually not a terminal
-    assert_equal false, Rubish::Builtins.run('test', ['-t', '1'])
+    # Force stdout to a non-TTY for the duration of the assertion so
+    # the result doesn't depend on how the test suite is invoked
+    # (`rake test` in a terminal sees a TTY; pipes / CI / IDE runners
+    # don't). The assertion is about `test -t`'s negative case, so we
+    # have to actually be in the negative case when we ask.
+    original_stdout = $stdout
+    $stdout = StringIO.new
+    begin
+      assert_equal false, Rubish::Builtins.run('test', ['-t', '1'])
+    ensure
+      $stdout = original_stdout
+    end
   end
 
   # Permission bit tests
