@@ -91,8 +91,8 @@ class TestDeclare < Test::Unit::TestCase
   # Test combined attributes
   def test_declare_combined_attrs
     Rubish::Builtins.run('declare', ['-lu', 'VAR=MixedCase'])
-    # lowercase takes precedence
-    assert_equal 'mixedcase', get_shell_var('VAR')
+    # -l and -u cancel each other, no transformation applied
+    assert_equal 'MixedCase', get_shell_var('VAR')
   end
 
   def test_declare_integer_and_readonly
@@ -171,11 +171,11 @@ class TestDeclare < Test::Unit::TestCase
 
   # Test get_var_attributes helper
   def test_get_var_attributes
-    Rubish::Builtins.run('declare', ['-ilu', 'VAR=test'])
+    Rubish::Builtins.run('declare', ['-il', 'VAR=test'])
     attrs = Rubish::Builtins.get_var_attributes('VAR')
     assert attrs.include?(:integer)
     assert attrs.include?(:lowercase)
-    assert attrs.include?(:uppercase)
+    assert_false attrs.include?(:uppercase)
   end
 
   # Test clear_var_attributes helper
@@ -212,5 +212,93 @@ class TestDeclare < Test::Unit::TestCase
   def test_declare_preserves_unquoted_value
     Rubish::Builtins.run('declare', ['VAR=simple'])
     assert_equal 'simple', get_shell_var('VAR')
+  end
+
+  # declare inside a function should save/restore unexported shell vars (not just ENV vars)
+  def test_declare_in_function_restores_unexported_var
+    execute('myvar=outer')
+    execute('f() { declare myvar=inner; }')
+    execute('f')
+    assert_equal 'outer', get_shell_var('myvar')
+  ensure
+    Rubish::Builtins.delete_var('myvar')
+  end
+
+  # declare -I inside a function should inherit unexported shell vars and be local
+  def test_declare_inherit_unexported_var_is_local
+    execute('myvar=outer')
+    execute('f() { declare -I myvar; myvar=inner; echo $myvar > ' + output_file + '; }')
+    execute('f')
+    assert_equal "inner\n", File.read(output_file)
+    assert_equal 'outer', get_shell_var('myvar')
+  ensure
+    Rubish::Builtins.delete_var('myvar')
+  end
+
+  # unset must not remove a readonly variable
+  def test_unset_readonly_fails
+    execute('declare -r RDONLY=1')
+    execute("unset RDONLY; echo \"exit=$?\" > #{output_file}")
+    assert_match(/exit=1/, File.read(output_file))
+    assert_equal '1', get_shell_var('RDONLY')
+  ensure
+    Rubish::Builtins.clear_readonly_vars
+    Rubish::Builtins.delete_var('RDONLY')
+  end
+
+  # declare on a readonly variable must exit 1
+  def test_declare_readonly_reassign_exits_1
+    execute('declare -r RDONLY=1')
+    execute("declare RDONLY=2; echo \"exit=$?\" > #{output_file}")
+    assert_match(/exit=1/, File.read(output_file))
+    assert_equal '1', get_shell_var('RDONLY')
+  ensure
+    Rubish::Builtins.clear_readonly_vars
+    Rubish::Builtins.delete_var('RDONLY')
+  end
+
+  # declare -p on undefined variable must exit 1 and print an error
+  def test_declare_p_undefined_exits_1
+    execute("declare -p __TOTALLY_UNSET__; echo \"exit=$?\" > #{output_file}")
+    assert_match(/exit=1/, File.read(output_file))
+  end
+
+  # declare -p must include the value
+  def test_declare_p_shows_value
+    execute('x=hello')
+    output = capture_output { execute('declare -p x') }
+    assert_match(/x="hello"/, output)
+  ensure
+    Rubish::Builtins.delete_var('x')
+  end
+
+  # -l and -u together cancel out (bash last-flag-wins is actually both-cancel)
+  def test_declare_lu_flags_cancel
+    execute('declare -lu VAR=MixedCase')
+    assert_equal 'MixedCase', get_shell_var('VAR')
+  ensure
+    Rubish::Builtins.delete_var('VAR')
+  end
+
+  # nameref: reading through the reference
+  def test_declare_nameref_read
+    execute('target=hello')
+    execute('declare -n ref=target')
+    execute("echo $ref > #{output_file}")
+    assert_equal "hello\n", File.read(output_file)
+  ensure
+    Rubish::Builtins.delete_var('target')
+    Rubish::Builtins.delete_var('ref')
+  end
+
+  # nameref: writing through the reference updates the target
+  def test_declare_nameref_write
+    execute('declare -n ref=target')
+    execute('ref=hello')
+    execute("echo $target > #{output_file}")
+    assert_equal "hello\n", File.read(output_file)
+  ensure
+    Rubish::Builtins.delete_var('target')
+    Rubish::Builtins.delete_var('ref')
   end
 end

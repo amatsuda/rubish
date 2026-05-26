@@ -703,7 +703,7 @@ module Rubish
       when *READONLY_SPECIAL_VARS
         # Read-only, silently ignore
       else
-        Builtins.set_var(var_name, expanded_value)
+        Builtins.set_var_through_nameref(var_name, expanded_value)
       end
 
       Builtins.export_var(var_name) if Builtins.set_option?('a')

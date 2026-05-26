@@ -1152,6 +1152,7 @@ module Rubish
         return false
       end
 
+      had_error = false
       names.each do |name|
         if mode == :function
           # Remove function
@@ -1164,7 +1165,8 @@ module Rubish
 
             # Check if readonly
             if readonly?(var_name)
-              puts "unset: #{var_name}: readonly variable"
+              $stderr.puts "unset: #{var_name}: readonly variable"
+              had_error = true
               next
             end
 
@@ -1181,7 +1183,8 @@ module Rubish
 
           # Check if readonly
           if readonly?(name)
-            puts "unset: #{name}: readonly variable"
+            $stderr.puts "unset: #{name}: readonly variable"
+            had_error = true
             next
           end
 
@@ -1211,6 +1214,7 @@ module Rubish
         end
       end
 
+      return ExitStatus.new(1) if had_error
       true
     end
 
@@ -1269,6 +1273,11 @@ module Rubish
     # Checks shell_vars first (for variables set in this shell),
     # then falls back to ENV (for inherited environment variables)
     def get_var(name)
+      # Resolve through nameref if applicable
+      if nameref?(name)
+        target = resolve_nameref(name)
+        return get_var(target) if target
+      end
       if @state.shell_vars.key?(name)
         @state.shell_vars[name]
       else
@@ -1417,11 +1426,17 @@ module Rubish
 
       # Print mode with names: show specific declarations
       if print_mode && names.any?
+        error = false
         names.each do |name|
           var_name = name.split('=', 2).first
-          print_declaration(var_name)
+          if !var_set?(var_name) && !(@state.var_attributes[var_name] || Set.new).any? && !readonly?(var_name)
+            $stderr.puts "declare: #{var_name}: not found"
+            error = true
+          else
+            print_declaration(var_name)
+          end
         end
-        return true
+        return error ? ExitStatus.new(1) : true
       end
 
       # No names and no attrs: list all
@@ -1430,7 +1445,16 @@ module Rubish
         return true
       end
 
+      # -l and -u together cancel each other: remove both rather than applying last-wins
+      if add_attrs.include?(:lowercase) && add_attrs.include?(:uppercase)
+        add_attrs.delete(:lowercase)
+        add_attrs.delete(:uppercase)
+        remove_attrs << :lowercase
+        remove_attrs << :uppercase
+      end
+
       # Process each name
+      had_error = false
       names.each do |arg|
         if arg.include?('=')
           name, value = arg.split('=', 2)
@@ -1441,7 +1465,8 @@ module Rubish
 
         # Check readonly
         if readonly?(name) && value
-          puts "declare: #{name}: readonly variable"
+          $stderr.puts "declare: #{name}: readonly variable"
+          had_error = true
           next
         end
 
@@ -1450,7 +1475,7 @@ module Rubish
         if in_function? && !global_mode
           current_scope = @state.local_scope_stack.last
           unless current_scope.key?(name)
-            current_scope[name] = ENV.key?(name) ? ENV[name] : :unset
+            current_scope[name] = var_set?(name) ? get_var(name) : :unset
           end
         end
 
@@ -1461,8 +1486,8 @@ module Rubish
             add_attrs = add_attrs | @state.var_attributes[name]
           end
           # Inherit value if not specified and variable exists
-          if value.nil? && ENV.key?(name)
-            value = ENV[name]
+          if value.nil? && var_set?(name)
+            value = get_var(name)
           end
         end
 
@@ -1503,10 +1528,11 @@ module Rubish
           # Strip quotes from value (like export does)
           value = strip_quotes(value)
           value = apply_attributes(name, value)
-          ENV[name] = value
+          set_var(name, value)
         end
       end
 
+      return ExitStatus.new(1) if had_error
       true
     end
 
@@ -1547,10 +1573,12 @@ module Rubish
         end
       end
 
-      # Apply case attributes (lowercase takes precedence if both set)
-      if attrs.include?(:lowercase)
+      # Apply case attributes (-l and -u together cancel each other out)
+      has_lower = attrs.include?(:lowercase)
+      has_upper = attrs.include?(:uppercase)
+      if has_lower && !has_upper
         value = value.downcase
-      elsif attrs.include?(:uppercase)
+      elsif has_upper && !has_lower
         value = value.upcase
       end
 
@@ -1600,7 +1628,7 @@ module Rubish
           end
         end
       else
-        value = ENV[name]
+        value = get_var(name)
         if flags.empty?
           if value
             puts "declare -- #{name}=#{value.inspect}"

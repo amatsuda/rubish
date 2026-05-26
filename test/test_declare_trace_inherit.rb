@@ -29,7 +29,7 @@ class TestDeclareTraceInherit < Test::Unit::TestCase
   def test_declare_t_sets_trace_attribute
     execute('declare -t myvar=hello')
     assert Rubish::Builtins.has_attribute?('myvar', :trace)
-    assert_equal 'hello', ENV['myvar']
+    assert_equal 'hello', get_shell_var('myvar')
   end
 
   def test_declare_t_without_value
@@ -48,7 +48,7 @@ class TestDeclareTraceInherit < Test::Unit::TestCase
     execute('declare -ti intvar=42')
     assert Rubish::Builtins.has_attribute?('intvar', :trace)
     assert Rubish::Builtins.has_attribute?('intvar', :integer)
-    assert_equal '42', ENV['intvar']
+    assert_equal '42', get_shell_var('intvar')
   end
 
   def test_declare_tx_trace_and_export
@@ -148,7 +148,7 @@ class TestDeclareTraceInherit < Test::Unit::TestCase
 
     execute('declare -I newvar=fresh')
     # No previous var to inherit from, just set new value
-    assert_equal 'fresh', ENV['newvar']
+    assert_equal 'fresh', get_shell_var('newvar')
 
     Rubish::Builtins.pop_local_scope
   end

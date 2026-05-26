@@ -1128,7 +1128,7 @@ module Rubish
       elsif result.is_a?(Command) && PROCESS_BUILTINS.include?(result.name)
         # Run process-affecting builtins directly in current process
         success = Builtins.run(result.name, result.args)
-        @last_status = success ? 0 : 1
+        @last_status = success.is_a?(ExitStatus) ? success.exitstatus : (success ? 0 : 1)
         run_err_trap_if_failed
         check_errexit
         # Return ExitStatus to prevent eval_in_context from trying to run command again
@@ -1137,7 +1137,7 @@ module Rubish
         # Run builtins without explicit redirects in current process
         # This allows them to respect $stdout set by __with_redirect for compound commands
         success = Builtins.run(result.name, result.args)
-        @last_status = success ? 0 : 1
+        @last_status = success.is_a?(ExitStatus) ? success.exitstatus : (success ? 0 : 1)
         run_err_trap_if_failed
         check_errexit
         # Return ExitStatus so callers (like Subshell) know the real exit status
