@@ -173,6 +173,24 @@ class TestCase < Test::Unit::TestCase
     assert_equal "matched\n", File.read(output_file)
   end
 
+  def test_case_leading_paren_multiple_branches
+    ENV['x'] = 'world'
+    execute("case $x in (hello) echo hello > #{output_file};; (world) echo world > #{output_file};; esac")
+    assert_equal "world\n", File.read(output_file)
+  end
+
+  def test_case_leading_paren_wildcard
+    ENV['x'] = 'other'
+    execute("case $x in (hello) echo hello > #{output_file};; (*) echo catch-all > #{output_file};; esac")
+    assert_equal "catch-all\n", File.read(output_file)
+  end
+
+  def test_case_leading_paren_mixed_with_no_paren
+    ENV['x'] = 'bar'
+    execute("case $x in (foo) echo foo > #{output_file};; bar) echo bar >> #{output_file};; esac")
+    assert_equal "bar\n", File.read(output_file)
+  end
+
   # Ruby-style case-when tests
 
   # Lexer tests

@@ -846,7 +846,8 @@ module Rubish
         # Shell-style: case value in pattern) ... ;; esac
 
         while !peek(:ESAC) && !peek_end && current
-          # Parse patterns (separated by |)
+          # Parse patterns (separated by |), optional leading (
+          consume(:LPAREN) if peek(:LPAREN)
           patterns = []
           loop do
             pattern = consume(:WORD)&.value
