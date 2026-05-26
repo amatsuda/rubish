@@ -574,7 +574,7 @@ module Rubish
       if tokens.length > 3
         tokens.each_with_index do |token, i|
           next if i == 0 || i == tokens.length - 1
-          if %w[== != =~ < > -eq -ne -lt -le -gt -ge -nt -ot -ef].include?(token)
+          if %w[== = != =~ < > -eq -ne -lt -le -gt -ge -nt -ot -ef].include?(token)
             left = tokens[0...i].join(' ')
             right_parts = tokens[i + 1..]
             # For regex (=~), reconstruct pattern without spaces around parens
@@ -647,32 +647,44 @@ module Rubish
       when '-x' then File.executable?(arg)
       when '-s' then File.exist?(arg) && File.size(arg) > 0
       when '-L', '-h' then File.symlink?(arg)
-      when '-v' then ENV.key?(arg)
+      when '-v' then Builtins.var_set?(arg)
       else false
       end
     rescue SystemCallError
       false
     end
 
+    def cond_parse_int(str)
+      s = str.to_s.strip
+      return 0 if s.empty?
+      if s =~ /\A(\d+)#([0-9a-zA-Z]+)\z/
+        Integer($2, $1.to_i)
+      else
+        Integer(s, 0)
+      end
+    rescue ArgumentError
+      0
+    end
+
     def eval_binary_test(left, op, right)
       case op
-      when '==' then cond_pattern_match?(left, right)
+      when '==', '=' then cond_pattern_match?(left, right)
       when '!=' then !cond_pattern_match?(left, right)
       when '=~' then cond_regex_match?(left, right)
       when '<' then left.to_s < right.to_s
       when '>' then left.to_s > right.to_s
-      when '-eq' then left.to_i == right.to_i
-      when '-ne' then left.to_i != right.to_i
-      when '-lt' then left.to_i < right.to_i
-      when '-le' then left.to_i <= right.to_i
-      when '-gt' then left.to_i > right.to_i
-      when '-ge' then left.to_i >= right.to_i
+      when '-eq' then cond_parse_int(left) == cond_parse_int(right)
+      when '-ne' then cond_parse_int(left) != cond_parse_int(right)
+      when '-lt' then cond_parse_int(left) < cond_parse_int(right)
+      when '-le' then cond_parse_int(left) <= cond_parse_int(right)
+      when '-gt' then cond_parse_int(left) > cond_parse_int(right)
+      when '-ge' then cond_parse_int(left) >= cond_parse_int(right)
       when '-nt' then File.exist?(left) && File.exist?(right) && File.mtime(left) > File.mtime(right)
       when '-ot' then File.exist?(left) && File.exist?(right) && File.mtime(left) < File.mtime(right)
       when '-ef' then File.exist?(left) && File.exist?(right) && File.stat(left).ino == File.stat(right).ino
       else false
       end
-    rescue SystemCallError, RegexpError
+    rescue SystemCallError
       false
     end
 
@@ -886,7 +898,7 @@ module Rubish
         false
       end
     rescue RegexpError
-      false
+      raise
     end
 
     def allocate_varname_fd

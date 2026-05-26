@@ -576,6 +576,20 @@ class TestTest < Test::Unit::TestCase
     assert help[:options].key?('e1 -a e2')
   end
 
+  def test_v_unexported_shell_var
+    Rubish::Builtins.set_var('MY_SHELL_VAR', 'hello')
+    assert_equal true, Rubish::Builtins.run('test', ['-v', 'MY_SHELL_VAR'])
+  ensure
+    Rubish::Builtins.delete_var('MY_SHELL_VAR')
+  end
+
+  def test_v_bracket_unexported_shell_var
+    Rubish::Builtins.set_var('MY_SHELL_VAR', 'hello')
+    assert_equal true, Rubish::Builtins.run('[', ['-v', 'MY_SHELL_VAR', ']'])
+  ensure
+    Rubish::Builtins.delete_var('MY_SHELL_VAR')
+  end
+
   def test_help_has_v_option
     help = Rubish::Builtins::BUILTIN_HELP['test']
     assert_not_nil help
@@ -586,5 +600,17 @@ class TestTest < Test::Unit::TestCase
     help = Rubish::Builtins::BUILTIN_HELP['test']
     assert_not_nil help
     assert help[:options].key?('-R varname')
+  end
+
+  # Unquoted empty var: [ $empty = "" ] expands to [ = "" ] which is a parse error (status 2)
+  def test_unquoted_empty_var_is_parse_error
+    repl = Rubish::REPL.new
+    tmpfile = Tempfile.new('rubish_empty_var')
+    tmpfile.close
+    repl.send(:execute, 'empty=""')
+    repl.send(:execute, "[ $empty = \"\" ]; echo \"exit=$?\" > #{tmpfile.path}")
+    assert_match(/exit=2/, File.read(tmpfile.path))
+  ensure
+    tmpfile&.unlink
   end
 end

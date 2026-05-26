@@ -2610,7 +2610,7 @@ module Rubish
         when '-z' then return arg.empty?
         when '-n' then return !arg.empty?
         # Variable tests
-        when '-v' then return ENV.key?(arg) || nameref?(arg)
+        when '-v' then return var_set?(arg) || nameref?(arg)
         when '-R' then return nameref?(arg)
         # File existence and type tests
         when '-e' then return File.exist?(arg)
@@ -2659,6 +2659,9 @@ module Rubish
           # modified since last read
           return File.exist?(arg) && File.mtime(arg) > File.atime(arg)
         end
+        # No valid unary operator matched — parse error
+        $stderr.puts "test: #{op}: unary operator expected"
+        return ExitStatus.new(2)
       end
 
       # Binary operators

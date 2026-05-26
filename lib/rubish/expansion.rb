@@ -486,7 +486,7 @@ module Rubish
           in_double_quotes = !in_double_quotes
           result << char
           i += 1
-        elsif char == '~' && !in_single_quotes
+        elsif char == '~' && !in_single_quotes && !in_double_quotes
           expanded, consumed = expand_tilde_at(line, i, result)
           result << expanded
           i += consumed

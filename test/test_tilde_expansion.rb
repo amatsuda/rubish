@@ -56,11 +56,11 @@ class TestTildeExpansion < Test::Unit::TestCase
   end
 
   def test_tilde_in_double_quotes
-    assert_equal "\"#{Dir.home}\"", expand('"~"')
+    assert_equal '"~"', expand('"~"')
   end
 
   def test_tilde_path_in_double_quotes
-    assert_equal "\"#{Dir.home}/Documents\"", expand('"~/Documents"')
+    assert_equal '"~/Documents"', expand('"~/Documents"')
   end
 
   def test_tilde_not_at_word_start
@@ -131,5 +131,25 @@ class TestTildeExpansion < Test::Unit::TestCase
   def test_tilde_plus_not_followed_by_slash_or_space
     # ~+extra should expand ~ only, not ~+
     assert_match(/\+extra$/, expand('~+extra'))
+  end
+
+  def test_tilde_not_expanded_inside_double_quotes
+    assert_equal '"no =~"', expand('"no =~"')
+  end
+
+  def test_tilde_not_expanded_after_equals_in_double_quotes
+    assert_equal '"path=~"', expand('"path=~"')
+  end
+
+  def test_tilde_not_expanded_in_non_assignment_word
+    # "echo x=~" looks like an assignment but isn't — tilde should stay literal.
+    # bash mistakenly expands here; POSIX says don't. rubish matches POSIX.
+    assert_equal 'echo x=~', expand('echo x=~')
+  end
+
+  def test_tilde_no_dynamic_assignment_expansion
+    # Tilde in a string that becomes an assignment via eval/readonly "$binding"
+    # should NOT expand at the point of initial string creation.
+    assert_equal "binding='const=~/src'", expand("binding='const=~/src'")
   end
 end

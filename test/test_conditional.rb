@@ -143,4 +143,54 @@ class TestConditional < Test::Unit::TestCase
     cmd.run
     assert !cmd.success?
   end
+
+  def test_double_bracket_v_unexported_shell_var
+    execute('myvar=hello')
+    execute("[[ -v myvar ]] && echo yes > #{@tempfile.path} || echo no > #{@tempfile.path}")
+    assert_equal "yes\n", File.read(@tempfile.path)
+  end
+
+  def test_double_bracket_v_unset_var
+    execute("[[ -v totally_unset_var ]] && echo yes > #{@tempfile.path} || echo no > #{@tempfile.path}")
+    assert_equal "no\n", File.read(@tempfile.path)
+  end
+
+  def test_double_bracket_single_equals_match
+    execute("[[ a = a ]] && echo yes > #{@tempfile.path} || echo no > #{@tempfile.path}")
+    assert_equal "yes\n", File.read(@tempfile.path)
+  end
+
+  def test_double_bracket_single_equals_no_match
+    execute("[[ a = b ]] && echo yes > #{@tempfile.path} || echo no > #{@tempfile.path}")
+    assert_equal "no\n", File.read(@tempfile.path)
+  end
+
+  def test_double_bracket_regex_mid_word_parens
+    execute("[[ foo =~ f(o+) ]] && echo yes > #{@tempfile.path} || echo no > #{@tempfile.path}")
+    assert_equal "yes\n", File.read(@tempfile.path)
+  end
+
+  def test_double_bracket_regex_no_match
+    execute("[[ bar =~ f(o+) ]] && echo yes > #{@tempfile.path} || echo no > #{@tempfile.path}")
+    assert_equal "no\n", File.read(@tempfile.path)
+  end
+
+  # [[ ]] with a variable as operator is a parse error (status 2) — parsed before var evaluation
+  def test_double_bracket_variable_as_operator_is_parse_error
+    execute('op="=="')
+    execute("[[ a $op a ]]; echo \"exit=$?\" > #{@tempfile.path}")
+    assert_match(/exit=2/, File.read(@tempfile.path))
+  end
+
+  # Invalid regex in =~ should exit 2
+  def test_double_bracket_invalid_regex_exits_2
+    execute("[[ foo.py =~ * ]]; echo \"exit=$?\" > #{@tempfile.path}")
+    assert_match(/exit=2/, File.read(@tempfile.path))
+  end
+
+  # [[ ]] supports octal literals with numeric comparison operators
+  def test_double_bracket_octal_eq
+    execute("[[ 15 -eq 017 ]] && echo yes > #{@tempfile.path} || echo no > #{@tempfile.path}")
+    assert_equal "yes\n", File.read(@tempfile.path)
+  end
 end

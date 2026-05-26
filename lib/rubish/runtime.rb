@@ -1087,6 +1087,14 @@ module Rubish
       # Returns ExitStatus based on expression result
       result = eval_cond_expr(parts, 0, parts.length)
       ExitStatus.new(result ? 0 : 1)
+    rescue RegexpError => e
+      $stderr.puts "rubish: [[: invalid regular expression `#{e.message}'"
+      ExitStatus.new(2)
+    end
+
+    def __cond_syntax_error(msg)
+      $stderr.puts "rubish: [[: #{msg}"
+      ExitStatus.new(2)
     end
 
     def __array_assign(var_part, elements)
@@ -1127,7 +1135,7 @@ module Rubish
       elsif result.is_a?(Command) && PROCESS_BUILTINS.include?(result.name)
         # Run process-affecting builtins directly in current process
         success = Builtins.run(result.name, result.args)
-        @last_status = success ? 0 : 1
+        @last_status = success.is_a?(ExitStatus) ? success.exitstatus : (success ? 0 : 1)
         run_err_trap_if_failed
         check_errexit
         # Return ExitStatus to prevent eval_in_context from trying to run command again
@@ -1136,7 +1144,7 @@ module Rubish
         # Run builtins without explicit redirects in current process
         # This allows them to respect $stdout set by __with_redirect for compound commands
         success = Builtins.run(result.name, result.args)
-        @last_status = success ? 0 : 1
+        @last_status = success.is_a?(ExitStatus) ? success.exitstatus : (success ? 0 : 1)
         run_err_trap_if_failed
         check_errexit
         # Return ExitStatus so callers (like Subshell) know the real exit status
