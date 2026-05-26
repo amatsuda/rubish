@@ -317,3 +317,93 @@ class TestPushdPopd < Test::Unit::TestCase
     assert_equal [@subdir2, @tempdir], Rubish::Builtins.current_state.dir_stack
   end
 end
+
+class TestDirsFlags < Test::Unit::TestCase
+  def setup
+    @original_dir = Dir.pwd
+    @tempdir = File.realpath(Dir.mktmpdir('rubish_dirs_test'))
+    @subdir1 = File.join(@tempdir, 'dir1')
+    @subdir2 = File.join(@tempdir, 'dir2')
+    FileUtils.mkdir_p(@subdir1)
+    FileUtils.mkdir_p(@subdir2)
+    Rubish::Builtins.clear_dir_stack
+    Dir.chdir(@tempdir)
+  end
+
+  def teardown
+    Dir.chdir(@original_dir)
+    FileUtils.rm_rf(@tempdir)
+    Rubish::Builtins.clear_dir_stack
+  end
+
+  def test_dirs_clear_empties_stack
+    Rubish::Builtins.run('pushd', [@subdir1])
+    Rubish::Builtins.run('pushd', [@subdir2])
+    assert_equal 2, Rubish::Builtins.current_state.dir_stack.length
+    Rubish::Builtins.run('dirs', ['-c'])
+    assert_equal [], Rubish::Builtins.current_state.dir_stack
+  end
+
+  def test_dirs_long_shows_full_path
+    home = ENV['HOME']
+    Dir.chdir(home)
+    output = capture_stdout { Rubish::Builtins.run('dirs', ['-l']) }
+    assert_match(home, output)
+    assert_no_match(/~/, output)
+  end
+
+  def test_dirs_default_uses_tilde
+    home = ENV['HOME']
+    Dir.chdir(home)
+    output = capture_stdout { Rubish::Builtins.run('dirs', []) }
+    assert_match(/~/, output)
+  end
+
+  def test_dirs_per_line_one_entry_per_line
+    Rubish::Builtins.run('pushd', [@subdir1])
+    output = capture_stdout { Rubish::Builtins.run('dirs', ['-p']) }
+    lines = output.lines.map(&:chomp).reject(&:empty?)
+    assert_equal 2, lines.length
+  end
+
+  def test_dirs_verbose_prefixes_index
+    Rubish::Builtins.run('pushd', [@subdir1])
+    output = capture_stdout { Rubish::Builtins.run('dirs', ['-v']) }
+    lines = output.lines.map(&:chomp).reject(&:empty?)
+    assert_equal 2, lines.length
+    assert_match(/^ 0  /, lines[0])
+    assert_match(/^ 1  /, lines[1])
+  end
+
+  def test_dirs_plus_n_shows_nth_entry
+    Rubish::Builtins.run('pushd', [@subdir1])
+    Rubish::Builtins.run('pushd', [@subdir2])
+    # full_stack: [dir2, dir1, tempdir] (+0=dir2, +1=dir1, +2=tempdir)
+    output = capture_stdout { Rubish::Builtins.run('dirs', ['+1']) }
+    assert_match(/dir1/, output)
+    assert_no_match(/dir2/, output)
+  end
+
+  def test_dirs_minus_n_counts_from_right
+    Rubish::Builtins.run('pushd', [@subdir1])
+    Rubish::Builtins.run('pushd', [@subdir2])
+    # full_stack: [dir2, dir1, tempdir], -0 = last = tempdir
+    output = capture_stdout { Rubish::Builtins.run('dirs', ['-0']) }
+    assert_match(/rubish_dirs_test/, output)
+    assert_no_match(/dir1|dir2/, output)
+  end
+
+  def test_dirs_plus_n_out_of_range
+    result = nil
+    output = capture_stderr { result = Rubish::Builtins.run('dirs', ['+5']) }
+    assert_false result
+    assert_match(/out of range/, output)
+  end
+
+  def test_dirs_invalid_option_to_stderr
+    result = nil
+    output = capture_stderr { result = Rubish::Builtins.run('dirs', ['--bad']) }
+    assert_false result
+    assert_match(/invalid option/, output)
+  end
+end

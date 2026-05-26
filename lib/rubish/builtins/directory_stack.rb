@@ -154,7 +154,64 @@ module Rubish
     end
 
     def dirs(args)
-      print_dir_stack
+      clear   = false
+      long    = false
+      per_line = false
+      verbose  = false
+      index_arg = nil
+
+      expanded = []
+      args.each do |arg|
+        if arg =~ /\A-([clpv]+)\z/
+          $1.each_char { |c| expanded << "-#{c}" }
+        else
+          expanded << arg
+        end
+      end
+
+      expanded.each do |arg|
+        case arg
+        when '-c' then clear = true
+        when '-l' then long = true
+        when '-p' then per_line = true
+        when '-v' then verbose = true
+        when /\A[+-]\d+\z/ then index_arg = arg
+        else
+          $stderr.puts "dirs: #{arg}: invalid option"
+          return false
+        end
+      end
+
+      if clear
+        @state.dir_stack.clear
+        return true
+      end
+
+      home  = ENV['HOME'] || Dir.home
+      stack = [Dir.pwd] + @state.dir_stack
+
+      format_entry = ->(dir, idx) {
+        display = long ? dir : dir.sub(home, '~')
+        verbose ? format('%2d  %s', idx, display) : display
+      }
+
+      if index_arg
+        n = index_arg[1..].to_i
+        idx = index_arg.start_with?('+') ? n : stack.length - 1 - n
+        if idx < 0 || idx >= stack.length
+          $stderr.puts "dirs: #{index_arg}: directory stack index out of range"
+          return false
+        end
+        puts format_entry.call(stack[idx], idx)
+        return true
+      end
+
+      if verbose || per_line
+        stack.each_with_index { |d, i| puts format_entry.call(d, i) }
+      else
+        puts stack.map { |d| long ? d : d.sub(home, '~') }.join(' ')
+      end
+
       true
     end
 
