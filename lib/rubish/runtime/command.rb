@@ -148,6 +148,14 @@ module Rubish
       @block = block
       @ran = false
       @skip_functions = skip_functions
+      # Lazy-set elsewhere; pre-init so Ruby 2.6's stricter -W doesn't
+      # emit "instance variable @xxx not initialized" warnings when
+      # they're first read. Those warnings hit stderr and bleed into
+      # capture_stderr-based tests (test_restricted, test_time).
+      @noclobber_failed = false
+      @restricted_failed = false
+      @prefix_env = nil
+      @status = nil
     end
 
     def args
@@ -897,6 +905,8 @@ module Rubish
       @stdout = nil
       @stderr = nil
       @ran = false
+      @noclobber_failed = false
+      @restricted_failed = false
     end
 
     def ran?
@@ -1039,6 +1049,8 @@ module Rubish
       @stdout = nil
       @stderr = nil
       @ran = false
+      @noclobber_failed = false
+      @restricted_failed = false
     end
 
     def ran?
