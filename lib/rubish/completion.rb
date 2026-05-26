@@ -606,50 +606,34 @@ module Rubish
       words.length
     end
 
-    # Complete hostnames from /etc/hosts and HOSTFILE
+    # Complete hostnames from HOSTFILE (or /etc/hosts as fallback).
+    # Matches bash: HOSTFILE, when set, *replaces* /etc/hosts rather
+    # than supplementing it. A user pointing HOSTFILE at a curated list
+    # has signaled they don't want /etc/hosts entries mixed in.
     def complete_hostname(prefix)
       hostnames = Set.new
 
-      # Read from /etc/hosts
-      if File.exist?('/etc/hosts')
-        begin
-          File.readlines('/etc/hosts').each do |line|
-            # Skip comments and empty lines
-            line = line.split('#').first&.strip
-            next if line.nil? || line.empty?
-
-            # Parse: IP hostname [aliases...]
-            parts = line.split(/\s+/)
-            next if parts.length < 2
-
-            # Skip the IP address, collect hostnames
-            parts[1..].each do |hostname|
-              hostnames << hostname if hostname.start_with?(prefix)
-            end
-          end
-        rescue Errno::EACCES, Errno::ENOENT
-          # Can't read file, skip
-        end
-      end
-
-      # Also read from HOSTFILE if set
       hostfile = ENV['HOSTFILE']
-      if hostfile && File.exist?(hostfile)
-        begin
-          File.readlines(hostfile).each do |line|
-            line = line.split('#').first&.strip
-            next if line.nil? || line.empty?
+      source = hostfile && !hostfile.empty? ? hostfile : '/etc/hosts'
+      return [] unless File.exist?(source)
 
-            parts = line.split(/\s+/)
-            next if parts.length < 2
+      begin
+        File.readlines(source).each do |line|
+          # Skip comments and empty lines
+          line = line.split('#').first&.strip
+          next if line.nil? || line.empty?
 
-            parts[1..].each do |hostname|
-              hostnames << hostname if hostname.start_with?(prefix)
-            end
+          # Parse: IP hostname [aliases...]
+          parts = line.split(/\s+/)
+          next if parts.length < 2
+
+          # Skip the IP address, collect hostnames
+          parts[1..].each do |hostname|
+            hostnames << hostname if hostname.start_with?(prefix)
           end
-        rescue Errno::EACCES, Errno::ENOENT
-          # Can't read file, skip
         end
+      rescue Errno::EACCES, Errno::ENOENT
+        # Can't read file, skip
       end
 
       hostnames.to_a.sort
