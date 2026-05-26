@@ -148,11 +148,17 @@ module Rubish
                          [arg]
                        end
 
-      # Then expand variables and globs on each result
+      # Then expand variables, apply IFS word splitting, and glob on each result.
+      # Per POSIX, IFS word splitting only applies to results of variable expansion,
+      # command substitution, and arithmetic expansion -- not to literal text.
       brace_expanded.flat_map do |item|
         expanded = expand_string_content(item)
-        next [] if expanded.empty?
-        expanded.match?(/[*?\[]/) ? __glob(expanded) : [expanded]
+        if item.include?('$') || item.include?('`')
+          Builtins.split_by_ifs(expanded).flat_map { |w| w.match?(/[*?\[]/) ? __glob(w) : [w] }
+        else
+          next [] if expanded.empty?
+          expanded.match?(/[*?\[]/) ? __glob(expanded) : [expanded]
+        end
       end
     end
 

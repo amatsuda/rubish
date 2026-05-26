@@ -710,10 +710,10 @@ module Rubish
         return arr.reject(&:empty?)
       end
 
-      # Otherwise fetch as regular variable
+      # Otherwise fetch as regular variable and word-split by IFS
       value = __fetch_var(var_name)
-      # Return empty array if value is nil or empty (so it gets removed from args)
-      value.nil? || value.empty? ? [] : [value]
+      return [] if value.nil?
+      Builtins.split_by_ifs(value)
     end
 
     def __glob(pattern)

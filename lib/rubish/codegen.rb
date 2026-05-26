@@ -124,6 +124,12 @@ module Rubish
           var_name = $1
           return "__fetch_var_for_arg_unquoted(#{var_name.inspect})"
         end
+        # Special case: standalone unquoted $(cmd) - word-split output by IFS
+        # Exclude $((arith)) which also starts with $(
+        if !arg.start_with?('$((') && pure_command_substitution?(arg)
+          cmd = arg[2...-1]
+          return "Builtins.split_by_ifs(__run_subst(#{cmd.inspect}))"
+        end
         # Special case: quoted "$varname" as standalone arg
         # In bash, quoted empty variable expansion is preserved as empty string
         # so "$empty_var" becomes "" (one empty string argument)
@@ -907,14 +913,18 @@ module Rubish
       # $VAR with value "a b c" should become three items
       # Also need glob/brace expansion for patterns like *.txt or {1..5}
       if item =~ /\A\$([a-zA-Z_][a-zA-Z0-9_]*)\z/
-        # Simple variable - expand and split
-        "ENV.fetch(#{$1.inspect}, '').split"
+        # Simple variable - expand and word-split by IFS
+        "__fetch_var_for_arg_unquoted(#{$1.inspect})"
+      elsif pure_command_substitution?(item)
+        # Pure command substitution - word-split output by IFS
+        cmd = item[2...-1]
+        "Builtins.split_by_ifs(__run_subst(#{cmd.inspect}))"
       elsif item =~ /\A\$\{([^}]+)\}\z/
-        # Braced variable - expand and split
-        "ENV.fetch(#{$1.inspect}, '').split"
+        # Braced variable - expand and word-split by IFS
+        "Builtins.split_by_ifs(#{generate_interpolated_string(item)})"
       elsif item.include?('$')
-        # Mixed content with variable - expand as string, then split
-        "#{generate_interpolated_string(item)}.split"
+        # Mixed content with variable - expand as string, then word-split by IFS
+        "Builtins.split_by_ifs(#{generate_interpolated_string(item)})"
       elsif has_brace_expansion?(item)
         # Brace expansion - may also have glob
         if has_glob_chars?(item)

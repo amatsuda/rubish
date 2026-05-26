@@ -416,7 +416,6 @@ class TestIFS < Test::Unit::TestCase
   # ---------------------------------------------------------------------------
 
   def test_unquoted_var_word_splits_by_ifs
-    omit 'unquoted variable expansion does not yet perform IFS word splitting'
     execute('IFS=:')
     execute('x=a:b:c')
     out = capture_stdout { execute('echo $x') }.strip
@@ -424,7 +423,6 @@ class TestIFS < Test::Unit::TestCase
   end
 
   def test_for_loop_splits_unquoted_var_by_ifs
-    omit 'for loop over unquoted variable does not yet perform IFS word splitting'
     execute('IFS=:')
     execute('x=one:two:three')
     execute('for w in $x; do echo $w >> words.txt; done')
@@ -433,7 +431,6 @@ class TestIFS < Test::Unit::TestCase
   end
 
   def test_cmd_sub_word_splits_by_ifs
-    omit 'command substitution output does not yet perform IFS word splitting'
     execute('IFS=:')
     out = capture_stdout { execute('echo $(echo a:b:c)') }.strip
     assert_equal 'a b c', out
