@@ -72,6 +72,7 @@ module Rubish
       REDIRECT_IN REDIRECT_ERR
       DUP_OUT DUP_IN
       HEREDOC HEREDOC_INDENT HERESTRING
+      VARNAME_REDIRECT
     ].freeze
 
     def initialize(input)
