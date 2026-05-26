@@ -6,6 +6,7 @@ class TestAutoPushd < Test::Unit::TestCase
   def setup
     @repl = Rubish::REPL.new
     @original_dir = Dir.pwd
+    @original_pwd_env = ENV['PWD']
     @original_zsh_options = Rubish::Builtins.current_state.zsh_options.dup
     @tempdir = File.realpath(Dir.mktmpdir('rubish_auto_pushd_test'))
     @subdir1 = File.join(@tempdir, 'dir1')
@@ -14,10 +15,12 @@ class TestAutoPushd < Test::Unit::TestCase
     FileUtils.mkdir_p(@subdir2)
     Rubish::Builtins.clear_dir_stack
     Dir.chdir(@tempdir)
+    ENV['PWD'] = @tempdir
   end
 
   def teardown
     Dir.chdir(@original_dir)
+    ENV['PWD'] = @original_pwd_env
     FileUtils.rm_rf(@tempdir)
     Rubish::Builtins.clear_dir_stack
     Rubish::Builtins.current_state.zsh_options.clear
@@ -68,6 +71,6 @@ class TestAutoPushd < Test::Unit::TestCase
     execute("cd #{@subdir1}")
     execute("cd #{@subdir2}")
     execute("cd #{@subdir1}")
-    assert_equal [@subdir2, @tempdir], Rubish::Builtins.current_state.dir_stack
+    assert_equal [@subdir2, @subdir1, @tempdir], Rubish::Builtins.current_state.dir_stack
   end
 end
