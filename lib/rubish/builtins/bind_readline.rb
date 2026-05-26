@@ -587,19 +587,26 @@ module Rubish
     # Idempotent: safe to call more than once.
     def install_push_line
       return unless defined?(Reline)
-      return if Reline::LineEditor.method_defined?(:rubish_push_line)
 
-      Reline::LineEditor.define_method(:rubish_push_line) do |_key = nil, **_kwargs|
-        state = Builtins.current_state
-        if state
-          stashed = whole_buffer
-          state.push_line_stack << stashed unless stashed.nil? || stashed.empty?
-          state.push_line_pending = true
+      # Defining the method is one-shot — once it's on the class it
+      # stays. The keymap registration, on the other hand, has to be
+      # re-applied every call: tests (and conceivably `bind -f` etc.)
+      # call Reline.core.config.reset_variables, which wipes
+      # @default_key_bindings. If we short-circuited the whole method
+      # on method_defined?, those bindings would never come back.
+      unless Reline::LineEditor.method_defined?(:rubish_push_line)
+        Reline::LineEditor.define_method(:rubish_push_line) do |_key = nil, **_kwargs|
+          state = Builtins.current_state
+          if state
+            stashed = whole_buffer
+            state.push_line_stack << stashed unless stashed.nil? || stashed.empty?
+            state.push_line_pending = true
+          end
+          # Do NOT clear @buffer_of_lines — render_finished will write
+          # the prompt + typed text + \r\n on Reline's way out, leaving
+          # the line visible in scrollback (zsh-style).
+          finish
         end
-        # Do NOT clear @buffer_of_lines — render_finished will write
-        # the prompt + typed text + \r\n on Reline's way out, leaving
-        # the line visible in scrollback (zsh-style).
-        finish
       end
 
       # Bind ESC-Q and ESC-q (zsh default) to push-line in emacs mode.
