@@ -61,9 +61,17 @@ module Rubish
     METHOD_CHAIN_OPENERS = %i[FUNC_CALL ARRAY BLOCK DOT].freeze
 
     # Tokens that end the current command and reset chain context.
+    # Includes redirect operators so that a path like `out.txt` after a
+    # `>` is lexed as a single WORD (otherwise an upstream BLOCK or
+    # FUNC_CALL would leave @in_method_chain set and the dot in the
+    # redirect target would be emitted as :DOT, splitting the filename).
     METHOD_CHAIN_BREAKERS = %i[
       PIPE PIPE_BOTH SEMICOLON DOUBLE_SEMI CASE_FALL CASE_CONT
       AND OR AMPERSAND NEWLINE LPAREN LBRACE
+      REDIRECT_OUT REDIRECT_CLOBBER REDIRECT_APPEND
+      REDIRECT_IN REDIRECT_ERR
+      DUP_OUT DUP_IN
+      HEREDOC HEREDOC_INDENT HERESTRING
     ].freeze
 
     def initialize(input)
