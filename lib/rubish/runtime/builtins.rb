@@ -387,7 +387,7 @@ module Rubish
     end
 
     def ifs
-      ENV['IFS'] || DEFAULT_IFS
+      get_var('IFS') || DEFAULT_IFS
     end
 
     def ifs_whitespace

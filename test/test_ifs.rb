@@ -280,4 +280,162 @@ class TestIFS < Test::Unit::TestCase
     result = Rubish::Builtins.split_by_ifs('name,age,city')
     assert_equal ['name', 'age', 'city'], result
   end
+
+  # ---------------------------------------------------------------------------
+  # Array [*] expansion respects IFS
+  # ---------------------------------------------------------------------------
+
+  def test_array_star_uses_ifs_separator
+    execute('c=(a b c)')
+    execute('IFS=x')
+    execute('ret="${c[*]}"')
+    assert_equal 'axbxc', get_shell_var('ret')
+  end
+
+  def test_array_star_empty_ifs_no_separator
+    execute('c=(a b c)')
+    execute('IFS=')
+    execute('ret="${c[*]}"')
+    assert_equal 'abc', get_shell_var('ret')
+  end
+
+  def test_array_star_default_ifs_space
+    execute('c=(a b c)')
+    execute('ret="${c[*]}"')
+    assert_equal 'a b c', get_shell_var('ret')
+  end
+
+  def test_array_star_multichar_ifs_uses_first
+    execute('c=(a b c)')
+    execute('IFS=:,')
+    execute('ret="${c[*]}"')
+    assert_equal 'a:b:c', get_shell_var('ret')
+  end
+
+  def test_array_at_ignores_ifs
+    execute('c=(a b c)')
+    execute('IFS=x')
+    out = capture_stdout { execute('echo "${c[@]}"') }.strip
+    assert_equal 'a b c', out
+  end
+
+  def test_array_star_ifs_in_case_pattern
+    execute('c=(a b c)')
+    execute('IFS=x')
+    execute('case "${c[*]}" in axbxc) ret=yes ;; *) ret=no ;; esac')
+    assert_equal 'yes', get_shell_var('ret')
+  end
+
+  def test_array_star_ifs_colon
+    execute('c=(/usr/bin /usr/local/bin /bin)')
+    execute('IFS=:')
+    execute('ret="${c[*]}"')
+    assert_equal '/usr/bin:/usr/local/bin:/bin', get_shell_var('ret')
+  end
+
+  def test_array_star_ifs_newline
+    execute("IFS=$'\\n'")
+    execute('c=(one two three)')
+    execute('ret="${c[*]}"')
+    assert_equal "one\ntwo\nthree", get_shell_var('ret')
+  end
+
+  # ---------------------------------------------------------------------------
+  # IFS set via assignment (not ENV) is respected
+  # ---------------------------------------------------------------------------
+
+  def test_ifs_assignment_not_env_affects_split
+    execute('IFS=:')
+    result = Rubish::Builtins.split_by_ifs('a:b:c')
+    assert_equal ['a', 'b', 'c'], result
+  end
+
+  def test_ifs_assignment_not_env_affects_join
+    execute('IFS=:')
+    result = Rubish::Builtins.join_by_ifs(['a', 'b', 'c'])
+    assert_equal 'a:b:c', result
+  end
+
+  def test_ifs_assignment_not_env_affects_read
+    execute('IFS=:')
+    File.write('input.txt', "one:two:three\n")
+    File.open('input.txt', 'r') do |f|
+      $stdin = f
+      Rubish::Builtins.read(['-r', 'a', 'b', 'c'])
+    end
+    $stdin = STDIN
+    assert_equal 'one', get_shell_var('a')
+    assert_equal 'two', get_shell_var('b')
+    assert_equal 'three', get_shell_var('c')
+  end
+
+  # ---------------------------------------------------------------------------
+  # Quoted vs unquoted expansion with IFS
+  # ---------------------------------------------------------------------------
+
+  def test_quoted_var_suppresses_ifs_split
+    execute('IFS=:')
+    execute('x=a:b:c')
+    out = capture_stdout { execute('echo "$x"') }.strip
+    assert_equal 'a:b:c', out
+  end
+
+  def test_unset_ifs_restores_default
+    execute('IFS=:')
+    execute('unset IFS')
+    assert_equal " \t\n", Rubish::Builtins.ifs
+  end
+
+  # ---------------------------------------------------------------------------
+  # set -- with $* and IFS
+  # ---------------------------------------------------------------------------
+
+  def test_set_positional_params_with_ifs
+    execute('set -- one two three')
+    execute('IFS=:')
+    out = capture_stdout { execute('echo "$*"') }.strip
+    assert_equal 'one:two:three', out
+  end
+
+  # ---------------------------------------------------------------------------
+  # IFS changes take effect immediately
+  # ---------------------------------------------------------------------------
+
+  def test_ifs_change_affects_subsequent_operations
+    execute('IFS=:')
+    r1 = Rubish::Builtins.split_by_ifs('a:b:c')
+    execute('IFS=,')
+    r2 = Rubish::Builtins.split_by_ifs('x,y,z')
+    assert_equal ['a', 'b', 'c'], r1
+    assert_equal ['x', 'y', 'z'], r2
+  end
+
+  # ---------------------------------------------------------------------------
+  # Known gaps: unquoted variable expansion word splitting (POSIX required,
+  # not yet implemented)
+  # ---------------------------------------------------------------------------
+
+  def test_unquoted_var_word_splits_by_ifs
+    omit 'unquoted variable expansion does not yet perform IFS word splitting'
+    execute('IFS=:')
+    execute('x=a:b:c')
+    out = capture_stdout { execute('echo $x') }.strip
+    assert_equal 'a b c', out
+  end
+
+  def test_for_loop_splits_unquoted_var_by_ifs
+    omit 'for loop over unquoted variable does not yet perform IFS word splitting'
+    execute('IFS=:')
+    execute('x=one:two:three')
+    execute('for w in $x; do echo $w >> words.txt; done')
+    words = File.read('words.txt').lines.map(&:strip)
+    assert_equal ['one', 'two', 'three'], words
+  end
+
+  def test_cmd_sub_word_splits_by_ifs
+    omit 'command substitution output does not yet perform IFS word splitting'
+    execute('IFS=:')
+    out = capture_stdout { execute('echo $(echo a:b:c)') }.strip
+    assert_equal 'a b c', out
+  end
 end
