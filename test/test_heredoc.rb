@@ -271,6 +271,35 @@ class TestHeredoc < Test::Unit::TestCase
     assert_equal "line with * and ? and [brackets]\n", File.read(output_file)
   end
 
+  # Multi-line heredoc via execute() — body embedded as \n in the string.
+  # Before the fix, Reline.readline returned nil in non-TTY context, so body
+  # was always empty and body lines were tokenized as stray commands.
+
+  def test_heredoc_basic_via_execute
+    execute("cat <<EOF > #{output_file}\na\nb\nc\nEOF")
+    assert_equal "a\nb\nc\n", File.read(output_file)
+  end
+
+  def test_heredoc_expansion_via_execute
+    execute("x=hello; cat <<EOF > #{output_file}\n$x world\nEOF")
+    assert_equal "hello world\n", File.read(output_file)
+  end
+
+  def test_heredoc_quoted_via_execute
+    execute("a=foo; cat <<'EOF' > #{output_file}\nthere$a\nEOF")
+    assert_equal "there$a\n", File.read(output_file)
+  end
+
+  def test_heredoc_tab_strip_via_execute
+    execute("cat <<-EOF > #{output_file}\n\ttab1\n\ttab2\n\tEOF")
+    assert_equal "tab1\ntab2\n", File.read(output_file)
+  end
+
+  def test_heredoc_empty_via_execute
+    execute("cat <<EOF > #{output_file}\nEOF")
+    assert_equal '', File.read(output_file)
+  end
+
   # Helper tests
   def test_detect_heredoc
     assert_equal ['EOF', false], Rubish::Builtins.detect_heredoc('cat <<EOF')

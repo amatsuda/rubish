@@ -932,9 +932,18 @@ module Rubish
       end
 
       # Variable expansion now happens at runtime in generated Ruby code
+      # If input has embedded heredoc body (eg. from execute() or source), strip the body
+      # before lexing so it isn't tokenized as additional commands, and pre-set the content.
+      lex_line = line
+      if line.include?("\n") && @heredoc_content.nil? && (m = line.match(/<<(-?)(['"]?)(\w+)\2/))
+        strip_tabs = m[1] == '-'
+        delimiter  = m[3]
+        lex_line, @heredoc_content = extract_heredoc_from_string(line, delimiter, strip_tabs)
+      end
+
       # Handle multi-line commands (cmdhist): collect continuation lines if parse fails
-      accumulated_lines = [line]
-      tokens = @lexer_class.new(line).tokenize
+      accumulated_lines = [lex_line]
+      tokens = @lexer_class.new(lex_line).tokenize
 
       # Restricted mode: block Ruby literal tokens (blocks, conditions, arrays)
       if Builtins.restricted_mode? && tokens.any? { |t| %i[BLOCK RUBY_CONDITION ARRAY].include?(t.type) }
@@ -970,7 +979,6 @@ module Rubish
       # Skip if content was already set (e.g., by source command)
       if (heredoc = find_heredoc(ast)) && @heredoc_content.nil?
         @heredoc_content = collect_heredoc_content(heredoc.delimiter, heredoc.strip_tabs)
-        # Update history with full heredoc command if cmdhist is enabled
         update_history_with_heredoc(line, heredoc.delimiter, @heredoc_content)
       end
 
@@ -2428,6 +2436,18 @@ module Rubish
       else
         nil
       end
+    end
+
+    def extract_heredoc_from_string(input, delimiter, strip_tabs)
+      first_line, *rest = input.split("\n", -1)
+      body = []
+      rest&.each do |l|
+        check = strip_tabs ? l.sub(/\A\t+/, '') : l
+        break if check == delimiter
+        body << l
+      end
+      content = body.empty? ? '' : body.join("\n") + "\n"
+      [first_line, content]
     end
 
     def collect_heredoc_content(delimiter, strip_tabs)
