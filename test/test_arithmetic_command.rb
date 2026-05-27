@@ -321,6 +321,11 @@ class TestArithmeticCommand < Test::Unit::TestCase
     assert_equal '0', get_shell_var('x')
   end
 
+  def test_logical_not_zero
+    execute('(( x = !0 ))')  # !falsy = 1
+    assert_equal '1', get_shell_var('x')
+  end
+
   def test_bitwise_not
     execute('(( x = ~0 ))')
     assert_equal '-1', get_shell_var('x')
