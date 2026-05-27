@@ -30,28 +30,7 @@ module Rubish
 
     def __arith(expr)
       # Evaluate arithmetic expression
-      # Replace variable references with their values
-      # Also handle positional parameters like $1, $2, etc.
-      expanded = expr.gsub(/\$\{([^}]+)\}|\$(\d+)|\$([a-zA-Z_][a-zA-Z0-9_]*)|([a-zA-Z_][a-zA-Z0-9_]*)/) do |match|
-        if $2 # Positional parameter like $1, $2
-          n = $2.to_i
-          (@positional_params[n - 1] || '0')
-        elsif (var_name = $1 || $3 || $4)
-          get_special_var(var_name) || Builtins.get_var(var_name) || '0'
-        else
-          match
-        end
-      end
-
-      # Evaluate the expression safely (only allow arithmetic)
-      # Convert shell operators to Ruby: ** for exponentiation is same
-      # Note: bash uses ** for exponent, which Ruby also supports
-      begin
-        result = Kernel.eval(expanded)
-        result.to_s
-      rescue StandardError
-        '0'
-      end
+      eval_arithmetic_expr(expr).to_s
     end
 
     def __arithmetic_command(expr)

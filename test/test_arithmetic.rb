@@ -215,4 +215,14 @@ class TestArithmetic < Test::Unit::TestCase
     execute('(( x = 42 ))')
     assert_equal '42', get_shell_var('x')
   end
+
+  def test_hex_literal
+    execute("echo $((0xff)) > #{output_file}")
+    assert_equal "255\n", File.read(output_file)
+  end
+
+  def test_hex_and_octal
+    execute("echo $((0x100 | 007)) > #{output_file}")
+    assert_equal "263\n", File.read(output_file)
+  end
 end

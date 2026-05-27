@@ -170,6 +170,8 @@ module Rubish
       end
 
       # Regular arithmetic expression - evaluate directly to handle booleans
+      # Pre-convert hex literals so their letter chars don't get treated as variables
+      expr = expr.gsub(/0[xX][0-9a-fA-F]+/) { |m| Integer(m).to_s }
       # Expand variables first
       expanded = expr.gsub(/\$\{([^}]+)\}|\$(\d+)|\$([a-zA-Z_][a-zA-Z0-9_]*)|([a-zA-Z_][a-zA-Z0-9_]*)/) do |match|
         if $2 # Positional parameter like $1, $2
