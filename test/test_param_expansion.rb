@@ -173,6 +173,68 @@ class TestParamExpansion < Test::Unit::TestCase
     assert_equal "hello\n", File.read(output_file)
   end
 
+  # ${var/#pat/rep} - replace at start (anchored prefix)
+  def test_replace_prefix_match
+    ENV['X'] = 'foobar'
+    execute("echo ${X/#foo/BAZ} > #{output_file}")
+    assert_equal "BAZbar\n", File.read(output_file)
+  end
+
+  def test_replace_prefix_no_match
+    ENV['X'] = 'foobar'
+    execute("echo ${X/#bar/BAZ} > #{output_file}")
+    assert_equal "foobar\n", File.read(output_file)
+  end
+
+  def test_replace_prefix_glob
+    ENV['X'] = 'aabbcc'
+    execute("echo ${X/#a*/X} > #{output_file}")
+    assert_equal "X\n", File.read(output_file)
+  end
+
+  def test_replace_prefix_empty_pattern
+    ENV['X'] = 'foobar'
+    execute("echo ${X/#/PRE} > #{output_file}")
+    assert_equal "PREfoobar\n", File.read(output_file)
+  end
+
+  def test_replace_prefix_delete
+    ENV['X'] = 'foofoo'
+    execute("echo ${X/#foo/} > #{output_file}")
+    assert_equal "foo\n", File.read(output_file)
+  end
+
+  # ${var/%pat/rep} - replace at end (anchored suffix)
+  def test_replace_suffix_match
+    ENV['X'] = 'foobar'
+    execute("echo ${X/%bar/BAZ} > #{output_file}")
+    assert_equal "fooBAZ\n", File.read(output_file)
+  end
+
+  def test_replace_suffix_no_match
+    ENV['X'] = 'foobar'
+    execute("echo ${X/%foo/BAZ} > #{output_file}")
+    assert_equal "foobar\n", File.read(output_file)
+  end
+
+  def test_replace_suffix_glob
+    ENV['X'] = 'aabbcc'
+    execute("echo ${X/%*c/X} > #{output_file}")
+    assert_equal "X\n", File.read(output_file)
+  end
+
+  def test_replace_suffix_empty_pattern
+    ENV['X'] = 'foobar'
+    execute("echo ${X/%/SUF} > #{output_file}")
+    assert_equal "foobarSUF\n", File.read(output_file)
+  end
+
+  def test_replace_suffix_delete
+    ENV['X'] = 'foofoo'
+    execute("echo ${X/%foo/} > #{output_file}")
+    assert_equal "foo\n", File.read(output_file)
+  end
+
   # ${!var} - indirect expansion
   def test_indirect_expansion
     ENV['PTR_VAR'] = 'TARGET_VAR'

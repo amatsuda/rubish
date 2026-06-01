@@ -195,7 +195,17 @@ module Rubish
       value = get_special_var(var_name) || Builtins.get_var(var_name) || ''
       return '' if value.empty?
 
-      regex = pattern_to_regex(pattern, :any, :longest)
+      if pattern.start_with?('#')
+        position = :prefix
+        pattern = pattern[1..]
+      elsif pattern.start_with?('%')
+        position = :suffix
+        pattern = pattern[1..]
+      else
+        position = :any
+      end
+
+      regex = pattern_to_regex(pattern, position, :longest)
       replacement_proc = build_replacement_proc(replacement)
 
       case operator
