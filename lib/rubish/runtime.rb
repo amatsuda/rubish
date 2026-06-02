@@ -67,6 +67,15 @@ module Rubish
         # Command substitution only inherits errexit when inherit_errexit is enabled
         Builtins.current_state.set_options['e'] = false unless inherit_errexit
 
+        # Disable job control inside the substitution. Otherwise the
+        # inner pipeline would fork into its own process group and lose
+        # the controlling terminal, so interactive tools like peco /
+        # fzf / less that need /dev/tty for their TUI get
+        # SIGTTIN/SIGTTOU and the shell prints "[1]+ Stopped …" into
+        # our capture pipe instead of the tool's real output. bash and
+        # zsh do the same — `set -m` is off inside `$(…)`.
+        Builtins.current_state.set_options['m'] = false
+
         begin
           exit_code = catch(:exit) do
             execute(cmd, skip_history_expansion: true)

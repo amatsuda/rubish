@@ -791,6 +791,30 @@ class TestSetOptions < Test::Unit::TestCase
     assert Rubish::Builtins.set_option?('m')
   end
 
+  # Monitor mode must be OFF inside `$(...)` even when the parent shell
+  # has `set -m`. Otherwise the inner pipeline forks a fresh process
+  # group and loses the controlling terminal, so interactive tools that
+  # need /dev/tty (peco, fzf, less, vim) get SIGTTIN/SIGTTOU and the
+  # shell prints `[1]+ Stopped …` into the capture pipe — bash and zsh
+  # both disable job control inside command substitutions for exactly
+  # this reason.
+  def test_monitor_mode_off_inside_command_substitution
+    execute('set -m')
+    output_file = File.join(@tempdir, 'out')
+    execute(%(echo "$(set -o | grep monitor)" > #{output_file}))
+    assert_equal "set +o monitor\n", File.read(output_file)
+  end
+
+  # And the outer shell's monitor setting is preserved after the
+  # substitution completes — the `m = false` only applies inside the
+  # forked substitution child, which exits when capture is done.
+  def test_monitor_mode_preserved_in_parent_after_command_substitution
+    execute('set -m')
+    execute('x=$(echo ignored)')
+    assert Rubish::Builtins.set_option?('m'),
+           'parent shell `set -m` should survive a $(...) call'
+  end
+
   def test_fg_requires_monitor_mode
     execute('set +m')  # Ensure monitor is disabled
 
