@@ -1027,8 +1027,7 @@ module Rubish
           Builtins.debug_trap
 
           expanded_args = expand_args_for_builtin(ast.args)
-          result = call_function(ast.name, expanded_args)
-          @last_status = result ? 0 : 1
+          @last_status = call_function(ast.name, expanded_args).exitstatus
           @pipestatus = [@last_status]
           # Don't run ERR trap here - it was already handled inside the function if errtrace is on
           check_errexit
@@ -1150,7 +1149,7 @@ module Rubish
 
     def call_function(name, args)
       func_info = @functions[name]
-      return false unless func_info
+      return ExitStatus.new(1) unless func_info
 
       # Check FUNCNEST limit
       funcnest = ENV['FUNCNEST']
@@ -1159,7 +1158,7 @@ module Rubish
         if max_depth > 0 && @funcname_stack.length >= max_depth
           $stderr.puts Builtins.format_error("maximum function nesting level exceeded (#{max_depth})", command: name)
           @last_status = 1
-          return false
+          return ExitStatus.new(1)
         end
       end
 
@@ -1212,16 +1211,16 @@ module Rubish
       end
 
       begin
-        result = func_block.call
-        # Handle return value
-        if result.is_a?(Command) || result.is_a?(Pipeline)
-          result.success?
-        else
-          true
+        return_code = catch(:return) do
+          begin
+            result = func_block.call
+            extract_exit_status(result)
+          rescue LocalJumpError
+            @context.last_status
+          end
         end
-      rescue LocalJumpError
-        # return was called in function
-        true
+        @last_status = return_code
+        ExitStatus.new(return_code)
       ensure
         # Run RETURN trap before leaving function (if functrace is on, trap exists)
         Builtins.return_trap
@@ -1323,8 +1322,9 @@ module Rubish
           $stdin.reopen(cmd.stdin)
         end
 
-        success = call_function(cmd.name, cmd.args)
-        @last_status = success ? 0 : 1
+        status = call_function(cmd.name, cmd.args)
+        @last_status = status.exitstatus
+        status
       ensure
         if saved_stdout
           $stdout.reopen(saved_stdout)

@@ -1154,10 +1154,11 @@ module Rubish
         ExitStatus.new(@last_status)
       elsif result.is_a?(Command) && @functions.key?(result.name)
         # Call user-defined function with redirects
-        call_function_with_redirects(result)
+        status = call_function_with_redirects(result)
         # Don't run ERR trap here - it was already handled inside the function
         check_errexit
-        result
+        # Return ExitStatus (not the Command) to prevent eval_in_context from calling the function again
+        status
       elsif result.is_a?(Command) && bare_assignment?(result.name) && result.args.all? { |a| bare_assignment?(a) }
         # Handle bare variable assignments in lists (VAR=value)
         handle_bare_assignments([result.name] + result.args)

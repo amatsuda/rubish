@@ -178,8 +178,9 @@ module Rubish
           $stdin.reopen(cmd.stdin)
         end
 
-        success = call_function(cmd.name, cmd.args)
-        @last_status = success ? 0 : 1
+        status = call_function(cmd.name, cmd.args)
+        @last_status = status.exitstatus
+        status
       ensure
         if saved_stdout
           $stdout.reopen(saved_stdout)
@@ -200,7 +201,7 @@ module Rubish
       if func_checker&.call(name) && func_caller
         func_caller.call(name, args)
       else
-        false
+        ExitStatus.new(1)
       end
     end
 
