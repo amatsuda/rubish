@@ -252,6 +252,28 @@ class TestCase < Test::Unit::TestCase
     assert_equal 'no', get_shell_var('ret')
   end
 
+  # POSIX char classes (handled in __case_match) must stay active when
+  # bare, and become literal when quoted, after glob-escaping.
+  def test_case_bare_posix_class_still_active
+    execute("case a in [[:alpha:]]) ret=matched;; *) ret=no;; esac")
+    assert_equal 'matched', get_shell_var('ret')
+  end
+
+  def test_case_bare_posix_class_rejects_nonmatch
+    execute("case 5 in [[:alpha:]]) ret=matched;; *) ret=no;; esac")
+    assert_equal 'no', get_shell_var('ret')
+  end
+
+  def test_case_quoted_posix_class_is_literal
+    execute("case a in '[[:alpha:]]') ret=matched;; *) ret=no;; esac")
+    assert_equal 'no', get_shell_var('ret')
+  end
+
+  def test_case_quoted_posix_class_matches_literal_string
+    execute("case '[[:alpha:]]' in '[[:alpha:]]') ret=matched;; *) ret=no;; esac")
+    assert_equal 'matched', get_shell_var('ret')
+  end
+
   # Ruby-style case-when tests
 
   # Lexer tests
