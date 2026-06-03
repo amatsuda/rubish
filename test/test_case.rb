@@ -236,6 +236,22 @@ class TestCase < Test::Unit::TestCase
     execute("case $a in 'foo:bar') echo matched > #{output_file};; *) echo no > #{output_file};; esac")
     assert_equal "matched\n", File.read(output_file)
   end
+
+  def test_case_double_quoted_glob_char_is_literal
+    execute("case abxc in \"ab*c\") ret=matched;; *) ret=no;; esac")
+    assert_equal 'no', get_shell_var('ret')
+  end
+
+  def test_case_single_quoted_glob_char_is_literal
+    execute("case abxc in 'ab*c') ret=matched;; *) ret=no;; esac")
+    assert_equal 'no', get_shell_var('ret')
+  end
+
+  def test_case_backslash_escaped_glob_char_is_literal
+    execute("case abxc in ab\\*c) ret=matched;; *) ret=no;; esac")
+    assert_equal 'no', get_shell_var('ret')
+  end
+
   # Ruby-style case-when tests
 
   # Lexer tests
