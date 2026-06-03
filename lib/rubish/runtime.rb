@@ -1165,7 +1165,7 @@ module Rubish
         @last_status = 0
         result
       else
-        result.run if result.is_a?(Command) || result.is_a?(Pipeline) || result.is_a?(Subshell)
+        result.run if result.is_a?(Command) || result.is_a?(Pipeline) || result.is_a?(Subshell) || result.is_a?(HeredocCommand)
         if result.respond_to?(:status)
           @last_status = result.status&.exitstatus || 0
           # Update PIPESTATUS array

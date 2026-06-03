@@ -1082,16 +1082,32 @@ module Rubish
         writer.write(@content)
         writer.close
 
-        # Set stdin from heredoc content
-        cmd.stdin = reader
+        if cmd.is_a?(Command) && Builtins.builtin?(cmd.name)
+          # Builtins run in-process and read from $stdin directly.
+          # Temporarily redirect $stdin to the pipe so the builtin sees the content.
+          original_stdin = $stdin.dup
+          begin
+            $stdin.reopen(reader)
+            success = Builtins.run(cmd.name, cmd.args)
+            exit_code = success.is_a?(ExitStatus) ? success.exitstatus : (success ? 0 : 1)
+            @status = ExitStatus.new(exit_code)
+          ensure
+            $stdin.reopen(original_stdin)
+            original_stdin.close
+            reader.close unless reader.closed?
+          end
+        else
+          # Set stdin from heredoc content
+          cmd.stdin = reader
 
-        # Apply any additional redirects we have
-        cmd.stdout = @stdout if @stdout
-        cmd.stderr = @stderr if @stderr
+          # Apply any additional redirects we have
+          cmd.stdout = @stdout if @stdout
+          cmd.stderr = @stderr if @stderr
 
-        cmd.run
-        reader.close unless reader.closed?
-        @status = cmd.status
+          cmd.run
+          reader.close unless reader.closed?
+          @status = cmd.status
+        end
       end
       self
     end
