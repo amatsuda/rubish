@@ -321,9 +321,11 @@ class TestDupRedirect < Test::Unit::TestCase
   end
 
   # Multi-digit fds work too — the lexer doesn't cap the digit count.
+  # Child is bash (rubish's compatibility target): POSIX sh/dash caps
+  # redirection fds at one digit, so >&10 needs bash.
   def test_fd10_open_for_write
     out = File.join(@tempdir, 'out')
-    execute("/bin/sh -c 'printf via10 >&10' 10>#{out}")
+    execute("/usr/bin/env bash -c 'printf via10 >&10' 10>#{out}")
     assert_equal 'via10', File.read(out)
   end
 
