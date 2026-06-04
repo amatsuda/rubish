@@ -318,6 +318,24 @@ module Rubish
       end
     end
 
+    def dup_err(target)
+      # 2>&N - duplicate stderr to file descriptor N
+      # 2>&- - close stderr
+      # 2>&file - redirect stderr to file (same as 2>file)
+      case target
+      when '1'
+        @stderr = :stdout
+        self
+      when '2'
+        self
+      when '-'
+        @stderr = :closed
+        self
+      else
+        redirect_err(target)
+      end
+    end
+
     private
 
     def expand_args(args)
@@ -628,6 +646,11 @@ module Rubish
 
     def dup_in(target)
       @commands.last.dup_in(target)
+      self
+    end
+
+    def dup_err(target)
+      @commands.last.dup_err(target)
       self
     end
 
@@ -1075,6 +1098,15 @@ module Rubish
       else redirect_in(target)
       end
     end
+
+    def dup_err(target)
+      case target
+      when '1' then @stderr = :stdout; self
+      when '2' then self
+      when '-' then @stderr = :closed; self
+      else redirect_err(target)
+      end
+    end
   end
 
   # Wrapper for heredoc/herestring that provides content as stdin
@@ -1241,6 +1273,15 @@ module Rubish
       when '0' then self
       when '-' then @stdin = :closed; self
       else redirect_in(target)
+      end
+    end
+
+    def dup_err(target)
+      case target
+      when '1' then @stderr = :stdout; self
+      when '2' then self
+      when '-' then @stderr = :closed; self
+      else redirect_err(target)
       end
     end
   end

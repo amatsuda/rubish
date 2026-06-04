@@ -70,6 +70,33 @@ class TestDupRedirect < Test::Unit::TestCase
     end
   end
 
+  # Lexer used to split `2>&1` into [REDIRECT_ERR, AMPERSAND, WORD],
+  # so rubish tried to run `1` as a separate command after the redirect.
+  # `ls /no/such/dir 2>&1` reported the legitimate ls error and then
+  # also `rubish: 1: command not found`.
+  def test_lexer_recognizes_dup_err_redirect
+    tokens = Rubish::Lexer.new('cmd 2>&1').tokenize
+    assert_not_nil tokens.find { |t| t.type == :DUP_ERR },
+                   'Lexer should recognize 2>& as DUP_ERR'
+  end
+
+  # Redirect through a file (not capture_*) because the merged stream
+  # lives at fd-level, not Ruby's $stdout/$stderr.
+  def test_2_to_amp_1_merges_stderr_into_stdout
+    out = File.join(@tempdir, 'out.txt')
+    execute("/bin/ls /no/such/dir_xyz > #{out} 2>&1")
+    content = File.read(out)
+    assert_match(/No such file or directory/, content)
+    assert_no_match(/command not found/, content)
+  end
+
+  def test_2_to_amp_close_closes_stderr
+    out = File.join(@tempdir, 'out.txt')
+    execute("/bin/ls /no/such/dir_xyz > #{out} 2>&-")
+    # stderr closed; the error message from ls is gone
+    assert_equal '', File.read(out)
+  end
+
   # Test Pipeline has dup_out/dup_in methods
   def test_pipeline_has_dup_out_method
     cmd1 = Rubish::Command.new('echo', 'test')

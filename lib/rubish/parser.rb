@@ -1153,6 +1153,7 @@ module Rubish
     def parse_redirections(cmd)
       while peek(:REDIRECT_OUT) || peek(:REDIRECT_CLOBBER) || peek(:REDIRECT_APPEND) ||
             peek(:REDIRECT_IN) || peek(:REDIRECT_ERR) || peek(:DUP_OUT) || peek(:DUP_IN) ||
+            peek(:DUP_ERR) ||
             peek(:HEREDOC) || peek(:HEREDOC_INDENT) || peek(:HERESTRING) ||
             peek(:VARNAME_REDIRECT)
         op = consume

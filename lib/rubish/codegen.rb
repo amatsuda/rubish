@@ -758,6 +758,7 @@ module Rubish
                   when '<' then 'redirect_in'
                   when '2>' then 'redirect_err'
                   when '>&' then 'dup_out'
+                  when '2>&' then 'dup_err'
                   when '<&' then 'dup_in'
                   end
       target = generate_string_arg(node.target)
