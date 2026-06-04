@@ -212,6 +212,10 @@ module Rubish
       end
       @stdout = File.open(file, 'w')
       self
+    rescue Errno::ENOENT, Errno::EACCES => e
+      $stderr.puts "rubish: #{file}: #{e.class.new.message}"
+      @restricted_failed = true
+      self
     end
 
     def redirect_clobber(file)
@@ -224,6 +228,10 @@ module Rubish
       # Force overwrite even with noclobber (>|)
       @stdout = File.open(file, 'w')
       self
+    rescue Errno::ENOENT, Errno::EACCES => e
+      $stderr.puts "rubish: #{file}: #{e.class.new.message}"
+      @restricted_failed = true
+      self
     end
 
     def redirect_append(file)
@@ -234,6 +242,10 @@ module Rubish
         return self
       end
       @stdout = File.open(file, 'a')
+      self
+    rescue Errno::ENOENT, Errno::EACCES => e
+      $stderr.puts "rubish: #{file}: #{e.class.new.message}"
+      @restricted_failed = true
       self
     end
 
@@ -254,6 +266,10 @@ module Rubish
         return self
       end
       @stderr = File.open(file, 'w')
+      self
+    rescue Errno::ENOENT, Errno::EACCES => e
+      $stderr.puts "rubish: #{file}: #{e.class.new.message}"
+      @restricted_failed = true
       self
     end
 
@@ -981,6 +997,10 @@ module Rubish
       end
       @stdout = File.open(file, 'w')
       self
+    rescue Errno::ENOENT, Errno::EACCES => e
+      $stderr.puts "rubish: #{file}: #{e.class.new.message}"
+      @restricted_failed = true
+      self
     end
 
     def redirect_clobber(file)
@@ -991,6 +1011,10 @@ module Rubish
       end
       @stdout = File.open(file, 'w')
       self
+    rescue Errno::ENOENT, Errno::EACCES => e
+      $stderr.puts "rubish: #{file}: #{e.class.new.message}"
+      @restricted_failed = true
+      self
     end
 
     def redirect_append(file)
@@ -1000,6 +1024,10 @@ module Rubish
         return self
       end
       @stdout = File.open(file, 'a')
+      self
+    rescue Errno::ENOENT, Errno::EACCES => e
+      $stderr.puts "rubish: #{file}: #{e.class.new.message}"
+      @restricted_failed = true
       self
     end
 
@@ -1019,6 +1047,10 @@ module Rubish
         return self
       end
       @stderr = File.open(file, 'w')
+      self
+    rescue Errno::ENOENT, Errno::EACCES => e
+      $stderr.puts "rubish: #{file}: #{e.class.new.message}"
+      @restricted_failed = true
       self
     end
 
@@ -1137,6 +1169,10 @@ module Rubish
       end
       @stdout = File.open(file, 'w')
       self
+    rescue Errno::ENOENT, Errno::EACCES => e
+      $stderr.puts "rubish: #{file}: #{e.class.new.message}"
+      @restricted_failed = true
+      self
     end
 
     def redirect_clobber(file)
@@ -1147,6 +1183,10 @@ module Rubish
       end
       @stdout = File.open(file, 'w')
       self
+    rescue Errno::ENOENT, Errno::EACCES => e
+      $stderr.puts "rubish: #{file}: #{e.class.new.message}"
+      @restricted_failed = true
+      self
     end
 
     def redirect_append(file)
@@ -1156,6 +1196,10 @@ module Rubish
         return self
       end
       @stdout = File.open(file, 'a')
+      self
+    rescue Errno::ENOENT, Errno::EACCES => e
+      $stderr.puts "rubish: #{file}: #{e.class.new.message}"
+      @restricted_failed = true
       self
     end
 
@@ -1171,6 +1215,10 @@ module Rubish
         return self
       end
       @stderr = File.open(file, 'w')
+      self
+    rescue Errno::ENOENT, Errno::EACCES => e
+      $stderr.puts "rubish: #{file}: #{e.class.new.message}"
+      @restricted_failed = true
       self
     end
 

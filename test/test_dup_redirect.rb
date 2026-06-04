@@ -95,6 +95,43 @@ class TestDupRedirect < Test::Unit::TestCase
     assert_match(/rubish:.*nonexistent_file/, stderr_output)
   end
 
+  # Output redirect to a path whose parent dir doesn't exist used to raise
+  # Errno::ENOENT with a Ruby backtrace. Now reports a shell error and
+  # the command does not run. Uses /bin/cat (not a builtin) so the
+  # Command fork-and-exec path is exercised — see follow-up commit for
+  # the builtin fast-path bypass.
+  def test_redirect_out_nonexistent_directory
+    stderr_output = capture_stderr do
+      execute('/bin/cat /etc/hostname > /no/such/dir/file_xyz')
+    end
+    assert_not_equal 0, @repl.instance_variable_get(:@last_status)
+    assert_match(%r{rubish: /no/such/dir/file_xyz:.*No such file}, stderr_output)
+  end
+
+  def test_redirect_append_nonexistent_directory
+    stderr_output = capture_stderr do
+      execute('/bin/cat /etc/hostname >> /no/such/dir/file_xyz')
+    end
+    assert_not_equal 0, @repl.instance_variable_get(:@last_status)
+    assert_match(%r{rubish: /no/such/dir/file_xyz:.*No such file}, stderr_output)
+  end
+
+  def test_redirect_err_nonexistent_directory
+    stderr_output = capture_stderr do
+      execute('/bin/cat /no/such/source 2> /no/such/dir/file_xyz')
+    end
+    assert_not_equal 0, @repl.instance_variable_get(:@last_status)
+    assert_match(%r{rubish: /no/such/dir/file_xyz:.*No such file}, stderr_output)
+  end
+
+  def test_redirect_clobber_nonexistent_directory
+    stderr_output = capture_stderr do
+      execute('/bin/cat /etc/hostname >| /no/such/dir/file_xyz')
+    end
+    assert_not_equal 0, @repl.instance_variable_get(:@last_status)
+    assert_match(%r{rubish: /no/such/dir/file_xyz:.*No such file}, stderr_output)
+  end
+
   # Test Subshell has dup_out/dup_in methods
   def test_subshell_has_dup_out_method
     subshell = Rubish::Subshell.new { true }
