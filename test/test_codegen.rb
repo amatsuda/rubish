@@ -114,4 +114,16 @@ class TestCodegen < Test::Unit::TestCase
     code = generate('echo "a\\zb"')
     assert_equal '__cmd("echo", *["a\\\\zb"].flatten)', code
   end
+
+  def test_comsub_with_single_quoted_arg_not_split_as_segments
+    # x=$(printf 'hi\n') must not be split at the ' inside $()
+    code = generate("x=$(printf 'hi')")
+    assert_match(/__run_subst\("printf 'hi'"\)/, code)
+  end
+
+  def test_backtick_with_single_quoted_arg_not_split_as_segments
+    # v=`echo -n 'ab'` must not be split at the ' inside the backtick
+    code = generate("v=`echo -n 'ab'`")
+    assert_match(/__run_subst\("echo -n 'ab'"\)/, code)
+  end
 end
