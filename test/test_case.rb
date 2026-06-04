@@ -191,6 +191,89 @@ class TestCase < Test::Unit::TestCase
     assert_equal "bar\n", File.read(output_file)
   end
 
+  def test_case_variable_prefix_with_glob
+    execute("p=foo")
+    execute("x=foo_bar")
+    execute("case $x in ${p}_*) echo matched > #{output_file};; *) echo no > #{output_file};; esac")
+    assert_equal "matched\n", File.read(output_file)
+  end
+
+  def test_case_variable_concat_with_glob
+    execute("p=foo")
+    execute("x=foobar")
+    execute("case $x in ${p}*) echo matched > #{output_file};; *) echo no > #{output_file};; esac")
+    assert_equal "matched\n", File.read(output_file)
+  end
+
+  def test_case_quoted_variable_in_pattern
+    execute("p='x y'")
+    execute("x='x y'")
+    execute("case $x in \"$p\") echo matched > #{output_file};; *) echo no > #{output_file};; esac")
+    assert_equal "matched\n", File.read(output_file)
+  end
+
+  def test_case_double_quoted_pattern_with_space
+    execute("a='x y'")
+    execute("case $a in \"x y\") echo matched > #{output_file};; *) echo no > #{output_file};; esac")
+    assert_equal "matched\n", File.read(output_file)
+  end
+
+  def test_case_single_quoted_pattern_with_space
+    execute("a='x y'")
+    execute("case $a in 'x y') echo matched > #{output_file};; *) echo no > #{output_file};; esac")
+    assert_equal "matched\n", File.read(output_file)
+  end
+
+  def test_case_word_no_split_on_spaces
+    execute("a='hello world'")
+    execute("case $a in 'hello world') echo matched > #{output_file};; *) echo no > #{output_file};; esac")
+    assert_equal "matched\n", File.read(output_file)
+  end
+
+  def test_case_word_no_split_custom_ifs
+    execute('IFS=:')
+    execute("a='foo:bar'")
+    execute("case $a in 'foo:bar') echo matched > #{output_file};; *) echo no > #{output_file};; esac")
+    assert_equal "matched\n", File.read(output_file)
+  end
+
+  def test_case_double_quoted_glob_char_is_literal
+    execute("case abxc in \"ab*c\") ret=matched;; *) ret=no;; esac")
+    assert_equal 'no', get_shell_var('ret')
+  end
+
+  def test_case_single_quoted_glob_char_is_literal
+    execute("case abxc in 'ab*c') ret=matched;; *) ret=no;; esac")
+    assert_equal 'no', get_shell_var('ret')
+  end
+
+  def test_case_backslash_escaped_glob_char_is_literal
+    execute("case abxc in ab\\*c) ret=matched;; *) ret=no;; esac")
+    assert_equal 'no', get_shell_var('ret')
+  end
+
+  # POSIX char classes (handled in __case_match) must stay active when
+  # bare, and become literal when quoted, after glob-escaping.
+  def test_case_bare_posix_class_still_active
+    execute("case a in [[:alpha:]]) ret=matched;; *) ret=no;; esac")
+    assert_equal 'matched', get_shell_var('ret')
+  end
+
+  def test_case_bare_posix_class_rejects_nonmatch
+    execute("case 5 in [[:alpha:]]) ret=matched;; *) ret=no;; esac")
+    assert_equal 'no', get_shell_var('ret')
+  end
+
+  def test_case_quoted_posix_class_is_literal
+    execute("case a in '[[:alpha:]]') ret=matched;; *) ret=no;; esac")
+    assert_equal 'no', get_shell_var('ret')
+  end
+
+  def test_case_quoted_posix_class_matches_literal_string
+    execute("case '[[:alpha:]]' in '[[:alpha:]]') ret=matched;; *) ret=no;; esac")
+    assert_equal 'matched', get_shell_var('ret')
+  end
+
   # Ruby-style case-when tests
 
   # Lexer tests

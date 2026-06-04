@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require_relative 'word_segments'
+
 module Rubish
   class Codegen
     def generate(node)
@@ -1006,13 +1008,74 @@ module Rubish
     end
 
     def generate_case_pattern_match(pattern)
-      # Convert shell pattern to fnmatch check
-      # Handle variable expansion in patterns
-      if pattern.include?('$')
-        pattern_expr = generate_interpolated_string(pattern)
-        "__case_match(#{pattern_expr}, __case_word)"
-      else
-        "__case_match(#{pattern.inspect}, __case_word)"
+      pattern_expr = generate_pattern_arg(pattern)
+      "__case_match(#{pattern_expr}, __case_word)"
+    end
+
+    # Build the fnmatch pattern for one case branch.
+    #
+    # generate_string_arg strips quoting and loses the fact that a char
+    # was quoted, so "ab*c" would reach fnmatch as the wildcard ab*c.
+    # Instead, walk the word segment-wise (via WordSegments): quoted and
+    # ANSI-C text is glob-escaped at runtime (__glob_escape) so it matches
+    # literally, while bare text keeps its wildcards active. Variable and
+    # command expansion reuse generate_interpolated_string; their values
+    # are glob-escaped too when they came from a quoted segment, matching
+    # bash, which treats a quoted expansion as literal text.
+    def generate_pattern_arg(pattern)
+      result = +'"'
+      WordSegments.each_segment(pattern) do |type, content|
+        case type
+        when :single
+          result << '#{__glob_escape(' << content.inspect << ')}'
+        when :ansi_c
+          result << '#{__glob_escape(process_escape_sequences(' << content.inspect << '))}'
+        when :double
+          result << '#{__glob_escape(' << generate_interpolated_string(content) << ')}'
+        when :bare
+          append_bare_pattern(result, content)
+        end
+      end
+      result << '"'
+      result
+    end
+
+    # Bare segment: wildcards stay active, variables/commands expand with
+    # their values' wildcards active too (bash unquoted behavior). Only a
+    # backslash escape turns the next char into a glob-escaped literal.
+    def append_bare_pattern(result, content)
+      i = 0
+      len = content.length
+      while i < len
+        char = content[i]
+        if char == '\\' && i + 1 < len
+          # Escaped char is literal: prefix a backslash so fnmatch keeps
+          # it out of its metacharacter set.
+          result << '\\\\' if '\\*?[]'.include?(content[i + 1])
+          append_escaped_char(result, content[i + 1])
+          i += 2
+        elsif char == '$'
+          expr, consumed = parse_variable(content, i)
+          if expr
+            result << '#{' << expr << '}'
+            i += consumed
+          else
+            result << '$'
+            i += 1
+          end
+        elsif char == '`'
+          cmd_expr, consumed = parse_backtick_substitution(content, i)
+          if cmd_expr
+            result << '#{' << cmd_expr << '}'
+            i += consumed
+          else
+            result << '`'
+            i += 1
+          end
+        else
+          append_escaped_char(result, char)
+          i += 1
+        end
       end
     end
 

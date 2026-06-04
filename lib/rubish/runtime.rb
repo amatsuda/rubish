@@ -864,6 +864,13 @@ module Rubish
       File.fnmatch(pattern, word, flags)
     end
 
+    # Glob-escape a runtime value so its fnmatch metacharacters match
+    # literally. Used for variables expanded inside a quoted case pattern,
+    # where bash treats the expansion as literal text.
+    def __glob_escape(str)
+      str.to_s.gsub(/[\\*?\[\]]/) { |c| "\\#{c}" }
+    end
+
     def __subshell(&block)
       # Create a Subshell object that can be run, redirected, or piped
       # Wrap the block to increment subshell level before executing (in the forked process)
