@@ -350,10 +350,16 @@ module Rubish
 
     def __and_cmd(left_proc, right_proc)
       # Per POSIX: all commands in an AND-OR list except the last are exempt from errexit.
+      # Restore the flag in an ensure so an exception escaping the left operand
+      # (set -u, failglob, a host syscall error) can't leave it stuck on and
+      # silently mask the next failing command.
       prev = @errexit_suppressed
       @errexit_suppressed = true
-      left = __run_cmd(&left_proc)
-      @errexit_suppressed = prev
+      begin
+        left = __run_cmd(&left_proc)
+      ensure
+        @errexit_suppressed = prev
+      end
       return left unless @last_status == 0
 
       __run_cmd(&right_proc)
@@ -361,10 +367,16 @@ module Rubish
 
     def __or_cmd(left_proc, right_proc)
       # Per POSIX: all commands in an AND-OR list except the last are exempt from errexit.
+      # Restore the flag in an ensure so an exception escaping the left operand
+      # (set -u, failglob, a host syscall error) can't leave it stuck on and
+      # silently mask the next failing command.
       prev = @errexit_suppressed
       @errexit_suppressed = true
-      left = __run_cmd(&left_proc)
-      @errexit_suppressed = prev
+      begin
+        left = __run_cmd(&left_proc)
+      ensure
+        @errexit_suppressed = prev
+      end
       return left if @last_status == 0
 
       __run_cmd(&right_proc)
