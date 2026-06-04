@@ -60,6 +60,7 @@ module Rubish
       @named_directories = {}
       @builtin_completion_functions = {}
       @disabled_builtins = Set.new
+      @errexit_suppressed = false
       @dynamic_commands = []
       @call_stack = []
       @comp_words = []
@@ -139,7 +140,7 @@ module Rubish
     end
 
     def check_errexit
-      return if @last_status == 0
+      return if @last_status == 0 || @errexit_suppressed
       throw(:exit, @last_status) if set_option?('e')
     end
 

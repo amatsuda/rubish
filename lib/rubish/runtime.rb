@@ -349,16 +349,22 @@ module Rubish
     end
 
     def __and_cmd(left_proc, right_proc)
+      # Per POSIX: all commands in an AND-OR list except the last are exempt from errexit.
+      prev = @errexit_suppressed
+      @errexit_suppressed = true
       left = __run_cmd(&left_proc)
-      # Use @last_status to check success (handles function calls and builtins)
+      @errexit_suppressed = prev
       return left unless @last_status == 0
 
       __run_cmd(&right_proc)
     end
 
     def __or_cmd(left_proc, right_proc)
+      # Per POSIX: all commands in an AND-OR list except the last are exempt from errexit.
+      prev = @errexit_suppressed
+      @errexit_suppressed = true
       left = __run_cmd(&left_proc)
-      # Use @last_status to check success (handles function calls and builtins)
+      @errexit_suppressed = prev
       return left if @last_status == 0
 
       __run_cmd(&right_proc)

@@ -65,6 +65,30 @@ class TestSetOptions < Test::Unit::TestCase
     assert_false Rubish::Builtins.set_option?('e')
   end
 
+  def test_errexit_aborts_on_failure
+    execute('set -e')
+    catch(:exit) { execute("false; echo ran > #{output_file}") }
+    assert_false File.exist?(output_file)
+  end
+
+  # Per POSIX: commands that are part of an && or || list (except the last)
+  # are exempt from errexit. bash -c "set -e; false || true; echo ok" prints "ok".
+  def test_errexit_suppressed_for_or_left_operand
+    execute('set -e')
+    catch(:exit) do
+      execute('false || true')
+      execute("echo ok > #{output_file}")
+    end
+    assert File.exist?(output_file), 'false || true should not abort under set -e'
+  end
+
+  def test_errexit_suppressed_for_and_left_operand
+    execute('set -e')
+    # true is the left operand of &&, exempt; false is the last, triggers abort
+    catch(:exit) { execute("true && false; echo ran > #{output_file}") }
+    assert_false File.exist?(output_file), 'true && false should abort under set -e'
+  end
+
   # set -x (xtrace)
   def test_set_minus_x_enables_xtrace
     execute('set -x')
