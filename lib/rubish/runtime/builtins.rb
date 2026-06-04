@@ -7280,6 +7280,14 @@ module Rubish
         elsif char == '\\' && !in_single_quotes
           # Skip escaped character (backslash only escapes in double quotes or unquoted)
           i += 2
+        elsif char == '#' && !in_single_quotes && !in_double_quotes &&
+              (i == 0 || " \t\n;&|(".include?(text[i - 1]))
+          # `#` at a word boundary starts a comment to end of line. Without
+          # this, an apostrophe in a comment (e.g. `# We're not a login
+          # shell` in stock /etc/bashrc on RHEL/AlmaLinux) opens a phantom
+          # single-quoted string the rest of the file can never close.
+          nl = text.index("\n", i)
+          i = nl ? nl + 1 : text.length
         else
           i += 1
         end

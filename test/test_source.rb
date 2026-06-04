@@ -273,4 +273,46 @@ class TestSource < Test::Unit::TestCase
     assert_match(/'if' opened at line 1/, output)
     assert_match(/'def' opened at line 2/, output)
   end
+
+  # Regression for issue #33: stock /etc/bashrc on RHEL/AlmaLinux has
+  # `if ! shopt -q login_shell ; then # We're not a login shell`. The
+  # apostrophe inside the comment used to open a phantom single-quoted
+  # string that the rest of the file never closed, triggering a bogus
+  # "unclosed quote" warning and dropping the shell into a continuation
+  # prompt at startup.
+  def test_source_apostrophe_in_comment_does_not_open_quote
+    script = create_script('apos_in_comment.sh', <<~SCRIPT)
+      if [ 1 = 1 ]; then
+        echo body  # We're inside
+      fi
+    SCRIPT
+
+    output = capture_stderr { execute("source #{script}") }
+
+    assert_no_match(/unclosed quote/, output)
+    assert_no_match(/unclosed control structure/, output)
+  end
+
+  def test_source_apostrophe_in_comment_at_start_of_line
+    script = create_script('apos_in_leading_comment.sh', <<~SCRIPT)
+      # It's a leading comment
+      echo done
+    SCRIPT
+
+    output = capture_stderr { execute("source #{script}") }
+
+    assert_no_match(/unclosed quote/, output)
+  end
+
+  # `#` is only a comment-introducer at a word boundary; `a#b` is a
+  # literal three-character word, not a comment.
+  def test_source_hash_in_middle_of_word_is_not_a_comment
+    script = create_script('hash_inword.sh', <<~SCRIPT)
+      echo a#b'still-in-string'
+    SCRIPT
+
+    output = capture_stderr { execute("source #{script}") }
+
+    assert_no_match(/unclosed quote/, output)
+  end
 end
