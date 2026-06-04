@@ -240,6 +240,10 @@ module Rubish
     def redirect_in(file)
       @stdin = File.open(file, 'r')
       self
+    rescue Errno::ENOENT, Errno::EACCES => e
+      $stderr.puts "rubish: #{file}: #{e.message.split(' @ ').first}"
+      @restricted_failed = true
+      self
     end
 
     def redirect_err(file)
@@ -1001,6 +1005,10 @@ module Rubish
 
     def redirect_in(file)
       @stdin = File.open(file, 'r')
+      self
+    rescue Errno::ENOENT, Errno::EACCES => e
+      $stderr.puts "rubish: #{file}: #{e.message.split(' @ ').first}"
+      @restricted_failed = true
       self
     end
 

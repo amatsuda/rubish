@@ -85,6 +85,16 @@ class TestDupRedirect < Test::Unit::TestCase
     assert pipeline.respond_to?(:dup_in), 'Pipeline should have dup_in method'
   end
 
+  # Test that redirecting input from a nonexistent file fails gracefully:
+  # sets non-zero exit status and prints a shell error rather than raising a Ruby exception.
+  def test_redirect_in_nonexistent_file
+    stderr_output = capture_stderr do
+      execute('cat < /nonexistent_file_rubish_test_xyz 2>/dev/null')
+    end
+    assert_not_equal 0, @repl.instance_variable_get(:@last_status)
+    assert_match(/rubish:.*nonexistent_file/, stderr_output)
+  end
+
   # Test Subshell has dup_out/dup_in methods
   def test_subshell_has_dup_out_method
     subshell = Rubish::Subshell.new { true }
