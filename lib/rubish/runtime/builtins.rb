@@ -92,8 +92,11 @@ module Rubish
 
       hostname = Socket.gethostname rescue 'localhost'
       path = Dir.pwd
-      # URI-encode the path (spaces and special chars)
-      encoded_path = path.gsub(/[^a-zA-Z0-9\/_.-]/) { |c| '%%%02X' % c.ord }
+      # URI-encode each UTF-8 byte (RFC 3986). Iterating over characters
+      # and using c.ord would emit `%3042` for U+3042 instead of the
+      # required `%E3%81%82`, which Terminal.app then can't parse —
+      # cmd-T silently falls back to ~.
+      encoded_path = path.b.gsub(/[^a-zA-Z0-9\/_.-]/n) { |c| '%%%02X' % c.ord }
       # OSC 7: file://hostname/path
       print "\e]7;file://#{hostname}#{encoded_path}\a"
       $stdout.flush
