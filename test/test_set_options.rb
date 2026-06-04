@@ -104,6 +104,35 @@ class TestSetOptions < Test::Unit::TestCase
     assert_equal "1\n", File.read(output_file)
   end
 
+  # A short-circuited && exempts only the AND-OR list's own status —
+  # the next statement runs normally and errexit applies to it.
+  def test_errexit_resumes_after_and_short_circuit
+    catch(:exit) { execute("set -e; false && true; echo done > #{output_file}") }
+    assert_equal "done\n", File.read(output_file)
+  end
+
+  # Left-associative chain: `false && true && X` short-circuits at the
+  # first &&, so X never runs and the list status (1) stays exempt.
+  def test_errexit_exempt_for_chained_and_short_circuit
+    catch(:exit) { execute("set -e; false && true && false; echo $? > #{output_file}") }
+    assert_equal "1\n", File.read(output_file)
+  end
+
+  # `(false && true) && X || Y`: the subshell returns 1 (the exempt
+  # short-circuit), the outer && short-circuits too, the || recovers
+  # with Y. Exercises exempt propagation across operators.
+  def test_errexit_and_or_recovery_after_short_circuit
+    catch(:exit) { execute("set -e; (false && true) && echo no > #{output_file} || echo yes > #{output_file}") }
+    assert_equal "yes\n", File.read(output_file)
+  end
+
+  # OR chain where the last operand succeeds: every non-last is
+  # exempt; the final true makes the list status 0.
+  def test_errexit_or_chain_recovers_on_last_operand
+    catch(:exit) { execute("set -e; false || false || true; echo ok > #{output_file}") }
+    assert_equal "ok\n", File.read(output_file)
+  end
+
   # set -x (xtrace)
   def test_set_minus_x_enables_xtrace
     execute('set -x')
