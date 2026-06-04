@@ -156,4 +156,16 @@ class TestEscapeExpansion < Test::Unit::TestCase
     execute("echo unquoted'  single-quoted'\"  double-quoted  \"unquoted > #{output_file}")
     assert_equal "unquoted  single-quoted  double-quoted  unquoted\n", File.read(output_file)
   end
+
+  # A "$(...)"/`...` segment that itself contains " must not end the double-quoted
+  # segment early when the token has adjacent segments (the cmdsub must still run).
+  def test_double_quoted_command_substitution_with_inner_quotes_in_multi_segment_word
+    execute('echo "$(printf "%s" hi)"_tail > ' + output_file)
+    assert_equal "hi_tail\n", File.read(output_file)
+  end
+
+  def test_double_quoted_backtick_with_inner_quotes_in_multi_segment_word
+    execute('echo "`echo "x"`"_tail > ' + output_file)
+    assert_equal "x_tail\n", File.read(output_file)
+  end
 end

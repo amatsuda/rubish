@@ -9,6 +9,28 @@ module Rubish
     # Yields (type, content) for each segment of str.
     # type is one of: :single, :double, :ansi_c, :bare
     # content is the inner text (quotes already stripped).
+    # $(...), ${...}, and `...` can contain a literal " that must not be read as
+    # a double-quote boundary. When one begins at str[i], return the index just
+    # past it, else nil.
+    def self.skip_expansion(str, i)
+      if str[i] == '$' && (str[i + 1] == '(' || str[i + 1] == '{')
+        open = str[i + 1]
+        close = open == '(' ? ')' : '}'
+        depth = 1
+        j = i + 2
+        while j < str.length && depth > 0
+          depth += 1 if str[j] == open
+          depth -= 1 if str[j] == close
+          j += 1
+        end
+        j
+      elsif str[i] == '`'
+        j = i + 1
+        j += (str[j] == '\\' ? 2 : 1) while j < str.length && str[j] != '`'
+        j < str.length ? j + 1 : j
+      end
+    end
+
     def self.each_segment(str)
       i = 0
       while i < str.length
@@ -22,10 +44,14 @@ module Rubish
           i = j < str.length ? j + 1 : str.length
         elsif str[i] == '"'
           j = i + 1
-          while j < str.length
-            break if str[j] == '"'
-            j += 1 if str[j] == '\\'
-            j += 1
+          while j < str.length && str[j] != '"'
+            if str[j] == '\\'
+              j += 2
+            elsif (skip = skip_expansion(str, j))
+              j = skip
+            else
+              j += 1
+            end
           end
           yield :double, str[i + 1...j]
           i = j < str.length ? j + 1 : str.length
@@ -83,29 +109,8 @@ module Rubish
         while i < str.length
           if str[i] == '\\'
             i += 2
-          elsif str[i] == '$' && i + 1 < str.length
-            # Skip $(...), ${...}, $"...", $'...' so inner quotes don't
-            # look like segment boundaries
-            case str[i + 1]
-            when '(', '{'
-              close = str[i + 1] == '(' ? ')' : '}'
-              open  = str[i + 1]
-              depth = 1
-              j = i + 2
-              while j < str.length && depth > 0
-                depth += 1 if str[j] == open
-                depth -= 1 if str[j] == close
-                j += 1
-              end
-              i = j
-            when '"', "'"
-              delim = str[i + 1]
-              j = i + 2
-              j += 1 while j < str.length && str[j] != delim
-              i = j < str.length ? j + 1 : str.length
-            else
-              i += 1
-            end
+          elsif (skip = skip_expansion(str, i))
+            i = skip
           elsif str[i] == '"'
             return i != str.length - 1
           else
