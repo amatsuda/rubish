@@ -479,4 +479,28 @@ class TestLexer < Test::Unit::TestCase
     assert_equal :FUNC_CALL, tokens[0].type
     assert_equal ['-5'], tokens[0].value[:args]
   end
+
+  # read_double_quoted_string used to advance char-by-char without
+  # recognizing embedded $(...) / `...` / ${...}, so a literal " inside
+  # the cmdsub (e.g. `"$(echo "x;y")"`) was treated as the closing of
+  # the outer DQ, and the `;` after it became a SEMICOLON separator —
+  # leaving `b` and `c")"_tail` as orphan tokens.
+  def test_double_quoted_string_with_embedded_cmdsub_containing_quotes
+    tokens = tokenize('echo "$(echo "a;b;c")"_tail')
+    assert_equal 2, tokens.length, "expected one WORD after echo, got #{tokens.map(&:value).inspect}"
+    assert_equal :WORD, tokens[1].type
+    assert_equal '"$(echo "a;b;c")"_tail', tokens[1].value
+  end
+
+  def test_double_quoted_string_with_embedded_backtick_containing_quotes
+    tokens = tokenize('echo "`echo "x;y"`"_tail')
+    assert_equal 2, tokens.length
+    assert_equal '"`echo "x;y"`"_tail', tokens[1].value
+  end
+
+  def test_double_quoted_string_with_embedded_braced_variable
+    tokens = tokenize('echo "${HOME}"_tail')
+    assert_equal 2, tokens.length
+    assert_equal '"${HOME}"_tail', tokens[1].value
+  end
 end

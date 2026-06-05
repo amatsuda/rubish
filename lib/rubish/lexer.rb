@@ -955,6 +955,19 @@ module Rubish
           @pos += 2 # skip escaped char
           next
         end
+        # Embedded $(...) / `...` / ${...} may contain a literal " that
+        # is part of the substitution, not the closing of the outer DQ.
+        # The dedicated scanners already track their own nesting.
+        if @input[@pos] == '$' && @input[@pos + 1] == '('
+          read_command_substitution
+          next
+        elsif @input[@pos] == '$' && @input[@pos + 1] == '{'
+          read_braced_variable
+          next
+        elsif @input[@pos] == '`'
+          read_backtick_substitution
+          next
+        end
         @pos += 1
       end
       @pos += 1 # skip closing "
