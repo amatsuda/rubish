@@ -684,6 +684,7 @@ module Rubish
     def handle_array_element_assignment(var_name, key, value)
       expanded_key = expand_string_content(key)
       expanded_value = expand_assignment_value(value)
+      expanded_value = eval_arithmetic_expr(expanded_value).to_s if Builtins.has_attribute?(var_name, :integer)
 
       # array_expand_once (bash 5.2+): when disabled, subscripts may be expanded again
       # assoc_expand_once (deprecated): same but only for associative arrays
@@ -734,6 +735,7 @@ module Rubish
       when *READONLY_SPECIAL_VARS
         # Read-only, silently ignore
       else
+        expanded_value = eval_arithmetic_expr(expanded_value).to_s if Builtins.has_attribute?(var_name, :integer)
         Builtins.set_var_through_nameref(var_name, expanded_value)
       end
 

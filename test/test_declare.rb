@@ -301,4 +301,77 @@ class TestDeclare < Test::Unit::TestCase
     Rubish::Builtins.delete_var('target')
     Rubish::Builtins.delete_var('ref')
   end
+
+  # Integer attribute: assignments to an integer-attributed variable are
+  # evaluated as arithmetic (bash). e.g. `typeset -i b; b=4+1` -> b is 5.
+  def test_integer_attr_then_bare_assignment_evaluates
+    execute('typeset -i b; b=4+1')
+    assert_equal '5', get_shell_var('b')
+  ensure
+    Rubish::Builtins.delete_var('b')
+  end
+
+  def test_declare_integer_arithmetic_expression
+    execute('declare -i b; b=3*7')
+    assert_equal '21', get_shell_var('b')
+  ensure
+    Rubish::Builtins.delete_var('b')
+  end
+
+  def test_integer_inline_assignment_evaluates
+    execute('declare -i b=4+1')
+    assert_equal '5', get_shell_var('b')
+  ensure
+    Rubish::Builtins.delete_var('b')
+  end
+
+  def test_integer_non_numeric_becomes_zero
+    execute('typeset -i n; n=foo')
+    assert_equal '0', get_shell_var('n')
+  ensure
+    Rubish::Builtins.delete_var('n')
+  end
+
+  def test_integer_append_is_arithmetic
+    execute('typeset -i x=5; x+=37')
+    assert_equal '42', get_shell_var('x')
+  ensure
+    Rubish::Builtins.delete_var('x')
+  end
+
+  def test_integer_attr_then_bare_append_is_arithmetic
+    execute('typeset -i x; x=5; x+=37')
+    assert_equal '42', get_shell_var('x')
+  ensure
+    Rubish::Builtins.delete_var('x')
+  end
+
+  def test_remove_integer_attr_restores_literal
+    execute('typeset -i b; typeset +i b; b=4+1')
+    assert_equal '4+1', get_shell_var('b')
+  ensure
+    Rubish::Builtins.delete_var('b')
+  end
+
+  def test_integer_array_element_assignment_evaluates
+    execute("declare -i a; a[0]=2+2; echo \"${a[0]}\" > #{output_file}")
+    assert_equal "4\n", File.read(output_file)
+  ensure
+    Rubish::Builtins.delete_var('a')
+  end
+
+  def test_integer_array_element_append_is_arithmetic
+    execute("declare -i a; a[0]=5; a[0]+=37; echo \"${a[0]}\" > #{output_file}")
+    assert_equal "42\n", File.read(output_file)
+  ensure
+    Rubish::Builtins.delete_var('a')
+  end
+
+  # A plain (non-integer) variable is never arithmetic-evaluated.
+  def test_plain_var_not_evaluated
+    execute('b=4+1')
+    assert_equal '4+1', get_shell_var('b')
+  ensure
+    Rubish::Builtins.delete_var('b')
+  end
 end
