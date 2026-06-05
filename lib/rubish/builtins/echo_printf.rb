@@ -427,6 +427,19 @@ module Rubish
       char_val = arg.to_s =~ /\A["'](.)/m ? Regexp.last_match(1).ord : nil
       numeric_arg = char_val ? char_val.to_s : arg.to_s
 
+      # Bash warns to stderr when a numeric specifier receives a value that
+      # isn't a valid number (empty, non-numeric, or numeric with trailing
+      # garbage like "5abc"). The formatted value is still produced from
+      # the parsed prefix — we just want the diagnostic to surface.
+      if char_val.nil? && %w[d i u o x X f F e E g G].include?(specifier)
+        valid = if %w[d i u o x X].include?(specifier)
+                  numeric_arg.match?(/\A\s*[+-]?(0[xX][0-9a-fA-F]+|\d+)\z/)
+                else
+                  numeric_arg.match?(/\A\s*[+-]?(\d+(\.\d*)?|\.\d+)([eE][+-]?\d+)?\z/)
+                end
+        $stderr.puts "rubish: printf: #{numeric_arg}: invalid number" unless valid
+      end
+
       result = case specifier
                when 's'
                  # String

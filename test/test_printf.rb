@@ -664,4 +664,39 @@ class TestPrintf < Test::Unit::TestCase
     output = capture_output { Rubish::Builtins.run('printf', ['hi\n', 'a', 'b', 'c']) }
     assert_equal "hi\n", output
   end
+
+  # Bash warns when a numeric specifier receives an invalid value, and
+  # still produces the parsed-prefix value (or 0).
+  def test_printf_invalid_number_warns_on_empty_arg
+    err = capture_stderr { Rubish::Builtins.run('printf', ['%d', '']) }
+    assert_match(/printf: : invalid number/, err)
+  end
+
+  def test_printf_invalid_number_warns_on_non_numeric
+    err = capture_stderr { Rubish::Builtins.run('printf', ['%d', 'foo']) }
+    assert_match(/printf: foo: invalid number/, err)
+  end
+
+  # `5abc` still produces `5` (parsed prefix); the warning fires too.
+  def test_printf_invalid_number_warns_on_trailing_garbage
+    err = capture_stderr { Rubish::Builtins.run('printf', ['%d', '5abc']) }
+    assert_match(/printf: 5abc: invalid number/, err)
+  end
+
+  def test_printf_invalid_number_still_emits_parsed_prefix
+    out = capture_output { Rubish::Builtins.run('printf', ['%d', '5abc']) }
+    # `capture_output` mixes stdout+stderr; assert the parsed prefix is in there.
+    assert_match(/\A5/, out)
+  end
+
+  def test_printf_valid_numeric_arg_does_not_warn
+    err = capture_stderr { Rubish::Builtins.run('printf', ['%d', '5']) }
+    assert_no_match(/invalid number/, err)
+  end
+
+  # Char-value notation (`'A`) is always valid; no warning.
+  def test_printf_char_value_does_not_warn
+    err = capture_stderr { Rubish::Builtins.run('printf', ['%d', "'A"]) }
+    assert_no_match(/invalid number/, err)
+  end
 end
