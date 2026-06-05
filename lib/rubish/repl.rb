@@ -1531,7 +1531,7 @@ module Rubish
     def expand_posix_classes(pattern)
       # Expand POSIX character classes in bracket expressions
       # e.g., [[:digit:]] -> [0-9], [[:alpha:][:digit:]] -> [a-zA-Z0-9]
-      return pattern unless pattern.include?('[:')
+      return pattern unless pattern.include?('[:') || pattern.include?('[.') || pattern.include?('[=')
 
       result = +''
       i = 0
@@ -1556,6 +1556,11 @@ module Rubish
               else
                 j += 1
               end
+            elsif pattern[j] == '[' && j + 1 < pattern.length && (pattern[j + 1] == '.' || pattern[j + 1] == '=')
+              # Collating symbol [.x.] or equivalence class [=x=] - skip to its end
+              close = pattern[j + 1] == '.' ? '.]' : '=]'
+              end_pos = pattern.index(close, j + 2)
+              j = end_pos ? end_pos + 2 : j + 1
             elsif pattern[j] == ']'
               # Found the closing bracket
               break
@@ -1589,7 +1594,9 @@ module Rubish
       # [^[:digit:]] -> [^0-9]
       # [a[:digit:]] -> [a0-9]
 
-      return bracket_expr unless bracket_expr.include?('[:')
+      unless bracket_expr.include?('[:') || bracket_expr.include?('[.') || bracket_expr.include?('[=')
+        return bracket_expr
+      end
 
       # Extract content between [ and ]
       content = bracket_expr[1...-1]
@@ -1611,6 +1618,11 @@ module Rubish
           match
         end
       end
+
+      # Collating symbols / equivalence classes -> literal char (unknown -> drop).
+      resolve = ->(name) { name.length == 1 ? name : ExecutionContext::COLLATING_SYMBOLS[name] }
+      expanded_content = expanded_content.gsub(/\[\.(.*?)\.\]/) { resolve.call($1) || '' }
+      expanded_content = expanded_content.gsub(/\[=(.*?)=\]/) { resolve.call($1) || '' }
 
       "[#{negation}#{expanded_content}]"
     end

@@ -300,4 +300,42 @@ class TestPosixCharClasses < Test::Unit::TestCase
     execute("case a in [[:al:]]) echo bad > #{output_file};; *) echo ok > #{output_file};; esac")
     assert_equal "ok\n", File.read(output_file)
   end
+
+  # Collating symbols [[.x.]] and equivalence classes [[=x=]] (C locale: each
+  # resolves to its literal char; no real collation table).
+  def test_expand_collating_single_char
+    assert_equal '[a]', @repl.send(:expand_posix_classes, '[[.a.]]')
+  end
+
+  def test_expand_collating_named_symbol
+    assert_equal '[-]', @repl.send(:expand_posix_classes, '[[.hyphen.]]')
+  end
+
+  def test_expand_equivalence_class
+    assert_equal '[b]', @repl.send(:expand_posix_classes, '[[=b=]]')
+  end
+
+  def test_expand_collating_unknown_symbol_dropped
+    assert_equal '[a]', @repl.send(:expand_posix_classes, '[[.zz.]a]')
+  end
+
+  def test_case_collating_symbol_matches
+    execute("case a in [[.a.]]) echo ok > #{output_file};; esac")
+    assert_equal "ok\n", File.read(output_file)
+  end
+
+  def test_case_collating_named_symbol_matches
+    execute("case - in [[.hyphen.]]) echo ok > #{output_file};; esac")
+    assert_equal "ok\n", File.read(output_file)
+  end
+
+  def test_case_collating_symbols_form_range
+    execute("case p in [[.a.]-[.z.]]) echo ok > #{output_file};; *) echo bad > #{output_file};; esac")
+    assert_equal "ok\n", File.read(output_file)
+  end
+
+  def test_case_equivalence_class_matches
+    execute("case b in [[=b=]]) echo ok > #{output_file};; esac")
+    assert_equal "ok\n", File.read(output_file)
+  end
 end
