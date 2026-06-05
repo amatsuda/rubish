@@ -321,9 +321,13 @@ class TestDupRedirect < Test::Unit::TestCase
   end
 
   # Multi-digit fds work too — the lexer doesn't cap the digit count.
+  # Drive the write via Ruby because /bin/sh on Ubuntu is dash, which
+  # can't parse `>&10` (multi-digit fd in dup syntax); we only care
+  # here that rubish's `10>file` opens the file as fd 10 in the child.
   def test_fd10_open_for_write
     out = File.join(@tempdir, 'out')
-    execute("/bin/sh -c 'printf via10 >&10' 10>#{out}")
+    ruby = RbConfig.ruby
+    execute(%(#{ruby} -e 'IO.new(10, "w").write("via10")' 10>#{out}))
     assert_equal 'via10', File.read(out)
   end
 
