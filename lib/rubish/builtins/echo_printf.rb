@@ -342,10 +342,16 @@ module Rubish
               result << str[i]; i += 1
             end
           when /[0-7]/
-            # Octal escape \NNN (1-3 digits)
-            octal = str[i + 1, 3].match(/\A[0-7]{1,3}/)[0]
-            result << octal.to_i(8).chr
-            i += 1 + octal.length
+            # Octal escape: \0ddd (leading 0, up to 3 more digits) or bare \ddd.
+            if str[i + 1] == '0'
+              octal = str[i + 2, 3].match(/\A[0-7]{0,3}/)[0]
+              result << (octal.empty? ? "\0" : octal.to_i(8).chr)
+              i += 2 + octal.length
+            else
+              octal = str[i + 1, 3].match(/\A[0-7]{1,3}/)[0]
+              result << octal.to_i(8).chr
+              i += 1 + octal.length
+            end
           else
             # Unknown escape - keep backslash and character
             result << str[i, 2]; i += 2
@@ -407,6 +413,11 @@ module Rubish
       width_int = width.empty? ? nil : width.to_i
       prec_int = precision.nil? ? nil : (precision.empty? ? 0 : precision.to_i)
 
+      # Char-value notation (numeric specifiers only): a leading ' or " makes the
+      # arg the numeric code of the next char, e.g. printf '%d' "'s" -> 115.
+      char_val = arg.to_s =~ /\A["'](.)/m ? Regexp.last_match(1).ord : nil
+      numeric_arg = char_val ? char_val.to_s : arg.to_s
+
       result = case specifier
                when 's'
                  # String
@@ -415,7 +426,7 @@ module Rubish
                  s
                when 'd', 'i'
                  # Signed integer
-                 num = arg.to_i
+                 num = numeric_arg.to_i
                  if prec_int
                    format("%0#{prec_int}d", num)
                  else
@@ -423,47 +434,47 @@ module Rubish
                  end
                when 'u'
                  # Unsigned integer
-                 num = arg.to_i
+                 num = numeric_arg.to_i
                  num = num & 0xFFFFFFFF if num < 0
                  num.to_s
                when 'o'
                  # Octal
-                 num = arg.to_i
+                 num = numeric_arg.to_i
                  prefix = flags.include?('#') ? '0' : ''
                  "#{prefix}#{num.to_s(8)}"
                when 'x'
                  # Hexadecimal lowercase
-                 num = arg.to_i
+                 num = numeric_arg.to_i
                  prefix = flags.include?('#') ? '0x' : ''
                  "#{prefix}#{num.to_s(16)}"
                when 'X'
                  # Hexadecimal uppercase
-                 num = arg.to_i
+                 num = numeric_arg.to_i
                  prefix = flags.include?('#') ? '0X' : ''
                  "#{prefix}#{num.to_s(16).upcase}"
                when 'f', 'F'
                  # Floating point
-                 num = arg.to_f
+                 num = numeric_arg.to_f
                  prec = prec_int || 6
                  format("%.#{prec}f", num)
                when 'e'
                  # Scientific notation lowercase
-                 num = arg.to_f
+                 num = numeric_arg.to_f
                  prec = prec_int || 6
                  format("%.#{prec}e", num)
                when 'E'
                  # Scientific notation uppercase
-                 num = arg.to_f
+                 num = numeric_arg.to_f
                  prec = prec_int || 6
                  format("%.#{prec}E", num)
                when 'g'
                  # Shorter of %e or %f
-                 num = arg.to_f
+                 num = numeric_arg.to_f
                  prec = prec_int || 6
                  format("%.#{prec}g", num)
                when 'G'
                  # Shorter of %E or %F
-                 num = arg.to_f
+                 num = numeric_arg.to_f
                  prec = prec_int || 6
                  format("%.#{prec}G", num)
                when 'c'

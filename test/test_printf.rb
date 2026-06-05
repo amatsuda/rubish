@@ -631,4 +631,18 @@ class TestPrintf < Test::Unit::TestCase
     # Missing width arg defaults to 0
     assert_equal '', output
   end
+
+  # %b: \0ddd takes up to 3 octal digits after the 0, so \0007 is BEL (007),
+  # not NUL followed by a literal 7.
+  def test_printf_b_octal_0prefix_three_digits
+    output = capture_output { Rubish::Builtins.run('printf', ['%b', '\0007']) }
+    assert_equal "\a", output
+  end
+
+  # Numeric specifiers accept 'c / "c char-value notation: the arg is the
+  # numeric code of the first char. %f must honor it too (was truncated to 0).
+  def test_printf_float_char_value_notation
+    output = capture_output { Rubish::Builtins.run('printf', ['%6.2f', "'s"]) }
+    assert_equal '115.00', output
+  end
 end
