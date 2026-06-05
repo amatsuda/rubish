@@ -231,7 +231,11 @@ module Rubish
       val ||= ''
       expanded_val = expand_assignment_value(val)
       current = get_var(var)
-      set_var(var, current + expanded_val)
+      if Builtins.has_attribute?(var, :integer)
+        set_var(var, (eval_arithmetic_expr(current.to_s) + eval_arithmetic_expr(expanded_val)).to_s)
+      else
+        set_var(var, current + expanded_val)
+      end
     end
 
     def handle_array_element_assignment(assignment)
@@ -243,11 +247,17 @@ module Rubish
 
         expanded_val = expand_assignment_value(val)
         index = eval_arithmetic_expr(index_expr).to_i
+        integer = Builtins.has_attribute?(var, :integer)
 
         if is_append
           current = get_array_element(var, index)
-          set_array_element(var, index, current + expanded_val)
+          if integer
+            set_array_element(var, index, (eval_arithmetic_expr(current.to_s) + eval_arithmetic_expr(expanded_val)).to_s)
+          else
+            set_array_element(var, index, current + expanded_val)
+          end
         else
+          expanded_val = eval_arithmetic_expr(expanded_val).to_s if integer
           set_array_element(var, index, expanded_val)
         end
       end
