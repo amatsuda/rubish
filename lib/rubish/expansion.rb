@@ -777,11 +777,11 @@ module Rubish
 
       case next_char
       when '+'
-        return [ENV['PWD'] || Dir.pwd, 2] if line[i + 2].nil? || line[i + 2] =~ %r{[\s/]}
+        # Defer to $PWD so it resolves at command-execution time, after any cd.
+        return ['$PWD', 2] if line[i + 2].nil? || line[i + 2] =~ %r{[\s/]}
       when '-'
-        if line[i + 2].nil? || line[i + 2] =~ %r{[\s/]}
-          return ENV['OLDPWD'] ? [ENV['OLDPWD'], 2] : ['~-', 2]
-        end
+        # Defer to $OLDPWD; the :- default keeps bash's "unset -> literal ~-".
+        return ['${OLDPWD:-~-}', 2] if line[i + 2].nil? || line[i + 2] =~ %r{[\s/]}
       end
 
       j = i + 1

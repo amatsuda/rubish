@@ -5,10 +5,23 @@ require_relative 'test_helper'
 class TestTildeExpansion < Test::Unit::TestCase
   def setup
     @repl = Rubish::REPL.new
+    @orig_cwd = Dir.pwd
+  end
+
+  def teardown
+    # The cd in the ~+/~- integration tests chdirs the test process; restore it.
+    Dir.chdir(@orig_cwd) if @orig_cwd && File.directory?(@orig_cwd)
   end
 
   def expand(line)
     @repl.send(:expand_tilde, line)
+  end
+
+  # ~+/~- expand to $PWD/$OLDPWD at the tilde stage, then variable expansion
+  # resolves them. Mirror that two-stage pipeline so these tests assert the
+  # final resolved value (as they always have), not the intermediate rewrite.
+  def expand_resolved(line)
+    @repl.send(:expand_string_content, @repl.send(:expand_tilde, line))
   end
 
   def test_simple_tilde
@@ -95,41 +108,41 @@ class TestTildeExpansion < Test::Unit::TestCase
 
   def test_tilde_plus_pwd
     ENV['PWD'] = '/test/pwd'
-    assert_equal '/test/pwd', expand('~+')
+    assert_equal '/test/pwd', expand_resolved('~+')
   end
 
   def test_tilde_plus_with_path
     ENV['PWD'] = '/test/pwd'
-    assert_equal '/test/pwd/subdir', expand('~+/subdir')
+    assert_equal '/test/pwd/subdir', expand_resolved('~+/subdir')
   end
 
   def test_tilde_minus_oldpwd
     ENV['OLDPWD'] = '/old/path'
-    assert_equal '/old/path', expand('~-')
+    assert_equal '/old/path', expand_resolved('~-')
   end
 
   def test_tilde_minus_with_path
     ENV['OLDPWD'] = '/old/path'
-    assert_equal '/old/path/subdir', expand('~-/subdir')
+    assert_equal '/old/path/subdir', expand_resolved('~-/subdir')
   end
 
   def test_tilde_minus_no_oldpwd
     ENV.delete('OLDPWD')
-    assert_equal '~-', expand('~-')
+    assert_equal '~-', expand_resolved('~-')
   end
 
   def test_tilde_plus_in_command
     ENV['PWD'] = '/current'
-    assert_equal 'ls /current', expand('ls ~+')
+    assert_equal 'ls /current', expand_resolved('ls ~+')
   end
 
   def test_tilde_minus_in_command
     ENV['OLDPWD'] = '/previous'
-    assert_equal 'cd /previous', expand('cd ~-')
+    assert_equal 'cd /previous', expand_resolved('cd ~-')
   end
 
   def test_tilde_plus_not_followed_by_slash_or_space
-    # ~+extra should expand ~ only, not ~+
+    # ~+extra should expand ~ only, not ~+ (tilde-stage parsing boundary)
     assert_match(/\+extra$/, expand('~+extra'))
   end
 
@@ -151,5 +164,52 @@ class TestTildeExpansion < Test::Unit::TestCase
     # Tilde in a string that becomes an assignment via eval/readonly "$binding"
     # should NOT expand at the point of initial string creation.
     assert_equal "binding='const=~/src'", expand("binding='const=~/src'")
+  end
+
+  # --- ~+ / ~- : PWD / OLDPWD tilde expansion ---
+  # bash: ~+ expands to $PWD, ~- to $OLDPWD. These must reflect the cwd at the
+  # time the command runs, not when the line is first preprocessed -- so they
+  # run the full cd-then-echo pipeline rather than calling expand_tilde directly.
+
+  def test_tilde_plus_is_pwd_after_cd
+    Dir.mktmpdir do |d|
+      dir = File.realpath(d)
+      out = File.join(dir, 'out')
+      execute("cd #{dir}; echo ~+ > #{out}")
+      assert_equal "#{dir}\n", File.read(out)
+    end
+  end
+
+  def test_tilde_plus_with_path_after_cd
+    Dir.mktmpdir do |d|
+      dir = File.realpath(d)
+      out = File.join(dir, 'out')
+      execute("cd #{dir}; echo ~+/sub > #{out}")
+      assert_equal "#{dir}/sub\n", File.read(out)
+    end
+  end
+
+  def test_tilde_minus_is_oldpwd_after_cd
+    Dir.mktmpdir do |d1|
+      Dir.mktmpdir do |d2|
+        old = File.realpath(d1)
+        cur = File.realpath(d2)
+        out = File.join(cur, 'out')
+        execute("cd #{old}; cd #{cur}; echo ~- > #{out}")
+        assert_equal "#{old}\n", File.read(out)
+      end
+    end
+  end
+
+  def test_tilde_minus_with_path_after_cd
+    Dir.mktmpdir do |d1|
+      Dir.mktmpdir do |d2|
+        old = File.realpath(d1)
+        cur = File.realpath(d2)
+        out = File.join(cur, 'out')
+        execute("cd #{old}; cd #{cur}; echo ~-/bin > #{out}")
+        assert_equal "#{old}/bin\n", File.read(out)
+      end
+    end
   end
 end
