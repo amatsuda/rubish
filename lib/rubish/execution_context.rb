@@ -30,6 +30,26 @@ module Rubish
       'xdigit' => '0-9A-Fa-f'
     }.freeze
 
+    # POSIX named collating symbols ([[.name.]]) -> the single character they
+    # name. Single-char names ([[.a.]]) resolve to themselves; see
+    # resolve_collating_symbol. Multi-char names not listed here are invalid.
+    COLLATING_SYMBOLS = {
+      'space' => ' ', 'tab' => "\t", 'newline' => "\n", 'carriage-return' => "\r",
+      'form-feed' => "\f", 'vertical-tab' => "\v", 'alert' => "\a", 'backspace' => "\b",
+      'exclamation-mark' => '!', 'quotation-mark' => '"', 'number-sign' => '#',
+      'dollar-sign' => '$', 'percent-sign' => '%', 'ampersand' => '&', 'apostrophe' => "'",
+      'left-parenthesis' => '(', 'right-parenthesis' => ')', 'asterisk' => '*',
+      'plus-sign' => '+', 'comma' => ',', 'hyphen' => '-', 'hyphen-minus' => '-',
+      'period' => '.', 'full-stop' => '.', 'slash' => '/', 'solidus' => '/',
+      'colon' => ':', 'semicolon' => ';', 'less-than-sign' => '<', 'equals-sign' => '=',
+      'greater-than-sign' => '>', 'question-mark' => '?', 'commercial-at' => '@',
+      'left-square-bracket' => '[', 'backslash' => '\\', 'reverse-solidus' => '\\',
+      'right-square-bracket' => ']', 'circumflex' => '^', 'circumflex-accent' => '^',
+      'underscore' => '_', 'low-line' => '_', 'grave-accent' => '`',
+      'left-brace' => '{', 'left-curly-bracket' => '{', 'vertical-line' => '|',
+      'right-brace' => '}', 'right-curly-bracket' => '}', 'tilde' => '~'
+    }.freeze
+
     attr_reader :state
     attr_accessor :last_status, :last_bg_pid, :lineno, :pipestatus
     attr_accessor :functions, :heredoc_content, :command_number
@@ -327,7 +347,7 @@ module Rubish
     end
 
     def expand_posix_classes(pattern)
-      return pattern unless pattern.include?('[:')
+      return pattern unless pattern.include?('[:') || pattern.include?('[.') || pattern.include?('[=')
       result = +''
       i = 0
       while i < pattern.length
@@ -339,6 +359,10 @@ module Rubish
           while j < pattern.length
             if pattern[j] == '[' && j + 1 < pattern.length && pattern[j + 1] == ':'
               end_pos = pattern.index(':]', j + 2)
+              j = end_pos ? end_pos + 2 : j + 1
+            elsif pattern[j] == '[' && j + 1 < pattern.length && (pattern[j + 1] == '.' || pattern[j + 1] == '=')
+              close = pattern[j + 1] == '.' ? '.]' : '=]'
+              end_pos = pattern.index(close, j + 2)
               j = end_pos ? end_pos + 2 : j + 1
             elsif pattern[j] == ']'
               break
@@ -364,7 +388,8 @@ module Rubish
     end
 
     def expand_posix_in_bracket(bracket_expr)
-      return bracket_expr unless bracket_expr.include?('[:')
+      has_posix = bracket_expr.include?('[:') || bracket_expr.include?('[.') || bracket_expr.include?('[=')
+      return bracket_expr unless has_posix
       content = bracket_expr[1...-1]
       negation = ''
       if content.start_with?('!') || content.start_with?('^')
@@ -374,6 +399,9 @@ module Rubish
       expanded_content = content.gsub(/\[:([a-z]+):\]/) do |match|
         POSIX_CHAR_CLASSES[$1] || match
       end
+      # Collating symbols / equivalence classes -> literal char (unknown -> drop).
+      expanded_content = expanded_content.gsub(/\[\.(.*?)\.\]/) { resolve_collating_symbol($1) || '' }
+      expanded_content = expanded_content.gsub(/\[=(.*?)=\]/) { resolve_collating_symbol($1) || '' }
       "[#{negation}#{expanded_content.delete("\x00")}]"
     end
 
@@ -435,6 +463,19 @@ module Rubish
             buf << '\\['
             i += 1
           end
+        elsif ch == '[' && i + 1 < pattern.length && (pattern[i + 1] == '.' || pattern[i + 1] == '=')
+          # Collating symbol [[.x.]] or equivalence class [[=x=]]: resolve to the
+          # literal char (C locale; no real collation). Unknown symbol -> drop.
+          close = pattern[i + 1] == '.' ? '.]' : '=]'
+          end_pos = pattern.index(close, i + 2)
+          if end_pos
+            sym = resolve_collating_symbol(pattern[i + 2...end_pos])
+            buf << class_escape(sym) if sym
+            i = end_pos + 2
+          else
+            buf << '\\['
+            i += 1
+          end
         elsif ch == '['
           buf << '\\['
           i += 1
@@ -451,6 +492,21 @@ module Rubish
         end
       end
       nil
+    end
+
+    # Resolve a collating-symbol/equivalence-class name to its single char.
+    # Single-char names are themselves; multi-char names use the table. Returns
+    # nil for unknown multi-char names (invalid symbol).
+    def resolve_collating_symbol(name)
+      return name if name.length == 1
+      COLLATING_SYMBOLS[name]
+    end
+
+    # Escape a char for safe inclusion inside a regex character class. Ranges
+    # like [[.a.]-[.z.]] still work: the range operator is the user-typed `-`
+    # between two escaped outputs, never the escaped char itself.
+    def class_escape(ch)
+      [']', '\\', '^', '-'].include?(ch) ? "\\#{ch}" : ch
     end
 
     def apply_globignore(matches)

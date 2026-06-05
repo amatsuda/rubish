@@ -883,7 +883,7 @@ module Rubish
     def __case_match(pattern, word)
       # Shell pattern matching using fnmatch
       # Supports *, ?, [...] patterns
-      if pattern.include?('[:')
+      if pattern.include?('[:') || pattern.include?('[.') || pattern.include?('[=')
         icase = Builtins.shopt_enabled?('nocasematch')
         rx = posix_glob_to_regex(pattern, icase: icase)
         return rx ? rx.match?(word) : false
