@@ -381,4 +381,73 @@ class TestArray < Test::Unit::TestCase
     execute('arr=( $(echo $WORDS) )')
     assert_equal %w[alpha beta gamma], Rubish::Builtins.get_array('arr')
   end
+
+  # Element-boundary preservation for [@]/[*] (like "$@").
+  # echo ${arr[@]} collapses spacing and cannot catch the bug; these use
+  # printf one-per-line so each element occupies its own field.
+
+  def test_at_quoted_each_element_own_line
+    execute('arr=(x y z)')
+    execute("printf '%s\\n' \"${arr[@]}\" > #{output_file}")
+    assert_equal "x\ny\nz\n", File.read(output_file)
+  end
+
+  def test_at_quoted_preserves_element_with_spaces
+    execute("arr=(x 'b c' d)")
+    execute("printf '[%s]' \"${arr[@]}\" > #{output_file}")
+    assert_equal '[x][b c][d]', File.read(output_file)
+  end
+
+  def test_at_for_loop_preserves_spaces
+    execute("arr=(1 '2 3')")
+    execute("for v in \"${arr[@]}\"; do echo \"<$v>\"; done > #{output_file}")
+    assert_equal "<1>\n<2 3>\n", File.read(output_file)
+  end
+
+  def test_at_append_then_expand_boundaries
+    execute('declare -a arr')
+    execute('arr+=(x)')
+    execute("arr+=('b c' d)")
+    execute("printf '[%s]' \"${arr[@]}\" > #{output_file}")
+    assert_equal '[x][b c][d]', File.read(output_file)
+  end
+
+  def test_at_array_into_array_boundaries
+    execute("arr=(1 '2 3')")
+    execute("arr=(0 \"${arr[@]}\" '4 5')")
+    execute("printf '[%s]' \"${arr[@]}\" > #{output_file}")
+    assert_equal '[0][1][2 3][4 5]', File.read(output_file)
+  end
+
+  def test_at_unquoted_splits_elements
+    execute("arr=(1 '2 3')")
+    execute("printf '[%s]' ${arr[@]} > #{output_file}")
+    assert_equal '[1][2][3]', File.read(output_file)
+  end
+
+  def test_star_quoted_stays_single_word
+    # Regression guard: "${arr[*]}" is one IFS-joined word, not separate ones.
+    execute("arr=(x 'b c' d)")
+    execute("printf '[%s]' \"${arr[*]}\" > #{output_file}")
+    assert_equal '[x b c d]', File.read(output_file)
+  end
+
+  def test_at_empty_array_yields_no_words
+    execute('arr=()')
+    execute("printf '[%s]' before \"${arr[@]}\" after > #{output_file}")
+    assert_equal '[before][after]', File.read(output_file)
+  end
+
+  def test_star_unquoted_splits_and_drops_empty
+    # Unquoted ${arr[*]} word-splits like ${arr[@]}; empty elements drop.
+    execute("arr=(0 0 1 '' release plat)")
+    execute("printf '[%s]' ${arr[*]} > #{output_file}")
+    assert_equal '[0][0][1][release][plat]', File.read(output_file)
+  end
+
+  def test_at_unquoted_drops_empty_element
+    execute("arr=(0 0 1 '' release plat)")
+    execute("printf '[%s]' ${arr[@]} > #{output_file}")
+    assert_equal '[0][0][1][release][plat]', File.read(output_file)
+  end
 end

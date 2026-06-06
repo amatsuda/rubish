@@ -70,7 +70,8 @@ class TestRUBISHVERSINFO < Test::Unit::TestCase
 
   def test_versinfo_all_elements_at
     output_file = File.join(@tempdir, 'output.txt')
-    execute("echo ${RUBISH_VERSINFO[@]} > #{output_file}")
+    # Quoted: empty element (index 3) is preserved.
+    execute("echo \"${RUBISH_VERSINFO[@]}\" > #{output_file}")
     value = File.read(output_file).strip
     parts = Rubish::VERSION.split('.')
     expected_parts = [parts[0], parts[1], parts[2], '', 'release', RUBY_PLATFORM]
@@ -79,10 +80,31 @@ class TestRUBISHVERSINFO < Test::Unit::TestCase
 
   def test_versinfo_all_elements_star
     output_file = File.join(@tempdir, 'output.txt')
-    execute("echo ${RUBISH_VERSINFO[*]} > #{output_file}")
+    # Quoted: joins by IFS and keeps the empty element.
+    execute("echo \"${RUBISH_VERSINFO[*]}\" > #{output_file}")
     value = File.read(output_file).strip
     parts = Rubish::VERSION.split('.')
     expected_parts = [parts[0], parts[1], parts[2], '', 'release', RUBY_PLATFORM]
+    assert_equal expected_parts.join(' '), value
+  end
+
+  def test_versinfo_all_elements_at_unquoted
+    output_file = File.join(@tempdir, 'output.txt')
+    # Unquoted ${a[@]} word-splits, so the empty element (index 3) drops out.
+    execute("echo ${RUBISH_VERSINFO[@]} > #{output_file}")
+    value = File.read(output_file).strip
+    parts = Rubish::VERSION.split('.')
+    expected_parts = [parts[0], parts[1], parts[2], 'release', RUBY_PLATFORM]
+    assert_equal expected_parts.join(' '), value
+  end
+
+  def test_versinfo_all_elements_star_unquoted
+    output_file = File.join(@tempdir, 'output.txt')
+    # Unquoted ${a[*]} word-splits like ${a[@]}; the empty element drops out.
+    execute("echo ${RUBISH_VERSINFO[*]} > #{output_file}")
+    value = File.read(output_file).strip
+    parts = Rubish::VERSION.split('.')
+    expected_parts = [parts[0], parts[1], parts[2], 'release', RUBY_PLATFORM]
     assert_equal expected_parts.join(' '), value
   end
 

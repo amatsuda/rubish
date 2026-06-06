@@ -293,20 +293,34 @@ module Rubish
     # @ mode: elements joined by space
     # * mode: elements joined by first character of IFS
     def __array_all(var_name, mode)
-      values = get_special_array_values(var_name)
-      values = case values
-               when Array then values.map(&:to_s)
-               when :assoc then get_special_assoc_all_values(var_name)
-               when nil
-                 if Builtins.assoc_array?(var_name)
-                   Builtins.assoc_values(var_name)
-                 else
-                   Builtins.get_array(var_name).compact
-                 end
-               else values
-               end
-
+      values = __array_value_list(var_name)
       mode == '@' ? values.join(' ') : Builtins.join_by_ifs(values)
+    end
+
+    # The element list behind ${arr[@]}/${arr[*]}, as an Array of strings.
+    # Sparse holes (nil) are dropped; empty-string elements are kept so a
+    # quoted "${arr[@]}" can still yield empty words.
+    def __array_value_list(var_name)
+      values = get_special_array_values(var_name)
+      case values
+      when Array then values.map(&:to_s)
+      when :assoc then get_special_assoc_all_values(var_name)
+      when nil
+        if Builtins.assoc_array?(var_name)
+          Builtins.assoc_values(var_name)
+        else
+          Builtins.get_array(var_name).compact
+        end
+      else values
+      end
+    end
+
+    # Unquoted ${arr[@]}/${arr[*]}: each element is IFS word-split and then
+    # globbed, mirroring how bash expands an unquoted array reference.
+    def __array_expand_unquoted(var_name)
+      __array_value_list(var_name)
+        .flat_map { |e| Builtins.split_by_ifs(e) }
+        .flat_map { |w| __glob(w) }
     end
 
     # ${#arr[@]} - get array/assoc length

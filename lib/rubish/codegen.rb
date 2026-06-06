@@ -121,6 +121,20 @@ module Rubish
         if arg == '$@' || arg == '"$@"'
           return 'positional_params'
         end
+        # Special case: "${arr[@]}" / ${arr[@]} as standalone arg expand to
+        # separate words, preserving element boundaries (like "$@"). Quoted
+        # keeps each element verbatim; unquoted IFS-splits and globs each.
+        if arg =~ /\A"\$\{([a-zA-Z_][a-zA-Z0-9_]*)\[@\]\}"\z/
+          return "__array_value_list(#{$1.inspect})"
+        end
+        if arg =~ /\A\$\{([a-zA-Z_][a-zA-Z0-9_]*)\[@\]\}\z/
+          return "__array_expand_unquoted(#{$1.inspect})"
+        end
+        # Unquoted ${arr[*]} word-splits to the same fields as ${arr[@]}
+        # (they differ only when quoted), so reuse the same expansion.
+        if arg =~ /\A\$\{([a-zA-Z_][a-zA-Z0-9_]*)\[\*\]\}\z/
+          return "__array_expand_unquoted(#{$1.inspect})"
+        end
         # Special case: unquoted $varname as standalone arg
         # In bash, unquoted empty variable expansion is removed (word splitting)
         # so $empty_var becomes nothing, not an empty string argument
@@ -941,7 +955,12 @@ module Rubish
       # For loop items need word splitting on variable expansion
       # $VAR with value "a b c" should become three items
       # Also need glob/brace expansion for patterns like *.txt or {1..5}
-      if item =~ /\A\$([a-zA-Z_][a-zA-Z0-9_]*)\z/
+      # "${arr[@]}" / ${arr[@]} expand to separate words, like "$@".
+      if item =~ /\A"\$\{([a-zA-Z_][a-zA-Z0-9_]*)\[@\]\}"\z/
+        "__array_value_list(#{$1.inspect})"
+      elsif item =~ /\A\$\{([a-zA-Z_][a-zA-Z0-9_]*)\[@\]\}\z/
+        "__array_expand_unquoted(#{$1.inspect})"
+      elsif item =~ /\A\$([a-zA-Z_][a-zA-Z0-9_]*)\z/
         # Simple variable - expand and word-split by IFS
         "__fetch_var_for_arg_unquoted(#{$1.inspect})"
       elsif pure_command_substitution?(item)

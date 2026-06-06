@@ -121,6 +121,16 @@ module Rubish
     def expand_array_element(value)
       return [''] if value.nil? || value.empty?
 
+      # "${arr[@]}" / ${arr[@]} inside a literal expand to separate elements,
+      # preserving boundaries (like "$@"). Quoted keeps each element verbatim;
+      # unquoted IFS-splits and globs each.
+      if value =~ /\A"\$\{([a-zA-Z_][a-zA-Z0-9_]*)\[@\]\}"\z/
+        return __array_value_list($1)
+      end
+      if value =~ /\A\$\{([a-zA-Z_][a-zA-Z0-9_]*)\[@\]\}\z/
+        return __array_expand_unquoted($1)
+      end
+
       # Check if this is purely a command substitution: $(cmd) or `cmd`
       if value =~ /\A\$\(.*\)\z/m || value =~ /\A`.*`\z/m
         expanded = expand_string_content(value)
