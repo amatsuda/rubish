@@ -72,6 +72,31 @@ class TestEscapeExpansion < Test::Unit::TestCase
     assert_equal "`date`\n", File.read(output_file)
   end
 
+  # \" in an unquoted word is a literal double quote (backslash removed), not a
+  # quote delimiter. Regression: WordSegments treated the escaped " as a string
+  # boundary, so `echo \"hi\"` produced `\hi"` instead of `"hi"`.
+  def test_echo_escaped_double_quote_is_literal
+    execute("echo \\\"hi\\\" > #{output_file}")
+    assert_equal "\"hi\"\n", File.read(output_file)
+  end
+
+  def test_echo_escaped_double_quote_midword
+    execute("echo a\\\"b > #{output_file}")
+    assert_equal "a\"b\n", File.read(output_file)
+  end
+
+  def test_echo_escaped_single_quote_is_literal
+    execute("echo \\'hi\\' > #{output_file}")
+    assert_equal "'hi'\n", File.read(output_file)
+  end
+
+  # The read builtin's bash-suite tests print results with `echo \"$x.\"`; the
+  # escaped-quote bug made every one of them fail. Cover that exact shape.
+  def test_read_then_echo_escaped_quotes
+    execute("echo ' a ' | (read x; echo \\\"$x.\\\") > #{output_file}")
+    assert_equal "\"a.\"\n", File.read(output_file)
+  end
+
   def test_echo_escaped_backslash_produces_backslash
     execute("echo a\\\\b > #{output_file}")
     assert_equal "a\\b\n", File.read(output_file)

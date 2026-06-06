@@ -59,7 +59,11 @@ module Rubish
           j = i
           while j < str.length
             c = str[j]
-            if c == '$' && j + 1 < str.length
+            if c == '\\'
+              # Backslash escapes the next char (incl. a quote), so it is not a
+              # segment boundary; keep both for the unescape step downstream.
+              j += 2
+            elsif c == '$' && j + 1 < str.length
               nc = str[j + 1]
               if nc == "'"
                 break
@@ -127,7 +131,10 @@ module Rubish
       j = 0
       while j < str.length
         c = str[j]
-        if c == '$' && j + 1 < str.length
+        if c == '\\'
+          # Escaped char (incl. a quote) is not a segment boundary.
+          j += 2
+        elsif c == '$' && j + 1 < str.length
           nc = str[j + 1]
           if nc == "'"
             return true
