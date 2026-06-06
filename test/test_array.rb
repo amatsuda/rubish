@@ -381,4 +381,65 @@ class TestArray < Test::Unit::TestCase
     execute('arr=( $(echo $WORDS) )')
     assert_equal %w[alpha beta gamma], Rubish::Builtins.get_array('arr')
   end
+
+  # Array-element assignment inside arithmetic (( )) / $(( )).
+  # Regression: these used to fall through to Kernel.eval as "2 = 9" and
+  # crash with a SyntaxError (not rescued, since it is a ScriptError).
+
+  def test_arith_subscript_simple_assign
+    execute('(( a[1] = 9 ))')
+    assert_equal '9', Rubish::Builtins.get_array_element('a', 1)
+  end
+
+  def test_arith_subscript_compound_assign
+    execute('a=(0 1 2)')
+    execute('(( a[1] += 10 ))')
+    assert_equal '11', Rubish::Builtins.get_array_element('a', 1)
+  end
+
+  def test_arith_subscript_index_is_expression
+    execute('i=1')
+    execute('(( a[i+1] = 5 ))')
+    assert_equal '5', Rubish::Builtins.get_array_element('a', 2)
+  end
+
+  def test_arith_subscript_negative_index_compound
+    execute('a=(0 1 2 3)')
+    execute('(( a[-1] += 42 ))')
+    assert_equal '45', Rubish::Builtins.get_array_element('a', 3)
+  end
+
+  def test_arith_subscript_post_increment
+    execute('a=(5)')
+    execute('(( a[0]++ ))')
+    assert_equal '6', Rubish::Builtins.get_array_element('a', 0)
+  end
+
+  def test_arith_subscript_sparse_create_no_crash
+    execute('(( a[99] = 1 ))')
+    assert_equal 0, @repl.instance_variable_get(:@last_status)
+    assert_equal '1', Rubish::Builtins.get_array_element('a', 99)
+  end
+
+  def test_arith_subscript_dollar_form_returns_value
+    execute("echo $(( a[2] = 7 )) > #{output_file}")
+    assert_equal "7\n", File.read(output_file)
+    assert_equal '7', Rubish::Builtins.get_array_element('a', 2)
+  end
+
+  def test_arith_subscript_status_zero_result
+    # bash: (( ... )) exits 1 when the result is 0, 0 otherwise.
+    execute('(( a[0] = 1 ))')
+    assert_equal 0, @repl.instance_variable_get(:@last_status)
+    execute('(( a[0] = 0 ))')
+    assert_equal 1, @repl.instance_variable_get(:@last_status)
+  end
+
+  def test_arith_subscript_equality_not_assignment
+    # Regression guard: a[0]==a[1] is a comparison, not an assignment.
+    execute('a=(5 5)')
+    execute('(( a[0] == a[1] ))')
+    assert_equal 0, @repl.instance_variable_get(:@last_status)
+    assert_equal '5', Rubish::Builtins.get_array_element('a', 0)
+  end
 end

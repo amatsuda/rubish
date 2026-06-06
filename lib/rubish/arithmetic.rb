@@ -26,6 +26,28 @@ module Rubish
       elem.to_s.empty? ? '0' : elem.to_s
     end
 
+    # Current value of an array element as an integer (unset/empty -> 0).
+    def arith_elem_int(name, idx)
+      v = Builtins.get_array_element(name, idx).to_s
+      v.empty? ? 0 : v.to_i
+    end
+
+    # Apply a compound-assignment operator (+=, -=, ...) to two integers.
+    def arith_binop(lhs, op, rhs)
+      case op
+      when '+' then lhs + rhs
+      when '-' then lhs - rhs
+      when '*' then lhs * rhs
+      when '/' then rhs != 0 ? lhs / rhs : 0
+      when '%' then rhs != 0 ? lhs % rhs : 0
+      when '<<' then lhs << rhs
+      when '>>' then lhs >> rhs
+      when '&' then lhs & rhs
+      when '|' then lhs | rhs
+      when '^' then lhs ^ rhs
+      end
+    end
+
     def split_arithmetic_expressions(expr)
       # Split by comma, but not inside parentheses
       result = []
@@ -146,23 +168,47 @@ module Rubish
         return old_val
       end
 
+      # Array-element assignment forms must be handled before the scalar ones:
+      # the subscript makes `a[i]=v` fall through to Kernel.eval otherwise,
+      # where `a[i]` expands to its value and `2 = 9` is a Ruby SyntaxError.
+
+      # ++a[i] / --a[i]
+      if expr =~ /\A(\+\+|--)([a-zA-Z_][a-zA-Z0-9_]*)\[([^\]]+)\]\z/
+        op, name, idx = $1, $2, eval_single_arithmetic($3)
+        val = arith_elem_int(name, idx) + (op == '++' ? 1 : -1)
+        Builtins.set_array_element(name, idx, val.to_s)
+        return val
+      end
+
+      # a[i]++ / a[i]--
+      if expr =~ /\A([a-zA-Z_][a-zA-Z0-9_]*)\[([^\]]+)\](\+\+|--)\z/
+        name, idx, op = $1, eval_single_arithmetic($2), $3
+        old = arith_elem_int(name, idx)
+        Builtins.set_array_element(name, idx, (old + (op == '++' ? 1 : -1)).to_s)
+        return old
+      end
+
+      # a[i] += expr (and -=, *=, /=, %=, <<=, >>=, &=, |=, ^=)
+      if expr =~ /\A([a-zA-Z_][a-zA-Z0-9_]*)\[([^\]]+)\]\s*(\+|-|\*|\/|%|<<|>>|&|\||\^)=\s*(.+)\z/
+        name, idx, op, rhs = $1, eval_single_arithmetic($2), $3, $4
+        result = arith_binop(arith_elem_int(name, idx), op, eval_single_arithmetic(rhs))
+        Builtins.set_array_element(name, idx, result.to_s)
+        return result
+      end
+
+      # a[i] = expr (not == comparison)
+      if expr =~ /\A([a-zA-Z_][a-zA-Z0-9_]*)\[([^\]]+)\]\s*=\s*(?!=)(.+)\z/
+        name, idx, rhs = $1, eval_single_arithmetic($2), $3
+        result = eval_single_arithmetic(rhs)
+        Builtins.set_array_element(name, idx, result.to_s)
+        return result
+      end
+
       # Handle compound assignments: var+=, var-=, var*=, var/=, var%=, var<<=, var>>=, var&=, var|=, var^=
       if expr =~ /\A([a-zA-Z_][a-zA-Z0-9_]*)\s*(\+|-|\*|\/|%|<<|>>|&|\||\^)=\s*(.+)\z/
         var, op, rhs = $1, $2, $3
         lhs_val = (Builtins.get_var(var) || '0').to_i
-        rhs_val = eval_single_arithmetic(rhs)
-        result = case op
-                 when '+' then lhs_val + rhs_val
-                 when '-' then lhs_val - rhs_val
-                 when '*' then lhs_val * rhs_val
-                 when '/' then rhs_val != 0 ? lhs_val / rhs_val : 0
-                 when '%' then rhs_val != 0 ? lhs_val % rhs_val : 0
-                 when '<<' then lhs_val << rhs_val
-                 when '>>' then lhs_val >> rhs_val
-                 when '&' then lhs_val & rhs_val
-                 when '|' then lhs_val | rhs_val
-                 when '^' then lhs_val ^ rhs_val
-                 end
+        result = arith_binop(lhs_val, op, eval_single_arithmetic(rhs))
         Builtins.set_var(var, result.to_s)
         return result
       end
