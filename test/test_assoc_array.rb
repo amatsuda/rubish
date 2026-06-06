@@ -191,4 +191,44 @@ class TestAssocArray < Test::Unit::TestCase
     assert_equal '', Rubish::Builtins.get_assoc_element('map', 'foo')
     assert_equal '2', Rubish::Builtins.get_assoc_element('map', 'bar')
   end
+
+  # Compiled-mode assoc (whole script in one execute, so it goes through
+  # eval_in_context rather than the REPL single-line fast path). Regression:
+  # the compiled path keyed assoc assignments by arithmetic index, writing an
+  # indexed array instead, so reads came back empty.
+
+  def test_compiled_assign_then_read
+    execute(%(declare -A m; m[k]=v; echo "[${m[k]}]" > #{output_file}))
+    assert_equal "[v]\n", File.read(output_file)
+  end
+
+  def test_compiled_keys
+    execute(%(declare -A m; m[x]=1; m[y]=2; echo "${!m[@]}" | tr ' ' '\\n' | sort | tr '\\n' ' ' > #{output_file}))
+    assert_equal 'x y ', File.read(output_file)
+  end
+
+  def test_compiled_length
+    execute(%(declare -A m; m[x]=1; m[y]=2; echo "len=${#m[@]}" > #{output_file}))
+    assert_equal "len=2\n", File.read(output_file)
+  end
+
+  def test_compiled_append
+    execute(%(declare -A m; m[k]=ab; m[k]+=cd; echo "${m[k]}" > #{output_file}))
+    assert_equal "abcd\n", File.read(output_file)
+  end
+
+  def test_compiled_quoted_key_with_spaces
+    execute(%(declare -A m; m["a b"]=z; echo "${m["a b"]}" > #{output_file}))
+    assert_equal "z\n", File.read(output_file)
+  end
+
+  def test_compiled_variable_key
+    execute(%(declare -A m; k=foo; m[$k]=bar; echo "${m[foo]}" > #{output_file}))
+    assert_equal "bar\n", File.read(output_file)
+  end
+
+  def test_compiled_iterate_over_keys
+    execute(%(declare -A m; m[a]=1; m[b]=2; for kk in "${!m[@]}"; do echo "$kk=${m[$kk]}"; done | sort > #{output_file}))
+    assert_equal "a=1\nb=2\n", File.read(output_file)
+  end
 end
