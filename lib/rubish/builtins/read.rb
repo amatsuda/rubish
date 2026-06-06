@@ -76,15 +76,17 @@ module Rubish
         line = process_read_escapes(line)
       end
 
-      # Array and -N modes always succeed; only scalar assignment can fail
-      # (a readonly target), so it returns the read's success directly.
+      # Array (-a) and -N modes also refuse readonly targets, matching bash.
+      # For -N with multiple vars, fail before any assignment so a readonly
+      # var leaves later ones unchanged too, like scalar read semantics.
       if opts[:array_name]
+        return false if readonly_read_error(opts[:array_name])
         store_read_array(opts[:array_name], line)
         return true
       end
 
       if opts[:nchars_exact]
-        # -N mode: store raw content without splitting
+        vars.each { |var| return false if readonly_read_error(var) }
         vars.each { |var| ENV[var] = line }
         return true
       end

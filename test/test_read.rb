@@ -371,4 +371,40 @@ class TestRead < Test::Unit::TestCase
     Rubish::Builtins.delete_var('A')
     Rubish::Builtins.delete_var('C')
   end
+
+  # `read -a` into a readonly array name should error and fail, just like
+  # the scalar case — PR #46 only covered the scalar path.
+  def test_read_array_into_readonly_errors
+    execute('readonly arr')
+    out = capture_output { with_stdin("x y z\n") { execute('read -a arr') } }
+    assert_match(/readonly/, out)
+  ensure
+    Rubish::Builtins.clear_readonly_vars
+    Rubish::Builtins.delete_var('arr')
+  end
+
+  # `read -N` (nchars-exact) into a readonly target should also error.
+  def test_read_nchars_exact_into_readonly_errors
+    execute('readonly x=keep')
+    out = capture_output { with_stdin('abcdef') { execute('read -N 3 x') } }
+    assert_equal 'keep', get_shell_var('x')
+    assert_match(/readonly/, out)
+  ensure
+    Rubish::Builtins.clear_readonly_vars
+    Rubish::Builtins.delete_var('x')
+  end
+
+  # For `read -N` with multiple targets, fail at the first readonly and
+  # leave the others untouched — same shape as scalar read.
+  def test_read_nchars_exact_stops_at_first_readonly
+    execute('readonly RO=keep')
+    out = capture_output { with_stdin('abcdef') { execute('read -N 6 RO X') } }
+    assert_equal 'keep', get_shell_var('RO')
+    assert_equal '', get_shell_var('X').to_s
+    assert_match(/readonly/, out)
+  ensure
+    Rubish::Builtins.clear_readonly_vars
+    Rubish::Builtins.delete_var('RO')
+    Rubish::Builtins.delete_var('X')
+  end
 end
