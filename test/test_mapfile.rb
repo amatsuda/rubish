@@ -8,8 +8,8 @@ class TestMapfile < Test::Unit::TestCase
     @original_env = ENV.to_h.dup
     @tempdir = Dir.mktmpdir('rubish_mapfile_test')
     @original_stdin = $stdin
-    Rubish::Builtins.clear_mapfile_array('MAPFILE')
-    Rubish::Builtins.clear_mapfile_array('myarray')
+    Rubish::Builtins.current_state.arrays.clear
+    Rubish::Builtins.current_state.assoc_arrays.clear
   end
 
   def teardown
@@ -263,20 +263,23 @@ class TestMapfile < Test::Unit::TestCase
   # Driven via execute() with a here-string, the way a script would.
   def test_mapfile_array_usable_via_expansion
     out = File.join(@tempdir, 'out.txt')
-    execute(%(mapfile -t arr <<< $'x\\ny\\nz'; echo "n=${#arr[@]} second=${arr[1]} all=${arr[*]}" > #{out}))
+    $stdin = StringIO.new("x\ny\nz\n")
+    execute(%(mapfile -t arr; echo "n=${#arr[@]} second=${arr[1]} all=${arr[*]}" > #{out}))
     assert_equal "n=3 second=y all=x y z\n", File.read(out)
   end
 
   def test_mapfile_default_keeps_delimiter
     # Without -t, each element keeps its trailing delimiter.
     out = File.join(@tempdir, 'out.txt')
-    execute(%(mapfile arr <<< $'a\\nb'; printf '[%s]' "${arr[0]}" "${arr[1]}" > #{out}))
+    $stdin = StringIO.new("a\nb\n")
+    execute(%(mapfile arr; printf '[%s]' "${arr[0]}" "${arr[1]}" > #{out}))
     assert_equal "[a\n][b\n]", File.read(out)
   end
 
   def test_mapfile_iterate_via_expansion
     out = File.join(@tempdir, 'out.txt')
-    execute(%(mapfile -t arr <<< $'one\\ntwo\\nthree'; for x in "${arr[@]}"; do echo "<$x>"; done > #{out}))
+    $stdin = StringIO.new("one\ntwo\nthree\n")
+    execute(%(mapfile -t arr; for x in "${arr[@]}"; do echo "<$x>"; done > #{out}))
     assert_equal "<one>\n<two>\n<three>\n", File.read(out)
   end
 end
