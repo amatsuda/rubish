@@ -155,7 +155,7 @@ end
 if command_string
   # -c mode: execute command string
   ENV['RUBISH_EXECUTION_STRING'] = command_string
-  repl = Rubish::REPL.new(no_rc: no_rc, rcfile: rcfile)
+  repl = Rubish::REPL.new(no_rc: no_rc, rcfile: rcfile, interactive: force_interactive)
   repl.script_name = script_args[0] || 'rubish'
   repl.positional_params = script_args[1..] || []
 
@@ -178,7 +178,7 @@ if command_string
   exit(last_status)
 elsif read_stdin
   # -s mode: read commands from stdin, args are positional parameters
-  repl = Rubish::REPL.new(no_rc: no_rc, rcfile: rcfile)
+  repl = Rubish::REPL.new(no_rc: no_rc, rcfile: rcfile, interactive: force_interactive)
   repl.script_name = script_args[0] || 'rubish'
   repl.positional_params = script_args
 
@@ -251,7 +251,8 @@ else
     no_profile: no_profile,
     no_rc: no_rc,
     restricted: restricted,
-    rcfile: rcfile
+    rcfile: rcfile,
+    interactive: true
   )
   Rubish::Builtins.enable_interactive_mode
   exit repl.run

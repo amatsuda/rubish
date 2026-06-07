@@ -23,7 +23,7 @@ module Rubish
     include Expansion
     include Runtime
 
-    def initialize(login_shell: false, no_profile: false, no_rc: false, restricted: false, rcfile: nil, frontend: nil)
+    def initialize(login_shell: false, no_profile: false, no_rc: false, restricted: false, rcfile: nil, frontend: nil, interactive: true)
       # Without LANG/LC_* (e.g. when launched from launchd / a .app
       # bundle, not from a terminal), Ruby's default external encoding
       # falls back to US-ASCII, and reading user-authored files like
@@ -79,6 +79,7 @@ module Rubish
       @no_rc = no_rc              # Skip rc files (--norc)
       @restricted = restricted    # Start in restricted mode (-r or rbash)
       @rcfile = rcfile            # Custom RC file (--rcfile, --init-file)
+      @interactive = interactive  # Allow prompting for continuation lines
       # Set the login_shell shopt option (read-only)
       @context.set_shell_option('login_shell', login_shell)
       # SHLVL - shell nesting level (stored in ENV for inheritance)
@@ -979,9 +980,14 @@ module Rubish
       rescue => e
         # Check if this is an incomplete command that needs more input
         if incomplete_command_error?(e.message)
-          # Prompt for continuation lines until parsing succeeds
-          ast = collect_continuation_lines(accumulated_lines, e)
-          return unless ast  # User cancelled (Ctrl+C) or error
+          if @interactive
+            # Prompt for continuation lines until parsing succeeds
+            ast = collect_continuation_lines(accumulated_lines, e)
+            return unless ast  # User cancelled (Ctrl+C) or error
+          else
+            # In non-interactive mode, treat incomplete input as syntax error
+            raise
+          end
         else
           raise  # Re-raise actual syntax errors
         end

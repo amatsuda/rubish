@@ -261,4 +261,31 @@ class TestIf < Test::Unit::TestCase
     execute("source #{script}")
     assert_equal "yes\n", File.read(output_file)
   end
+
+  def test_echo_if_as_argument
+    output = capture_stdout { execute('echo if') }
+    assert_equal "if\n", output
+  end
+
+  def test_echo_fi_as_argument
+    output = capture_stdout { execute('echo fi') }
+    assert_equal "fi\n", output
+  end
+
+  def test_echo_then_as_argument
+    output = capture_stdout { execute('echo then') }
+    assert_equal "then\n", output
+  end
+
+  def test_multiline_if_with_completion
+    script = File.join(@tempdir, 'multiline_if.sh')
+    File.write(script, <<~SCRIPT)
+      if true
+      then
+        echo yes > #{output_file}
+      fi
+    SCRIPT
+    execute("source #{script}")
+    assert_equal "yes\n", File.read(output_file)
+  end
 end

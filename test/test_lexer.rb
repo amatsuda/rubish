@@ -503,4 +503,27 @@ class TestLexer < Test::Unit::TestCase
     assert_equal 2, tokens.length
     assert_equal '"${HOME}"_tail', tokens[1].value
   end
+
+  def test_keyword_if_as_command_argument
+    tokens = tokenize('echo if')
+    assert_equal 2, tokens.length
+    assert_equal :WORD, tokens[0].type
+    assert_equal 'echo', tokens[0].value
+    assert_equal :WORD, tokens[1].type, "if in command args should be WORD token, not IF"
+    assert_equal 'if', tokens[1].value
+  end
+
+  def test_keyword_fi_as_command_argument
+    tokens = tokenize('echo fi')
+    assert_equal 2, tokens.length
+    assert_equal :WORD, tokens[1].type, "fi in command args should be WORD token, not FI"
+    assert_equal 'fi', tokens[1].value
+  end
+
+  def test_keyword_then_as_command_argument
+    tokens = tokenize('echo then')
+    assert_equal 2, tokens.length
+    assert_equal :WORD, tokens[1].type, "then in command args should be WORD token, not THEN"
+    assert_equal 'then', tokens[1].value
+  end
 end

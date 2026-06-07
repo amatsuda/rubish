@@ -87,6 +87,9 @@ module Rubish
       # Lets `looks_like_method_chain_start?` accept bare `.method` only
       # in safe contexts — never for filenames or paths.
       @in_method_chain = false
+      # Track if we're in command argument position (after a command name)
+      # to suppress keyword tokenization for words like "echo if"
+      @in_command_args = false
     end
 
     def tokenize
@@ -101,6 +104,12 @@ module Rubish
           @last_token_type = token.type
           # Track word value for block detection (also SELECT for filtering select)
           @last_word_value = token.value if token.type == :WORD || token.type == :SELECT
+          # Track command argument position: WORD starts command args, separators clear it
+          if token.type == :WORD
+            @in_command_args = true
+          elsif METHOD_CHAIN_BREAKERS.include?(token.type)
+            @in_command_args = false
+          end
           # Maintain chain context. Note: :WORD does NOT toggle the flag
           # so chains can continue across method names (ls().sort.reverse).
           if METHOD_CHAIN_OPENERS.include?(token.type)
@@ -613,7 +622,10 @@ module Rubish
       end
 
       # Check if word is a keyword
-      if KEYWORDS.key?(value)
+      # Skip keyword recognition in command argument position
+      # (e.g., "echo if" should treat "if" as a word, not the IF keyword)
+      # The parser will recognize keywords in their proper contexts
+      if KEYWORDS.key?(value) && !@in_command_args
         Token.new(KEYWORDS[value], value)
       else
         Token.new(:WORD, value)
