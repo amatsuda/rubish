@@ -15,6 +15,19 @@ module Rubish
       end
     end
 
+    # A bare `PS1=...` or `PROMPT=...` at the prompt assigns to the shell-var
+    # namespace, not ENV — so the lookup has to check Builtins.get_var first
+    # (matching bash, where a non-exported shell var shadows the env var).
+    def prompt_var(*names)
+      names.each do |n|
+        v = Builtins.get_var(n)
+        return v if v
+        v = ENV[n]
+        return v if v
+      end
+      nil
+    end
+
     def prompt
       # First check for fish-style prompt function
       if self.class.prompt_proc
@@ -25,8 +38,8 @@ module Rubish
         end
       end
 
-      # Fall back to bash/zsh-style environment variables
-      ps1 = ENV['PS1'] || ENV['PROMPT']
+      # Fall back to bash/zsh-style prompt variables
+      ps1 = prompt_var('PS1', 'PROMPT')
       if ps1
         expand_prompt(ps1)
       else
@@ -36,7 +49,7 @@ module Rubish
     end
 
     def continuation_prompt
-      ps2 = ENV['PS2']
+      ps2 = prompt_var('PS2')
       if ps2
         expand_prompt(ps2)
       else
@@ -56,8 +69,8 @@ module Rubish
         end
       end
 
-      # Fall back to bash/zsh-style environment variables
-      rprompt = ENV['RPROMPT'] || ENV['RPS1']
+      # Fall back to bash/zsh-style prompt variables
+      rprompt = prompt_var('RPROMPT', 'RPS1')
       return nil unless rprompt && !rprompt.empty?
 
       expand_prompt(rprompt)

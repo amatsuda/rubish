@@ -1137,4 +1137,41 @@ class TestPrompt < Test::Unit::TestCase
   ensure
     Rubish::REPL.right_prompt_proc = nil
   end
+
+  # A bare `PS1=` / `PROMPT=` / `PS2=` / `RPROMPT=` at the shell assigns
+  # to the shell-var namespace, not ENV. The prompt code used to read
+  # ENV only, so these silently no-op'd. It now checks shell vars first
+  # (matching bash, where a non-exported shell var shadows the env var).
+  def test_shell_var_ps1_changes_prompt
+    ENV.delete('PS1')
+    @repl.send(:execute, 'PS1="bashy> "')
+    assert_equal 'bashy> ', @repl.send(:prompt)
+  end
+
+  def test_shell_var_zsh_prompt_changes_prompt
+    ENV.delete('PS1')
+    ENV.delete('PROMPT')
+    @repl.send(:execute, 'PROMPT="zshy> "')
+    assert_equal 'zshy> ', @repl.send(:prompt)
+  end
+
+  def test_shell_var_ps1_wins_over_prompt
+    ENV.delete('PS1')
+    ENV.delete('PROMPT')
+    @repl.send(:execute, 'PROMPT="zshy> "; PS1="bashy> "')
+    assert_equal 'bashy> ', @repl.send(:prompt)
+  end
+
+  def test_shell_var_ps2_changes_continuation_prompt
+    ENV.delete('PS2')
+    @repl.send(:execute, 'PS2="cont> "')
+    assert_equal 'cont> ', @repl.send(:continuation_prompt)
+  end
+
+  def test_shell_var_rprompt_changes_right_prompt
+    ENV.delete('RPROMPT')
+    ENV.delete('RPS1')
+    @repl.send(:execute, 'RPROMPT="right"')
+    assert_equal 'right', @repl.send(:right_prompt)
+  end
 end
