@@ -10,6 +10,12 @@ module Rubish
     def parse
       return nil if @tokens.empty?
 
+      # Leading newlines/`;` are empty statements — skip them so a multi-line
+      # input that begins with a blank line (e.g. `eval "$(cmd)"` whose first
+      # output is a newline) parses correctly instead of dropping to nil.
+      consume(:SEMICOLON) while peek(:SEMICOLON)
+      return nil if @pos >= @tokens.length
+
       parse_list
     end
 
