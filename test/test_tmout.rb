@@ -147,13 +147,13 @@ class TestTMOUT < Test::Unit::TestCase
     ENV['TMOUT'] = '5'
     File.write('input.txt', "one two three\n")
 
+    Rubish::Builtins.current_state.arrays.clear
     File.open('input.txt', 'r') do |f|
       $stdin = f
       result = Rubish::Builtins.read(['-a', 'arr'])
       $stdin = STDIN
       assert_equal true, result
-      assert_equal '3', ENV['arr_LENGTH']
-      assert_equal 'one', ENV['arr_0']
+      assert_equal %w[one two three], Rubish::Builtins.get_array('arr')
     end
   end
 

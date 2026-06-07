@@ -200,16 +200,14 @@ class TestIFS < Test::Unit::TestCase
     ENV['IFS'] = ':'
     File.write('input.txt', "a:b:c\n")
 
+    Rubish::Builtins.current_state.arrays.clear
     File.open('input.txt', 'r') do |f|
       $stdin = f
       Rubish::Builtins.read(['-a', 'arr'])
     end
     $stdin = STDIN
 
-    assert_equal '3', ENV['arr_LENGTH']
-    assert_equal 'a', ENV['arr_0']
-    assert_equal 'b', ENV['arr_1']
-    assert_equal 'c', ENV['arr_2']
+    assert_equal %w[a b c], Rubish::Builtins.get_array('arr')
   end
 
   # $* expansion with IFS tests
