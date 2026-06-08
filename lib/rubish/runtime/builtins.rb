@@ -2290,16 +2290,16 @@ module Rubish
           open_structures << ['function', line_number]
         end
 
-        # Accumulate lines - use newline for function definitions or multi-line strings, semicolon otherwise
+        # Accumulate lines with newline separators. The lexer treats `\n`
+        # as a statement separator equivalent to `;`, and newlines avoid
+        # two problems `;` joins have: `foo() {` + body produces `foo() {; body`
+        # (`;` directly after `{` is invalid), and a line already ending in `;`
+        # gives `cmd;; next` (`;;` is a case-statement terminator and confuses
+        # the parser). starship's init has both shapes.
         if buffer.empty?
           buffer = line
-        elsif was_pending_function || has_unclosed_quotes(buffer)
-          # Function definitions need newline between () and {
-          # Multi-line strings need actual newlines preserved
-          buffer = "#{buffer}\n#{line}"
         else
-          # Other statements can be joined with semicolon
-          buffer = "#{buffer}; #{line}"
+          buffer = "#{buffer}\n#{line}"
         end
 
         # Execute when we have a complete statement
@@ -2310,7 +2310,11 @@ module Rubish
         if depth == 0 && !pending_function_def && !has_unclosed_quotes(buffer)
           begin
             execute_sourced_command(buffer, file_label, buffer_start_line)
-          rescue SyntaxError => e
+          rescue SyntaxError, StandardError => e
+            # rubish's parser raises plain RuntimeError ("Expected fi …"),
+            # not SyntaxError — catch both so a malformed statement in the
+            # middle of a script reports one error and the rest of the
+            # script keeps running.
             puts "#{file_label}:#{buffer_start_line}: syntax error: #{e.message}"
           end
           buffer = +''
@@ -2343,7 +2347,7 @@ module Rubish
 
         begin
           execute_sourced_command(buffer, file_label, buffer_start_line)
-        rescue SyntaxError => e
+        rescue SyntaxError, StandardError => e
           puts "#{file_label}: syntax error (starting at line #{buffer_start_line}): #{e.message}"
         end
       end
