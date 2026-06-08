@@ -200,4 +200,29 @@ class TestPIPESTATUS < Test::Unit::TestCase
     value = File.read(output_file).strip
     assert_equal '0', value
   end
+
+  # `pipestatus` (lowercase) is zsh's spelling of the same array.
+  # starship reads `${pipestatus[@]}` in its precmd, so the lowercase
+  # alias has to mirror the uppercase one.
+  def test_pipestatus_lowercase_alias_pipeline
+    execute('false | true | false')
+    output_file = File.join(@tempdir, 'output.txt')
+    execute("echo ${pipestatus[@]} > #{output_file}")
+    assert_equal '1 0 1', File.read(output_file).strip
+  end
+
+  def test_pipestatus_lowercase_alias_element
+    execute('false | true | false')
+    output_file = File.join(@tempdir, 'output.txt')
+    execute("echo ${pipestatus[1]} > #{output_file}")
+    assert_equal '0', File.read(output_file).strip
+  end
+
+  def test_pipestatus_lowercase_alias_length
+    execute('true | true | true | true')
+    output_file = File.join(@tempdir, 'output.txt')
+    execute('echo ${#pipestatus[@]} > ' + output_file)
+    assert_equal '4', File.read(output_file).strip
+  end
+
 end
