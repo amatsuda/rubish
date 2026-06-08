@@ -903,4 +903,43 @@ class TestAutoCompletion < Test::Unit::TestCase
       end
     end
   end
+
+  # ==========================================================================
+  # Empty-prefix file completion: complete the single match when there is one
+  # ==========================================================================
+
+  # Bare `<TAB>` in a directory with one entry should complete to that entry.
+  # The empty-prefix gate exists to avoid dumping the whole CWD on every
+  # programmatic tab, but a single match is the ergonomic case the gate
+  # shouldn't block.
+  def test_empty_prefix_completes_single_file
+    Dir.mktmpdir do |dir|
+      FileUtils.touch(File.join(dir, 'only_one.txt'))
+      Dir.chdir(dir) do
+        result = @repl.send(:complete, '', line: 'ls ', point: 3)
+        assert_equal ['only_one.txt'], result
+      end
+    end
+  end
+
+  def test_empty_prefix_completes_single_directory
+    Dir.mktmpdir do |dir|
+      FileUtils.mkdir(File.join(dir, 'only_dir'))
+      Dir.chdir(dir) do
+        result = @repl.send(:complete, '', line: 'ls ', point: 3)
+        assert_equal ['only_dir/'], result
+      end
+    end
+  end
+
+  # The whole-CWD-dump case the gate still guards against.
+  def test_empty_prefix_stays_quiet_when_multiple_entries
+    Dir.mktmpdir do |dir|
+      %w[a.txt b.txt c.txt].each { |f| FileUtils.touch(File.join(dir, f)) }
+      Dir.chdir(dir) do
+        result = @repl.send(:complete, '', line: 'ls ', point: 3)
+        assert_empty result
+      end
+    end
+  end
 end

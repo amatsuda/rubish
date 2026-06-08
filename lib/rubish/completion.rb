@@ -363,11 +363,14 @@ module Rubish
             Builtins.clear_completion_context
           end
 
-          # Skip file completion on empty input — otherwise `bundle
-          # <TAB>` would dump every entry in CWD alongside the bundle
-          # subcommands. With a non-empty prefix, complete_file globs
-          # `prefix*` and only returns actual matches.
-          file_results = input.empty? ? [] : complete_file(input)
+          # With a non-empty prefix, complete_file globs `prefix*` and
+          # returns actual matches. With an empty prefix, it returns
+          # every entry in CWD — useful when there's just one (`<TAB>`
+          # should complete to it), but otherwise we'd dump the whole
+          # directory alongside subcommand candidates. Keep the single-
+          # match case and drop anything wider.
+          candidates = complete_file(input)
+          file_results = (input.empty? && candidates.length > 1) ? [] : candidates
 
           # Files first; uniq preserves first-occurrence order so a
           # name appearing in both sources surfaces from the file side.
