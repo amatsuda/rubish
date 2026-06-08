@@ -2241,9 +2241,13 @@ module Rubish
             end
           end
 
-          # Track subshell depth separately (only standalone ( at start of word)
-          # This handles: ( cmd ) but not: arr=( ... ) or $( ... )
-          if line =~ /\A\s*\(/
+          # Track subshell depth separately (only standalone ( at start of word).
+          # Handles: ( cmd ) but not arr=( ... ), $( ... ), or arithmetic
+          # commands `(( … ))` — the close uses `))` which the closing regex
+          # below can't match, so counting `((` as an open would leave depth
+          # forever incremented and break source on any script using `(( … ))`
+          # inside an if/while/function body (e.g. `starship init zsh`).
+          if line =~ /\A\s*\((?!\()/
             depth += 1
             open_structures << ['(', line_number]
           end
