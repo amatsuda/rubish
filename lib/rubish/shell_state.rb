@@ -41,6 +41,11 @@ module Rubish
     attr_accessor :function_checker, :function_remover, :function_lister, :function_getter, :function_caller
     attr_accessor :autoload_functions
 
+    # zsh-style hook firer: `state.zsh_hook_runner.call('precmd')`,
+    # `state.zsh_hook_runner.call('preexec', cmdline)`, etc. Installed by
+    # the REPL so non-REPL code (cd → chpwd) can fire hooks too.
+    attr_accessor :zsh_hook_runner
+
     # History callbacks
     attr_accessor :history_file_getter, :history_loader, :history_saver, :history_appender
     attr_accessor :last_history_line
@@ -136,6 +141,7 @@ module Rubish
       @function_lister = nil
       @function_getter = nil
       @function_caller = nil
+      @zsh_hook_runner = nil
       @autoload_functions = {}
 
       # History callbacks

@@ -33,6 +33,7 @@ module Rubish
       _get_comp_words_by_ref _init_completion _filedir _have _split_longopt
       _ltrim_colon_completions _variables _tilde _quote_readline_by_ref _parse_help
       _upvars _usergroup setopt unsetopt autoload compinit compdef git_ps1 require
+      add_zsh_hook
     ]).freeze
 
     # Global state (shared across all sessions) - accessed via Builtins.xxx
@@ -599,7 +600,8 @@ module Rubish
       'true' => :true_,
       'false' => :false_,
       '__git_ps1' => :git_ps1,
-      '__ltrim_colon_completions' => :_ltrim_colon_completions
+      '__ltrim_colon_completions' => :_ltrim_colon_completions,
+      'add-zsh-hook' => :add_zsh_hook
     }.freeze
 
     def run(name, args)
@@ -728,6 +730,9 @@ module Rubish
 
       # Notify terminal of new working directory (for "new tab in same dir" feature)
       notify_terminal_of_cwd
+
+      # zsh chpwd_functions: fires after every successful directory change.
+      @state.zsh_hook_runner&.call('chpwd')
 
       true
     rescue Errno::ENOENT => e
@@ -3843,6 +3848,62 @@ module Rubish
       # Kill completions (process IDs)
       @state.completions['kill'] ||= {function: '_kill'}
       @state.completions['killall'] ||= {signals: true, running: true}
+    end
+
+    # zsh-style hook installer. Manages the `precmd_functions`,
+    # `preexec_functions`, `chpwd_functions`, etc. arrays that the
+    # REPL drains at the corresponding loop points. Used by starship,
+    # most prompt themers, and direnv to wire themselves in.
+    #
+    # Usage: add-zsh-hook HOOK FUNCTION         # append (deduped)
+    #        add-zsh-hook -d HOOK FUNCTION      # remove
+    #        add-zsh-hook -L                    # list all installed hooks
+    ZSH_HOOK_NAMES = %w[chpwd precmd preexec periodic zshexit zshaddhistory zsh_directory_name].freeze
+
+    def add_zsh_hook(args)
+      delete = false
+      list = false
+      i = 0
+      while i < args.length
+        case args[i]
+        when '-d', '-D' then delete = true
+        when '-L' then list = true
+        when '-U' then # default add already dedupes; accept and ignore
+        else break
+        end
+        i += 1
+      end
+
+      if list
+        ZSH_HOOK_NAMES.each do |h|
+          arr = get_array("#{h}_functions")
+          next if arr.nil? || arr.empty?
+          arr.each { |fn| puts "add-zsh-hook #{h} #{fn}" }
+        end
+        return true
+      end
+
+      if args.length - i < 2
+        $stderr.puts 'add-zsh-hook: usage: add-zsh-hook [-dDL] hook function'
+        return false
+      end
+
+      hook = args[i]
+      func = args[i + 1]
+      unless ZSH_HOOK_NAMES.include?(hook)
+        $stderr.puts "add-zsh-hook: unknown hook: #{hook}"
+        return false
+      end
+
+      array_name = "#{hook}_functions"
+      current = get_array(array_name) || []
+      if delete
+        current.delete(func)
+      else
+        current << func unless current.include?(func)
+      end
+      set_array(array_name, current)
+      true
     end
 
     # compdef - define zsh-style completion

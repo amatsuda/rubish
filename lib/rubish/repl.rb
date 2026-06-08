@@ -127,6 +127,8 @@ module Rubish
       Command.function_caller = ->(name, args) { call_function(name, args) }
       # Set up state to call functions (for compgen -F)
       @state.function_caller = ->(name, args) { call_function(name, args) }
+      # zsh-style hook firer: `precmd`, `preexec`, `chpwd`, `zshexit`, etc.
+      @state.zsh_hook_runner = ->(name, *args) { fire_zsh_hooks(name, *args) }
       # Source executor for autoload: source a file or execute code string
       @state.source_executor = ->(file, code = nil) {
         if code
@@ -170,6 +172,9 @@ module Rubish
       exit_code = catch(:exit) do
         loop { process_line }
       end
+      # zsh zshexit_functions: fire on shell exit, before history save
+      # so a hook that wants to write to it sees the current session.
+      fire_zsh_hooks('zshexit')
       save_history
       load_logout_config
       exit_code
@@ -738,6 +743,11 @@ module Rubish
       # Execute PROMPT_COMMAND before displaying prompt
       run_prompt_command
 
+      # zsh precmd_functions: every named function runs before the prompt
+      # is rendered. starship_precmd populates STATUS / DURATION here so
+      # the next prompt's `$(starship prompt --status=$STATUS …)` sees them.
+      fire_zsh_hooks('precmd')
+
       # Get the left prompt
       left_prompt = prompt
 
@@ -816,6 +826,11 @@ module Rubish
 
       # Print PS0 before executing command (bash 4.4+ feature)
       print_ps0
+
+      # zsh preexec_functions: fires after the line is read but before
+      # it executes. Each function receives the command string as $1.
+      # starship_preexec captures the start time here.
+      fire_zsh_hooks('preexec', expanded_line)
 
       @last_line = expanded_line
       execute(expanded_line, skip_history_expansion: true)
@@ -1336,6 +1351,26 @@ module Rubish
       @last_bg_pid = @context.last_bg_pid
 
       result
+    end
+
+    # Fire each function in the `<name>_functions` zsh-style array. The
+    # array is populated by `add-zsh-hook NAME FUNC` (see Builtins). The
+    # last command's exit status is preserved across the hook calls so
+    # prompt expansion still sees the original `$?` (matching zsh —
+    # individual hooks that care about `$?` save it themselves on entry).
+    def fire_zsh_hooks(short_name, *args)
+      arr = Builtins.get_array("#{short_name}_functions")
+      return if arr.nil? || arr.empty?
+      saved = @last_status
+      arr.each do |fname|
+        next unless @functions.key?(fname)
+        begin
+          call_function(fname, args)
+        rescue => e
+          $stderr.puts "rubish: #{short_name}: #{fname}: #{e.message}"
+        end
+      end
+      @last_status = saved
     end
 
     def call_function_with_redirects(cmd)
