@@ -352,4 +352,14 @@ class TestArithmeticCommand < Test::Unit::TestCase
     assert_equal '6', get_shell_var('sum')  # 3 + 2 + 1
     assert_equal '0', get_shell_var('count')
   end
+
+  # Nested single-paren groups inside `(( … ))`. The previous lexer
+  # only special-cased the `((` / `))` pair — so the closing `))` of
+  # `(1 + (2 * 3))` was treated as the terminator of the arithmetic
+  # command, truncating the body. Same root cause as the `int(rint(…))`
+  # function-call form starship's `__starship_get_time` uses.
+  def test_nested_parens_balanced
+    execute('(( X = (1 + (2 * 3)) ))')
+    assert_equal '7', get_shell_var('X')
+  end
 end

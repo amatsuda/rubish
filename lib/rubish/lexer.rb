@@ -1138,43 +1138,39 @@ module Rubish
     end
 
     def read_arithmetic_command
-      # Read the arithmetic expression until ))
-      # Need to handle nested parentheses
+      # Read the arithmetic expression body, terminated by `))` at
+      # paren-balance 0. We track INNER paren depth (`(` minus `)` seen
+      # inside the body) so function-call syntax like `int(rint(EPOCHREALTIME * 1000))`
+      # doesn't get truncated — the previous version only special-cased
+      # `((` / `))` pairs and treated the inner `))` as the terminator.
       expression = +''
-      depth = 1  # We've already consumed the opening ((
+      inner_depth = 0
 
-      while @pos < @input.length && depth > 0
+      while @pos < @input.length
         char = @input[@pos]
-        two_char = @input[@pos, 2]
-
-        if two_char == '))'
-          depth -= 1
-          if depth == 0
-            @pos += 2
-            break
-          else
-            expression << '))'
-            @pos += 2
-          end
-        elsif two_char == '(('
-          depth += 1
-          expression << '(('
-          @pos += 2
-        elsif char == '('
+        if char == '('
+          inner_depth += 1
           expression << char
           @pos += 1
         elsif char == ')'
-          expression << char
-          @pos += 1
+          if inner_depth > 0
+            inner_depth -= 1
+            expression << char
+            @pos += 1
+          elsif @input[@pos + 1] == ')'
+            # Balanced — this `)` is the first half of the terminating `))`.
+            @pos += 2
+            return Token.new(:ARITH_CMD, expression.strip)
+          else
+            raise 'Unmatched ) in arithmetic command'
+          end
         else
           expression << char
           @pos += 1
         end
       end
 
-      raise 'Expected ")))" to close arithmetic command' if depth > 0
-
-      Token.new(:ARITH_CMD, expression.strip)
+      raise 'Expected "))" to close arithmetic command'
     end
 
     # Check if current position is a {varname} redirection pattern
