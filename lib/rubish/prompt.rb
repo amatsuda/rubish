@@ -411,6 +411,13 @@ module Rubish
             result << "\e[24m"  # Underline off
           when '%'
             result << '%'
+          when '{'
+            # Begin non-printing sequence (zsh-style: %{...%}).
+            # Skip the marker; the content inside (typically ANSI escapes)
+            # is kept as-is, since Reline and visible_length already
+            # exclude ANSI escapes from width calculations.
+          when '}'
+            # End non-printing sequence (zsh-style)
           else
             # Unknown escape, keep literal
             result << '%' << ps[i]
@@ -427,6 +434,10 @@ module Rubish
       # surviving `\X` should stay literal — DQ-style backslash rules.
       if Builtins.shopt_enabled?('promptvars') || Builtins.zsh_option_enabled?('prompt_subst')
         result = expand_string_content(result, quoted: true)
+        # zsh processes `%{...%}` AFTER prompt_subst — so markers emitted by
+        # `$(starship init zsh)` and similar plugin output need to be stripped
+        # here, not in the walker above (which only ran on the raw PS1).
+        result = result.gsub(/%\{|%\}/, '')
       end
 
       result

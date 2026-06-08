@@ -211,6 +211,50 @@ class TestPrompt < Test::Unit::TestCase
     assert_equal "\e[32mgreen\e[0m$ ", prompt
   end
 
+  # %{...%} - zsh-style non-printing markers (stripped, content kept).
+  # Without this, `eval "$(starship init zsh)"` leaks the literal `%{`/`%}`
+  # bytes into the displayed prompt.
+  def test_prompt_zsh_non_printing_markers
+    ENV.delete('PS1')
+    Rubish::Builtins.set_var('PROMPT', "%{\e[32m%}green%{\e[0m%}$ ")
+    prompt = @repl.send(:prompt)
+    assert_equal "\e[32mgreen\e[0m$ ", prompt
+  ensure
+    Rubish::Builtins.delete_var('PROMPT')
+  end
+
+  # Mixed bash- and zsh-style markers in the same string both get stripped.
+  def test_prompt_mixed_non_printing_markers
+    ENV['PS1'] = "\\[\e[31m\\]r%{\e[32m%}g\\[\e[0m\\]> "
+    prompt = @repl.send(:prompt)
+    assert_equal "\e[31mr\e[32mg\e[0m> ", prompt
+  end
+
+  # %{...%} produced by `$(...)` substitution (the starship case) also
+  # gets stripped — prompt_subst happens at the end of expand_prompt, so
+  # the post-substitution pass needs to scrub markers that the walker
+  # didn't see.
+  def test_prompt_zsh_markers_from_command_substitution
+    ENV.delete('PS1')
+    Rubish::Builtins.set_var('PROMPT', %($(printf '%%{\\e[32m%%}ok%%{\\e[0m%%}> ')))
+    Rubish::Builtins.current_state.shell_options['promptvars'] = true
+    prompt = @repl.send(:prompt)
+    assert_equal "\e[32mok\e[0m> ", prompt
+  ensure
+    Rubish::Builtins.delete_var('PROMPT')
+  end
+
+  # After stripping markers, visible_length should count only the
+  # printable characters — the metric Reline uses to lay out the cursor.
+  def test_prompt_zsh_markers_visible_length
+    ENV.delete('PS1')
+    Rubish::Builtins.set_var('PROMPT', "%{\e[32m%}hi%{\e[0m%}> ")
+    prompt = @repl.send(:prompt)
+    assert_equal 4, @repl.send(:visible_length, prompt)
+  ensure
+    Rubish::Builtins.delete_var('PROMPT')
+  end
+
   # Test octal character
   def test_ps1_octal_character
     ENV['PS1'] = '\101$ '  # 'A' in octal
