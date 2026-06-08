@@ -362,4 +362,59 @@ class TestArithmeticCommand < Test::Unit::TestCase
     execute('(( X = (1 + (2 * 3)) ))')
     assert_equal '7', get_shell_var('X')
   end
+
+  # zsh/mathfunc — exposed as method dispatch inside the arith eval.
+  # Function-call syntax inside `(( … ))` is what starship's
+  # `__starship_get_time` uses: `(( T = int(rint(EPOCHREALTIME * 1000)) ))`.
+  def test_int_truncates
+    execute('(( X = int(3.9) ))')
+    assert_equal '3', get_shell_var('X')
+  end
+
+  def test_rint_rounds
+    execute('(( X = rint(3.7) ))')
+    assert_equal '4', get_shell_var('X')
+  end
+
+  def test_floor_and_ceil
+    execute('(( A = floor(3.7) ))')
+    execute('(( B = ceil(3.2) ))')
+    assert_equal '3', get_shell_var('A')
+    assert_equal '4', get_shell_var('B')
+  end
+
+  def test_abs_and_sqrt
+    execute('(( A = abs(-5) ))')
+    execute('(( B = sqrt(16) ))')
+    assert_equal '5', get_shell_var('A')
+    assert_equal '4', get_shell_var('B')
+  end
+
+  # Nested math-function calls — exercises both the lexer fix and the
+  # math-func dispatch together; same shape as starship's __starship_get_time.
+  def test_nested_function_calls
+    execute('(( X = int(rint(1234.5 * 10)) ))')
+    assert_equal '12345', get_shell_var('X')
+  end
+
+  # `${+VAR}` is zsh's parameter-is-set test. starship's precmd uses
+  # it as the gate around duration tracking.
+  def test_parameter_is_set_arith
+    @repl.send(:execute, 'MAYBE_SET=anything')
+    execute('(( A = ${+MAYBE_SET} ))')
+    execute('(( B = ${+NEVER_SET_VAR_ZZZ} ))')
+    assert_equal '1', get_shell_var('A')
+    assert_equal '0', get_shell_var('B')
+  end
+
+  # Variables vs function calls: `int` alone is a variable (currently
+  # unset, evaluates to 0). `int(x)` is a function call.
+  def test_identifier_only_function_call_when_followed_by_paren
+    # As variable
+    execute('(( X = int + 5 ))')  # int → 0, 0 + 5
+    assert_equal '5', get_shell_var('X')
+    # As function
+    execute('(( Y = int(7.9) ))')
+    assert_equal '7', get_shell_var('Y')
+  end
 end

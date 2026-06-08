@@ -352,6 +352,12 @@ module Rubish
     end
 
     def expand_parameter_expansion(content)
+      # ${+VAR} - zsh parameter-is-set test. Evaluates to '1' if the
+      # variable is set (even to empty), '0' if not. starship and other
+      # zsh prompt themers gate behaviour on this — e.g. precmd uses
+      # `(( ${+STARSHIP_START_TIME} ))` to decide whether a preexec ran.
+      return (Builtins.var_set?($1) ? '1' : '0') if content =~ /\A\+([a-zA-Z_][a-zA-Z0-9_]*)\z/
+
       # ${#arr[@]} or ${#arr[*]} - array length
       return __array_length($1) if content =~ /\A#([a-zA-Z_][a-zA-Z0-9_]*)\[[@*]\]\z/
 

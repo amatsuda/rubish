@@ -33,7 +33,7 @@ module Rubish
       _get_comp_words_by_ref _init_completion _filedir _have _split_longopt
       _ltrim_colon_completions _variables _tilde _quote_readline_by_ref _parse_help
       _upvars _usergroup setopt unsetopt autoload compinit compdef git_ps1 require
-      add_zsh_hook
+      add_zsh_hook zmodload
     ]).freeze
 
     # Global state (shared across all sessions) - accessed via Builtins.xxx
@@ -3848,6 +3848,53 @@ module Rubish
       # Kill completions (process IDs)
       @state.completions['kill'] ||= {function: '_kill'}
       @state.completions['killall'] ||= {signals: true, running: true}
+    end
+
+    # zsh's dynamic-module loader. Rubish doesn't load modules at runtime —
+    # the features each module exposes (EPOCHREALTIME, int(), rint() in
+    # arithmetic, `${jobstates}`, …) are either always-on or implemented
+    # natively. This builtin exists so prompt-init scripts that begin with
+    # `zmodload zsh/datetime` / `zmodload zsh/mathfunc` / `zmodload zsh/parameter`
+    # succeed instead of aborting with "command not found", which would
+    # leave starship's `__starship_get_time` undefined and the precmd
+    # hook unable to populate STATUS / DURATION.
+    ZMODLOAD_KNOWN_MODULES = %w[
+      zsh/datetime zsh/mathfunc zsh/parameter zsh/zle zsh/zleparameter
+      zsh/complist zsh/computil zsh/terminfo zsh/termcap zsh/system
+      zsh/regex zsh/files zsh/net/tcp zsh/sched zsh/stat zsh/zutil
+      zsh/zselect zsh/curses zsh/pcre
+    ].freeze
+
+    def zmodload(args)
+      i = 0
+      list_mode = false
+      unload_mode = false
+      while i < args.length
+        case args[i]
+        when '-L' then list_mode = true
+        when '-u' then unload_mode = true
+        when '-a', '-b', '-c', '-d', '-i', '-e', '-F', '-A', '-p', '-P', '-m'
+          # zsh flags we don't model — accept and ignore
+        else break
+        end
+        i += 1
+      end
+
+      if list_mode && i >= args.length
+        # `zmodload -L` lists loaded modules. We pretend the typical set
+        # is always loaded — anything a script needs is implemented.
+        ZMODLOAD_KNOWN_MODULES.each { |m| puts "zmodload #{m}" }
+        return true
+      end
+
+      # `zmodload` with no args = list loaded modules (same as -L for us)
+      if args[i].nil?
+        ZMODLOAD_KNOWN_MODULES.each { |m| puts m }
+        return true
+      end
+
+      # Loading / unloading any module is a no-op success.
+      true
     end
 
     # zsh-style hook installer. Manages the `precmd_functions`,

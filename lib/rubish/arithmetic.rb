@@ -190,6 +190,11 @@ module Rubish
           # ${var} or ${arr[expr]} (the latter only — already stripped by [^}]+)
           if braced =~ /\A([a-zA-Z_][a-zA-Z0-9_]*)\[(.+)\]\z/
             resolve_array_element($1, $2)
+          elsif braced =~ /\A\+([a-zA-Z_][a-zA-Z0-9_]*)\z/
+            # ${+VAR}: zsh parameter-is-set test. starship's precmd uses
+            # `(( ${+STARSHIP_START_TIME} ))` to gate duration tracking,
+            # so this has to evaluate inside `(( … ))` too.
+            Builtins.var_set?($1) ? '1' : '0'
           else
             get_special_var(braced) || Builtins.get_var(braced) || '0'
           end
@@ -197,6 +202,11 @@ module Rubish
           subscript = $4
           if subscript
             resolve_array_element(var_name, subscript[1...-1])
+          elsif !match.start_with?('$') && Regexp.last_match.post_match.start_with?('(')
+            # Function call like `int(x)`, `rint(x)`: an identifier
+            # immediately followed by `(` is a math function (zsh/mathfunc),
+            # not a variable. Leave it untouched so eval can dispatch.
+            match
           else
             get_special_var(var_name) || Builtins.get_var(var_name) || '0'
           end
@@ -206,7 +216,7 @@ module Rubish
       end
 
       begin
-        result = Kernel.eval(expanded)
+        result = ARITH_FUNC_EVAL.instance_eval(expanded)
         # Handle boolean results (comparison operators return true/false in Ruby)
         case result
         when true then 1
@@ -214,9 +224,36 @@ module Rubish
         when Numeric then result.to_i
         else result.to_s.to_i
         end
-      rescue StandardError
+      rescue StandardError, SyntaxError
         0
       end
     end
+
+    # Math functions exposed inside `(( … ))` and `$(( … ))`. These mirror
+    # zsh/mathfunc — starship's `__starship_get_time` body
+    # `(( STARSHIP_CAPTURED_TIME = int(rint(EPOCHREALTIME * 1000)) ))`
+    # is the canonical reason this exists. The expression is evaluated
+    # against an instance of this class so method dispatch resolves the
+    # function names; Math constants and Ruby operators work as usual.
+    class ArithFuncEvaluator
+      def int(x); x.to_i; end
+      def rint(x); x.round; end
+      def floor(x); x.floor; end
+      def ceil(x); x.ceil; end
+      def abs(x); x.abs; end
+      def sqrt(x); Math.sqrt(x); end
+      def exp(x); Math.exp(x); end
+      def log(x); Math.log(x); end
+      def log2(x); Math.log2(x); end
+      def log10(x); Math.log10(x); end
+      def sin(x); Math.sin(x); end
+      def cos(x); Math.cos(x); end
+      def tan(x); Math.tan(x); end
+      def asin(x); Math.asin(x); end
+      def acos(x); Math.acos(x); end
+      def atan(x); Math.atan(x); end
+      def atan2(y, x); Math.atan2(y, x); end
+    end
+    ARITH_FUNC_EVAL = ArithFuncEvaluator.new
   end
 end
