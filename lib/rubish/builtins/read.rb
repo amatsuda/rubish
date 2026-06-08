@@ -263,24 +263,11 @@ module Rubish
     end
 
     def store_read_array(array_name, line)
-      # Split line into words using IFS and store as array
-      words = split_by_ifs(line)
-      clear_read_array(array_name)
-
-      words.each_with_index do |word, idx|
-        ENV["#{array_name}_#{idx}"] = word
-      end
-      ENV["#{array_name}_LENGTH"] = words.length.to_s
+      # Split the line on IFS and store as a real indexed array, so it is
+      # accessible via ${name[i]} / ${name[@]} like any other array.
+      set_array(array_name, split_by_ifs(line))
     end
 
-    def clear_read_array(array_name)
-      # Clear existing array elements
-      length = ENV["#{array_name}_LENGTH"]&.to_i || 0
-      length.times do |i|
-        ENV.delete("#{array_name}_#{i}")
-      end
-      ENV.delete("#{array_name}_LENGTH")
-    end
 
     def store_read_variables(vars, line)
       if vars.length == 1

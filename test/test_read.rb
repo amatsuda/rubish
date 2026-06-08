@@ -205,32 +205,31 @@ class TestRead < Test::Unit::TestCase
 
   # -a array tests
   def test_read_into_array
+    Rubish::Builtins.current_state.arrays.clear
     with_stdin("one two three\n") do
       Rubish::Builtins.run('read', ['-a', 'words'])
     end
-    assert_equal 'one', ENV['words_0']
-    assert_equal 'two', ENV['words_1']
-    assert_equal 'three', ENV['words_2']
-    assert_equal '3', ENV['words_LENGTH']
+    assert_equal %w[one two three], Rubish::Builtins.get_array('words')
+  end
+
+  def test_read_array_element_access
+    Rubish::Builtins.current_state.arrays.clear
+    with_stdin("x y z\n") do
+      Rubish::Builtins.run('read', ['-a', 'arr'])
+    end
+    assert_equal 'y', Rubish::Builtins.get_array_element('arr', 1)
   end
 
   def test_read_array_clears_previous
-    ENV['arr_0'] = 'old1'
-    ENV['arr_1'] = 'old2'
-    ENV['arr_2'] = 'old3'
-    ENV['arr_LENGTH'] = '3'
-
+    Rubish::Builtins.set_array('arr', %w[old1 old2 old3])
     with_stdin("new\n") do
       Rubish::Builtins.run('read', ['-a', 'arr'])
     end
-
-    assert_equal 'new', ENV['arr_0']
-    assert_nil ENV['arr_1']
-    assert_nil ENV['arr_2']
-    assert_equal '1', ENV['arr_LENGTH']
+    assert_equal %w[new], Rubish::Builtins.get_array('arr')
   end
 
   def test_read_array_does_not_set_reply
+    Rubish::Builtins.current_state.arrays.clear
     ENV.delete('REPLY')
     with_stdin("one two\n") do
       Rubish::Builtins.run('read', ['-a', 'arr'])
@@ -304,23 +303,9 @@ class TestRead < Test::Unit::TestCase
   end
 
   def test_store_read_array
+    Rubish::Builtins.current_state.arrays.clear
     Rubish::Builtins.store_read_array('arr', 'foo bar baz')
-    assert_equal 'foo', ENV['arr_0']
-    assert_equal 'bar', ENV['arr_1']
-    assert_equal 'baz', ENV['arr_2']
-    assert_equal '3', ENV['arr_LENGTH']
-  end
-
-  def test_clear_read_array
-    ENV['arr_0'] = 'a'
-    ENV['arr_1'] = 'b'
-    ENV['arr_LENGTH'] = '2'
-
-    Rubish::Builtins.clear_read_array('arr')
-
-    assert_nil ENV['arr_0']
-    assert_nil ENV['arr_1']
-    assert_nil ENV['arr_LENGTH']
+    assert_equal %w[foo bar baz], Rubish::Builtins.get_array('arr')
   end
 
   # Edge cases
