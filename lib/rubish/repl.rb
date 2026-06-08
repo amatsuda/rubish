@@ -754,7 +754,15 @@ module Rubish
       # If the previous command's output didn't end with a newline,
       # mark the spot and force the prompt onto a fresh line. zsh's
       # PROMPT_SP / PROMPT_EOL_MARK behavior.
-      emit_prompt_eol_mark
+      #
+      # Skip when the prompt itself starts with `\n` (the starship /
+      # zsh-prompt-themer pattern): the prompt's leading newline already
+      # gives us the fresh line, and the eol-mark would stay visible on
+      # the line above instead of being overwritten — `\n` moves down,
+      # it doesn't erase. With no command output, there's nothing to
+      # mark; with unterminated output, the user still sees it on the
+      # line above the prompt for free.
+      emit_prompt_eol_mark unless left_prompt.start_with?("\n")
 
       # zsh push-line: decide whether this prompt is the interjection
       # prompt (blank) or a normal one that should restore a stashed
