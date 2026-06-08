@@ -1217,6 +1217,15 @@ module Rubish
     # Generate code for an array element, with special handling for command substitution
     # In array context, $(cmd) should be word-split into multiple elements
     def generate_array_element(str)
+      # Pure ${arr[@]} / ${arr[*]} / $arr[@] / $arr[*] — return the array's
+      # elements as separate words. In bash/zsh, unquoted array expansion
+      # in array-literal context word-splits, so `STARSHIP_PIPE_STATUS=(${pipestatus[@]})`
+      # produces a 3-element array when pipestatus has 3 elements, not a
+      # single joined string.
+      if (name = pure_array_at_expansion(str))
+        return "__array_values(#{name.inspect})"
+      end
+
       # Check if this element is purely a command substitution (handles nested $(...))
       if pure_command_substitution?(str)
         # Pure command substitution: $(cmd) - word-split the result
@@ -1232,6 +1241,18 @@ module Rubish
 
       # No command substitution - use normal string arg generation
       generate_string_arg(str)
+    end
+
+    # If str is purely `${name[@]}`, `${name[*]}`, `$name[@]`, or `$name[*]`,
+    # return the array name. Otherwise nil. Quoted forms (`"${name[@]}"`)
+    # are intentionally excluded — they preserve a single string and
+    # belong in the generate_string_arg path.
+    def pure_array_at_expansion(str)
+      if str =~ /\A\$\{([a-zA-Z_][a-zA-Z0-9_]*)\[[@*]\]\}\z/
+        $1
+      elsif str =~ /\A\$([a-zA-Z_][a-zA-Z0-9_]*)\[[@*]\]\z/
+        $1
+      end
     end
 
     # Check if str is purely a $(...) command substitution, handling nested parens and quotes

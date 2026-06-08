@@ -121,6 +121,16 @@ module Rubish
     def expand_array_element(value)
       return [''] if value.nil? || value.empty?
 
+      # Pure ${arr[@]} / ${arr[*]} / $arr[@] / $arr[*] — each element of
+      # the source array becomes a separate word. Bash/zsh do the same
+      # for unquoted array expansion in array-literal context, so
+      # `STARSHIP_PIPE_STATUS=(${pipestatus[@]})` produces N elements
+      # when pipestatus has N elements, not a single joined string.
+      if value =~ /\A\$\{([a-zA-Z_][a-zA-Z0-9_]*)\[[@*]\]\}\z/ ||
+         value =~ /\A\$([a-zA-Z_][a-zA-Z0-9_]*)\[[@*]\]\z/
+        return __array_values($1)
+      end
+
       # Check if this is purely a command substitution: $(cmd) or `cmd`
       if value =~ /\A\$\(.*\)\z/m || value =~ /\A`.*`\z/m
         expanded = expand_string_content(value)

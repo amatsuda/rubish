@@ -381,4 +381,48 @@ class TestArray < Test::Unit::TestCase
     execute('arr=( $(echo $WORDS) )')
     assert_equal %w[alpha beta gamma], Rubish::Builtins.get_array('arr')
   end
+
+  # Splat: unquoted `${arr[@]}` in array-literal context expands to one
+  # element per source-array element, not a single space-joined string.
+  # `STARSHIP_PIPE_STATUS=(${pipestatus[@]})` is the canonical example —
+  # without this, starship's pipestatus segment can never count entries.
+  def test_array_assignment_splats_arr_at
+    execute('src=(a b c)')
+    execute('dst=(${src[@]})')
+    assert_equal %w[a b c], Rubish::Builtins.get_array('dst')
+  end
+
+  def test_array_assignment_splats_arr_star
+    execute('src=(a b c)')
+    execute('dst=(${src[*]})')
+    assert_equal %w[a b c], Rubish::Builtins.get_array('dst')
+  end
+
+  def test_array_append_splats_arr_at
+    execute('src=(a b)')
+    execute('dst=(x y)')
+    execute('dst+=(${src[@]})')
+    assert_equal %w[x y a b], Rubish::Builtins.get_array('dst')
+  end
+
+  def test_array_splat_mixed_with_literals
+    execute('src=(a b c)')
+    execute('mix=(prefix ${src[@]} suffix)')
+    assert_equal %w[prefix a b c suffix], Rubish::Builtins.get_array('mix')
+  end
+
+  def test_array_splat_empty_source_contributes_nothing
+    execute('empty_src=()')
+    execute('result=(before ${empty_src[@]} after)')
+    assert_equal %w[before after], Rubish::Builtins.get_array('result')
+  end
+
+  # Special arrays (PIPESTATUS, pipestatus, GROUPS, …) splice the same
+  # way — they go through `__array_values` which consults the
+  # special-array getter before falling back to the regular store.
+  def test_array_splat_from_pipestatus
+    execute('false | true | false')
+    execute('captured=(${pipestatus[@]})')
+    assert_equal %w[1 0 1], Rubish::Builtins.get_array('captured')
+  end
 end
