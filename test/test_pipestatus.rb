@@ -225,4 +225,32 @@ class TestPIPESTATUS < Test::Unit::TestCase
     assert_equal '4', File.read(output_file).strip
   end
 
+  # zsh hook functions (precmd / preexec) need to see the pre-hook
+  # `$?` and `${pipestatus[@]}` from the user's last interactive
+  # command, not from internal hook bookkeeping. fire_zsh_hooks saves
+  # / restores both around the call AND syncs them into the context
+  # so the function body's $?-and-${pipestatus[@]} reads land correctly.
+  def test_pipestatus_preserved_across_zsh_hooks
+    execute('captured_status="" captured_pipe=""')
+    execute('my_precmd() { captured_status=$?; captured_pipe="${pipestatus[*]}"; }')
+    execute('add-zsh-hook precmd my_precmd')
+
+    # Simulate a user pipeline by setting state directly — what the
+    # REPL loop would do between line execution and the next precmd.
+    @repl.instance_variable_set(:@last_status, 1)
+    @repl.instance_variable_set(:@pipestatus, [1, 0, 1])
+
+    @repl.send(:fire_zsh_hooks, 'precmd')
+
+    assert_equal '1',     Rubish::Builtins.get_var('captured_status')
+    assert_equal '1 0 1', Rubish::Builtins.get_var('captured_pipe')
+    # And the surrounding state is restored after the hook runs.
+    assert_equal 1,         @repl.instance_variable_get(:@last_status)
+    assert_equal [1, 0, 1], @repl.instance_variable_get(:@pipestatus)
+  ensure
+    Rubish::Builtins.delete_var('captured_status')
+    Rubish::Builtins.delete_var('captured_pipe')
+    Rubish::Builtins.unset_array('precmd_functions')
+    Rubish::Builtins.current_state.function_remover&.call('my_precmd')
+  end
 end

@@ -1361,7 +1361,14 @@ module Rubish
     def fire_zsh_hooks(short_name, *args)
       arr = Builtins.get_array("#{short_name}_functions")
       return if arr.nil? || arr.empty?
-      saved = @last_status
+      saved_status = @last_status
+      saved_pipestatus = @pipestatus
+      # Hook bodies read `$?` and `${pipestatus[@]}` via the execution
+      # context, not directly via @last_status. Sync explicitly — at
+      # this point call_function bypasses eval_in_context, which is
+      # what normally pushes these values across.
+      @context.last_status = @last_status
+      @context.pipestatus = @pipestatus
       arr.each do |fname|
         next unless @functions.key?(fname)
         begin
@@ -1370,7 +1377,8 @@ module Rubish
           $stderr.puts "rubish: #{short_name}: #{fname}: #{e.message}"
         end
       end
-      @last_status = saved
+      @last_status = saved_status
+      @pipestatus = saved_pipestatus
     end
 
     def call_function_with_redirects(cmd)
