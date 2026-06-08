@@ -266,6 +266,18 @@ module Rubish
         is_append = assignment.include?('+=')
 
         expanded_val = expand_assignment_value(val)
+
+        # Associative arrays key on the literal string, not an arithmetic index.
+        if Builtins.assoc_array?(var)
+          key = expand_string_content(index_expr)
+          if is_append
+            Builtins.set_assoc_element(var, key, Builtins.get_assoc_element(var, key).to_s + expanded_val)
+          else
+            Builtins.set_assoc_element(var, key, expanded_val)
+          end
+          return
+        end
+
         index = eval_arithmetic_expr(index_expr).to_i
         integer = Builtins.has_attribute?(var, :integer)
 
