@@ -6340,12 +6340,20 @@ module Rubish
         return false
       end
 
+      # Mark as "sourcing" so per-line execute() inside process_script_lines
+      # doesn't prompt the user for continuation lines on a transient parse
+      # failure. The full eval input is already in memory — there's nothing
+      # to read from the terminal even if a sub-statement looks incomplete.
+      old_sourcing = @state.sourcing_file
+      @state.sourcing_file = true
       begin
         process_script_lines(command.split("\n", -1), '(eval)')
         true
       rescue => e
         puts "eval: #{e.message}"
         false
+      ensure
+        @state.sourcing_file = old_sourcing
       end
     end
 

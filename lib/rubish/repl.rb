@@ -992,8 +992,12 @@ module Rubish
       begin
         ast = @parser_class.new(tokens).parse
       rescue => e
-        # Check if this is an incomplete command that needs more input
-        if incomplete_command_error?(e.message)
+        # Check if this is an incomplete command that needs more input.
+        # `sourcing_file` is set by `source` and `eval` — the full input
+        # is already in memory there, and reading more from stdin would
+        # render the PS2 prompt mid-script and block the script's progress
+        # on whatever the user happens to type next.
+        if incomplete_command_error?(e.message) && !@state.sourcing_file
           # Prompt for continuation lines until parsing succeeds
           ast = collect_continuation_lines(accumulated_lines, e)
           return unless ast  # User cancelled (Ctrl+C) or error
