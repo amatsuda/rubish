@@ -72,4 +72,43 @@ class TestEval < Test::Unit::TestCase
     execute('eval eval export RESULT=$NESTED_VAR')
     assert_equal 'nested_value', ENV['RESULT']
   end
+
+  # eval'd content goes through the same line-by-line accumulator as source,
+  # so multi-line input with comments, control structures, and function
+  # definitions parses correctly — `eval "$(starship init zsh)"` and
+  # similar plugin-style snippets need this.
+  def test_eval_multi_line_with_leading_comment
+    execute(%(eval "# a comment\nEVAL_MULTI_LEAD='val'\n"))
+    assert_equal 'val', Rubish::Builtins.get_var('EVAL_MULTI_LEAD')
+  ensure
+    Rubish::Builtins.delete_var('EVAL_MULTI_LEAD')
+  end
+
+  def test_eval_multi_line_with_leading_blank_line
+    execute(%(eval "\nEVAL_MULTI_BLANK='val'\n"))
+    assert_equal 'val', Rubish::Builtins.get_var('EVAL_MULTI_BLANK')
+  ensure
+    Rubish::Builtins.delete_var('EVAL_MULTI_BLANK')
+  end
+
+  # If-block whose body uses `(( … ))`. Without the source-style line
+  # tracker, the depth count never decrements and the rest of the eval
+  # gets dropped. Use `$'…'` so the embedded `\n`s are real newlines
+  # (matching bash, where `\n` inside `"…"` is literal).
+  def test_eval_with_if_block_containing_arithmetic_command
+    execute(%q{eval $'if true; then\n  (( EVAL_ARITH = 2 + 3 ))\nfi\nEVAL_AFTER_IF=reached\n'})
+    assert_equal '5', Rubish::Builtins.get_var('EVAL_ARITH').to_s
+    assert_equal 'reached', Rubish::Builtins.get_var('EVAL_AFTER_IF')
+  ensure
+    Rubish::Builtins.delete_var('EVAL_ARITH')
+    Rubish::Builtins.delete_var('EVAL_AFTER_IF')
+  end
+
+  # Function definition inside eval: the body shouldn't run at eval time,
+  # and a later call exercises it.
+  def test_eval_function_definition_then_call
+    execute(%(eval "evalf() { echo \\"got-\\$1\\"; }"))
+    output = capture_output { execute('evalf hello') }
+    assert_equal "got-hello\n", output
+  end
 end

@@ -2152,181 +2152,7 @@ module Rubish
       @state.sourcing_file = true
 
       return_code = catch(:return) do
-        buffer = +''
-        depth = 0
-        pending_function_def = false  # Track if we're waiting for { after ()
-        # Track open control structures for better error messages: [[keyword, line_number], ...]
-        open_structures = []
-        buffer_start_line = 0
-        lines = File.readlines(file, chomp: true)
-        i = 0
-
-        while i < lines.length
-          line = lines[i].strip
-          line_number = i + 1  # 1-based line number for error messages
-          i += 1
-          next if line.empty? || line.start_with?('#')
-
-          # Track where buffer starts for error messages
-          buffer_start_line = line_number if buffer.empty?
-
-          # Inline Ruby block detection. Lines starting with [A-Z] (Ruby
-          # constants like `Reline::Face.config(...) do …`) or `->`
-          # (lambda literals) are evaluated as Ruby by execute(). If
-          # the block spans multiple lines (`do |x| … end`), the
-          # shell-aware depth tracking below doesn't recognize Ruby's
-          # `do` as an opener, so we accumulate here using Ruby's own
-          # parser to detect completeness.
-          if buffer.empty? && ruby_block_start_line?(line)
-            ruby_buffer = line
-            while ruby_input_incomplete_ast?(ruby_buffer) && i < lines.length
-              next_raw = lines[i]
-              i += 1
-              ruby_buffer = "#{ruby_buffer}\n#{next_raw}"
-            end
-            begin
-              execute_sourced_command(ruby_buffer, file, buffer_start_line)
-            rescue SyntaxError => e
-              puts "source: #{file}:#{buffer_start_line}: syntax error: #{e.message}"
-            end
-            next
-          end
-
-          # Check for heredoc in this line
-          heredoc_info = detect_heredoc(line)
-          if heredoc_info
-            delimiter, strip_tabs = heredoc_info
-            heredoc_lines = []
-            # Collect heredoc content from subsequent lines
-            while i < lines.length
-              heredoc_line = lines[i]
-              i += 1
-              # Check for delimiter (possibly with leading tabs if strip_tabs)
-              check_line = strip_tabs ? heredoc_line.sub(/\A\t+/, '') : heredoc_line
-              if check_line.strip == delimiter
-                break
-              end
-              heredoc_lines << heredoc_line
-            end
-            # Set heredoc content before executing
-            content = heredoc_lines.join("\n") + (heredoc_lines.empty? ? '' : "\n")
-            @state.heredoc_content_setter&.call(content)
-          end
-
-          # Remember if we're waiting for function body BEFORE processing this line
-          was_pending_function = pending_function_def
-
-          # Track control structure depth
-          # Extract keywords while respecting quotes (don't count { } inside quotes)
-          keywords = extract_unquoted_keywords(line)
-          keywords.each do |word|
-            case word
-            when 'if', 'unless', 'while', 'until', 'for', 'case', 'def'
-              depth += 1
-              open_structures << [word, line_number]
-            when 'fi', 'done', 'esac', 'end'
-              depth -= 1
-              open_structures.pop if open_structures.any?
-            when '{'
-              # If pending function def, don't double-count the depth
-              if pending_function_def
-                pending_function_def = false
-              else
-                depth += 1
-                open_structures << ['{', line_number]
-              end
-            when '}'
-              depth -= 1
-              open_structures.pop if open_structures.any?
-            end
-          end
-
-          # Track subshell depth separately (only standalone ( at start of word).
-          # Handles: ( cmd ) but not arr=( ... ), $( ... ), or arithmetic
-          # commands `(( … ))` — the close uses `))` which the closing regex
-          # below can't match, so counting `((` as an open would leave depth
-          # forever incremented and break source on any script using `(( … ))`
-          # inside an if/while/function body (e.g. `starship init zsh`).
-          if line =~ /\A\s*\((?!\()/
-            depth += 1
-            open_structures << ['(', line_number]
-          end
-          # Check if line is just ) or ends with ) not preceded by ( on same line
-          if line =~ /\A\s*\)\s*\z/
-            depth -= 1
-            open_structures.pop if open_structures.any?
-          end
-
-          # Detect function definition: name() or "function name"
-          # These need { on next line, so set flag and increment depth
-          # But NOT array assignment like VAR=() which has = before ()
-          # Also handle name() { on same line - don't set pending, just track the {
-          if (line =~ /\A[a-zA-Z_][a-zA-Z0-9_]*\(\)\s*$/ && !line.include?('=')) ||
-             (line =~ /\Afunction\s+\w+\s*$/)
-            pending_function_def = true
-            depth += 1
-            open_structures << ['function', line_number]
-          end
-
-          # Accumulate lines - use newline for function definitions or multi-line strings, semicolon otherwise
-          if buffer.empty?
-            buffer = line
-          elsif was_pending_function || has_unclosed_quotes(buffer)
-            # Function definitions need newline between () and {
-            # Multi-line strings need actual newlines preserved
-            buffer = "#{buffer}\n#{line}"
-          else
-            # Other statements can be joined with semicolon
-            buffer = "#{buffer}; #{line}"
-          end
-
-          # Execute when we have a complete statement
-          # A statement is complete when:
-          # - depth is 0 (no unclosed control structures)
-          # - not waiting for function body
-          # - no unclosed quotes in the buffer
-          if depth == 0 && !pending_function_def && !has_unclosed_quotes(buffer)
-            begin
-              execute_sourced_command(buffer, file, buffer_start_line)
-            rescue SyntaxError => e
-              puts "source: #{file}:#{buffer_start_line}: syntax error: #{e.message}"
-            end
-            buffer = +''
-          end
-        end
-
-        # Execute any remaining buffer (incomplete statement)
-        unless buffer.empty?
-          # If depth > 0, we have unclosed structures - report them
-          if depth > 0 && open_structures.any?
-            $stderr.puts "source: #{file}: warning: unclosed control structure(s):"
-            open_structures.each do |keyword, line_num|
-              closing = case keyword
-                        when 'if', 'unless' then 'end (or fi)'
-                        when 'while', 'until', 'for' then 'end (or done)'
-                        when 'case' then 'end (or esac)'
-                        when 'def', 'function' then 'end'
-                        when '{' then '}'
-                        when '(' then ')'
-                        else 'end'
-                        end
-              $stderr.puts "  '#{keyword}' opened at line #{line_num} - expected #{closing}"
-            end
-          end
-
-          # Check for unclosed quotes
-          if has_unclosed_quotes(buffer)
-            $stderr.puts "source: #{file}: warning: unclosed quote starting at line #{buffer_start_line}"
-          end
-
-          begin
-            execute_sourced_command(buffer, file, buffer_start_line)
-          rescue SyntaxError => e
-            puts "source: #{file}: syntax error (starting at line #{buffer_start_line}): #{e.message}"
-          end
-        end
-
-        nil
+        process_script_lines(File.readlines(file, chomp: true), file)
       end
 
       # Restore script name, positional params, source file, and sourcing flag
@@ -2336,6 +2162,188 @@ module Rubish
       @state.sourcing_file = old_sourcing
 
       return_code.nil? || return_code == 0
+    end
+
+    # Walk a list of lines (already chomped) the same way `source` does:
+    # track control-structure depth, accumulate a buffer, execute each
+    # statement when complete. Used by `source` (file input) and `eval`
+    # (multi-line string input). `file_label` is the name used in
+    # diagnostics (file path for source, `(eval)` for eval).
+    def process_script_lines(lines, file_label)
+      buffer = +''
+      depth = 0
+      pending_function_def = false  # Track if we're waiting for { after ()
+      # Track open control structures for better error messages: [[keyword, line_number], ...]
+      open_structures = []
+      buffer_start_line = 0
+      i = 0
+
+      while i < lines.length
+        line = lines[i].strip
+        line_number = i + 1  # 1-based line number for error messages
+        i += 1
+        next if line.empty? || line.start_with?('#')
+
+        # Track where buffer starts for error messages
+        buffer_start_line = line_number if buffer.empty?
+
+        # Inline Ruby block detection. Lines starting with [A-Z] (Ruby
+        # constants like `Reline::Face.config(...) do …`) or `->`
+        # (lambda literals) are evaluated as Ruby by execute(). If
+        # the block spans multiple lines (`do |x| … end`), the
+        # shell-aware depth tracking below doesn't recognize Ruby's
+        # `do` as an opener, so we accumulate here using Ruby's own
+        # parser to detect completeness.
+        if buffer.empty? && ruby_block_start_line?(line)
+          ruby_buffer = line
+          while ruby_input_incomplete_ast?(ruby_buffer) && i < lines.length
+            next_raw = lines[i]
+            i += 1
+            ruby_buffer = "#{ruby_buffer}\n#{next_raw}"
+          end
+          begin
+            execute_sourced_command(ruby_buffer, file_label, buffer_start_line)
+          rescue SyntaxError => e
+            puts "#{file_label}:#{buffer_start_line}: syntax error: #{e.message}"
+          end
+          next
+        end
+
+        # Check for heredoc in this line
+        heredoc_info = detect_heredoc(line)
+        if heredoc_info
+          delimiter, strip_tabs = heredoc_info
+          heredoc_lines = []
+          # Collect heredoc content from subsequent lines
+          while i < lines.length
+            heredoc_line = lines[i]
+            i += 1
+            # Check for delimiter (possibly with leading tabs if strip_tabs)
+            check_line = strip_tabs ? heredoc_line.sub(/\A\t+/, '') : heredoc_line
+            if check_line.strip == delimiter
+              break
+            end
+            heredoc_lines << heredoc_line
+          end
+          # Set heredoc content before executing
+          content = heredoc_lines.join("\n") + (heredoc_lines.empty? ? '' : "\n")
+          @state.heredoc_content_setter&.call(content)
+        end
+
+        # Remember if we're waiting for function body BEFORE processing this line
+        was_pending_function = pending_function_def
+
+        # Track control structure depth
+        # Extract keywords while respecting quotes (don't count { } inside quotes)
+        keywords = extract_unquoted_keywords(line)
+        keywords.each do |word|
+          case word
+          when 'if', 'unless', 'while', 'until', 'for', 'case', 'def'
+            depth += 1
+            open_structures << [word, line_number]
+          when 'fi', 'done', 'esac', 'end'
+            depth -= 1
+            open_structures.pop if open_structures.any?
+          when '{'
+            # If pending function def, don't double-count the depth
+            if pending_function_def
+              pending_function_def = false
+            else
+              depth += 1
+              open_structures << ['{', line_number]
+            end
+          when '}'
+            depth -= 1
+            open_structures.pop if open_structures.any?
+          end
+        end
+
+        # Track subshell depth separately (only standalone ( at start of word).
+        # Handles: ( cmd ) but not arr=( ... ), $( ... ), or arithmetic
+        # commands `(( … ))` — the close uses `))` which the closing regex
+        # below can't match, so counting `((` as an open would leave depth
+        # forever incremented and break source on any script using `(( … ))`
+        # inside an if/while/function body (e.g. `starship init zsh`).
+        if line =~ /\A\s*\((?!\()/
+          depth += 1
+          open_structures << ['(', line_number]
+        end
+        # Check if line is just ) or ends with ) not preceded by ( on same line
+        if line =~ /\A\s*\)\s*\z/
+          depth -= 1
+          open_structures.pop if open_structures.any?
+        end
+
+        # Detect function definition: name() or "function name"
+        # These need { on next line, so set flag and increment depth
+        # But NOT array assignment like VAR=() which has = before ()
+        # Also handle name() { on same line - don't set pending, just track the {
+        if (line =~ /\A[a-zA-Z_][a-zA-Z0-9_]*\(\)\s*$/ && !line.include?('=')) ||
+           (line =~ /\Afunction\s+\w+\s*$/)
+          pending_function_def = true
+          depth += 1
+          open_structures << ['function', line_number]
+        end
+
+        # Accumulate lines - use newline for function definitions or multi-line strings, semicolon otherwise
+        if buffer.empty?
+          buffer = line
+        elsif was_pending_function || has_unclosed_quotes(buffer)
+          # Function definitions need newline between () and {
+          # Multi-line strings need actual newlines preserved
+          buffer = "#{buffer}\n#{line}"
+        else
+          # Other statements can be joined with semicolon
+          buffer = "#{buffer}; #{line}"
+        end
+
+        # Execute when we have a complete statement
+        # A statement is complete when:
+        # - depth is 0 (no unclosed control structures)
+        # - not waiting for function body
+        # - no unclosed quotes in the buffer
+        if depth == 0 && !pending_function_def && !has_unclosed_quotes(buffer)
+          begin
+            execute_sourced_command(buffer, file_label, buffer_start_line)
+          rescue SyntaxError => e
+            puts "#{file_label}:#{buffer_start_line}: syntax error: #{e.message}"
+          end
+          buffer = +''
+        end
+      end
+
+      # Execute any remaining buffer (incomplete statement)
+      unless buffer.empty?
+        # If depth > 0, we have unclosed structures - report them
+        if depth > 0 && open_structures.any?
+          $stderr.puts "#{file_label}: warning: unclosed control structure(s):"
+          open_structures.each do |keyword, line_num|
+            closing = case keyword
+                      when 'if', 'unless' then 'end (or fi)'
+                      when 'while', 'until', 'for' then 'end (or done)'
+                      when 'case' then 'end (or esac)'
+                      when 'def', 'function' then 'end'
+                      when '{' then '}'
+                      when '(' then ')'
+                      else 'end'
+                      end
+            $stderr.puts "  '#{keyword}' opened at line #{line_num} - expected #{closing}"
+          end
+        end
+
+        # Check for unclosed quotes
+        if has_unclosed_quotes(buffer)
+          $stderr.puts "#{file_label}: warning: unclosed quote starting at line #{buffer_start_line}"
+        end
+
+        begin
+          execute_sourced_command(buffer, file_label, buffer_start_line)
+        rescue SyntaxError => e
+          puts "#{file_label}: syntax error (starting at line #{buffer_start_line}): #{e.message}"
+        end
+      end
+
+      nil
     end
 
     # Execute a command from a sourced file, with optional profiling
@@ -6204,7 +6212,13 @@ module Rubish
 
     def eval(args)
       # eval [arg ...]
-      # Concatenate arguments and execute as a shell command
+      # Concatenate arguments and execute as a shell command. bash treats
+      # the joined string the same way it treats interactive input — so
+      # multi-line content (e.g. `eval "$(starship init zsh)"`) needs the
+      # same line-by-line accumulation as `source`, otherwise depth- and
+      # quote-tracking happen all at once and stumble on function bodies
+      # whose `$(...)` would then be expanded at eval time instead of at
+      # call time.
       return true if args.empty?
 
       command = args.join(' ')
@@ -6215,7 +6229,7 @@ module Rubish
       end
 
       begin
-        @state.executor.call(command)
+        process_script_lines(command.split("\n", -1), '(eval)')
         true
       rescue => e
         puts "eval: #{e.message}"
