@@ -33,7 +33,7 @@ module Rubish
       _get_comp_words_by_ref _init_completion _filedir _have _split_longopt
       _ltrim_colon_completions _variables _tilde _quote_readline_by_ref _parse_help
       _upvars _usergroup setopt unsetopt autoload compinit compdef git_ps1 require
-      add_zsh_hook zmodload
+      add_zsh_hook zmodload zle
     ]).freeze
 
     # Global state (shared across all sessions) - accessed via Builtins.xxx
@@ -3898,6 +3898,18 @@ module Rubish
       end
 
       # Loading / unloading any module is a no-op success.
+      true
+    end
+
+    # zsh's line-editor command. The real `zle` registers widgets
+    # (`zle -N name func`), invokes them (`zle widget-name`), or
+    # triggers redraws (`zle reset-prompt`) — all of which would need
+    # zle infrastructure rubish doesn't have. Accepting the calls
+    # silently lets prompt-init scripts (starship, Pure, Spaceship)
+    # finish without spraying "command not found" warnings; the
+    # widgets just never run, which is the same end state as if zle
+    # were present but no key triggered them.
+    def zle(_args)
       true
     end
 
