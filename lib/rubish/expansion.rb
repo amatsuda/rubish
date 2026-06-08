@@ -475,9 +475,16 @@ module Rubish
           i += 1
         elsif char == '#' && !in_single_quotes && !in_double_quotes && brace_depth == 0
           prev_char = i > 0 ? result[-1] : nil
-          break if prev_char.nil? || prev_char =~ /\s/
-          result << char
-          i += 1
+          if prev_char.nil? || prev_char =~ /\s/
+            # `#` starts a comment to end of LINE (not end of input). For a
+            # multi-line input like `eval "$(starship init zsh)"` the first
+            # `# …` would otherwise eat the entire rest of the script.
+            nl = line.index("\n", i)
+            i = nl || line.length
+          else
+            result << char
+            i += 1
+          end
         else
           result << char
           i += 1
