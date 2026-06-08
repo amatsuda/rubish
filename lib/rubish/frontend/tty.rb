@@ -36,11 +36,20 @@ module Rubish
       # to stdout before readline so only the final line is the
       # readline-managed prompt. Matches bash/zsh's behaviour.
       def render_prompt_prefix(prompt)
+        Tty.last_prompt_prefix = nil
         return prompt unless prompt.include?("\n")
         prefix, _, last = prompt.rpartition("\n")
         print "#{prefix}\n"
         $stdout.flush
+        # Stash so the Ctrl-L handler can re-emit it after clear-screen.
+        Tty.last_prompt_prefix = "#{prefix}\n"
         last
+      end
+
+      class << self
+        # Set on every prompt cycle by render_prompt_prefix above; read
+        # by the PromptPrefixRedraw Reline patch when Ctrl-L fires.
+        attr_accessor :last_prompt_prefix
       end
 
       def read_simple_line(prompt = '')
@@ -126,5 +135,28 @@ module Rubish
       end
     end
     Reline::LineEditor.prepend(CtrlCEcho)
+
+    # Ctrl-L is handled entirely inside Reline (ed_clear_screen): it
+    # clears the screen and re-renders only its own prompt — which is
+    # the FINAL line of a multi-line prompt for us (render_prompt_prefix
+    # above already printed the rest to stdout). After Ctrl-L the prefix
+    # is gone, leaving just `❯ ` floating at the top of the cleared screen.
+    # Re-emit the prefix right after Reline's clear, then bump base_y so
+    # Reline draws its prompt below it.
+    module PromptPrefixRedraw
+      private def ed_clear_screen(key)
+        super
+        prefix = Tty.last_prompt_prefix
+        return unless prefix && !prefix.empty?
+
+        Reline::IOGate.write prefix
+        # Number of rows the prefix consumed = newline count. base_y is
+        # the row Reline considers row 0 for its own rendering, so
+        # bumping it lets the prompt redraw below the prefix instead of
+        # on top of it.
+        @rendered_screen.base_y = prefix.count("\n")
+      end
+    end
+    Reline::LineEditor.prepend(PromptPrefixRedraw)
   end
 end
