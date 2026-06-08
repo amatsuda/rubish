@@ -15,6 +15,7 @@ module Rubish
         Reline::Core.instance_method(:readline).parameters.any? { |_, n| n == :rprompt }
 
       def read_line(prompt:, rprompt: nil)
+        prompt = render_prompt_prefix(prompt)
         with_interrupt_trap do
           if RELINE_SUPPORTS_RPROMPT
             Reline.readline(prompt: prompt, rprompt: rprompt || '')
@@ -25,7 +26,21 @@ module Rubish
       end
 
       def read_continuation_line(prompt)
+        prompt = render_prompt_prefix(prompt)
         with_interrupt_trap { Reline.readline(prompt, false) }
+      end
+
+      # Reline renders embedded `\n` in the prompt as literal two-char
+      # `\n` sequences. Multi-line prompts (e.g. starship's
+      # `\nrubish on master\n❯`) need the leading lines printed straight
+      # to stdout before readline so only the final line is the
+      # readline-managed prompt. Matches bash/zsh's behaviour.
+      def render_prompt_prefix(prompt)
+        return prompt unless prompt.include?("\n")
+        prefix, _, last = prompt.rpartition("\n")
+        print "#{prefix}\n"
+        $stdout.flush
+        last
       end
 
       def read_simple_line(prompt = '')
