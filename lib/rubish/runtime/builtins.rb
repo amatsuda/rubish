@@ -7087,41 +7087,30 @@ module Rubish
       # Limit to max_count lines
       lines = lines.take(max_count) if max_count > 0
 
-      # Clear existing array elements (from origin onwards)
-      ENV.keys.select { |k| k.start_with?("#{array_name}_") }.each do |k|
-        idx = k.sub("#{array_name}_", '').to_i
-        ENV.delete(k) if idx >= origin
-      end
-
-      # Store lines in array
+      # Store the lines into a real indexed array. With -O origin, keep the
+      # existing elements before origin and overwrite from there; otherwise
+      # replace the whole array.
+      arr = origin.positive? ? (get_array(array_name)[0...origin] || []) : []
       lines.each_with_index do |line, i|
         # Strip trailing delimiter if -t was used
         line = line.chomp(delimiter) if strip_trailing
 
         idx = origin + i
-        ENV["#{array_name}_#{idx}"] = line
+        arr[idx] = line
 
         # Call callback if specified
         if callback && ((i + 1) % quantum == 0)
           @state.executor&.call("#{callback} #{idx} #{line.inspect}")
         end
       end
-
-      # Set array length marker
-      ENV["#{array_name}_LENGTH"] = lines.length.to_s
+      set_array(array_name, arr)
 
       true
     end
 
-    # Helper to get mapfile array contents
-    def get_mapfile_array(name = 'MAPFILE')
-      length = ENV["#{name}_LENGTH"]&.to_i || 0
-      (0...length).map { |i| ENV["#{name}_#{i}"] }
-    end
-
     # Helper to clear mapfile array
     def clear_mapfile_array(name = 'MAPFILE')
-      ENV.keys.select { |k| k.start_with?("#{name}_") }.each { |k| ENV.delete(k) }
+      unset_array(name)
     end
 
     def basename(args)
