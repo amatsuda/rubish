@@ -429,6 +429,13 @@ module Rubish
       # Add abbreviated path expansion as a dialog proc
       # This expands l/r/re to lib/rubish/repl.rb inline when Tab is pressed
       setup_abbreviated_path_expansion
+
+      # Pre-warm the zsh-fpath lookup off the hot path. The help-parser's
+      # `zsh_fpath` accessor calls `zsh -c 'print -l $fpath'` lazily on its
+      # first invocation, which costs ~150ms — a noticeable hit on the
+      # session's first Tab. Spawning here means the cache is usually warm
+      # by the time the user types their first command.
+      Thread.new { Builtins.context&.zsh_fpath }
     end
 
     # Set terminal title to "rubish" (or custom title via RUBISH_TITLE env var)
