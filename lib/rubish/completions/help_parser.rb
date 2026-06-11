@@ -286,18 +286,23 @@ module Rubish
         help_output = output
         # Check if this output has good subcommand info
         help_parsed = parse_help_output(output)
-        if help_parsed[:subcommands].length >= 3
-          parsed = help_parsed
-          break
-        elsif parsed.nil? || help_parsed[:subcommands].length > (parsed[:subcommands]&.length || 0)
+        parsed ||= help_parsed
+        if help_parsed[:subcommands].length > (parsed[:subcommands] || []).length
           parsed = help_parsed
         end
+        # Break as soon as the parse looks substantial. The previous loop only
+        # broke on `subcommands >= 3`, so file-arg utilities like `cat`, `ls`,
+        # `vim`, `tar` (zero subcommands, many options) ran both `--help` and
+        # `-h` — doubling the cold-cache cost for no gain, since the second
+        # spawn returned the same output.
+        break if help_parsed[:subcommands].length >= 3 || help_parsed[:options].length >= 3
       end
 
-      return nil unless parsed
+      # Cache the result. Caching `parsed=nil` ("total help failure") prevents
+      # re-spawning on every subsequent tab; the cache key still re-tries after
+      # HELP_CACHE_TTL in case the user installed the binary or fixed its --help.
+      @help_completion_cache[cache_key] = (parsed || {subcommands: [], options: []}).merge(timestamp: Time.now)
 
-      parsed[:timestamp] = Time.now
-      @help_completion_cache[cache_key] = parsed
       parsed
     end
 
