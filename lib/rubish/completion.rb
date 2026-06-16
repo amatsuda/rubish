@@ -363,13 +363,25 @@ module Rubish
             Builtins.clear_completion_context
           end
 
+          # Reline's word-break logic doesn't know about backslash escapes,
+          # so for `cat foo\ bar/<TAB>` it passes us `input = "bar/"` after
+          # the unescaped space. Our split_completion_words is escape-aware
+          # and recovers the real word `foo\ bar/` from the line — glob
+          # against that, then strip the leading-bit-Reline-doesn't-see
+          # from each result so the candidates still start with `input` and
+          # Reline's replace lands the right path.
+          file_input = (cword < words.length ? words[cword] : nil) || input
           # With a non-empty prefix, complete_file globs `prefix*` and
           # returns actual matches. With an empty prefix, it returns
           # every entry in CWD — useful when there's just one (`<TAB>`
           # should complete to it), but otherwise we'd dump the whole
           # directory alongside subcommand candidates. Keep the single-
           # match case and drop anything wider.
-          candidates = complete_file(input)
+          candidates = complete_file(file_input)
+          if file_input != input && !candidates.empty?
+            prefix_to_strip = file_input.delete_suffix(input)
+            candidates = candidates.map { |c| c.delete_prefix(prefix_to_strip) }
+          end
           file_results = (input.empty? && candidates.length > 1) ? [] : candidates
 
           # Files first; uniq preserves first-occurrence order so a

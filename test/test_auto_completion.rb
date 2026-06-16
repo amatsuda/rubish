@@ -942,4 +942,65 @@ class TestAutoCompletion < Test::Unit::TestCase
       end
     end
   end
+
+  # ==========================================================================
+  # File completion under directories whose names contain a space
+  # ==========================================================================
+
+  # Reline word-breaks on the literal space inside `foo\ bar/`, so it
+  # passes only `bar/` to the completion proc. The proc has to look at
+  # the full line buffer, recognise the backslash-escape, glob against
+  # the real path, and strip the prefix Reline already has so its
+  # replace lands the right file.
+  def test_completes_under_escaped_space_directory
+    Dir.mktmpdir do |dir|
+      FileUtils.mkdir(File.join(dir, 'foo bar'))
+      FileUtils.touch(File.join(dir, 'foo bar', 'file1.txt'))
+      Dir.chdir(dir) do
+        line = 'cat foo\\ bar/'
+        result = @repl.send(:complete, 'bar/', line: line, point: line.length)
+        assert_equal ['bar/file1.txt'], result
+      end
+    end
+  end
+
+  # Same shape, with a partial filename after the directory.
+  def test_completes_under_escaped_space_directory_with_partial
+    Dir.mktmpdir do |dir|
+      FileUtils.mkdir(File.join(dir, 'foo bar'))
+      FileUtils.touch(File.join(dir, 'foo bar', 'file1.txt'))
+      Dir.chdir(dir) do
+        line = 'cat foo\\ bar/f'
+        result = @repl.send(:complete, 'f', line: line, point: line.length)
+        assert_equal ['file1.txt'], result
+      end
+    end
+  end
+
+  # Tab right after the escaped space (before any directory entry name)
+  # should still complete to entries inside the escaped-space directory.
+  def test_completes_after_trailing_escaped_space
+    Dir.mktmpdir do |dir|
+      FileUtils.mkdir(File.join(dir, 'foo bar'))
+      Dir.chdir(dir) do
+        line = 'cat foo\\ '
+        result = @repl.send(:complete, '', line: line, point: line.length)
+        assert_equal ['bar/'], result
+      end
+    end
+  end
+
+  # Quux-style sibling (no space in name) must still complete normally
+  # — the fix mustn't regress the easy case.
+  def test_no_escape_directory_completion_unchanged
+    Dir.mktmpdir do |dir|
+      FileUtils.mkdir(File.join(dir, 'quux'))
+      FileUtils.touch(File.join(dir, 'quux', 'file2.txt'))
+      Dir.chdir(dir) do
+        line = 'cat quux/'
+        result = @repl.send(:complete, 'quux/', line: line, point: line.length)
+        assert_equal ['quux/file2.txt'], result
+      end
+    end
+  end
 end
