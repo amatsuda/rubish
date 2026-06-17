@@ -7398,6 +7398,16 @@ module Rubish
             keywords << current_word unless current_word.empty?
             current_word = +''
             i += 1
+          elsif (char == '{' || char == '}') && !current_word.end_with?('$')
+            # `{`/`}` adjacent to other chars (`};`, `foo(){`, `}fi`) are
+            # token boundaries the depth tracker needs to see. Flush the
+            # word in progress and emit the brace itself.
+            # `${...}` parameter expansion is preserved by the `$`-prefix
+            # check: a `{` right after `$` joins the word instead.
+            keywords << current_word unless current_word.empty?
+            current_word = +''
+            keywords << char
+            i += 1
           else
             current_word << char
             i += 1

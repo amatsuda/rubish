@@ -111,4 +111,27 @@ class TestEval < Test::Unit::TestCase
     output = capture_output { execute('evalf hello') }
     assert_equal "got-hello\n", output
   end
+
+  # `};` (closing brace immediately followed by semicolon, no whitespace)
+  # is what `eval "$(direnv hook bash)"` and most shell hook scripts use
+  # to end their function definitions. extract_unquoted_keywords used
+  # to split only on whitespace, so `};` was one word that didn't match
+  # the `}` keyword — the depth tracker never closed the function and
+  # process_script_lines emitted a spurious "unclosed control structure"
+  # warning.
+  def test_eval_function_with_brace_semicolon_terminator
+    err_io = StringIO.new
+    original_stderr = $stderr
+    $stderr = err_io
+    begin
+      execute(%(eval $'fn_terminated() {\n  echo body\n};\n'))
+    ensure
+      $stderr = original_stderr
+    end
+    refute_match(/unclosed control structure/, err_io.string)
+    output = capture_output { execute('fn_terminated') }
+    assert_equal "body\n", output
+  ensure
+    Rubish::Builtins.current_state.function_remover&.call('fn_terminated')
+  end
 end
