@@ -447,6 +447,23 @@ class TestPrompt < Test::Unit::TestCase
     end
   end
 
+  # `eval "$(direnv hook bash)"` assigns `PROMPT_COMMAND=_direnv_hook`
+  # without `export`, so it lands in the shell-var namespace, not ENV.
+  # run_prompt_command must consult the shell var too (matching bash —
+  # a non-exported shell var still drives PROMPT_COMMAND).
+  def test_prompt_command_from_shell_var
+    Dir.chdir(@tempdir) do
+      ENV.delete('PROMPT_COMMAND')
+      Rubish::Builtins.set_array('PROMPT_COMMAND', [])
+      Rubish::Builtins.set_var('PROMPT_COMMAND', 'echo "from-shell-var" > prompt_test.txt')
+      @repl.send(:run_prompt_command)
+      assert File.exist?('prompt_test.txt'), 'shell-var PROMPT_COMMAND should fire'
+      assert_equal "from-shell-var\n", File.read('prompt_test.txt')
+    end
+  ensure
+    Rubish::Builtins.delete_var('PROMPT_COMMAND')
+  end
+
   def test_prompt_command_preserves_exit_status
     @repl.instance_variable_set(:@last_status, 42)
     ENV['PROMPT_COMMAND'] = 'true'

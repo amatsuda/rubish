@@ -788,8 +788,11 @@ module Rubish
         return
       end
 
-      # Fall back to PROMPT_COMMAND as a string
-      cmd = ENV['PROMPT_COMMAND']
+      # Fall back to PROMPT_COMMAND as a string. Check the shell-var
+      # namespace first — bash and `eval "$(direnv hook bash)"` use a
+      # bare `PROMPT_COMMAND=…` assignment which lands there, not in
+      # ENV. (Same shape of fix as for PROMPT / PS1.)
+      cmd = Builtins.get_var('PROMPT_COMMAND') || ENV['PROMPT_COMMAND']
       return if cmd.nil? || cmd.empty?
 
       execute_prompt_command(cmd)
