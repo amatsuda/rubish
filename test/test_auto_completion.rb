@@ -964,15 +964,52 @@ class TestAutoCompletion < Test::Unit::TestCase
     end
   end
 
-  # Same shape, with a partial filename after the directory.
+  # Same shape, with a partial filename after the directory. Reline
+  # passes the truncated `bar/f` (the part after the last literal space),
+  # not just `f` — that's the contract the proc has to satisfy.
   def test_completes_under_escaped_space_directory_with_partial
     Dir.mktmpdir do |dir|
       FileUtils.mkdir(File.join(dir, 'foo bar'))
       FileUtils.touch(File.join(dir, 'foo bar', 'file1.txt'))
       Dir.chdir(dir) do
         line = 'cat foo\\ bar/f'
-        result = @repl.send(:complete, 'f', line: line, point: line.length)
-        assert_equal ['file1.txt'], result
+        result = @repl.send(:complete, 'bar/f', line: line, point: line.length)
+        assert_equal ['bar/file1.txt'], result
+      end
+    end
+  end
+
+  # The same path through the `elsif spec` branch (used for commands with
+  # a programmable completion spec like `{files: true}`). compinit / zsh
+  # defaults register this for cat/less/vim/head/tail/etc., so the real
+  # REPL hits this path — NOT the catchall else where the earlier fix
+  # alone applied. Without the spec-branch fix, interactive Tab on
+  # `cat foo\ bar/f<TAB>` does nothing.
+  def test_completes_under_escaped_space_with_files_spec
+    Dir.mktmpdir do |dir|
+      FileUtils.mkdir(File.join(dir, 'foo bar'))
+      FileUtils.touch(File.join(dir, 'foo bar', 'file1.txt'))
+      Dir.chdir(dir) do
+        # Register the same spec compinit would add for cat.
+        Rubish::Builtins.current_state.completions['cat'] = {files: true}
+        line = 'cat foo\\ bar/f'
+        result = @repl.send(:complete, 'bar/f', line: line, point: line.length)
+        assert_equal ['bar/file1.txt'], result
+      end
+    end
+  end
+
+  # Same spec branch, Tab on the trailing escaped space — should descend
+  # into the escaped-space directory.
+  def test_files_spec_trailing_escaped_space
+    Dir.mktmpdir do |dir|
+      FileUtils.mkdir(File.join(dir, 'foo bar'))
+      FileUtils.touch(File.join(dir, 'foo bar', 'file1.txt'))
+      Dir.chdir(dir) do
+        Rubish::Builtins.current_state.completions['cat'] = {files: true}
+        line = 'cat foo\\ '
+        result = @repl.send(:complete, '', line: line, point: line.length)
+        assert_equal ['bar/'], result
       end
     end
   end

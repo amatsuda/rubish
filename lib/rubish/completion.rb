@@ -331,10 +331,22 @@ module Rubish
           end
         elsif spec
           # Use spec without function (wordlist, actions, etc.)
-          results = Builtins.generate_completions(spec, input)
-          if (spec[:files] || spec[:directories]) &&
-             Builtins.shopt_enabled?('complete_fullquote')
+          # For file/dir specs (e.g. `cat` has `{files: true}`), Reline's
+          # `input` is the post-word-break partial (`bar/f`) but the real
+          # word is the escape-aware `foo\ bar/f` recovered by
+          # split_completion_words. Glob against the latter so we find the
+          # right files, then strip the prefix Reline doesn't see from each
+          # result so it still starts with `input` for Reline's replace.
+          cword = calculate_comp_cword(line, point, words)
+          is_file_spec = spec[:files] || spec[:directories]
+          spec_input = is_file_spec && cword < words.length ? (words[cword] || input) : input
+          results = Builtins.generate_completions(spec, spec_input)
+          if is_file_spec && Builtins.shopt_enabled?('complete_fullquote')
             results = results.map { |r| quote_completion_metacharacters(r) }
+          end
+          if spec_input != input && !results.empty?
+            prefix_to_strip = spec_input.delete_suffix(input)
+            results = results.map { |r| r.delete_prefix(prefix_to_strip) }
           end
           return results
         else
