@@ -28,11 +28,13 @@ SCRIPT_DIR="$(cd -P "$(dirname "$SCRIPT")" && pwd)"
 RUBISH_ROOT="$(cd -P "$SCRIPT_DIR/.." && pwd)"
 RUBISH_BIN="$RUBISH_ROOT/exe/rubish"
 
-# Pick a Ruby interpreter. Honor an explicit override via $RUBY;
-# otherwise probe common locations (rbenv, homebrew, system) and fall
-# back to whatever `command -v ruby` finds. The first match wins;
+# Pick a Ruby interpreter. Prefer $ECHOES_RUBY (set by Echoes to
+# pin the launcher to the interpreter Echoes itself is running on;
+# Fall back to $RUBY for back-compat, then probe common locations
+# (rbenv, homebrew, system), then `command -v ruby`. First match wins;
 # adjust your PATH or set $RUBY for a specific version.
-if [ -z "${RUBY:-}" ]; then
+RUBY="${ECHOES_RUBY:-${RUBY:-}}"
+if [ -z "$RUBY" ]; then
   for cand in \
     "$HOME/.rbenv/shims/ruby" \
     /opt/homebrew/bin/ruby \

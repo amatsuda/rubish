@@ -33,11 +33,11 @@ bundle install
 bundle exec exe/rubish
 ```
 
-`bin/rubish` is a small bash launcher that finds a usable Ruby on its own (probes `~/.rbenv/shims/ruby`, `/opt/homebrew/bin/ruby`, `/usr/local/bin/ruby`, system Ruby; honors `$RUBY`). Use it when bundler isn't around — for example as a login shell, from a `.app` bundle, or anywhere `PATH` may be minimal:
+`bin/rubish` is a small bash launcher that finds a usable Ruby on its own (probes `~/.rbenv/shims/ruby`, `/opt/homebrew/bin/ruby`, `/usr/local/bin/ruby`, system Ruby; honors `$ECHOES_RUBY`, falling back to `$RUBY` for back-compat). Use it when bundler isn't around — for example as a login shell, from a `.app` bundle, or anywhere `PATH` may be minimal:
 
 ```sh
 ./bin/rubish
-RUBY=/opt/homebrew/opt/ruby@3.4/bin/ruby ./bin/rubish   # explicit override
+ECHOES_RUBY=/opt/homebrew/opt/ruby@3.4/bin/ruby ./bin/rubish   # explicit override
 ```
 
 ## Usage
