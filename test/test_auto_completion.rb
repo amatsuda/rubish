@@ -932,13 +932,46 @@ class TestAutoCompletion < Test::Unit::TestCase
     end
   end
 
-  # The whole-CWD-dump case the gate still guards against.
-  def test_empty_prefix_stays_quiet_when_multiple_entries
+  # When the help parser has nothing to offer, files are all Tab can
+  # complete — list them even with an empty prefix, like bash's
+  # default filename completion and like spec'd commands (`cat <TAB>`
+  # with a `{files: true}` spec) already do. The gate only suppresses
+  # the dump when subcommand candidates would be drowned out by it
+  # (see test_complete_empty_input_does_not_dump_cwd_entries).
+  def test_empty_prefix_lists_entries_when_no_help_candidates
+    Rubish::Builtins.context.instance_variable_get(:@help_completion_cache)['ls'] = {
+      subcommands: [],
+      options: [],
+      timestamp: Time.now
+    }
+
     Dir.mktmpdir do |dir|
       %w[a.txt b.txt c.txt].each { |f| FileUtils.touch(File.join(dir, f)) }
       Dir.chdir(dir) do
         result = @repl.send(:complete, '', line: 'ls ', point: 3)
-        assert_empty result
+        assert_equal %w[a.txt b.txt c.txt], result
+      end
+    end
+  end
+
+  # A command invoked by path (`ln -s /bin/cat dog; ./dog <TAB>`) has
+  # no completion spec and no help-parser candidates; it should still
+  # offer the CWD files instead of a dead Tab.
+  def test_empty_prefix_lists_entries_for_path_invoked_command
+    Rubish::Builtins.context.instance_variable_get(:@help_completion_cache)['./dog'] = {
+      subcommands: [],
+      options: [],
+      timestamp: Time.now
+    }
+
+    Dir.mktmpdir do |dir|
+      FileUtils.touch(File.join(dir, 'a'))
+      FileUtils.touch(File.join(dir, 'b'))
+      File.symlink('/bin/cat', File.join(dir, 'dog'))
+      Dir.chdir(dir) do
+        result = @repl.send(:complete, '', line: './dog ', point: 6)
+        assert_includes result, 'a'
+        assert_includes result, 'b'
       end
     end
   end

@@ -385,16 +385,17 @@ module Rubish
           file_input = (cword < words.length ? words[cword] : nil) || input
           # With a non-empty prefix, complete_file globs `prefix*` and
           # returns actual matches. With an empty prefix, it returns
-          # every entry in CWD — useful when there's just one (`<TAB>`
-          # should complete to it), but otherwise we'd dump the whole
-          # directory alongside subcommand candidates. Keep the single-
-          # match case and drop anything wider.
+          # every entry in CWD — wanted when the help parser came up
+          # empty (files are then all Tab can offer, matching bash's
+          # filename-completion fallback and spec'd commands like
+          # `cat`), but when there ARE subcommand candidates the dump
+          # would drown them out, so keep only a single match then.
           candidates = complete_file(file_input)
           if file_input != input && !candidates.empty?
             prefix_to_strip = file_input.delete_suffix(input)
             candidates = candidates.map { |c| c.delete_prefix(prefix_to_strip) }
           end
-          file_results = (input.empty? && candidates.length > 1) ? [] : candidates
+          file_results = (input.empty? && candidates.length > 1 && !auto_results.empty?) ? [] : candidates
 
           # Files first; uniq preserves first-occurrence order so a
           # name appearing in both sources surfaces from the file side.
