@@ -503,4 +503,23 @@ class TestLexer < Test::Unit::TestCase
     assert_equal 2, tokens.length
     assert_equal '"${HOME}"_tail', tokens[1].value
   end
+
+  # `brew shellenv` nests a quoted `${...}` inside another `${...}`:
+  # MANPATH="${MANPATH%"${MANPATH##*[!:]}"}". The braced-variable scanner
+  # must consume the whole expansion (nested braces and inner quotes),
+  # not stop at the first `}` — otherwise the word is cut short and a
+  # spurious RBRACE token splits the command.
+  def test_nested_quoted_param_expansion_stays_one_word
+    tokens = tokenize('export MANPATH="${MANPATH%"${MANPATH##*[!:]}"}"')
+    assert_equal 2, tokens.length
+    assert_equal :WORD, tokens[1].type
+    assert_equal 'MANPATH="${MANPATH%"${MANPATH##*[!:]}"}"', tokens[1].value
+  end
+
+  def test_brace_group_with_nested_quoted_param_expansion
+    line = '[ -z "${MANPATH-}" ] || { export MANPATH="${MANPATH%"${MANPATH##*[!:]}"}"; };'
+    tokens = tokenize(line)
+    assert_equal %i[WORD WORD WORD WORD OR LBRACE WORD WORD SEMICOLON RBRACE SEMICOLON],
+                 tokens.map(&:type)
+  end
 end

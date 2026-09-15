@@ -1035,10 +1035,36 @@ module Rubish
     end
 
     def read_braced_variable
-      # ${VAR}
+      # ${VAR}, including nested expansions and quoted sections inside:
+      # `${MANPATH%"${MANPATH##*[!:]}"}` (brew shellenv) must be consumed
+      # whole — stopping at the first `}` would cut the word short and
+      # leak a spurious RBRACE token.
       @pos += 2 # skip ${
-      @pos += 1 while @pos < @input.length && @input[@pos] != '}'
-      @pos += 1 if @pos < @input.length # skip closing }
+      depth = 1
+      while @pos < @input.length && depth > 0
+        case @input[@pos]
+        when '{' then depth += 1
+        when '}' then depth -= 1
+        when '\\' then @pos += 1
+        when '$'
+          # $'...' (ANSI-C, knows \') and $(...) have their own scanners;
+          # a bare $ falls through (a following { is counted as nesting).
+          if @input[@pos + 1] == "'"
+            read_ansi_c_quoted_string
+            next
+          elsif @input[@pos + 1] == '('
+            read_command_substitution
+            next
+          end
+        when '"'
+          read_double_quoted_string
+          next
+        when "'"
+          read_single_quoted_string
+          next
+        end
+        @pos += 1
+      end
     end
 
     def read_brace_expansion
