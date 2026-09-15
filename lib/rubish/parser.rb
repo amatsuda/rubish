@@ -254,6 +254,8 @@ module Rubish
                        parse_def
                      elsif peek(:LPAREN)
                        parse_subshell
+                     elsif peek(:LBRACE)
+                       parse_brace_group
                      elsif peek(:COPROC)
                        parse_coproc
                      elsif peek(:LAZY_LOAD)
@@ -932,6 +934,32 @@ module Rubish
       skip_semicolon
 
       while !peek(:WHEN) && !peek(:ELSE) && !peek_end && current
+        cmd = parse_conditional
+        break unless cmd
+
+        commands << cmd
+        skip_semicolon
+      end
+
+      commands.length == 1 ? commands.first : AST::List.new(commands)
+    end
+
+    # brace_group : '{' list '}'
+    # Runs in the current shell, unlike a subshell.
+    def parse_brace_group
+      consume(:LBRACE)
+      body = parse_brace_group_body
+      consume(:RBRACE) || raise('Expected "}" to close brace group')
+      cmd = AST::BraceGroup.new(body)
+      parse_redirections(cmd)
+    end
+
+    # Parse body of brace group (stops at })
+    def parse_brace_group_body
+      commands = []
+      skip_semicolon
+
+      while !peek(:RBRACE) && current
         cmd = parse_conditional
         break unless cmd
 

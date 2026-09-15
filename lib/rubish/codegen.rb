@@ -46,6 +46,8 @@ module Rubish
         generate_case(node)
       when AST::Subshell
         generate_subshell(node)
+      when AST::BraceGroup
+        generate_brace_group(node)
       when AST::Heredoc
         generate_heredoc(node)
       when AST::Herestring
@@ -753,7 +755,7 @@ module Rubish
     def pipeline_compound_command?(node)
       case node
       when AST::For, AST::ArithFor, AST::While, AST::Until, AST::Select,
-           AST::If, AST::Unless, AST::Case, AST::Function
+           AST::If, AST::Unless, AST::Case, AST::Function, AST::BraceGroup
         true
       else
         false
@@ -793,7 +795,7 @@ module Rubish
       # and needs the redirect set on the object itself
       case node
       when AST::For, AST::ArithFor, AST::While, AST::Until, AST::Select,
-           AST::If, AST::Unless, AST::Case, AST::Function
+           AST::If, AST::Unless, AST::Case, AST::Function, AST::BraceGroup
         true
       else
         false
@@ -1109,6 +1111,13 @@ module Rubish
     def generate_subshell(node)
       body_code = generate_loop_body(node.body)
       "__subshell { #{body_code} }"
+    end
+
+    def generate_brace_group(node)
+      # No fork — the group runs in the current shell. begin/end keeps
+      # it a single expression so it works inside __and_cmd/__or_cmd
+      # lambdas and __with_redirect blocks.
+      "begin; #{generate_loop_body(node.body)}; end"
     end
 
     def generate_heredoc(node)

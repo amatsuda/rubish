@@ -263,4 +263,32 @@ class TestParser < Test::Unit::TestCase
     assert_equal 'each', ast.commands[1].name
     assert_match(/\|n\|/, ast.commands[1].block)
   end
+
+  # Brace group: { list; } runs in the current shell (unlike a subshell).
+  # `brew shellenv` emits `[ -z "${MANPATH-}" ] || { export ...; };`.
+  def test_brace_group
+    ast = parse('{ echo hi; }')
+    assert_instance_of Rubish::AST::BraceGroup, ast
+    assert_instance_of Rubish::AST::Command, ast.body
+    assert_equal 'echo', ast.body.name
+  end
+
+  def test_brace_group_multiple_commands
+    ast = parse('{ echo one; echo two; }')
+    assert_instance_of Rubish::AST::BraceGroup, ast
+    assert_instance_of Rubish::AST::List, ast.body
+    assert_equal 2, ast.body.commands.length
+  end
+
+  def test_brace_group_as_or_right_operand
+    ast = parse('false || { echo hi; };')
+    assert_instance_of Rubish::AST::Or, ast
+    assert_instance_of Rubish::AST::BraceGroup, ast.right
+  end
+
+  def test_brace_group_with_redirect
+    ast = parse('{ echo hi; } > out.txt')
+    assert_instance_of Rubish::AST::Redirect, ast
+    assert_instance_of Rubish::AST::BraceGroup, ast.command
+  end
 end

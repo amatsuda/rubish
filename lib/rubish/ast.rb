@@ -110,6 +110,9 @@ module Rubish
     # Subshell: (commands) - runs commands in a child process
     Subshell = Data.define(:body)
 
+    # BraceGroup: { commands; } - runs commands in the current shell
+    BraceGroup = Data.define(:body)
+
     # Heredoc: cmd <<EOF ... EOF - provides multi-line input to command
     # delimiter: the terminating word (e.g., "EOF")
     # content: the heredoc content (set later when lines are collected)
