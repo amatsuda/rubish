@@ -382,7 +382,7 @@ module Rubish
 
       # ${var:-default}, ${var-default}, etc.
       # Also handles positional parameters: ${1:-default}, ${10:-default}, etc.
-      return __param_expand($1, $2, $3 || '') if content =~ /\A([a-zA-Z_][a-zA-Z0-9_]*|\d+)(:-|:=|:\+|:\?|-|=|\+|\?)(.*)?\z/
+      return __param_expand($1, $2, $3 || '', expand_operand: true) if content =~ /\A([a-zA-Z_][a-zA-Z0-9_]*|\d+)(:-|:=|:\+|:\?|-|=|\+|\?)(.*)?\z/
 
       # ${#var} - length
       return __param_length($1) if content =~ /\A#([a-zA-Z_][a-zA-Z0-9_]*)\z/

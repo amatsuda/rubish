@@ -1440,7 +1440,10 @@ module Rubish
         # decoded at codegen time, the runtime would receive an
         # already-decoded string and the shopt toggle would have
         # nothing to gate.
-        generate_interpolated_string(operand, decode_extquote: false)
+        # Wrap in a proc so the interpolation (and any command
+        # substitution inside it) runs only if the operator actually
+        # uses the word — `${X-$(cmd)}` must not run cmd when X is set.
+        "proc { #{generate_interpolated_string(operand, decode_extquote: false)} }"
       else
         operand.inspect
       end

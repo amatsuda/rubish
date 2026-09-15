@@ -83,6 +83,32 @@ class TestParamExpansion < Test::Unit::TestCase
     assert_equal "\n", File.read(output_file)
   end
 
+  # The operand word undergoes expansion when used, like bash. This is
+  # what `brew shellenv` relies on: PATH="...${PATH+:$PATH}" must splice
+  # the old PATH in, not append a literal ":$PATH".
+  def test_alternate_operand_expands_variables
+    ENV['SET_VAR'] = 'old'
+    execute(%(RESULT="pre${SET_VAR+:$SET_VAR}post"))
+    assert_equal 'pre:oldpost', get_shell_var('RESULT')
+  end
+
+  def test_default_operand_expands_variables_in_quoted_string
+    ENV['SET_VAR'] = 'world'
+    ENV.delete('UNSET_VAR')
+    execute(%(echo "${UNSET_VAR:-hello $SET_VAR}" > #{output_file}))
+    assert_equal "hello world\n", File.read(output_file)
+  end
+
+  # bash expands the word only when the operator actually uses it:
+  # `${SET-$(cmd)}` must not run cmd when the variable is set.
+  def test_unused_operand_is_not_expanded
+    ENV['SET_VAR'] = 'value'
+    side_effect = File.join(@tempdir, 'side_effect')
+    execute(%(echo "${SET_VAR-$(touch #{side_effect})}" > #{output_file}))
+    assert_false File.exist?(side_effect), 'operand command substitution ran despite not being used'
+    assert_equal "value\n", File.read(output_file)
+  end
+
   # ${#var} - length
   def test_length
     ENV['LEN_VAR'] = 'hello'

@@ -111,33 +111,50 @@ module Rubish
     #   ##  Remove longest prefix matching pattern
     #   %   Remove shortest suffix matching pattern
     #   %%  Remove longest suffix matching pattern
-    def __param_expand(var_name, operator, operand)
-      # extquote: when enabled, process $'...' and $"..." quoting in the operand
-      operand = expand_extquote(operand) if Builtins.shopt_enabled?('extquote')
+    def __param_expand(var_name, operator, operand, expand_operand: false)
+      # The operand word is only expanded when the operator actually uses
+      # it, like bash: `${X-$(cmd)}` must not run cmd when X is set. The
+      # codegen path defers its interpolation by passing a proc; the
+      # runtime path passes the raw text with expand_operand: true so
+      # $VAR / $(cmd) / backticks inside it are expanded here
+      # (`brew shellenv` relies on `${PATH+:$PATH}` splicing in old PATH).
+      resolve = lambda do
+        word = operand.respond_to?(:call) ? operand.call.to_s : operand
+        # extquote: when enabled, process $'...' and $"..." quoting in the operand
+        word = expand_extquote(word) if Builtins.shopt_enabled?('extquote')
+        word = expand_string_content(word, quoted: true) if expand_operand
+        word
+      end
 
       value, is_set, is_null = get_param_expand_info(var_name)
 
       case operator
-      when ':-' then is_null ? operand : value                    # ${var:-default}
-      when '-' then is_set ? value : operand                      # ${var-default}
-      when ':=' then is_null ? assign_default(var_name, operand) : value  # ${var:=default}
-      when '=' then is_set ? value : assign_default(var_name, operand)    # ${var=default}
-      when ':+' then is_null ? '' : operand                       # ${var:+value}
-      when '+' then is_set ? operand : ''                         # ${var+value}
-      when ':?'                                                   # ${var:?message}
-        raise(operand.empty? ? "#{var_name}: parameter null or not set" : operand) if is_null
+      when ':-' then is_null ? resolve.call : value                    # ${var:-default}
+      when '-' then is_set ? value : resolve.call                      # ${var-default}
+      when ':=' then is_null ? assign_default(var_name, resolve.call) : value  # ${var:=default}
+      when '=' then is_set ? value : assign_default(var_name, resolve.call)    # ${var=default}
+      when ':+' then is_null ? '' : resolve.call                       # ${var:+value}
+      when '+' then is_set ? resolve.call : ''                         # ${var+value}
+      when ':?'                                                        # ${var:?message}
+        if is_null
+          message = resolve.call
+          raise(message.empty? ? "#{var_name}: parameter null or not set" : message)
+        end
         value
-      when '?'                                                    # ${var?message}
-        raise(operand.empty? ? "#{var_name}: parameter not set" : operand) unless is_set
+      when '?'                                                         # ${var?message}
+        unless is_set
+          message = resolve.call
+          raise(message.empty? ? "#{var_name}: parameter not set" : message)
+        end
         value || ''
-      when '#'                                                    # ${var#pattern}
+      when '#'                                                         # ${var#pattern}
         return '' if value.nil?
-        pattern_to_regex(operand, :prefix, :shortest).match(value) { |m| value[m.end(0)..] } || value
-      when '##'                                                   # ${var##pattern}
+        pattern_to_regex(resolve.call, :prefix, :shortest).match(value) { |m| value[m.end(0)..] } || value
+      when '##'                                                        # ${var##pattern}
         return '' if value.nil?
-        pattern_to_regex(operand, :prefix, :longest).match(value) { |m| value[m.end(0)..] } || value
-      when '%' then value.nil? ? '' : remove_suffix(value, operand, :shortest)   # ${var%pattern}
-      when '%%' then value.nil? ? '' : remove_suffix(value, operand, :longest)   # ${var%%pattern}
+        pattern_to_regex(resolve.call, :prefix, :longest).match(value) { |m| value[m.end(0)..] } || value
+      when '%' then value.nil? ? '' : remove_suffix(value, resolve.call, :shortest)   # ${var%pattern}
+      when '%%' then value.nil? ? '' : remove_suffix(value, resolve.call, :longest)   # ${var%%pattern}
       else value || ''
       end
     end
