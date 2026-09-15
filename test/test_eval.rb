@@ -134,4 +134,44 @@ class TestEval < Test::Unit::TestCase
   ensure
     Rubish::Builtins.current_state.function_remover&.call('fn_terminated')
   end
+
+  # `brew shellenv` (sh flavor) has a line whose parameter expansion
+  # nests double quotes: `{ export MANPATH="${MANPATH%"${MANPATH##*[!:]}"}"; ...; };`
+  # A scanner that toggles quote state on every `"` flips to "unquoted"
+  # inside the expansion, reads `##` as a comment, and never sees the
+  # closing `};` — so the depth tracker reported the `{` as unclosed
+  # and swallowed every line after it. `${...}` must be skipped
+  # atomically.
+  def test_extract_unquoted_keywords_skips_param_expansion_with_nested_quotes
+    line = '[ -z "${MANPATH-}" ] || { export MANPATH="${MANPATH%"${MANPATH##*[!:]}"}"; export MANPATH=":${MANPATH#"${MANPATH%%[!:]*}"}"; };'
+    keywords = Rubish::Builtins.context.send(:extract_unquoted_keywords, line)
+    assert_equal ['{', '}'], keywords
+  end
+
+  def test_eval_brew_shellenv_like_script
+    script = <<~SCRIPT
+      export EVAL_BREW_PREFIX="/opt/homebrew";
+      [ -z "${EVAL_BREW_MANPATH-}" ] || { export EVAL_BREW_MANPATH="${EVAL_BREW_MANPATH%"${EVAL_BREW_MANPATH##*[!:]}"}"; };
+      export EVAL_BREW_INFOPATH="/opt/homebrew/share/info";
+    SCRIPT
+
+    err_io = StringIO.new
+    original_stderr = $stderr
+    $stderr = err_io
+    begin
+      # Same entry point as `eval "$(brew shellenv)"`: the substituted
+      # multi-line text arrives at the eval builtin as one argument.
+      Rubish::Builtins.run('eval', [script])
+    ensure
+      $stderr = original_stderr
+    end
+
+    refute_match(/unclosed control structure/, err_io.string)
+    assert_equal '/opt/homebrew/share/info', get_shell_var('EVAL_BREW_INFOPATH'),
+                 'lines after the brace-group line must still execute'
+  ensure
+    Rubish::Builtins.delete_var('EVAL_BREW_PREFIX')
+    Rubish::Builtins.delete_var('EVAL_BREW_MANPATH')
+    Rubish::Builtins.delete_var('EVAL_BREW_INFOPATH')
+  end
 end

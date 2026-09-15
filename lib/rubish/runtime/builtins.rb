@@ -7379,6 +7379,19 @@ module Rubish
       while i < line.length
         char = line[i]
 
+        # Skip `${...}` parameter expansions atomically (outside single
+        # quotes). Their content can nest double quotes — e.g. brew
+        # shellenv's `"${MANPATH%"${MANPATH##*[!:]}"}"` — which would
+        # otherwise flip the quote state and make the `##` look like an
+        # unquoted comment, hiding the rest of the line (including a
+        # closing `};`) from the depth tracker.
+        if char == '$' && line[i + 1] == '{' && !in_single_quotes
+          skip_end = skip_param_expansion(line, i)
+          current_word << line[i...skip_end] unless in_double_quotes
+          i = skip_end
+          next
+        end
+
         if char == "'" && !in_double_quotes
           in_single_quotes = !in_single_quotes
           i += 1
@@ -7423,6 +7436,32 @@ module Rubish
 
       # Filter to only control structure keywords and braces
       keywords.select { |w| %w[if unless while until for case def fi done esac end { }].include?(w) }
+    end
+
+    # Return the index just past the `}` closing the `${` at position i
+    # (i points at the `$`). Tracks nested braces and skips quoted
+    # sections inside the expansion, so `${VAR%"${VAR##*[!:]}"}` and
+    # `${VAR#"}"}` are both consumed whole. Consumes to end of line if
+    # the expansion is unterminated.
+    def skip_param_expansion(line, i)
+      j = i + 2
+      depth = 1
+      while j < line.length && depth > 0
+        case line[j]
+        when '{' then depth += 1
+        when '}' then depth -= 1
+        when '\\' then j += 1
+        when '"', "'"
+          quote = line[j]
+          j += 1
+          while j < line.length && line[j] != quote
+            j += 1 if line[j] == '\\' && quote == '"'
+            j += 1
+          end
+        end
+        j += 1
+      end
+      j
     end
 
     def has_unclosed_quotes(text)
