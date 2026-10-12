@@ -166,7 +166,18 @@ module Rubish
       brace_expanded.flat_map do |item|
         expanded = expand_string_content(item)
         if item.include?('$') || item.include?('`')
-          Builtins.split_by_ifs(expanded).flat_map { |w| w.match?(/[*?\[]/) ? __glob(w) : [w] }
+          # With shwordsplit unset (zsh behavior), scalar variable
+          # expansions stay one word. Command substitutions still split
+          # (zsh splits those regardless of shwordsplit), and array
+          # expansions keep their usual splitting.
+          words = if Builtins.zsh_option_enabled?('sh_word_split') ||
+                     item.include?('$(') || item.include?('`') ||
+                     item =~ /\$\{[a-zA-Z_][a-zA-Z0-9_]*\[[@*]\]/
+                    Builtins.split_by_ifs(expanded)
+                  else
+                    expanded.empty? ? [] : [expanded]
+                  end
+          words.flat_map { |w| w.match?(/[*?\[]/) ? __glob(w) : [w] }
         else
           next [] if expanded.empty?
           expanded.match?(/[*?\[]/) ? __glob(expanded) : [expanded]

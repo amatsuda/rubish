@@ -235,7 +235,10 @@ module Rubish
       'posix_traps' => [false, 'POSIX trap behavior'],
       'sh_file_expansion' => [false, 'sh-style filename expansion'],
       'sh_nullcmd' => [false, 'do not use NULLCMD for empty redirections'],
-      'sh_word_split' => [false, 'split unquoted parameter expansions'],
+      # Default true (zsh defaults to false): rubish is bash-compatible,
+      # and bash always field-splits unquoted expansions. `unsetopt
+      # shwordsplit` opts into zsh's no-split behavior.
+      'sh_word_split' => [true, 'split unquoted parameter expansions'],
       'traps_async' => [false, 'run traps asynchronously'],
 
       # Zle (Zsh Line Editor)

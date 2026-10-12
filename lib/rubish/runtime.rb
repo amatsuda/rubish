@@ -762,9 +762,15 @@ module Rubish
         return arr.reject(&:empty?)
       end
 
-      # Otherwise fetch as regular variable and word-split by IFS
+      # Otherwise fetch as regular variable and word-split by IFS.
+      # With shwordsplit unset (zsh behavior, opted into via `unsetopt
+      # shwordsplit`), the scalar stays one word — though an empty
+      # expansion is still removed, as in zsh.
       value = __fetch_var(var_name)
       return [] if value.nil?
+      unless Builtins.zsh_option_enabled?('sh_word_split')
+        return value.empty? ? [] : [value]
+      end
       Builtins.split_by_ifs(value)
     end
 
