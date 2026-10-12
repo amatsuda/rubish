@@ -433,4 +433,43 @@ class TestIFS < Test::Unit::TestCase
     out = capture_stdout { execute('echo $(echo a:b:c)') }.strip
     assert_equal 'a b c', out
   end
+
+  # ---------------------------------------------------------------------------
+  # Word splitting of standalone unquoted ${...} on the codegen path.
+  # Only bare $VAR used to get the splitting treatment there; ${VAR},
+  # ${VAR:-default} and ${arr[@]} produced a single unsplit word for
+  # external commands and redirected builtins, while the builtin fast
+  # path (no redirect) split them — the same command gave a different
+  # arg count depending on an unrelated redirect.
+  # ---------------------------------------------------------------------------
+
+  def test_braced_var_splits_on_codegen_path
+    execute('WORDS="foo bar"')
+    execute('printf "[%s]" ${WORDS} > out.txt')
+    assert_equal '[foo][bar]', File.read('out.txt')
+  end
+
+  def test_param_default_splits_on_codegen_path
+    execute('unset NO_SUCH_VAR')
+    execute('printf "[%s]" ${NO_SUCH_VAR:-foo bar} > out.txt')
+    assert_equal '[foo][bar]', File.read('out.txt')
+  end
+
+  def test_array_expansion_splits_on_codegen_path
+    execute('arr=("foo bar" baz)')
+    execute('printf "[%s]" ${arr[@]} > out.txt')
+    assert_equal '[foo][bar][baz]', File.read('out.txt')
+  end
+
+  def test_braced_empty_var_elided_on_codegen_path
+    execute('EMPTY=""')
+    execute('printf "[%s]" before ${EMPTY} after > out.txt')
+    assert_equal '[before][after]', File.read('out.txt')
+  end
+
+  def test_quoted_braced_var_stays_single_word
+    execute('WORDS="foo bar"')
+    execute('printf "[%s]" "${WORDS}" > out.txt')
+    assert_equal '[foo bar]', File.read('out.txt')
+  end
 end

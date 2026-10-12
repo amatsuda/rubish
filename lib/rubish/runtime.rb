@@ -774,6 +774,21 @@ module Rubish
       Builtins.split_by_ifs(value)
     end
 
+    # Word-split the result of a standalone unquoted ${...} expansion and
+    # glob each resulting word — the same treatment the builtin fast path
+    # gives it in expand_single_arg_with_brace_and_glob. always_split is
+    # true for array expansions (${arr[@]} and friends), which split
+    # regardless of shwordsplit; scalars honor the option.
+    def __split_unquoted_expansion(value, always_split)
+      value = value.to_s
+      words = if always_split || Builtins.zsh_option_enabled?('sh_word_split')
+                Builtins.split_by_ifs(value)
+              else
+                value.empty? ? [] : [value]
+              end
+      words.flat_map { |w| w.match?(/[*?\[]/) ? __glob(w) : [w] }
+    end
+
     def __glob(pattern)
       # If noglob is set, return pattern as-is (no expansion)
       return [pattern] if Builtins.set_option?('f')

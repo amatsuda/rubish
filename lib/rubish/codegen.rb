@@ -130,6 +130,17 @@ module Rubish
           var_name = $1
           return "__fetch_var_for_arg_unquoted(#{var_name.inspect})"
         end
+        # Standalone unquoted ${...} (${VAR}, ${VAR:-default}, ${arr[@]}, …)
+        # must be word-split like bare $VAR; it used to produce a single
+        # unsplit word here while the builtin fast path split it. Keep
+        # the existing expansion codegen (it covers substring, case-mod,
+        # replace, … that the runtime expander doesn't) and wrap the
+        # result in the runtime splitter. Array expansions always split;
+        # scalars honor shwordsplit.
+        if arg.start_with?('${') && find_matching_brace(arg, 1) == arg.length - 1
+          always_split = arg.match?(/\A\$\{!?[a-zA-Z_][a-zA-Z0-9_]*\[[@*]\]/) ? 'true' : 'false'
+          return "__split_unquoted_expansion(#{generate_string_arg(arg)}, #{always_split})"
+        end
         # Special case: standalone unquoted $(cmd) - word-split output by IFS
         # Exclude $((arith)) which also starts with $(
         if !arg.start_with?('$((') && pure_command_substitution?(arg)

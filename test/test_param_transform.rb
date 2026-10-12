@@ -119,17 +119,25 @@ class TestParamTransform < Test::Unit::TestCase
     assert_equal "\n", File.read(output_file)
   end
 
-  # ${var@E} - Expand escape sequences
+  # ${var@E} - Expand escape sequences. Quoted, so the expanded
+  # whitespace survives: like bash, the unquoted form word-splits the
+  # result (`echo ${TEST@E}` prints "hello world").
   def test_transform_e_newline
     ENV['TEST'] = 'hello\nworld'
-    execute("echo ${TEST@E} > #{output_file}")
+    execute("echo \"${TEST@E}\" > #{output_file}")
     assert_equal "hello\nworld\n", File.read(output_file)
   end
 
   def test_transform_e_tab
     ENV['TEST'] = 'hello\tworld'
-    execute("echo ${TEST@E} > #{output_file}")
+    execute("echo \"${TEST@E}\" > #{output_file}")
     assert_equal "hello\tworld\n", File.read(output_file)
+  end
+
+  def test_transform_e_unquoted_word_splits
+    ENV['TEST'] = 'hello\nworld'
+    execute("echo ${TEST@E} > #{output_file}")
+    assert_equal "hello world\n", File.read(output_file)
   end
 
   def test_transform_e_no_escapes

@@ -68,12 +68,14 @@ class TestRUBISHVERSINFO < Test::Unit::TestCase
 
   # Array expansion
 
+  # Unquoted expansion word-splits, so the empty 4th element
+  # (RUBISH_VERSINFO[3]) is elided, like bash.
   def test_versinfo_all_elements_at
     output_file = File.join(@tempdir, 'output.txt')
     execute("echo ${RUBISH_VERSINFO[@]} > #{output_file}")
     value = File.read(output_file).strip
     parts = Rubish::VERSION.split('.')
-    expected_parts = [parts[0], parts[1], parts[2], '', 'release', RUBY_PLATFORM]
+    expected_parts = [parts[0], parts[1], parts[2], 'release', RUBY_PLATFORM]
     assert_equal expected_parts.join(' '), value
   end
 
@@ -82,7 +84,7 @@ class TestRUBISHVERSINFO < Test::Unit::TestCase
     execute("echo ${RUBISH_VERSINFO[*]} > #{output_file}")
     value = File.read(output_file).strip
     parts = Rubish::VERSION.split('.')
-    expected_parts = [parts[0], parts[1], parts[2], '', 'release', RUBY_PLATFORM]
+    expected_parts = [parts[0], parts[1], parts[2], 'release', RUBY_PLATFORM]
     assert_equal expected_parts.join(' '), value
   end
 
