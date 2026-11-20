@@ -47,7 +47,7 @@ module Rubish
 
     class << self
       attr_reader :disabled_builtins, :call_stack, :coprocs, :builtin_completion_functions, :named_directories
-      attr_accessor :dynamic_commands, :current_state
+      attr_accessor :dynamic_commands, :current_state, :zsh_option_lookup
 
       # Apply prefix assignments (`IFS=: read ...`) for the duration of the
       # block. Both ENV and the shell variable are set, because variable
@@ -3532,21 +3532,22 @@ module Rubish
     end
 
     # Find the canonical zsh option name from a possibly non-canonical form
+    # Resolve a zsh option name in any spelling (shwordsplit, sh_word_split,
+    # SH_WORD_SPLIT) to [:bash, shopt_name] or [:zsh, canonical_name].
+    # Looked up on every unquoted expansion (shwordsplit), so the normalized
+    # table is built once rather than re-normalizing every option per call.
     def find_zsh_option(name)
-      normalized = normalize_zsh_option(name)
+      zsh_option_lookup[normalize_zsh_option(name)]
+    end
 
-      # Check bash-compatible options first (via ZSH_TO_BASH_OPTIONS mapping)
-      ZSH_TO_BASH_OPTIONS.each do |zsh_name, bash_name|
-        return [:bash, bash_name] if normalize_zsh_option(zsh_name) == normalized
+    def zsh_option_lookup
+      Builtins.zsh_option_lookup ||= begin
+        table = {}
+        # bash-compatible options take precedence, as before
+        ZSH_OPTIONS.each_key { |opt_name| table[normalize_zsh_option(opt_name)] = [:zsh, opt_name] }
+        ZSH_TO_BASH_OPTIONS.each { |zsh_name, bash_name| table[normalize_zsh_option(zsh_name)] = [:bash, bash_name] }
+        table.freeze
       end
-
-      # Check zsh-specific options
-      ZSH_OPTIONS.each_key do |opt_name|
-        return [:zsh, opt_name] if normalize_zsh_option(opt_name) == normalized
-      end
-
-      # Not found
-      nil
     end
 
     # Get the current value of a zsh option
