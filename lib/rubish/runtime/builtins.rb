@@ -2614,18 +2614,29 @@ module Rubish
     def return_(args)
       code = args.first&.to_i || 0
       throw :return, code
+    rescue UncaughtThrowError
+      # No enclosing function or sourced script is catching :return
+      $stderr.puts "rubish: return: can only `return' from a function or sourced script"
+      false
     end
 
     def break_(args)
       # Optional: break N to break out of N levels (default 1)
       levels = args.first&.to_i || 1
       throw :break_loop, levels
+    rescue UncaughtThrowError
+      # bash prints this and returns success
+      $stderr.puts "rubish: break: only meaningful in a `for', `while', or `until' loop"
+      true
     end
 
     def continue(args)
       # Optional: continue N to continue Nth enclosing loop (default 1)
       levels = args.first&.to_i || 1
       throw :continue_loop, levels
+    rescue UncaughtThrowError
+      $stderr.puts "rubish: continue: only meaningful in a `for', `while', or `until' loop"
+      true
     end
 
     def true_(_args)
