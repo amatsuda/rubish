@@ -444,6 +444,16 @@ module Rubish
       # Resolve command path before forking (so hash updates are visible in parent)
       cmd_path = resolve_command_path(name)
 
+      # Diagnose an unknown command here instead of after fork+exec: no need
+      # to fork the whole interpreter just to fail, and the PATH scan behind
+      # "Did you mean?" stays memoized in the shell process instead of being
+      # redone in every short-lived child.
+      if command_not_found?(cmd_path)
+        report_command_not_found
+        @status = ExitStatus.new(127)
+        return self
+      end
+
       # Extract keyword assignments if -k is set
       cmd_args, keyword_env = extract_keyword_assignments(@args)
 
@@ -575,6 +585,36 @@ module Rubish
       Process.wait(@pid)
       @status = $?
       self
+    end
+
+    # A path that does not exist, or a bare name that is neither a function,
+    # a builtin, nor anywhere on PATH. (Permission and is-a-directory errors
+    # on an existing path are still reported by the child after exec.)
+    def command_not_found?(cmd_path)
+      return !File.exist?(cmd_path) if name.include?('/')
+      return false if cmd_path != name
+      return false if !@skip_functions && Command.function?(name)
+      return false if Builtins.builtin?(name)
+
+      Builtins.find_in_path(name).nil?
+    end
+
+    def report_command_not_found
+      err = case @stderr
+            when :closed then return
+            when :stdout then $stdout
+            when IO then @stderr
+            else $stderr
+            end
+      if name.include?('/')
+        err.puts "rubish: #{name}: No such file or directory"
+      else
+        err.puts "rubish: #{name}: command not found"
+        suggestions = Command.suggest_similar_commands(name)
+        err.puts "Did you mean?  #{suggestions.join("\n               ")}" unless suggestions.empty?
+      end
+      # The target may be a redirect file the caller reads right away
+      err.flush if err.respond_to?(:flush)
     end
 
     def resolve_command_path(cmd)
