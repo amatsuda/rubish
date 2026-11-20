@@ -683,6 +683,10 @@ module Rubish
         case char
         when '*' then regex_str << (greedy == :longest ? '.*' : '.*?')
         when '?' then regex_str << '.'
+        when '\\'
+          # Backslash quotes the next pattern character (`\"`, `\*`, `\.`)
+          i += 1
+          regex_str << Regexp.escape(pattern[i] || '\\')
         when '['
           j = i + 1
           j += 1 if j < pattern.length && pattern[j] == '!'
