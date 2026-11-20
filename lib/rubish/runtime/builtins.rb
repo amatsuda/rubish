@@ -7125,41 +7125,31 @@ module Rubish
       # Limit to max_count lines
       lines = lines.take(max_count) if max_count > 0
 
-      # Clear existing array elements (from origin onwards)
-      ENV.keys.select { |k| k.start_with?("#{array_name}_") }.each do |k|
-        idx = k.sub("#{array_name}_", '').to_i
-        ENV.delete(k) if idx >= origin
-      end
+      # Store into a real indexed array (readable as ${name[@]}), replacing
+      # elements from origin onwards and keeping any below it
+      lines = lines.map { |line| strip_trailing ? line.chomp(delimiter) : line }
+      existing = origin.positive? ? (get_array(array_name) || [])[0, origin] : []
+      set_array(array_name, (existing + Array.new([origin - existing.length, 0].max) + lines))
 
-      # Store lines in array
-      lines.each_with_index do |line, i|
-        # Strip trailing delimiter if -t was used
-        line = line.chomp(delimiter) if strip_trailing
+      if callback
+        lines.each_with_index do |line, i|
+          next unless ((i + 1) % quantum).zero?
 
-        idx = origin + i
-        ENV["#{array_name}_#{idx}"] = line
-
-        # Call callback if specified
-        if callback && ((i + 1) % quantum == 0)
-          @state.executor&.call("#{callback} #{idx} #{line.inspect}")
+          @state.executor&.call("#{callback} #{origin + i} #{line.inspect}")
         end
       end
-
-      # Set array length marker
-      ENV["#{array_name}_LENGTH"] = lines.length.to_s
 
       true
     end
 
     # Helper to get mapfile array contents
     def get_mapfile_array(name = 'MAPFILE')
-      length = ENV["#{name}_LENGTH"]&.to_i || 0
-      (0...length).map { |i| ENV["#{name}_#{i}"] }
+      get_array(name) || []
     end
 
     # Helper to clear mapfile array
     def clear_mapfile_array(name = 'MAPFILE')
-      ENV.keys.select { |k| k.start_with?("#{name}_") }.each { |k| ENV.delete(k) }
+      unset_array(name)
     end
 
     def basename(args)
