@@ -54,11 +54,9 @@ module Rubish
       commands = [first]
       while peek(:SEMICOLON) || peek(:AMPERSAND)
         op = consume
-        if op.type == :AMPERSAND && !peek_any(:WORD, :ARRAY, :IF, :WHILE, :FOR)
-          # Trailing &, make last command background
-          commands[-1] = AST::Background.new(commands[-1])
-          break
-        end
+        # `&` always backgrounds the command it follows, whether or not
+        # another command comes after it on the same line
+        commands[-1] = AST::Background.new(commands[-1]) if op.type == :AMPERSAND
         next_cmd = parse_conditional
         commands << next_cmd if next_cmd
       end
