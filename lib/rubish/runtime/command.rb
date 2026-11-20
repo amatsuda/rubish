@@ -496,6 +496,13 @@ module Rubish
         if !@skip_functions && Command.function?(name)
           result = Command.call_function(name, cmd_args)
           exit(result ? 0 : 1)
+        elsif Builtins.builtin?(name)
+          # A builtin that reached the fork because of its redirections:
+          # run it here, on the redirected streams, rather than exec'ing a
+          # same-named external (or failing when there is none, as for
+          # `help cd > file` or `history > file`)
+          success = Builtins.run(name, cmd_args)
+          exit(success.is_a?(ExitStatus) ? success.exitstatus : (success ? 0 : 1))
         elsif cmd_path.include?('/') && File.directory?(cmd_path)
           # Only check for directory if path was explicitly given or resolved
           # Don't check bare command names against current directory
