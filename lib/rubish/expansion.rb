@@ -380,6 +380,9 @@ module Rubish
     end
 
     def expand_parameter_expansion(content)
+      # ${#@}, ${#*}, ${#} - number of positional parameters
+      return @positional_params.length.to_s if content.match?(/\A#[@*]?\z/)
+
       # ${+VAR} - zsh parameter-is-set test. Evaluates to '1' if the
       # variable is set (even to empty), '0' if not. starship and other
       # zsh prompt themers gate behaviour on this — e.g. precmd uses
@@ -897,6 +900,7 @@ module Rubish
       when 'HOSTTYPE' then hosttype
       when 'MACHTYPE' then RUBY_PLATFORM
       when 'RUBISH_COMMAND', 'BASH_COMMAND' then @rubish_command
+      when 'FUNCNAME' then (@funcname_stack || []).first
       when 'RUBISH_SUBSHELL', 'BASH_SUBSHELL' then @subshell_level.to_s
       when 'COLUMNS' then terminal_columns.to_s
       when 'LINES' then terminal_lines.to_s

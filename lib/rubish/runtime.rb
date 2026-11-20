@@ -775,6 +775,7 @@ module Rubish
 
     def __fetch_var(var_name)
       # Special handling for SECONDS, RANDOM, LINENO, PPID, UID, EUID, GROUPS, HOSTNAME, RUBISHPID, BASHPID, HISTCMD, and EPOCHSECONDS
+      return (@funcname_stack || []).first.to_s if var_name == 'FUNCNAME'
       return seconds.to_s if var_name == 'SECONDS'
       return random.to_s if var_name == 'RANDOM'
       return @lineno.to_s if var_name == 'LINENO'

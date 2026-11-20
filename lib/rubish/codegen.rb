@@ -1358,6 +1358,9 @@ module Rubish
     end
 
     def parse_parameter_expansion(content)
+      # ${#@}, ${#*}, ${#} - number of positional parameters
+      return 'positional_params.length.to_s' if content.match?(/\A#[@*]?\z/)
+
       # Handle ${!arr[@]} or ${!arr[*]} - array keys/indices
       if content =~ /\A!([a-zA-Z_][a-zA-Z0-9_]*)\[[@*]\]\z/
         var_name = $1
