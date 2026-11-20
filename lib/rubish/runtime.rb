@@ -94,6 +94,8 @@ module Rubish
 
       Process.wait(pid)
       @last_status = $?.exitstatus || 0
+      # Remembered so a bare assignment (`x=$(cmd)`) can report this status
+      @last_subst_status = @last_status
       output
     end
 
@@ -592,8 +594,12 @@ module Rubish
     end
 
     def __condition(&block)
+      @last_subst_status = nil
       result = block.call
-      if result.is_a?(Command) && Builtins.builtin?(result.name)
+      if __bare_assignment_command?(result)
+        # `if x=$(cmd); then` tests the substitution's status
+        __run_bare_assignment(result) == 0
+      elsif result.is_a?(Command) && Builtins.builtin?(result.name)
         # Run builtin directly and check its return value
         run_builtin_with_prefix(result)
       else
@@ -1001,10 +1007,14 @@ module Rubish
 
     def __negate(&block)
       # Run command and negate exit status
+      @last_subst_status = nil
       result = block.call
 
       # Handle different return types
       case result
+      when ->(r) { __bare_assignment_command?(r) }
+        # `! x=$(cmd)` negates the substitution's status
+        status = __run_bare_assignment(result) == 0
       when Command, Pipeline, Subshell
         result.run unless result.ran?
         status = result.success?
@@ -1328,7 +1338,21 @@ module Rubish
       end
     end
 
+    # `VAR=value ...` with no command name: every word is an assignment
+    def __bare_assignment_command?(result)
+      result.is_a?(Command) && bare_assignment?(result.name) && result.args.all? { |a| bare_assignment?(a) }
+    end
+
+    # Perform the assignments and return the command's status: that of the
+    # last command substitution expanded for it, or 0 (bash semantics). The
+    # caller resets @last_subst_status before expanding the words.
+    def __run_bare_assignment(result)
+      handle_bare_assignments([result.name] + result.args)
+      @last_status = @last_subst_status || 0
+    end
+
     def __run_cmd(&block)
+      @last_subst_status = nil
       result = block.call
 
       # Run DEBUG trap before each command
@@ -1373,10 +1397,9 @@ module Rubish
         # Return ExitStatus (not the Command) to prevent eval_in_context from calling the function again
         status
       elsif result.is_a?(Command) && bare_assignment?(result.name) && result.args.all? { |a| bare_assignment?(a) }
-        # Handle bare variable assignments in lists (VAR=value)
-        handle_bare_assignments([result.name] + result.args)
-        @last_status = 0
-        result
+        # Handle bare variable assignments in lists (VAR=value). Return an
+        # ExitStatus so the caller sees this status rather than the unrun Command's.
+        ExitStatus.new(__run_bare_assignment(result))
       else
         result.run if result.is_a?(Command) || result.is_a?(Pipeline) || result.is_a?(Subshell) || result.is_a?(HeredocCommand)
         if result.respond_to?(:status)

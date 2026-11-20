@@ -152,8 +152,12 @@ module Rubish
 
     # Methods expected by Runtime module
     def execute(line, skip_history_expansion: false)
-      # Delegate to the executor callback in state
-      @state.executor&.call(line)
+      # Delegate to the executor callback in state. It returns the REPL's $?
+      # so this context's view of the last status stays current; the
+      # command-substitution child exits with it.
+      status = @state.executor&.call(line)
+      @last_status = status if status.is_a?(Integer)
+      status
     end
 
     def run_err_trap_if_failed

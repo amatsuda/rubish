@@ -89,7 +89,7 @@ module Rubish
       # SHELL - full pathname of the shell
       # Set to the rubish binary path if not already set or if running rubish
       set_shell_variable
-      @state.executor = ->(line) { execute(line) }
+      @state.executor = ->(line) { execute(line); @last_status }
       @state.script_name_getter = -> { @script_name }
       @state.script_name_setter = ->(name) { @script_name = name }
       @state.positional_params_getter = -> { @positional_params }
@@ -1043,9 +1043,11 @@ module Rubish
 
       # Check for bare variable assignment (VAR=value or VAR=value VAR2=value2 ...)
       if ast.is_a?(AST::Command) && bare_assignment?(ast.name) && ast.args.all? { |a| bare_assignment?(a) }
+        # Status is that of the last command substitution in the values, or 0
+        @last_subst_status = nil
         handle_bare_assignments([ast.name] + ast.args)
-        @last_status = 0
-        @pipestatus = [0]
+        @last_status = @last_subst_status || 0
+        @pipestatus = [@last_status]
         @command_number += 1
         # Note: bare assignments don't increment LINENO (bash behavior)
         Builtins.clear_exit_blocked  # checkjobs: non-exit command resets flag
@@ -1347,6 +1349,7 @@ module Rubish
 
       # `exit` (and errexit) throw :exit straight through this eval; keep $?
       # current so whoever catches the throw reports the right status
+      @context.instance_variable_set(:@last_subst_status, nil)
       eval_completed = false
       begin
         result = @context.instance_eval(code)
@@ -1363,10 +1366,11 @@ module Rubish
         call_function_with_redirects(result)
         @pipestatus = [@last_status]
       elsif result.is_a?(Command) && bare_assignment?(result.name) && result.args.all? { |a| bare_assignment?(a) }
-        # Handle bare variable assignments (e.g., x=$(echo hello) after expansion)
+        # Handle bare variable assignments (e.g., x=$(echo hello) after expansion).
+        # The substitutions already ran in the context; take the last one's status.
         handle_bare_assignments([result.name] + result.args)
-        @last_status = 0
-        @pipestatus = [0]
+        @last_status = @context.instance_variable_get(:@last_subst_status) || 0
+        @pipestatus = [@last_status]
       elsif result.is_a?(Command) || result.is_a?(Pipeline) || result.is_a?(Subshell) || result.is_a?(HeredocCommand)
         result.run
         # Update PIPESTATUS array
