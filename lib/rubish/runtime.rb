@@ -138,13 +138,15 @@ module Rubish
       when ':?'                                                        # ${var:?message}
         if is_null
           message = resolve.call
-          raise(message.empty? ? "#{var_name}: parameter null or not set" : message)
+          message = 'parameter null or not set' if message.empty?
+          raise ParameterExpansionError, "#{var_name}: #{message}"
         end
         value
       when '?'                                                         # ${var?message}
         unless is_set
           message = resolve.call
-          raise(message.empty? ? "#{var_name}: parameter not set" : message)
+          message = 'parameter not set' if message.empty?
+          raise ParameterExpansionError, "#{var_name}: #{message}"
         end
         value || ''
       when '#'                                                         # ${var#pattern}
