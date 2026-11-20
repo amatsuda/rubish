@@ -95,6 +95,13 @@ module Rubish
     # is an IO, nil (inherit), or a symbol: :closed, :stderr (for stdout,
     # `>&2`), or :stdout (for stderr, `2>&1` / `|&`).
     def self.apply_child_redirections(stdin, stdout, stderr)
+      # The child needs the real streams. If an embedder (or a test) swapped
+      # $stdout/$stderr for a non-IO such as StringIO, go back to the real
+      # ones first: StringIO#reopen cannot take an IO.
+      $stdin = STDIN unless $stdin.is_a?(IO)
+      $stdout = STDOUT unless $stdout.is_a?(IO)
+      $stderr = STDERR unless $stderr.is_a?(IO)
+
       if stdin == :closed
         $stdin.close
       elsif stdin
@@ -777,7 +784,7 @@ module Rubish
             # Run subshell block
             result = cmd.instance_variable_get(:@block).call
             result.run if result.is_a?(Command) || result.is_a?(Pipeline)
-            exit(result.respond_to?(:success?) && result.success? ? 0 : 0)
+            exit(Subshell.exit_code_for(result))
           elsif cmd.is_a?(HeredocCommand)
             # Run heredoc command in child process
             cmd.run
@@ -994,6 +1001,20 @@ module Rubish
   end
 
   class Subshell
+    # Exit code for the value a subshell's block returned: an ExitStatus,
+    # a ran Command/Pipeline, anything with success?, or 0.
+    def self.exit_code_for(result)
+      if result.respond_to?(:exitstatus) && result.exitstatus
+        result.exitstatus
+      elsif result.respond_to?(:status) && result.status.respond_to?(:exitstatus)
+        result.status.exitstatus || 0
+      elsif result.respond_to?(:success?)
+        result.success? ? 0 : 1
+      else
+        0
+      end
+    end
+
     attr_reader :status
     attr_accessor :stdin, :stdout, :stderr
 
@@ -1039,15 +1060,9 @@ module Rubish
         end
 
         # The block contains __run_cmd calls which handle execution
-        # So we just call the block and check the result's status
+        # So we just call the block and exit with the result's status
         result = @block.call
-
-        exit_code = if result.respond_to?(:success?)
-                      result.success? ? 0 : 1
-                    else
-                      0
-                    end
-        exit(exit_code)
+        exit(Subshell.exit_code_for(result))
       end
 
       @stdin&.close unless @stdin == $stdin || @stdin.is_a?(Symbol)

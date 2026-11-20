@@ -980,7 +980,15 @@ module Rubish
       # Wrap the block to increment subshell level before executing (in the forked process)
       Subshell.new do
         @subshell_level += 1
-        block.call
+        # `exit N` inside the subshell ends only the subshell: catch it here
+        # and hand the status to Subshell#run. A plain `exit` uses $?.
+        exited = true
+        result = catch(:exit) do
+          value = block.call
+          exited = false
+          value
+        end
+        exited ? ExitStatus.new(result || @last_status || 0) : result
       end
     end
 
