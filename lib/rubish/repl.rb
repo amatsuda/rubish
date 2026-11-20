@@ -1402,7 +1402,9 @@ module Rubish
         handle_bare_assignments([result.name] + result.args)
         @last_status = @context.instance_variable_get(:@last_subst_status) || 0
         @pipestatus = [@last_status]
-      elsif result.is_a?(Command) && PROCESS_BUILTINS.include?(result.name) && !@functions.key?(result.name)
+      elsif result.is_a?(Command) && !@functions.key?(result.name) &&
+            (PROCESS_BUILTINS.include?(result.name) ||
+             (Builtins.builtin?(result.name) && !result.stdout && !result.stderr))
         # A process builtin with redirections (`cd dir > /dev/null`) reaches
         # here as a Command; it must run in this process, not in a fork
         success = __run_process_builtin(result)

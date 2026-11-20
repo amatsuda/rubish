@@ -1516,7 +1516,7 @@ module Rubish
           check_errexit
           return ExitStatus.new(@last_status)
         end
-        success = run_builtin_with_prefix(result)
+        success = __run_process_builtin(result)
         @last_status = success.is_a?(ExitStatus) ? success.exitstatus : (success ? 0 : 1)
         run_err_trap_if_failed
         check_errexit
