@@ -453,10 +453,17 @@ module Rubish
         # Create new process group if job control is enabled
         Process.setpgid(0, 0) if Builtins.set_option?('m')
 
-        # Execute the command
-        result = block.call
-        result.run if result.is_a?(Command) || result.is_a?(Pipeline)
-        Kernel.exit(0)
+        # Execute the command. `exit N` inside the job ends only the job,
+        # and the job's exit status is the command's, so `wait $!` sees it.
+        exited = true
+        result = catch(:exit) do
+          value = block.call
+          exited = false
+          value
+        end
+        Kernel.exit(result || @last_status || 0) if exited
+        result.run if result.is_a?(Command) || result.is_a?(Pipeline) || result.is_a?(Subshell)
+        Kernel.exit(Subshell.exit_code_for(result))
       end
 
       @last_bg_pid = pid

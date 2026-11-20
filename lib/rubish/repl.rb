@@ -1063,7 +1063,7 @@ module Rubish
           expanded_args = expand_args_for_builtin(ast.args)
           # Temp env prefix (e.g. `IFS= read`) must reach in-process builtins.
           result = with_prefix_env(ast.env) { Builtins.run(builtin_name, expanded_args) }
-          @last_status = result ? 0 : 1
+          @last_status = result.is_a?(ExitStatus) ? result.exitstatus : (result ? 0 : 1)
           @pipestatus = [@last_status]
           run_err_trap_if_failed
           check_errexit

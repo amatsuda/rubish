@@ -6014,6 +6014,12 @@ module Rubish
       all_success
     end
 
+    # ExitStatus for a reaped child: its exit code, or 128+signal when it
+    # was killed, so `wait $!` reports the same value bash does
+    def wait_exit_status(status)
+      ExitStatus.new(status.exitstatus || (status.termsig ? 128 + status.termsig : 1))
+    end
+
     def wait(args)
       # wait [-fn] [-p VARNAME] [pid|%jobspec ...]
       # Wait for background jobs to complete
@@ -6151,7 +6157,7 @@ module Rubish
             manager.update_status(pid, status)
             manager.remove(job.id)
           end
-          return status.success?
+          return wait_exit_status(status)
         rescue Errno::ECHILD
           return true
         end
@@ -6168,7 +6174,7 @@ module Rubish
             loop do
               pid, status = Process.wait2(-1)
               ENV[pid_var] = pid.to_s if pid_var
-              last_status = status.success?
+              last_status = wait_exit_status(status)
             end
           rescue Errno::ECHILD
             # No more children
@@ -6182,7 +6188,7 @@ module Rubish
             ENV[pid_var] = pid.to_s if pid_var
             manager.update_status(job.pid, status)
             manager.remove(job.id)
-            last_status = status.success?
+            last_status = wait_exit_status(status)
           rescue Errno::ECHILD
             # Process already gone
             manager.remove(job.id)
@@ -6211,7 +6217,7 @@ module Rubish
               begin
                 wpid, status = Process.wait2(pid)
                 ENV[pid_var] = wpid.to_s if pid_var
-                last_status = status.success?
+                last_status = wait_exit_status(status)
                 next
               rescue Errno::ECHILD
                 puts "wait: pid #{pid} is not a child of this shell"
@@ -6227,7 +6233,7 @@ module Rubish
               ENV[pid_var] = wpid.to_s if pid_var
               manager.update_status(job.pid, status)
               manager.remove(job.id)
-              last_status = status.success?
+              last_status = wait_exit_status(status)
             rescue Errno::ECHILD
               manager.remove(job.id)
             end

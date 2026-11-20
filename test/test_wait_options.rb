@@ -81,8 +81,8 @@ class TestWaitOptions < Test::Unit::TestCase
 
     # Should have waited for the shorter process (pid1)
     assert_equal pid1.to_s, ENV['WAITED_PID']
-    # Should return false because exit 1
-    assert_false result
+    # Should report the exit status 1
+    assert_equal 1, result.exitstatus
     # Should not have waited the full 0.5 seconds
     assert elapsed < 0.4
 
@@ -186,7 +186,7 @@ class TestWaitOptions < Test::Unit::TestCase
     Rubish::JobManager.instance.add(pid: pid_fail, pgid: pid_fail, command: 'fail')
 
     result = Rubish::Builtins.run('wait', ['-n'])
-    assert_false result
+    assert_equal 1, result.exitstatus
   end
 
   # Test wait with -p combined in single arg like -pVAR
