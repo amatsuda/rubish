@@ -179,7 +179,8 @@ module Rubish
       fire_zsh_hooks('zshexit')
       save_history
       load_logout_config
-      exit_code
+      # A bare `exit` throws nil: leave with the last command's status
+      exit_code.nil? ? (@last_status || 0) : exit_code
     end
 
     # Helper for startup profiling
@@ -1344,7 +1345,15 @@ module Rubish
       @context.instance_variable_set(:@bash_argv0_unset, @bash_argv0_unset)
       @context.subshell_level = @subshell_level
 
-      result = @context.instance_eval(code)
+      # `exit` (and errexit) throw :exit straight through this eval; keep $?
+      # current so whoever catches the throw reports the right status
+      eval_completed = false
+      begin
+        result = @context.instance_eval(code)
+        eval_completed = true
+      ensure
+        @last_status = @context.last_status unless eval_completed
+      end
       if result.is_a?(Command) && result.name == 'exec'
         # Don't auto-run exec - it's handled specially in execute method
         # to support redirections without command replacement

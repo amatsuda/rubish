@@ -6432,7 +6432,8 @@ module Rubish
     end
 
     def exit(args)
-      code = args.first&.to_i || 0
+      # nil when no argument: callers fall back to $? (the last status)
+      code = args.first&.to_i
 
       # Check for active jobs if checkjobs is enabled
       if shopt_enabled?('checkjobs')

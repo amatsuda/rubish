@@ -32,11 +32,12 @@ class TestLogout < Test::Unit::TestCase
     end
   end
 
-  def test_logout_exits_with_zero_by_default
+  def test_logout_without_status_defers_to_last_status
+    # nil means "use $?", exactly like a bare `exit`
     exit_code = catch(:exit) do
       Rubish::Builtins.logout([])
     end
-    assert_equal 0, exit_code
+    assert_nil exit_code
   end
 
   def test_logout_exits_with_specified_code

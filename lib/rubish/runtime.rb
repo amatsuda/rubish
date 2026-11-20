@@ -81,7 +81,7 @@ module Rubish
             execute(cmd, skip_history_expansion: true)
             @last_status
           end
-          Kernel.exit(exit_code || 0)
+          Kernel.exit(exit_code || @last_status || 0)
         rescue => e
           $stderr.puts "rubish: #{e.message}" unless Builtins.in_completion_context?
           Kernel.exit(1)
