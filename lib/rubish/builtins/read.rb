@@ -19,6 +19,25 @@ module Rubish
       }
       vars = []
 
+      # Split clustered short options: `-ra parts` → `-r -a parts`,
+      # `-rn2 var` → `-r -n 2 var`. An option that takes a value ends the
+      # cluster; whatever follows it in the same word is its value.
+      args = args.flat_map do |arg|
+        next [arg] unless arg =~ /\A-([a-zA-Z][a-zA-Z0-9]+)\z/
+
+        expanded = []
+        chars = $1.chars
+        until chars.empty?
+          c = chars.shift
+          expanded << "-#{c}"
+          if 'adinNptu'.include?(c) && !chars.empty?
+            expanded << chars.join
+            break
+          end
+        end
+        expanded
+      end
+
       # Parse options
       i = 0
       while i < args.length

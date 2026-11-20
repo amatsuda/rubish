@@ -1372,15 +1372,7 @@ module Rubish
     # in-process builtins need it set/restored around the call.
     def run_builtin_with_prefix(cmd)
       env = cmd.respond_to?(:prefix_env) ? cmd.prefix_env : nil
-      return Builtins.run(cmd.name, cmd.args) if env.nil? || env.empty?
-
-      saved = env.keys.to_h { |k| [k, ENV.key?(k) ? ENV[k] : :__unset] }
-      env.each { |k, v| ENV[k] = v }
-      begin
-        Builtins.run(cmd.name, cmd.args)
-      ensure
-        saved.each { |k, v| v == :__unset ? ENV.delete(k) : ENV[k] = v }
-      end
+      Builtins.with_temporary_vars(env) { Builtins.run(cmd.name, cmd.args) }
     end
 
     # `exec` with redirections and no command rewires the shell's own fds.

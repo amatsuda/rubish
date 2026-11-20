@@ -1307,7 +1307,8 @@ module Rubish
           original_stdin = $stdin.dup
           begin
             $stdin.reopen(reader)
-            success = Builtins.run(cmd.name, cmd.args)
+            prefix = cmd.respond_to?(:prefix_env) ? cmd.prefix_env : nil
+            success = Builtins.with_temporary_vars(prefix) { Builtins.run(cmd.name, cmd.args) }
             exit_code = success.is_a?(ExitStatus) ? success.exitstatus : (success ? 0 : 1)
             @status = ExitStatus.new(exit_code)
           ensure

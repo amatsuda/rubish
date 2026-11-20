@@ -932,18 +932,11 @@ module Rubish
     def with_prefix_env(env_assignments)
       return yield if env_assignments.nil? || env_assignments.empty?
 
-      saved = {}
-      env_assignments.each do |assignment|
+      vars = env_assignments.to_h do |assignment|
         k, v = assignment.split('=', 2)
-        v ||= ''
-        saved[k] = ENV.key?(k) ? ENV[k] : :__unset
-        ENV[k] = expand_assignment_value(v)
+        [k, expand_assignment_value(v || '')]
       end
-      begin
-        yield
-      ensure
-        saved.each { |k, v| v == :__unset ? ENV.delete(k) : ENV[k] = v }
-      end
+      Builtins.with_temporary_vars(vars) { yield }
     end
 
     def execute(line, skip_history_expansion: false)

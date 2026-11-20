@@ -49,6 +49,27 @@ module Rubish
       attr_reader :disabled_builtins, :call_stack, :coprocs, :builtin_completion_functions, :named_directories
       attr_accessor :dynamic_commands, :current_state
 
+      # Apply prefix assignments (`IFS=: read ...`) for the duration of the
+      # block. Both ENV and the shell variable are set, because variable
+      # lookups check shell_vars first; both are restored afterwards.
+      def with_temporary_vars(vars)
+        return yield if vars.nil? || vars.empty?
+
+        shell_vars = current_state&.shell_vars
+        saved_env = vars.keys.to_h { |k| [k, ENV.key?(k) ? ENV[k] : :__unset] }
+        saved_shell = vars.keys.to_h { |k| [k, shell_vars&.key?(k) ? shell_vars[k] : :__unset] }
+        vars.each do |k, v|
+          ENV[k] = v
+          shell_vars[k] = v if shell_vars
+        end
+        begin
+          yield
+        ensure
+          saved_env.each { |k, v| v == :__unset ? ENV.delete(k) : ENV[k] = v }
+          saved_shell.each { |k, v| v == :__unset ? shell_vars.delete(k) : shell_vars[k] = v } if shell_vars
+        end
+      end
+
       # Create a context for class method calls that delegates to instance methods
       def context
         return nil if @current_state.nil?
