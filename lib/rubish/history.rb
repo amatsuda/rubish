@@ -5,6 +5,10 @@ module Rubish
   # Supports HISTFILE, HISTSIZE, HISTCONTROL, HISTIGNORE, and history expansion
   module History
     # Get the history file path from HISTFILE or default
+    # Permissions for a newly created history file: private to the user,
+    # as bash creates ~/.bash_history (commands can contain secrets)
+    HISTFILE_MODE = 0o600
+
     def history_file
       ENV['HISTFILE'] || File.expand_path('~/.rubish_history')
     end
@@ -67,7 +71,7 @@ module Rubish
 
           if new_entries && !new_entries.empty?
             # Filter out transient entries (hist_ignore_space)
-            File.open(file, 'a') do |f|
+            File.open(file, 'a', HISTFILE_MODE) do |f|
               new_entries.each_with_index do |line, i|
                 f.puts(line) unless Builtins.history_transient?(last_line + i)
               end
@@ -98,7 +102,7 @@ module Rubish
             end
           end
 
-          File.open(file, 'w') do |f|
+          File.open(file, 'w', HISTFILE_MODE) do |f|
             history.each { |line| f.puts(line) }
           end
         end
@@ -158,7 +162,7 @@ module Rubish
       return if lines.size <= max_lines
 
       # Keep only the last max_lines
-      File.open(file, 'w') do |f|
+      File.open(file, 'w', HISTFILE_MODE) do |f|
         lines.last(max_lines).each { |line| f.puts(line) }
       end
     end
@@ -179,7 +183,7 @@ module Rubish
         dir = File.dirname(file)
         FileUtils.mkdir_p(dir) unless File.directory?(dir)
 
-        File.open(file, 'a') do |f|
+        File.open(file, 'a', HISTFILE_MODE) do |f|
           new_entries.each { |line| f.puts(line) }
         end
 
