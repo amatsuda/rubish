@@ -48,7 +48,17 @@ module Rubish
     # Run command substitution within rubish itself (not external shell)
     # This allows user-defined functions to be available in $() substitution
     # Forks a subprocess, captures stdout, and returns the output (with trailing newlines removed)
+    # Builtins that only produce output: a $(...) made of one of these can
+    # run in this process (capturing $stdout) instead of forking the whole
+    # interpreter, which costs several milliseconds per substitution.
+    # Anything that touches shell state (cd, read, printf -v, ...) is left
+    # to the subshell so that its effects stay there.
+    SUBST_IN_PROCESS_BUILTINS = %w[echo printf pwd basename dirname realpath true false].freeze
+
     def __run_subst(cmd)
+      in_process = __subst_in_process(cmd)
+      return in_process unless in_process.nil?
+
       reader, writer = IO.pipe
       # inherit_errexit: if disabled, child should not inherit errexit (set -e)
       inherit_errexit = Builtins.shopt_enabled?('inherit_errexit')
@@ -100,6 +110,39 @@ module Rubish
       # Remembered so a bare assignment (`x=$(cmd)`) can report this status
       @last_subst_status = @last_status
       output
+    end
+
+    # Run `cmd` here when it is a lone output-only builtin; nil means "not
+    # eligible, fork as usual". Functions and aliases take precedence over
+    # builtins, so their presence disables the shortcut for that name.
+    def __subst_in_process(cmd)
+      return nil if cmd.include?("\n") || Builtins.set_option?('x')
+
+      ast = Parser.new(Lexer.new(cmd).tokenize).parse
+      return nil unless ast.is_a?(AST::Command) && ast.block.nil? && ast.env.empty?
+
+      name = ast.name
+      return nil unless SUBST_IN_PROCESS_BUILTINS.include?(name)
+      return nil if name == 'printf' && ast.args.first.to_s.start_with?('-v')
+      return nil if Command.function?(name) || Builtins.current_state.aliases.key?(name)
+
+      args = expand_args_for_builtin(ast.args)
+      captured = StringIO.new
+      saved_stdout = $stdout
+      $stdout = captured
+      begin
+        success = Builtins.run(name, args)
+      ensure
+        $stdout = saved_stdout
+      end
+      @last_status = success.is_a?(ExitStatus) ? success.exitstatus : (success ? 0 : 1)
+      @last_subst_status = @last_status
+      captured.string.sub(/\n+\z/, '')
+    rescue ArithmeticEvaluator::Error, NounsetError, FailglobError, ParameterExpansionError
+      raise
+    rescue StandardError
+      # Lexer/parser could not handle it: let the subshell deal with it
+      nil
     end
 
     # Parameter expansion operations
