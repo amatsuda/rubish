@@ -77,10 +77,25 @@ module Rubish
       VARNAME_REDIRECT
     ].freeze
 
+    # Tokens after which the next word is in command position, so a
+    # reserved word there is a keyword. Anywhere else (`echo if`,
+    # `fi=1 cmd`) reserved words are ordinary WORDs, as in bash.
+    KEYWORD_POSITION_TOKENS = %i[
+      SEMICOLON DOUBLE_SEMI CASE_FALL CASE_CONT AMPERSAND AND OR
+      PIPE PIPE_BOTH NEWLINE LPAREN RPAREN LBRACE RBRACE
+      IF UNLESS THEN ELSE ELIF ELSIF FI WHILE UNTIL FOR SELECT
+      CASE WHEN ESAC COPROC TIME FUNCTION DEF LAZY_LOAD
+    ].freeze
+
+    # `do`, `done`, `in` and `end` are lexed as WORDs (see KEYWORDS) but
+    # still put the following word in command position, as does `!`.
+    KEYWORD_POSITION_WORDS = %w[do done in end !].freeze
+
     def initialize(input)
       @input = input
       @pos = 0
       @last_token_type = nil
+      @prev_token_type = nil
       @last_word_value = nil
       # True when we just emitted a token that starts/continues a Ruby
       # method-call chain (`ls().sort`, `[1,2,3].sort`, `x.foo.bar`).
@@ -98,6 +113,7 @@ module Rubish
         token = read_token
         if token
           tokens << token
+          @prev_token_type = @last_token_type
           @last_token_type = token.type
           # Track word value for block detection (also SELECT for filtering select)
           @last_word_value = token.value if token.type == :WORD || token.type == :SELECT
@@ -612,12 +628,24 @@ module Rubish
         end
       end
 
-      # Check if word is a keyword
-      if KEYWORDS.key?(value)
+      # Check if word is a keyword (only in command position)
+      if KEYWORDS.key?(value) && keyword_position?
         Token.new(KEYWORDS[value], value)
       else
         Token.new(:WORD, value)
       end
+    end
+
+    def keyword_position?
+      return true if @last_token_type.nil?
+      return true if KEYWORD_POSITION_TOKENS.include?(@last_token_type)
+      # Ruby method chains: `seq(1, 6).select { ... }`
+      return true if @last_token_type == :DOT
+      # Ruby-style `case WORD when ...`: the word right after `case` is the
+      # subject, and `when` follows it directly
+      return true if @last_token_type == :WORD && @prev_token_type == :CASE
+
+      @last_token_type == :WORD && KEYWORD_POSITION_WORDS.include?(@last_word_value)
     end
 
     def read_array_assignment(var_part)

@@ -528,6 +528,7 @@ module Rubish
       while peek(:ELIF) || peek(:ELSIF)
         consume(:ELIF) || consume(:ELSIF)
         elif_condition = parse_conditional_for_if
+        raise 'Expected condition after "elif"' unless elif_condition
         skip_semicolon
         # 'then' is optional for Ruby-style syntax
         consume(:THEN)
