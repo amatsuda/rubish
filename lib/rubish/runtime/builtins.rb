@@ -7000,6 +7000,7 @@ module Rubish
       editor ||= ENV['FCEDIT'] || ENV['EDITOR'] || 'vi'
 
       # Create temp file with commands
+      Kernel.require 'tempfile'
       tempfile = Tempfile.new(['fc', '.sh'])
       begin
         commands.each { |_num, cmd| tempfile.puts cmd }

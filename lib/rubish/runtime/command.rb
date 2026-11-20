@@ -3,25 +3,34 @@
 module Rubish
   # Terminal control functions for job control
   module Terminal
-    extend Fiddle::Importer
-    dlload Fiddle::Handle::DEFAULT
-
-    extern 'int tcsetpgrp(int, int)'
-    extern 'int tcgetpgrp(int)'
-
     STDIN_FD = 0
+
+    # tcsetpgrp/tcgetpgrp via Fiddle, loaded on first use: only interactive
+    # job control needs them, and loading fiddle costs ~8 ms at startup
+    def self.libc
+      @libc ||= begin
+        Kernel.require 'fiddle'
+        Kernel.require 'fiddle/import'
+        importer = Module.new
+        importer.extend Fiddle::Importer
+        importer.dlload Fiddle::Handle::DEFAULT
+        importer.extern 'int tcsetpgrp(int, int)'
+        importer.extern 'int tcgetpgrp(int)'
+        importer
+      end
+    end
 
     # Give terminal control to a process group
     def self.set_foreground(pgid)
-      tcsetpgrp(STDIN_FD, pgid)
-    rescue Fiddle::DLError, SystemCallError
-      # Not a tty or no terminal control
+      libc.tcsetpgrp(STDIN_FD, pgid)
+    rescue StandardError
+      # Not a tty, no terminal control, or fiddle unavailable
     end
 
     # Get current foreground process group
     def self.get_foreground
-      tcgetpgrp(STDIN_FD)
-    rescue Fiddle::DLError, SystemCallError
+      libc.tcgetpgrp(STDIN_FD)
+    rescue StandardError
       nil
     end
 
