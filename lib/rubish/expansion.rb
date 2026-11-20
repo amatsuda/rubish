@@ -149,6 +149,10 @@ module Rubish
     def expand_single_arg_with_brace_and_glob(arg)
       return [arg] unless arg.is_a?(String)
 
+      # "${arr[@]}" keeps one word per element
+      words = expand_quoted_array_word(arg)
+      return words if words
+
       # Handle quoted strings
       result = expand_quoted_string(arg) { nil }
       return [result] if result
@@ -187,6 +191,9 @@ module Rubish
 
     def expand_single_arg_with_glob(arg)
       return [arg] unless arg.is_a?(String)
+
+      words = expand_quoted_array_word(arg)
+      return words if words
 
       result = expand_quoted_string(arg) { nil }
       return [result] if result
@@ -665,6 +672,26 @@ module Rubish
     private
 
     # Handle $'...' and '...' and "..." quoting
+    # Expand a plain double-quoted word containing "${arr[@]}" into one word
+    # per element, with any surrounding text attached to the first and last
+    # element. Returns nil for any other word.
+    def expand_quoted_array_word(value)
+      return nil unless value.length >= 2 && value.start_with?('"') && value.end_with?('"')
+      return nil if WordSegments.multi_segment?(value)
+
+      pieces = WordSegments.split_quoted_array_word(value[1...-1])
+      return nil unless pieces
+
+      expanded = pieces.map do |type, content|
+        case type
+        when :array then __array_values(content)
+        when :keys then __array_key_list(content)
+        else expand_string_content(content, quoted: true)
+        end
+      end
+      __quoted_array_words(expanded)
+    end
+
     def expand_quoted_string(value)
       if value.start_with?("$'") && value.end_with?("'")
         Builtins.process_escape_sequences(value[2...-1])

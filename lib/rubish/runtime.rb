@@ -306,6 +306,27 @@ module Rubish
       end
     end
 
+    # Build the words for a double-quoted word containing "${arr[@]}".
+    # pieces holds expanded text Strings and element Arrays, in order. Text
+    # attaches to the neighbouring elements, so with arr=(1 2) the word
+    # "x${arr[@]}y" becomes ["x1", "2y"]. A word made only of empty
+    # expansions disappears, like "$@" with no positional parameters.
+    def __quoted_array_words(pieces)
+      words = [+'']
+      literal_text = false
+      pieces.each do |piece|
+        if piece.is_a?(Array)
+          next if piece.empty?
+          words[-1] << piece[0].to_s
+          words.concat(piece[1..].map { |e| e.to_s.dup })
+        else
+          literal_text ||= !piece.empty?
+          words[-1] << piece
+        end
+      end
+      words == [''] && !literal_text ? [] : words
+    end
+
     # ${arr[@]} or ${arr[*]} - get all array/assoc values
     # @ mode: elements joined by space
     # * mode: elements joined by first character of IFS
@@ -349,6 +370,12 @@ module Rubish
 
     # ${!arr[@]} - get array indices or assoc keys
     def __array_keys(var_name)
+      __array_key_list(var_name).join(' ')
+    end
+
+    # Indices (indexed arrays) or keys (associative arrays) as an Array of
+    # strings — the per-word form of ${!arr[@]} used by "${!arr[@]}".
+    def __array_key_list(var_name)
       values = get_special_array_values(var_name)
       keys = case values
              when Array then (0...values.length).to_a
@@ -362,7 +389,7 @@ module Rubish
                end
              else (0...values.length).to_a
              end
-      keys.join(' ')
+      keys.map(&:to_s)
     end
 
     # === REPL methods ===

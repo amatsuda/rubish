@@ -154,6 +154,10 @@ module Rubish
           var_name = $1
           return "__fetch_var_for_arg(#{var_name.inspect})"
         end
+        # "${arr[@]}" (possibly with adjacent text) expands to one word per element
+        if (quoted_array = generate_quoted_array_word(arg))
+          return quoted_array
+        end
         generate_string_arg_with_glob(arg)
       when AST::ArrayLiteral
         arg.value  # Already valid Ruby: [1, 2, 3]
@@ -162,6 +166,26 @@ module Rubish
       else
         arg.inspect
       end
+    end
+
+    # For a plain double-quoted word containing "${arr[@]}", generate a call
+    # that yields one word per element with surrounding text attached to the
+    # first and last element. Returns nil for any other word.
+    def generate_quoted_array_word(arg)
+      return nil unless arg.length >= 2 && arg.start_with?('"') && arg.end_with?('"')
+      return nil if WordSegments.multi_segment?(arg)
+
+      pieces = WordSegments.split_quoted_array_word(arg[1...-1])
+      return nil unless pieces
+
+      code = pieces.map do |type, content|
+        case type
+        when :array then "__array_values(#{content.inspect})"
+        when :keys then "__array_key_list(#{content.inspect})"
+        else generate_interpolated_string(content)
+        end
+      end
+      "__quoted_array_words([#{code.join(', ')}])"
     end
 
     def generate_process_substitution(node)
@@ -957,6 +981,10 @@ module Rubish
       if item =~ /\A\$([a-zA-Z_][a-zA-Z0-9_]*)\z/
         # Simple variable - expand and word-split by IFS
         "__fetch_var_for_arg_unquoted(#{$1.inspect})"
+      elsif item.start_with?('"', "'", "$'")
+        # Quoted item: no word splitting, but "${arr[@]}" still yields one
+        # word per element. generate_arg handles both.
+        generate_arg(item)
       elsif pure_command_substitution?(item)
         # Pure command substitution - word-split output by IFS
         cmd = item[2...-1]

@@ -97,6 +97,38 @@ module Rubish
       end
     end
 
+    # Split the inner text of a plain double-quoted word around "${name[@]}"
+    # and "${!name[@]}" expansions. Returns an array of [:text, str],
+    # [:array, name] (elements) and [:keys, name] (indices/keys) pairs, or
+    # nil when the text contains no such expansion. An expansion preceded by a
+    # backslash is literal text. Used so "x${arr[@]}y" can expand to one word
+    # per element (with x/y attached to the first/last) instead of collapsing
+    # into a single string.
+    ARRAY_AT_EXPANSION = /\$\{(!?)([a-zA-Z_][a-zA-Z0-9_]*)\[@\]\}/
+
+    def self.split_quoted_array_word(inner)
+      return nil unless inner.match?(ARRAY_AT_EXPANSION)
+
+      pieces = []
+      text = +''
+      pos = 0
+      inner.scan(ARRAY_AT_EXPANSION) do
+        match = Regexp.last_match
+        text << inner[pos...match.begin(0)]
+        pos = match.end(0)
+        if text.end_with?(92.chr) # backslash: escaped, keep literal
+          text << match[0]
+          next
+        end
+        pieces << [:text, text] unless text.empty?
+        pieces << [match[1] == '!' ? :keys : :array, match[2]]
+        text = +''
+      end
+      text << inner[pos..]
+      pieces << [:text, text] unless text.empty?
+      pieces.any? { |type, _| type != :text } ? pieces : nil
+    end
+
     # Returns true when str contains more than one segment (ie. it is an
     # adjacent/mixed quoted word rather than a plain quoted or bare token).
     def self.multi_segment?(str)
