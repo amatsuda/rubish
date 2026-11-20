@@ -343,6 +343,12 @@ module Rubish
     end
 
     # ${!var} - indirect expansion: get value of variable whose name is in var
+    # ${!prefix*} / ${!prefix@}: names of all variables starting with prefix,
+    # sorted; as one IFS-joined word for *, one word per name for @
+    def __var_names_with_prefix(prefix)
+      (Builtins.shell_var_names + ENV.keys).uniq.select { |k| k.start_with?(prefix) }.sort
+    end
+
     def __param_indirect(var_name)
       indirect_name = Builtins.get_var(var_name)
       return '' if indirect_name.nil? || indirect_name.empty?

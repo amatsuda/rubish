@@ -183,6 +183,7 @@ module Rubish
         case type
         when :array then "__array_values(#{content.inspect})"
         when :keys then "__array_key_list(#{content.inspect})"
+        when :prefix_names then "__var_names_with_prefix(#{content.inspect})"
         when :slice
           offset, length = content[1].split(':', 2)
           "__array_slice_values(#{content[0].inspect}, #{offset.inspect}, #{length.inspect})"
@@ -1409,6 +1410,12 @@ module Rubish
         var_name = $1
         index = $2
         return "__array_element(#{var_name.inspect}, #{index.inspect})"
+      end
+
+      # Handle ${!prefix*} and ${!prefix@} - variable names with prefix
+      if content =~ /\A!([a-zA-Z_][a-zA-Z0-9_]*)([*@])\z/
+        joiner = $2 == '*' ? 'Builtins.join_by_ifs' : '->(a) { a.join(" ") }.call'
+        return "#{joiner}(__var_names_with_prefix(#{$1.inspect}))"
       end
 
       # Handle ${!var} - indirect expansion

@@ -445,6 +445,12 @@ module Rubish
       # ${var@operator} - transformations (Q, E, P, A, a, U, u, L, K)
       return __param_transform($1, $2) if content =~ /\A([a-zA-Z_][a-zA-Z0-9_]*)@([QEPAaUuLK])\z/
 
+      # ${!prefix*} / ${!prefix@} - variable names with prefix
+      if content =~ /\A!([a-zA-Z_][a-zA-Z0-9_]*)([*@])\z/
+        names = __var_names_with_prefix($1)
+        return $2 == '*' ? Builtins.join_by_ifs(names) : names.join(' ')
+      end
+
       # ${!var} - indirect expansion
       return __param_indirect($1) if content =~ /\A!([a-zA-Z_][a-zA-Z0-9_]*)\z/
 
@@ -740,6 +746,7 @@ module Rubish
         case type
         when :array then __array_values(content)
         when :keys then __array_key_list(content)
+        when :prefix_names then __var_names_with_prefix(content)
         else expand_string_content(content, quoted: true)
         end
       end
