@@ -178,10 +178,14 @@ module Rubish
       pieces = WordSegments.split_quoted_array_word(arg[1...-1])
       return nil unless pieces
 
-      code = pieces.map do |type, content|
+      code = pieces.map do |type, *content|
+    content = content.length == 1 ? content.first : content
         case type
         when :array then "__array_values(#{content.inspect})"
         when :keys then "__array_key_list(#{content.inspect})"
+        when :slice
+          offset, length = content[1].split(':', 2)
+          "__array_slice_values(#{content[0].inspect}, #{offset.inspect}, #{length.inspect})"
         else generate_interpolated_string(content)
         end
       end
@@ -1357,6 +1361,13 @@ module Rubish
       depth == 0 ? i - 1 : nil
     end
 
+    # ${name:offset[:length]} where offset is not one of the :-/:=/:+/:?
+    # operators (bash requires a space before a negative offset for the
+    # same reason)
+    SUBSTRING_EXPANSION = /\A([a-zA-Z_][a-zA-Z0-9_]*):(?![-=+?])([^:]*)(?::(.*))?\z/
+    # ${arr[@]:offset[:length]}, ${arr[*]:...}, ${@:...}, ${*:...}
+    SLICE_EXPANSION = /\A(?:([a-zA-Z_][a-zA-Z0-9_]*)\[([@*])\]|(@|\*)):(?![-=+?])([^:]*)(?::(.*))?\z/
+
     def parse_parameter_expansion(content)
       # ${#@}, ${#*}, ${#} - number of positional parameters
       return 'positional_params.length.to_s' if content.match?(/\A#[@*]?\z/)
@@ -1399,16 +1410,17 @@ module Rubish
         return "__param_length(#{var_name.inspect})"
       end
 
-      # Handle ${var:offset} and ${var:offset:length} - must check before other : operators
-      if content =~ /\A([a-zA-Z_][a-zA-Z0-9_]*):(-?\d+)(?::(-?\d+))?\z/
-        var_name = $1
-        offset = $2
-        length = $3
-        if length
-          return "__param_substring(#{var_name.inspect}, #{offset}, #{length})"
-        else
-          return "__param_substring(#{var_name.inspect}, #{offset}, nil)"
-        end
+      # Handle ${arr[@]:offset[:length]} and ${@:offset[:length]} - array slices
+      if content =~ SLICE_EXPANSION
+        name = $1 || $3
+        mode = $2 || $3
+        return "__array_slice(#{name.inspect}, #{mode.inspect}, #{$4.inspect}, #{$5.inspect})"
+      end
+
+      # Handle ${var:offset} and ${var:offset:length} - must check before other : operators.
+      # Offset/length are arithmetic expressions, evaluated at runtime.
+      if content =~ SUBSTRING_EXPANSION
+        return "__param_substring(#{$1.inspect}, #{$2.inspect}, #{$3.inspect})"
       end
 
       # Handle ${var//pattern/replacement} and ${var/pattern/replacement}

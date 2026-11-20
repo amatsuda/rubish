@@ -104,7 +104,9 @@ module Rubish
     # backslash is literal text. Used so "x${arr[@]}y" can expand to one word
     # per element (with x/y attached to the first/last) instead of collapsing
     # into a single string.
-    ARRAY_AT_EXPANSION = /\$\{(!?)([a-zA-Z_][a-zA-Z0-9_]*)\[@\]\}/
+    # Captures: 1 = "!" for keys, 2 = name, 3 = ":off[:len]" slice spec for
+    # an array, 4/5 = "@" and its slice spec for ${@:off[:len]}
+    ARRAY_AT_EXPANSION = /\$\{(!?)([a-zA-Z_][a-zA-Z0-9_]*)\[@\](?::([^}]*))?\}|\$\{(@)(?::([^}]*))?\}/
 
     def self.split_quoted_array_word(inner)
       return nil unless inner.match?(ARRAY_AT_EXPANSION)
@@ -121,7 +123,15 @@ module Rubish
           next
         end
         pieces << [:text, text] unless text.empty?
-        pieces << [match[1] == '!' ? :keys : :array, match[2]]
+        if match[4] || match[5]
+          # ${@:off[:len]}
+          pieces << [:slice, '@', match[5]]
+        elsif match[3]
+          # ${arr[@]:off[:len]}
+          pieces << [:slice, match[2], match[3]]
+        else
+          pieces << [match[1] == '!' ? :keys : :array, match[2]]
+        end
         text = +''
       end
       text << inner[pos..]

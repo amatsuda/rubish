@@ -215,16 +215,49 @@ module Rubish
     end
 
     # ${var:offset} or ${var:offset:length} - substring extraction
+    # ${var:offset[:length]}. Offset and length are arithmetic expressions
+    # (so `${s:i+1}`, `${s:(-3)}` and `${s: -2}` all work); a negative offset
+    # counts from the end, a negative length leaves that many characters off
+    # the end.
     def __param_substring(var_name, offset, length)
       value = get_special_var(var_name) || Builtins.get_var(var_name) || ''
-      offset = offset.to_i
-      if length
-        length = length.to_i
-        # Negative length means from end
-        length < 0 ? value[offset...length] : value[offset, length]
-      else
-        value[offset..]
-      end || ''
+      offset = __slice_index(offset)
+      offset += value.length if offset < 0
+      return '' if offset < 0 || offset > value.length
+      return value[offset..] if length.nil?
+
+      length = __slice_index(length)
+      (length < 0 ? value[offset...(value.length + length)] : value[offset, length]) || ''
+    end
+
+    def __slice_index(expr)
+      expr.is_a?(Integer) ? expr : eval_arithmetic_expr(expr.to_s).to_i
+    end
+
+    # ${arr[@]:offset[:length]} and ${@:offset[:length]} as a list of
+    # elements. For the positional parameters $0 occupies position 0, as in
+    # bash, so `${@:1}` is all of them.
+    def __array_slice_values(name, offset, length)
+      values = if name == '@' || name == '*'
+                 [respond_to?(:script_name) ? script_name.to_s : 'rubish'] + (positional_params || [])
+               else
+                 __array_values(name)
+               end
+      offset = __slice_index(offset)
+      offset += values.length if offset < 0
+      return [] if offset < 0 || offset > values.length
+
+      rest = values[offset..] || []
+      return rest if length.nil?
+
+      length = __slice_index(length)
+      length < 0 ? rest[0...(rest.length + length)] || [] : rest.first(length)
+    end
+
+    # Unquoted / "${arr[*]:...}" form: elements joined like ${arr[@]} / ${arr[*]}
+    def __array_slice(name, mode, offset, length)
+      values = __array_slice_values(name, offset, length)
+      mode == '*' ? Builtins.join_by_ifs(values) : values.join(' ')
     end
 
     # ${var@operator} - transformation operators

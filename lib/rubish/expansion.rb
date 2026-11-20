@@ -401,6 +401,14 @@ module Rubish
       # ${arr[n]} - array element access
       return __array_element($1, $2) if content =~ /\A([a-zA-Z_][a-zA-Z0-9_]*)\[([^\]]+)\]\z/
 
+      # ${arr[@]:offset[:length]} / ${@:offset[:length]} - array slices
+      if content =~ Codegen::SLICE_EXPANSION
+        return __array_slice($1 || $3, $2 || $3, $4, $5)
+      end
+
+      # ${var:offset[:length]} - substring (offset/length are arithmetic)
+      return __param_substring($1, $2, $3) if content =~ Codegen::SUBSTRING_EXPANSION
+
       # ${var:-default}, ${var-default}, etc.
       # Also handles positional parameters: ${1:-default}, ${10:-default}, etc.
       return __param_expand($1, $2, $3 || '', expand_operand: true) if content =~ /\A([a-zA-Z_][a-zA-Z0-9_]*|\d+)(:-|:=|:\+|:\?|-|=|\+|\?)(.*)?\z/
