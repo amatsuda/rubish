@@ -1030,8 +1030,8 @@ module Rubish
     end
 
     def safe_eval_index(expanded_index)
-      eval(expanded_index).to_i
-    rescue
+      eval_arithmetic_expr(expanded_index).to_i
+    rescue ArithmeticEvaluator::Error
       expanded_index.to_i
     end
 

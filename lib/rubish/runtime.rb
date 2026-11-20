@@ -1353,7 +1353,18 @@ module Rubish
 
     def __run_cmd(&block)
       @last_subst_status = nil
-      result = block.call
+      begin
+        result = block.call
+      rescue ArithmeticEvaluator::Error => e
+        # Bad arithmetic in this command's words aborts just this command
+        # (status 1) and the list goes on, as in bash
+        $stderr.puts "rubish: #{e.message}"
+        @last_status = 1
+        @pipestatus = [1]
+        run_err_trap_if_failed
+        check_errexit
+        return ExitStatus.new(1)
+      end
 
       # Run DEBUG trap before each command
       Builtins.debug_trap

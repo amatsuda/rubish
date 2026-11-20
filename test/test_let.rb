@@ -217,10 +217,13 @@ class TestLet < Test::Unit::TestCase
     assert_match(/usage/, output)
   end
 
-  # Test division by zero
+  # Test division by zero: reported as an error, variable left unchanged (bash)
   def test_let_division_by_zero
     ENV['a'] = '10'
-    Rubish::Builtins.run('let', ['a/=0'])
-    assert_equal '0', ENV['a']  # Protected from crash
+    result = nil
+    err = capture_stderr { result = Rubish::Builtins.run('let', ['a/=0']) }
+    assert_false result
+    assert_match(/division by 0/, err)
+    assert_equal '10', ENV['a']
   end
 end

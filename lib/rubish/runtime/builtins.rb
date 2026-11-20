@@ -1585,10 +1585,9 @@ module Rubish
       if attrs.include?(:integer)
         # Evaluate as arithmetic expression
         begin
-          # Simple arithmetic evaluation
-          result = Kernel.eval(value.gsub(/[a-zA-Z_][a-zA-Z0-9_]*/) { |var| ENV[var] || '0' })
-          value = result.to_s
-        rescue StandardError
+          value = let_evaluator.evaluate(value).to_i.to_s
+        rescue ArithmeticEvaluator::Error => e
+          $stderr.puts "rubish: #{name}: #{e.message}"
           value = '0'
         end
       end

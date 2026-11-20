@@ -1147,6 +1147,10 @@ module Rubish
       # Unbound variable error when set -u is enabled
       @last_status = 1
       throw(:exit, 1) if Builtins.set_option?('u')
+    rescue ArithmeticEvaluator::Error => e
+      # Bad arithmetic: report it, fail the command, keep going (bash does too)
+      $stderr.puts "rubish: #{e.message}"
+      @last_status = 1
     rescue ParameterExpansionError => e
       # ${VAR:?msg}: like bash, report it and exit a non-interactive shell
       $stderr.puts "rubish: #{e.message}"

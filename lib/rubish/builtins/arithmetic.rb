@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require_relative '../arithmetic_evaluator'
+
 module Rubish
   module Builtins
     def let(args)
@@ -20,110 +22,32 @@ module Rubish
 
       # Return true if last result is non-zero (shell convention)
       last_result != 0
+    rescue ArithmeticEvaluator::Error => e
+      $stderr.puts "rubish: let: #{e.message}"
+      false
     end
 
+    # Evaluate one `let` expression. Assignments write through to ENV, as
+    # let's variables have always been environment-backed here.
     def evaluate_arithmetic(expr)
-      # Handle assignment operators (but not ==, !=, <=, >=)
-      if expr =~ /\A([a-zA-Z_][a-zA-Z0-9_]*)\s*([\+\-\*\/%]?=)(?!=)\s*(.+)\z/
-        var_name = $1
-        operator = $2
-        value_expr = $3
+      let_evaluator.evaluate(expr).to_i
+    end
 
-        # Check readonly
-        if readonly?(var_name)
-          puts "let: #{var_name}: readonly variable"
-          return 0
-        end
-
-        # Evaluate the right side
-        value = evaluate_arithmetic_expr(value_expr)
-
-        if operator == '='
-          # Simple assignment
-          ENV[var_name] = value.to_s
-        else
-          # Compound assignment (+=, -=, *=, /=, %=)
-          current = (ENV[var_name] || '0').to_i
-          case operator
-          when '+='
-            ENV[var_name] = (current + value).to_s
-          when '-='
-            ENV[var_name] = (current - value).to_s
-          when '*='
-            ENV[var_name] = (current * value).to_s
-          when '/='
-            ENV[var_name] = (value.zero? ? 0 : current / value).to_s
-          when '%='
-            ENV[var_name] = (value.zero? ? 0 : current % value).to_s
+    def let_evaluator
+      @let_evaluator ||= ArithmeticEvaluator.new(
+        get_var: ->(name) { get_var(name) },
+        set_var: lambda do |name, value|
+          if readonly?(name)
+            puts "let: #{name}: readonly variable"
+          else
+            ENV[name] = value
+            @state.shell_vars[name] = value if @state.shell_vars.key?(name)
           end
-        end
-
-        return ENV[var_name].to_i
-      end
-
-      # Handle increment/decrement operators
-      result = apply_increment_decrement(expr)
-      return result unless result.nil?
-
-      # Just evaluate the expression
-      evaluate_arithmetic_expr(expr)
-    end
-
-    def apply_increment_decrement(expr)
-      # Pre-increment/decrement: ++var, --var
-      if expr =~ /\A(\+\+|--)([a-zA-Z_][a-zA-Z0-9_]*)\z/
-        op, var_name = $1, $2
-        return 0 if readonly?(var_name)
-        val = (ENV[var_name] || '0').to_i + (op == '++' ? 1 : -1)
-        ENV[var_name] = val.to_s
-        return val
-      end
-
-      # Post-increment/decrement: var++, var--
-      if expr =~ /\A([a-zA-Z_][a-zA-Z0-9_]*)(\+\+|--)\z/
-        var_name, op = $1, $2
-        return 0 if readonly?(var_name)
-        old_val = (ENV[var_name] || '0').to_i
-        ENV[var_name] = (old_val + (op == '++' ? 1 : -1)).to_s
-        return old_val
-      end
-
-      nil
-    end
-
-    def evaluate_arithmetic_expr(expr)
-      # Replace variable references with their values
-      # Handle $VAR, ${VAR}, and bare variable names
-      expanded = expr.gsub(/\$\{([^}]+)\}|\$([a-zA-Z_][a-zA-Z0-9_]*)|([a-zA-Z_][a-zA-Z0-9_]*)/) do |match|
-        if $1
-          # ${VAR} form
-          (ENV[$1] || '0')
-        elsif $2
-          # $VAR form
-          (ENV[$2] || '0')
-        elsif $3
-          # Plain variable name - in arithmetic context, unset vars default to 0
-          (ENV[$3] || '0')
-        else
-          match
-        end
-      end
-
-      # Handle logical operators
-      expanded = expanded.gsub('&&', ' && ')
-      expanded = expanded.gsub('||', ' || ')
-      expanded = expanded.gsub(/!(?!=)/, ' !')
-
-      # Handle ternary operator
-      expanded = expanded.gsub('?', ' ? ').gsub(':', ' : ')
-
-      # Evaluate safely
-      begin
-        result = Kernel.eval(expanded)
-        result.is_a?(Integer) ? result : (result ? 1 : 0)
-      rescue StandardError
-        0
-      end
+        end,
+        get_array_element: ->(name, index) { get_array_element(name, index) },
+        set_array_element: ->(name, index, value) { set_array_element(name, index, value) },
+        var_set: ->(name) { var_set?(name) }
+      )
     end
   end
 end
