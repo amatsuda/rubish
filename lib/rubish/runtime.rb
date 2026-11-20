@@ -621,7 +621,7 @@ module Rubish
       case operator
       when '>'
         # Check noclobber: if set and file exists, fail
-        if Builtins.set_option?('C') && File.exist?(target)
+        if Builtins.set_option?('C') && File.file?(target)
           $stderr.puts "rubish: #{target}: cannot overwrite existing file"
           return ExitStatus.new(1)
         end

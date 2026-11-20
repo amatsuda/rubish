@@ -259,7 +259,7 @@ module Rubish
         return self
       end
       # Check noclobber: if set and file exists, fail
-      if Builtins.set_option?('C') && File.exist?(file)
+      if Builtins.set_option?('C') && File.file?(file)
         $stderr.puts "rubish: #{file}: cannot overwrite existing file"
         @noclobber_failed = true
         return self
@@ -1157,7 +1157,7 @@ module Rubish
         @restricted_failed = true
         return self
       end
-      if Builtins.set_option?('C') && File.exist?(file)
+      if Builtins.set_option?('C') && File.file?(file)
         $stderr.puts "rubish: #{file}: cannot overwrite existing file"
         @noclobber_failed = true
         return self
@@ -1363,7 +1363,7 @@ module Rubish
         @restricted_failed = true
         return self
       end
-      if Builtins.set_option?('C') && File.exist?(file)
+      if Builtins.set_option?('C') && File.file?(file)
         $stderr.puts "rubish: #{file}: cannot overwrite existing file"
         @noclobber_failed = true
         return self
