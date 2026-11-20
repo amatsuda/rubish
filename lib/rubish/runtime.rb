@@ -1376,6 +1376,30 @@ module Rubish
       @last_status = @last_subst_status || 0
     end
 
+    # Run a process-affecting builtin (cd, export, set, ...) in this process
+    # while honouring the command's redirections: swap the global streams for
+    # the duration so the builtin's output lands in the redirect target.
+    # Forking, as external commands do, would lose the builtin's effect on
+    # the shell (`cd dir > /dev/null` must still change directory).
+    def __run_process_builtin(cmd)
+      saved_in, saved_out, saved_err = $stdin, $stdout, $stderr
+      $stdin = cmd.stdin if cmd.stdin.is_a?(IO)
+      case cmd.stdout
+      when IO then $stdout = cmd.stdout
+      when :stderr then $stdout = saved_err
+      end
+      case cmd.stderr
+      when IO then $stderr = cmd.stderr
+      when :stdout then $stderr = $stdout
+      end
+      begin
+        run_builtin_with_prefix(cmd)
+      ensure
+        [$stdout, $stderr].each { |io| io.flush if io.respond_to?(:flush) && !io.closed? }
+        $stdin, $stdout, $stderr = saved_in, saved_out, saved_err
+      end
+    end
+
     def __run_cmd(&block)
       @last_subst_status = nil
       begin
@@ -1400,7 +1424,7 @@ module Rubish
         result
       elsif result.is_a?(Command) && PROCESS_BUILTINS.include?(result.name)
         # Run process-affecting builtins directly in current process
-        success = Builtins.run(result.name, result.args)
+        success = __run_process_builtin(result)
         @last_status = success.is_a?(ExitStatus) ? success.exitstatus : (success ? 0 : 1)
         run_err_trap_if_failed
         check_errexit

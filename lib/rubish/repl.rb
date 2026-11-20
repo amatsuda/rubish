@@ -1389,6 +1389,14 @@ module Rubish
         handle_bare_assignments([result.name] + result.args)
         @last_status = @context.instance_variable_get(:@last_subst_status) || 0
         @pipestatus = [@last_status]
+      elsif result.is_a?(Command) && PROCESS_BUILTINS.include?(result.name)
+        # A process builtin with redirections (`cd dir > /dev/null`) reaches
+        # here as a Command; it must run in this process, not in a fork
+        success = __run_process_builtin(result)
+        @last_status = success.is_a?(ExitStatus) ? success.exitstatus : (success ? 0 : 1)
+        @pipestatus = [@last_status]
+        # Hand back the status, not the unrun Command, so execute keeps it
+        result = ExitStatus.new(@last_status)
       elsif result.is_a?(Command) || result.is_a?(Pipeline) || result.is_a?(Subshell) || result.is_a?(HeredocCommand)
         result.run
         # Update PIPESTATUS array
