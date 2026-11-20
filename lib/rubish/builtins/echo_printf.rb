@@ -41,8 +41,9 @@ module Rubish
         end
       end
 
+      # Not puts: it adds no newline when the text already ends with one
       if newline
-        puts output
+        print output, "\n"
       else
         print output
       end
