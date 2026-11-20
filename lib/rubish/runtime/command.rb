@@ -38,6 +38,19 @@ module Rubish
     def success?
       exitstatus == 0
     end
+
+    # The shell's view of a Process::Status (or anything with #exitstatus):
+    # the exit code, or 128+signal when the process was killed, as bash
+    # reports it in $? and PIPESTATUS. nil means "no status": 0.
+    def self.code_of(status)
+      return 0 if status.nil?
+
+      code = status.exitstatus
+      return code if code
+      return 128 + status.termsig if status.respond_to?(:termsig) && status.termsig
+
+      0
+    end
   end
 
   # Status for noclobber failures
@@ -1047,7 +1060,7 @@ module Rubish
       if result.respond_to?(:exitstatus) && result.exitstatus
         result.exitstatus
       elsif result.respond_to?(:status) && result.status.respond_to?(:exitstatus)
-        result.status.exitstatus || 0
+        ExitStatus.code_of(result.status)
       elsif result.respond_to?(:success?)
         result.success? ? 0 : 1
       else

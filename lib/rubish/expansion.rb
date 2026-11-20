@@ -461,7 +461,7 @@ module Rubish
     def extract_exit_status(result)
       case result
       when Command, Pipeline, Subshell, HeredocCommand
-        result.status&.exitstatus || 0
+        ExitStatus.code_of(result.status)
       when ExitStatus
         result.exitstatus
       when Integer

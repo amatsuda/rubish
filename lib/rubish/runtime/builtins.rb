@@ -6016,7 +6016,7 @@ module Rubish
     # ExitStatus for a reaped child: its exit code, or 128+signal when it
     # was killed, so `wait $!` reports the same value bash does
     def wait_exit_status(status)
-      ExitStatus.new(status.exitstatus || (status.termsig ? 128 + status.termsig : 1))
+      ExitStatus.new(ExitStatus.code_of(status))
     end
 
     def wait(args)

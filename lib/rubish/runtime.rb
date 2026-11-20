@@ -106,7 +106,7 @@ module Rubish
       reader.close
 
       Process.wait(pid)
-      @last_status = $?.exitstatus || 0
+      @last_status = ExitStatus.code_of($?)
       # Remembered so a bare assignment (`x=$(cmd)`) can report this status
       @last_subst_status = @last_status
       output
@@ -1510,10 +1510,10 @@ module Rubish
       else
         result.run if result.is_a?(Command) || result.is_a?(Pipeline) || result.is_a?(Subshell) || result.is_a?(HeredocCommand)
         if result.respond_to?(:status)
-          @last_status = result.status&.exitstatus || 0
+          @last_status = ExitStatus.code_of(result.status)
           # Update PIPESTATUS array
           if result.is_a?(Pipeline) && result.statuses
-            @pipestatus = result.statuses.map { |s| s.exitstatus || 0 }
+            @pipestatus = result.statuses.map { |s| ExitStatus.code_of(s) }
           else
             @pipestatus = [@last_status]
           end

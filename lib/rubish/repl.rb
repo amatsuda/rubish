@@ -1421,9 +1421,9 @@ module Rubish
         result.run
         # Update PIPESTATUS array
         if result.respond_to?(:status)
-          @last_status = result.status&.exitstatus || 0
+          @last_status = ExitStatus.code_of(result.status)
           if result.is_a?(Pipeline) && result.statuses
-            @pipestatus = result.statuses.map { |s| s.exitstatus || 0 }
+            @pipestatus = result.statuses.map { |s| ExitStatus.code_of(s) }
           else
             @pipestatus = [@last_status]
           end
