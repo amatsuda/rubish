@@ -1061,7 +1061,7 @@ module Rubish
       end
 
       # Check for builtins (simple command only)
-      if ast.is_a?(AST::Command) && Builtins.builtin?(ast.name)
+      if ast.is_a?(AST::Command) && Builtins.builtin?(ast.name) && !user_function?(ast.name)
         builtin_name = ast.name
         begin
           # Run DEBUG trap before command
@@ -1175,6 +1175,12 @@ module Rubish
     def cleanup_all_proc_sub_fifos
       cleanup_proc_sub_fifos
       @context&.cleanup_proc_sub_fifos
+    end
+
+    # Functions shadow builtins (bash semantics), including ones that are
+    # still waiting to be autoloaded
+    def user_function?(name)
+      @functions.key?(name) || Builtins.autoload_pending?(name)
     end
 
     def xtrace(line)
@@ -1389,7 +1395,7 @@ module Rubish
         handle_bare_assignments([result.name] + result.args)
         @last_status = @context.instance_variable_get(:@last_subst_status) || 0
         @pipestatus = [@last_status]
-      elsif result.is_a?(Command) && PROCESS_BUILTINS.include?(result.name)
+      elsif result.is_a?(Command) && PROCESS_BUILTINS.include?(result.name) && !@functions.key?(result.name)
         # A process builtin with redirections (`cd dir > /dev/null`) reaches
         # here as a Command; it must run in this process, not in a fork
         success = __run_process_builtin(result)

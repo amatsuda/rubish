@@ -646,6 +646,10 @@ module Rubish
       if __bare_assignment_command?(result)
         # `if x=$(cmd); then` tests the substitution's status
         __run_bare_assignment(result) == 0
+      elsif result.is_a?(Command) && Command.function?(result.name)
+        # `if myfunc; then`: call the function here, not in a fork
+        status = call_function_with_redirects(result)
+        status.respond_to?(:success?) ? status.success? : @last_status == 0
       elsif result.is_a?(Command) && Builtins.builtin?(result.name)
         # Run builtin directly and check its return value
         run_builtin_with_prefix(result)
@@ -1465,7 +1469,7 @@ module Rubish
         # Special handling for exec builtin
         handle_exec_command(result)
         result
-      elsif result.is_a?(Command) && PROCESS_BUILTINS.include?(result.name)
+      elsif result.is_a?(Command) && PROCESS_BUILTINS.include?(result.name) && !@functions.key?(result.name)
         # Run process-affecting builtins directly in current process
         success = __run_process_builtin(result)
         @last_status = success.is_a?(ExitStatus) ? success.exitstatus : (success ? 0 : 1)
@@ -1473,7 +1477,7 @@ module Rubish
         check_errexit
         # Return ExitStatus to prevent eval_in_context from trying to run command again
         ExitStatus.new(@last_status)
-      elsif result.is_a?(Command) && Builtins.builtin?(result.name) && !result.stdout && !result.stderr
+      elsif result.is_a?(Command) && Builtins.builtin?(result.name) && !result.stdout && !result.stderr && !@functions.key?(result.name)
         # Run builtins without explicit redirects in current process
         # This allows them to respect $stdout set by __with_redirect for compound commands.
         # If a redirect was attempted but its target file couldn't be opened,
