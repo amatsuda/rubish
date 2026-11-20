@@ -174,7 +174,7 @@ if command_string
   Rubish::Builtins.enable_restricted_mode if restricted
 
   exit_code = catch(:exit) { repl.send(:execute, command_string) }
-  last_status = exit_code || repl.instance_variable_get(:@last_status) || 0
+  last_status = repl.send(:run_exit_trap, exit_code)
   repl.send(:cleanup_all_proc_sub_fifos)
   exit(last_status)
 elsif read_stdin
@@ -206,7 +206,7 @@ elsif read_stdin
     nil
   end
 
-  last_status = exit_code || repl.instance_variable_get(:@last_status) || 0
+  last_status = repl.send(:run_exit_trap, exit_code)
   repl.send(:cleanup_all_proc_sub_fifos)
   exit(last_status)
 elsif script_file && !force_interactive
@@ -224,7 +224,7 @@ elsif script_file && !force_interactive
   # Use source to execute the script (handles multi-line strings properly)
   # Pass script_args so they become positional params in the script
   Rubish::Builtins.source([script_file] + script_args)
-  last_status = repl.instance_variable_get(:@last_status) || 0
+  last_status = repl.send(:run_exit_trap, nil)
   repl.send(:cleanup_all_proc_sub_fifos)
   exit(last_status)
 elsif script_file && force_interactive
@@ -245,7 +245,7 @@ elsif script_file && force_interactive
   # Use source to execute the script (handles multi-line strings properly)
   Rubish::Builtins.source([script_file] + script_args)
 
-  last_status = repl.instance_variable_get(:@last_status) || 0
+  last_status = repl.send(:run_exit_trap, nil)
   repl.send(:cleanup_all_proc_sub_fifos)
   exit(last_status)
 else

@@ -176,12 +176,26 @@ module Rubish
       end
       # zsh zshexit_functions: fire on shell exit, before history save
       # so a hook that wants to write to it sees the current session.
+      exit_code = run_exit_trap(exit_code)
       fire_zsh_hooks('zshexit')
       save_history
       load_logout_config
       cleanup_all_proc_sub_fifos
-      # A bare `exit` throws nil: leave with the last command's status
-      exit_code.nil? ? (@last_status || 0) : exit_code
+      exit_code
+    end
+
+    # Run the EXIT trap (if `exit` has not already) with $? set to the
+    # status the shell is leaving with, and return the final status: an
+    # `exit N` inside the trap replaces it, otherwise it is unchanged.
+    # A nil status means a bare `exit`, i.e. the last command's status.
+    def run_exit_trap(status)
+      status = @last_status || 0 if status.nil?
+      @last_status = status
+      from_trap = catch(:exit) do
+        Builtins.exit_traps
+        nil
+      end
+      from_trap.nil? ? status : from_trap
     end
 
     # Helper for startup profiling

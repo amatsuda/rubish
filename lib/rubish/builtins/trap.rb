@@ -199,12 +199,16 @@ module Rubish
       puts "trap: #{e.message}"
     end
 
+    # Run the EXIT trap. It fires once per shell: whoever gets there first
+    # (an explicit `exit`, or the shell reaching the end of its input)
+    # removes it, so the later caller is a no-op.
     def exit_traps
       return unless @state.traps.key?(0)
 
+      action = @state.traps.delete(0)
       @state.current_trapsig = 'EXIT'
       begin
-        @state.executor&.call(@state.traps[0]) if @state.executor
+        @state.executor&.call(action) if @state.executor
       ensure
         @state.current_trapsig = ''
       end
