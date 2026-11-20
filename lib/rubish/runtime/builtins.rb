@@ -2423,6 +2423,11 @@ module Rubish
       @state.shell_options['restricted_shell'] = true
     end
 
+    # $- : the single-letter set options currently enabled (e.g. "himBH")
+    def current_options
+      @state.set_options.select { |flag, on| on && flag.is_a?(String) && flag.length == 1 }.keys.sort.join
+    end
+
     # Check if shell is interactive
     def interactive_mode?
       @state.set_options['i']

@@ -339,6 +339,7 @@ module Rubish
       when '$!' then return [@last_bg_pid&.to_s || '', 2]
       when '$0' then return [argv0, 2]
       when '$#' then return [@positional_params.length.to_s, 2]
+      when '$-' then return [Builtins.current_options, 2]
       when '$@' then return [@positional_params.join(' '), 2]
       when '$*' then return [Builtins.join_by_ifs(@positional_params), 2]
       end
@@ -388,6 +389,9 @@ module Rubish
         n = content.to_i
         return n.zero? ? argv0 : (@positional_params[n - 1] || '')
       end
+
+      # ${-} - current option flags
+      return Builtins.current_options if content == '-'
 
       # ${+VAR} - zsh parameter-is-set test. Evaluates to '1' if the
       # variable is set (even to empty), '0' if not. starship and other

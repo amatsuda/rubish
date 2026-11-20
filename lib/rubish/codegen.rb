@@ -331,6 +331,8 @@ module Rubish
         "(positional_params[#{$1.to_i - 1}] || '')"
       when '$#'
         'positional_params.length.to_s'
+      when '$-'
+        'Builtins.current_options'
       when '$@'
         'positional_params.join(" ")'
       when '$*'
@@ -556,6 +558,8 @@ module Rubish
         return ['((a0 = get_var("RUBISH_ARGV0")) && !a0.empty? ? a0 : script_name)', 2]
       when '$#'
         return ['positional_params.length.to_s', 2]
+      when '$-'
+        return ['Builtins.current_options', 2]
       when '$@'
         return ['positional_params.join(" ")', 2]
       when '$*'
@@ -1377,6 +1381,9 @@ module Rubish
         n = content.to_i
         return n.zero? ? generate_special_variable('$0') : "(positional_params[#{n - 1}] || '')"
       end
+
+      # ${-} - current option flags
+      return 'Builtins.current_options' if content == '-'
 
       # Handle ${!arr[@]} or ${!arr[*]} - array keys/indices
       if content =~ /\A!([a-zA-Z_][a-zA-Z0-9_]*)\[[@*]\]\z/
