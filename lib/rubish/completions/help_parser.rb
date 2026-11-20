@@ -31,6 +31,18 @@ module Rubish
     end
     HELP_COMMAND_TIMEOUT = HELP_COMMAND_TIMEOUT_DEFAULT  # kept for back-compat
 
+    # Only macOS has a sandbox (sandbox-exec) to run an unfamiliar command's
+    # --help in. Elsewhere the probe runs the command for real.
+    def self.help_sandbox_available?
+      RUBY_PLATFORM.include?('darwin')
+    end
+
+    # The help invocation as argv, so it never passes through `sh -c`
+    def self.help_command_argv(help_cmd)
+      Kernel.require 'shellwords'
+      Shellwords.split(help_cmd)
+    end
+
     # macOS sandbox profile for running help commands safely
     # Denies network access, allows reads and writes only to safe locations
     SANDBOX_PROFILE = <<~PROFILE
@@ -68,16 +80,18 @@ module Rubish
       output = nil
       success = false
       started_at = Time.now
+      argv = Builtins.help_command_argv(help_cmd)
+      return [nil, false] if argv.empty?
 
       begin
-        if RUBY_PLATFORM.include?('darwin')
+        if Builtins.help_sandbox_available?
           # macOS: use sandbox-exec for additional isolation
           profile_file = Tempfile.new(['sandbox', '.sb'])
           begin
             profile_file.write(SANDBOX_PROFILE)
             profile_file.close
 
-            stdin, stdout_err, wait_thr = Open3.popen2e('sandbox-exec', '-f', profile_file.path, 'sh', '-c', help_cmd)
+            stdin, stdout_err, wait_thr = Open3.popen2e('sandbox-exec', '-f', profile_file.path, *argv)
             pid = wait_thr.pid
             stdin.close
 
@@ -99,7 +113,7 @@ module Rubish
           end
         else
           # Other platforms: run with timeout protection
-          stdin, stdout_err, wait_thr = Open3.popen2e(help_cmd)
+          stdin, stdout_err, wait_thr = Open3.popen2e(*argv)
           pid = wait_thr.pid
           stdin.close
 
@@ -220,9 +234,21 @@ module Rubish
       end
     end
 
+    # Whether it is acceptable to run `command --help` to learn its
+    # completions. Inside the macOS sandbox anything goes; without a
+    # sandbox only commands found on PATH are probed, never a relative or
+    # absolute path (`./untrusted<Tab>` must not execute it).
+    def help_command_allowed?(command)
+      return true if Builtins.help_sandbox_available?
+      return false if command.include?('/')
+
+      !Builtins.find_in_path(command).nil?
+    end
+
     def parse_help_for_command(command, *subcommand_chain)
       # Skip commands that look like shell operators or Ruby syntax
       return nil if command.nil? || command =~ /\A[-+:=<>|&!]\z/
+      return nil unless help_command_allowed?(command)
 
       cache_key = ([command] + subcommand_chain).join(' ')
 
