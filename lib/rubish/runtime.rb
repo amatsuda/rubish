@@ -1455,6 +1455,10 @@ module Rubish
     # Forking, as external commands do, would lose the builtin's effect on
     # the shell (`cd dir > /dev/null` must still change directory).
     def __run_process_builtin(cmd)
+      # A redirect that could not be set up (missing directory, noclobber,
+      # restricted mode, bad fd) has already been reported: skip the builtin
+      return ExitStatus.new(1) if cmd.restricted_failed || cmd.noclobber_failed
+
       saved_in, saved_out, saved_err = $stdin, $stdout, $stderr
       $stdin = cmd.stdin if cmd.stdin.is_a?(IO)
       case cmd.stdout
