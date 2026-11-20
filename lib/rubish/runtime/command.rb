@@ -365,9 +365,19 @@ module Rubish
         @stdout = :closed
         self
       else
+        # >&N for an fd the shell never opened is an error, not a file "N"
+        return bad_file_descriptor(target) if target.match?(/\A\d+\z/)
+
         # >&file - redirect to file
         redirect_out(target)
       end
+    end
+
+    # bash: `3: Bad file descriptor`; the command is skipped with status 1
+    def bad_file_descriptor(fd)
+      $stderr.puts "rubish: #{fd}: Bad file descriptor"
+      @restricted_failed = true
+      self
     end
 
     def dup_in(target)
@@ -382,7 +392,9 @@ module Rubish
         @stdin = :closed
         self
       else
-        # <&N - not commonly used, treat as redirect
+        return bad_file_descriptor(target) if target.match?(/\A\d+\z/)
+
+        # <&file - treat as input redirect
         redirect_in(target)
       end
     end
@@ -401,6 +413,8 @@ module Rubish
         @stderr = :closed
         self
       else
+        return bad_file_descriptor(target) if target.match?(/\A\d+\z/)
+
         redirect_err(target)
       end
     end
