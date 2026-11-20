@@ -383,6 +383,12 @@ module Rubish
       # ${#@}, ${#*}, ${#} - number of positional parameters
       return @positional_params.length.to_s if content.match?(/\A#[@*]?\z/)
 
+      # ${N} - positional parameter (${10} and up need the braces); ${0} is $0
+      if content.match?(/\A\d+\z/)
+        n = content.to_i
+        return n.zero? ? argv0 : (@positional_params[n - 1] || '')
+      end
+
       # ${+VAR} - zsh parameter-is-set test. Evaluates to '1' if the
       # variable is set (even to empty), '0' if not. starship and other
       # zsh prompt themers gate behaviour on this — e.g. precmd uses

@@ -1372,6 +1372,12 @@ module Rubish
       # ${#@}, ${#*}, ${#} - number of positional parameters
       return 'positional_params.length.to_s' if content.match?(/\A#[@*]?\z/)
 
+      # ${N} - positional parameter (${10} and up need the braces); ${0} is $0
+      if content.match?(/\A\d+\z/)
+        n = content.to_i
+        return n.zero? ? generate_special_variable('$0') : "(positional_params[#{n - 1}] || '')"
+      end
+
       # Handle ${!arr[@]} or ${!arr[*]} - array keys/indices
       if content =~ /\A!([a-zA-Z_][a-zA-Z0-9_]*)\[[@*]\]\z/
         var_name = $1
