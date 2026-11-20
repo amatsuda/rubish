@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require 'tmpdir'
+
 module Rubish
   # Runtime methods called from generated Ruby code (codegen output)
   # Methods in this module have __ prefix and are the interface between
@@ -53,6 +55,7 @@ module Rubish
 
       pid = fork do
         reader.close
+        @proc_sub_fifos = nil # the parent owns and removes the FIFOs
         # Redirect stdout to the pipe using the constant STDOUT
         # This works even if $stdout has been redirected to a StringIO (for testing)
         STDOUT.reopen(writer)
@@ -449,6 +452,7 @@ module Rubish
       # Fork and run in background
       pid = fork do
         # Reset signal handlers in child
+        @proc_sub_fifos = nil # the parent owns and removes the FIFOs
         Kernel.trap('INT', 'DEFAULT')
         Kernel.trap('TSTP', 'DEFAULT')
 
@@ -906,16 +910,35 @@ module Rubish
       end
     end
 
+    # Remove the FIFOs (and their private directories) created by __proc_sub.
+    # Called by the REPL before the next top-level command runs, so a
+    # background job started by the previous command has had time to open
+    # its end of the pipe.
+    def cleanup_proc_sub_fifos
+      return unless @proc_sub_fifos
+
+      @proc_sub_fifos.each do |fifo|
+        File.unlink(fifo) if File.exist?(fifo)
+        dir = File.dirname(fifo)
+        Dir.rmdir(dir) if File.basename(dir).start_with?('rubish_procsub') && Dir.exist?(dir)
+      rescue SystemCallError
+        # Already gone
+      end
+      @proc_sub_fifos.clear
+    end
+
     def __proc_sub(command, direction)
       # Process substitution: <(cmd) or >(cmd)
       # Creates a named pipe and returns its path
       # The command runs in background, reading from or writing to the pipe
 
-      # Create a unique FIFO path
-      fifo_path = File.join(Dir.tmpdir, "rubish_procsub_#{$$}_#{rand(1000000)}")
-      system('mkfifo', fifo_path)
+      # Create the FIFO inside a fresh private directory (0700), so another
+      # user on a shared /tmp can neither predict nor pre-create its path
+      fifo_dir = Dir.mktmpdir('rubish_procsub')
+      fifo_path = File.join(fifo_dir, 'fifo')
+      File.mkfifo(fifo_path, 0o600)
 
-      # Track the FIFO for cleanup
+      # Track the FIFO for cleanup (see cleanup_proc_sub_fifos)
       @proc_sub_fifos ||= []
       @proc_sub_fifos << fifo_path
 
@@ -924,6 +947,7 @@ module Rubish
         # Fork a process to run the command and write to FIFO
         pid = fork do
           # Redirect stdout to the FIFO
+          @proc_sub_fifos = nil # the parent owns and removes the FIFOs
           fifo = File.open(fifo_path, 'w')
           $stdout.reopen(fifo)
           $stderr.reopen('/dev/null', 'w')
@@ -942,6 +966,7 @@ module Rubish
         # Fork a process to read from FIFO and pipe to command
         pid = fork do
           # Read from FIFO and pipe to command
+          @proc_sub_fifos = nil # the parent owns and removes the FIFOs
           fifo = File.open(fifo_path, 'r')
           $stdin.reopen(fifo)
           $stderr.reopen('/dev/null', 'w')

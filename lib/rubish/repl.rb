@@ -179,6 +179,7 @@ module Rubish
       fire_zsh_hooks('zshexit')
       save_history
       load_logout_config
+      cleanup_all_proc_sub_fifos
       # A bare `exit` throws nil: leave with the last command's status
       exit_code.nil? ? (@last_status || 0) : exit_code
     end
@@ -932,6 +933,11 @@ module Rubish
     end
 
     def execute(line, skip_history_expansion: false)
+      # Outermost call only: the previous command's process-substitution
+      # FIFOs are no longer needed once the next command starts
+      @execute_depth = (@execute_depth || 0) + 1
+      cleanup_all_proc_sub_fifos if @execute_depth == 1
+
       # verbose: print input lines as read (before any processing)
       $stderr.puts line if Builtins.set_option?('v')
 
@@ -1160,7 +1166,15 @@ module Rubish
       # Glob pattern matched nothing with failglob enabled
       @last_status = 1
     ensure
+      @execute_depth -= 1
       @heredoc_content = nil
+    end
+
+    # FIFOs are registered on whichever object evaluated the <(...): the
+    # execution context for generated code, the REPL for builtin fast paths
+    def cleanup_all_proc_sub_fifos
+      cleanup_proc_sub_fifos
+      @context&.cleanup_proc_sub_fifos
     end
 
     def xtrace(line)
@@ -2019,17 +2033,6 @@ module Rubish
         i += 1
       end
       str.length
-    end
-
-    def cleanup_proc_sub_fifos
-      return unless @proc_sub_fifos
-
-      @proc_sub_fifos.each do |fifo|
-        File.unlink(fifo) if File.exist?(fifo)
-      rescue Errno::ENOENT
-        # Already deleted
-      end
-      @proc_sub_fifos.clear
     end
 
     def expand_braces(str)
