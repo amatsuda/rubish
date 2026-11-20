@@ -1424,7 +1424,7 @@ module Rubish
       end
 
       # Handle ${var//pattern/replacement} and ${var/pattern/replacement}
-      if content =~ /\A([a-zA-Z_][a-zA-Z0-9_]*)(\/\/|\/)((?:[^\/]|\\.)*)\/((?:[^\/]|\\.)*)?\z/
+      if content =~ /\A([a-zA-Z_][a-zA-Z0-9_]*)(\/\/|\/)((?:[^\/]|\\.)+)\/((?:[^\/]|\\.)*)?\z/
         var_name = $1
         operator = $2
         pattern = $3
