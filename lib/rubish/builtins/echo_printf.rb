@@ -418,6 +418,18 @@ module Rubish
       "'" + str + "'"
     end
 
+    # Integer value of a numeric printf argument with strtol semantics: 0x
+    # prefix is hex, a leading 0 is octal, otherwise decimal. Garbage gives
+    # 0 (the caller has already warned about it).
+    def printf_integer(str)
+      s = str.to_s.strip
+      case s
+      when /\A[+-]?0[xX][0-9a-fA-F]+\z/ then Integer(s, 16)
+      when /\A[+-]?0[0-7]+\z/ then Integer(s, 8)
+      else s.to_i
+      end
+    end
+
     def format_arg(specifier, arg, flags, width, precision)
       width_int = width.empty? ? nil : width.to_i
       prec_int = precision.nil? ? nil : (precision.empty? ? 0 : precision.to_i)
@@ -448,7 +460,7 @@ module Rubish
                  s
                when 'd', 'i'
                  # Signed integer
-                 num = numeric_arg.to_i
+                 num = printf_integer(numeric_arg)
                  if prec_int
                    format("%0#{prec_int}d", num)
                  else
@@ -456,22 +468,22 @@ module Rubish
                  end
                when 'u'
                  # Unsigned integer
-                 num = numeric_arg.to_i
+                 num = printf_integer(numeric_arg)
                  num = num & 0xFFFFFFFF if num < 0
                  num.to_s
                when 'o'
                  # Octal
-                 num = numeric_arg.to_i
+                 num = printf_integer(numeric_arg)
                  prefix = flags.include?('#') ? '0' : ''
                  "#{prefix}#{num.to_s(8)}"
                when 'x'
                  # Hexadecimal lowercase
-                 num = numeric_arg.to_i
+                 num = printf_integer(numeric_arg)
                  prefix = flags.include?('#') ? '0x' : ''
                  "#{prefix}#{num.to_s(16)}"
                when 'X'
                  # Hexadecimal uppercase
-                 num = numeric_arg.to_i
+                 num = printf_integer(numeric_arg)
                  prefix = flags.include?('#') ? '0X' : ''
                  "#{prefix}#{num.to_s(16).upcase}"
                when 'f', 'F'
