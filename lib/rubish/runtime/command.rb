@@ -91,6 +91,33 @@ module Rubish
       attr_accessor :child_pre_exec_hook
     end
 
+    # Apply stdin/stdout/stderr redirections in a forked child. Each target
+    # is an IO, nil (inherit), or a symbol: :closed, :stderr (for stdout,
+    # `>&2`), or :stdout (for stderr, `2>&1` / `|&`).
+    def self.apply_child_redirections(stdin, stdout, stderr)
+      if stdin == :closed
+        $stdin.close
+      elsif stdin
+        $stdin.reopen(stdin)
+      end
+
+      if stdout == :stderr
+        $stdout.reopen($stderr)
+      elsif stdout == :closed
+        $stdout.close
+      elsif stdout
+        $stdout.reopen(stdout)
+      end
+
+      if stderr == :stdout
+        $stderr.reopen($stdout)
+      elsif stderr == :closed
+        $stderr.close
+      elsif stderr
+        $stderr.reopen(stderr)
+      end
+    end
+
     # Execute a command with proper error handling for command not found / permission denied
     def self.safe_exec(cmd_name, cmd_path, *args, fd_options: nil)
       child_pre_exec_hook&.call
@@ -427,32 +454,7 @@ module Rubish
           Kernel.trap('TTOU', 'DEFAULT')
         end
 
-        # Handle stdin redirection
-        if @stdin == :closed
-          $stdin.close
-        elsif @stdin
-          $stdin.reopen(@stdin)
-        end
-
-        # Handle stdout redirection
-        if @stdout == :stderr
-          # >&2 - redirect stdout to stderr
-          $stdout.reopen($stderr)
-        elsif @stdout == :closed
-          $stdout.close
-        elsif @stdout
-          $stdout.reopen(@stdout)
-        end
-
-        # Handle stderr redirection
-        if @stderr == :stdout
-          # |& or 2>&1 - redirect stderr to stdout
-          $stderr.reopen($stdout)
-        elsif @stderr == :closed
-          $stderr.close
-        elsif @stderr
-          $stderr.reopen(@stderr)
-        end
+        Command.apply_child_redirections(@stdin, @stdout, @stderr)
 
         # Set keyword environment variables
         keyword_env.each { |k, v| ENV[k] = v }
@@ -765,9 +767,7 @@ module Rubish
             end
           end
 
-          $stdin.reopen(cmd.stdin) if cmd.stdin
-          $stdout.reopen(cmd.stdout) if cmd.stdout
-          $stderr.reopen(cmd.stderr) if cmd.stderr
+          Command.apply_child_redirections(cmd.stdin, cmd.stdout, cmd.stderr)
 
           # Set prefix environment variables (e.g., FOO=bar cmd)
           cmd.prefix_env&.each { |k, v| ENV[k] = v } if cmd.respond_to?(:prefix_env)
@@ -937,9 +937,7 @@ module Rubish
             end
           end
 
-          $stdin.reopen(cmd.stdin) if cmd.stdin
-          $stdout.reopen(cmd.stdout) if cmd.stdout
-          $stderr.reopen(cmd.stderr) if cmd.stderr
+          Command.apply_child_redirections(cmd.stdin, cmd.stdout, cmd.stderr)
 
           # Set prefix environment variables (e.g., FOO=bar cmd)
           cmd.prefix_env&.each { |k, v| ENV[k] = v } if cmd.respond_to?(:prefix_env)
