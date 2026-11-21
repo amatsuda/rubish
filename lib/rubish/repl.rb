@@ -57,7 +57,7 @@ module Rubish
       @seconds_base = Time.now  # For SECONDS variable
       @random_generator = Random.new  # For RANDOM variable
       @lineno = 1  # For LINENO variable
-      @pipestatus = [0]  # For PIPESTATUS array variable
+      @pipestatus = []  # PIPESTATUS: unset until a command has run, as in bash
       @rubish_command = ''  # For RUBISH_COMMAND variable (current command being executed)
       @funcname_stack = []  # For FUNCNAME array variable (function call stack)
       @rubish_lineno_stack = []  # For RUBISH_LINENO array variable (line numbers of function calls)

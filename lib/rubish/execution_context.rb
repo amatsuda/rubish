@@ -61,7 +61,7 @@ module Rubish
       @last_status = 0
       @last_bg_pid = nil
       @lineno = 1
-      @pipestatus = [0]
+      @pipestatus = []
       @functions = {}
       @heredoc_content = nil
       @command_number = 1

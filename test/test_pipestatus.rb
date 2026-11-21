@@ -193,12 +193,12 @@ class TestPIPESTATUS < Test::Unit::TestCase
   end
 
   def test_pipestatus_initial_value
-    # Fresh REPL should have PIPESTATUS = [0]
+    # Fresh REPL: PIPESTATUS is unset until a command has run (bash)
     repl = Rubish::REPL.new
     output_file = File.join(@tempdir, 'output.txt')
     repl.send(:execute, "echo ${PIPESTATUS[@]} > #{output_file}")
     value = File.read(output_file).strip
-    assert_equal '0', value
+    assert_equal '', value
   end
 
   # `pipestatus` (lowercase) is zsh's spelling of the same array.
