@@ -154,17 +154,18 @@ class TestParamTransform < Test::Unit::TestCase
 
   # ${var@A} - Assignment statement form
   def test_transform_a_upper_basic
-    ENV['TEST'] = 'hello'
-    Rubish::Builtins.current_state.var_attributes.delete('TEST')
+    # A plain shell variable (not exported, no attributes) is a bare assignment
+    ENV.delete('TEST')
+    execute('TEST=hello')
     execute("echo ${TEST@A} > #{output_file}")
-    assert_equal "declare -- TEST='hello'\n", File.read(output_file)
+    assert_equal "TEST='hello'\n", File.read(output_file)
   end
 
   def test_transform_a_upper_with_spaces
-    ENV['TEST'] = 'hello world'
-    Rubish::Builtins.current_state.var_attributes.delete('TEST')
+    ENV.delete('TEST')
+    execute("TEST='hello world'")
     execute("echo ${TEST@A} > #{output_file}")
-    assert_equal "declare -- TEST='hello world'\n", File.read(output_file)
+    assert_equal "TEST='hello world'\n", File.read(output_file)
   end
 
   def test_transform_a_upper_exported
@@ -179,7 +180,8 @@ class TestParamTransform < Test::Unit::TestCase
   def test_transform_a_upper_unset
     ENV.delete('UNSET_VAR')
     execute("echo ${UNSET_VAR@A} > #{output_file}")
-    assert_equal "declare -- UNSET_VAR\n", File.read(output_file)
+    # bash expands @A of an unset variable to nothing
+    assert_equal "\n", File.read(output_file)
   end
 
   # ${var@a} - Attribute flags

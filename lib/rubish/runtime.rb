@@ -276,11 +276,17 @@ module Rubish
       when 'E' then value.nil? ? '' : Builtins.process_escape_sequences(value)
       when 'P' then value.nil? ? '' : expand_prompt(value)
       when 'A'
-        if value.nil?
-          "declare -- #{var_name}"
+        # An assignment that recreates the variable: `x='v'`, `declare -i n='3'`
+        # when it has attributes, or a compound assignment for an array
+        base = var_name.sub(/\[[@*]\]\z/, '')
+        if Builtins.array?(base) || Builtins.assoc_array?(base)
+          Builtins.array_declaration(base)
+        elsif value.nil?
+          ''
         else
-          prefix = Builtins.exported?(var_name) ? 'declare -x' : 'declare --'
-          "#{prefix} #{var_name}=#{__param_transform(var_name, 'Q')}"
+          flags = Builtins.declaration_flags(var_name)
+          assignment = "#{var_name}=#{__param_transform(var_name, 'Q')}"
+          flags.empty? ? assignment : "declare -#{flags} #{assignment}"
         end
       when 'a'
         flags = +''
