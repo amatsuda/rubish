@@ -1361,9 +1361,9 @@ module Rubish
         $stderr.puts format('real %.2f', real)
         $stderr.puts format('user %.2f', user)
         $stderr.puts format('sys %.2f', sys)
-      elsif ENV['TIMEFORMAT']
-        # Custom TIMEFORMAT
-        output = format_timeformat(ENV['TIMEFORMAT'], real, user, sys)
+      elsif !(timeformat = Builtins.get_var('TIMEFORMAT')).nil?
+        # Custom TIMEFORMAT; an empty value prints nothing (bash)
+        output = format_timeformat(timeformat, real, user, sys)
         $stderr.puts output unless output.empty?
       else
         # Default bash-like format
