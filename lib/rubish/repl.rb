@@ -584,7 +584,7 @@ module Rubish
           if ruby_input_incomplete?(e.message) && !@state.sourcing_file
             cancelled = false
             cont = begin
-              @frontend.read_continuation_line(continuation_prompt)
+              continuation_available? ? @frontend.read_continuation_line(continuation_prompt) : nil
             rescue Interrupt
               cancelled = true
               nil
@@ -629,17 +629,20 @@ module Rubish
       end
     end
 
+    # Whether an unfinished line can be continued by asking for more input.
+    # A non-interactive shell reading a pipe, socket or file (rubish -c, a
+    # script) has nothing to prompt: the command is simply unfinished, and
+    # waiting on that stdin for a line would block for as long as it stays
+    # open.
+    def continuation_available?
+      Builtins.interactive_mode? || !@frontend.is_a?(Frontend::Tty) || $stdin.tty?
+    end
+
     # Collect continuation lines for multi-line commands
     def collect_continuation_lines(accumulated_lines, initial_error)
       loop do
         begin
-          # A non-interactive shell reading a pipe or file (rubish -c, a
-          # script) has nothing to prompt: the command is simply unfinished
-          cont_line = if !Builtins.interactive_mode? && @frontend.is_a?(Frontend::Tty) && !$stdin.tty?
-                        nil
-                      else
-                        @frontend.read_continuation_line(continuation_prompt)
-                      end
+          cont_line = continuation_available? ? @frontend.read_continuation_line(continuation_prompt) : nil
         rescue Interrupt
           puts
           return nil  # User cancelled
