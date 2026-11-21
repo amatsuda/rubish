@@ -1334,6 +1334,12 @@ module Rubish
         return true
       end
 
+      # readonly -f NAME...: the functions can no longer be redefined
+      if args.first == '-f'
+        args.drop(1).each { |name| @state.readonly_functions << name }
+        return true
+      end
+
       # Filter out -p flag
       names = args.reject { |a| a == '-p' }
 

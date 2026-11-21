@@ -30,6 +30,9 @@ module Rubish
 
     # Descriptors >= 3 opened with `exec N>file`, keyed by the shell-level number
     attr_accessor :shell_fds
+
+    # Functions made readonly with `readonly -f`
+    attr_accessor :readonly_functions
     attr_accessor :history_transient
 
     # Execution callbacks
@@ -88,6 +91,7 @@ module Rubish
 
     def initialize
       @shell_fds = {}
+      @readonly_functions = Set.new
 
       # Variables state
       @shell_vars = {}

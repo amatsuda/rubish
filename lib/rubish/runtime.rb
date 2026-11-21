@@ -1497,6 +1497,12 @@ module Rubish
     end
 
     def __define_function(name, source_code = nil, params = nil, &block)
+      if Builtins.current_state.readonly_functions.include?(name)
+        $stderr.puts "rubish: #{name}: readonly function"
+        @last_status = 1
+        return nil
+      end
+
       @functions[name] = {block: block, source: @current_source_file, source_code: source_code, lineno: @lineno, params: params}
       nil
     end
