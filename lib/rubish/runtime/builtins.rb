@@ -1377,6 +1377,11 @@ module Rubish
     # Get a shell variable's value
     # Checks shell_vars first (for variables set in this shell),
     # then falls back to ENV (for inherited environment variables)
+    # The array a name refers to: the nameref's target, or the name itself
+    def array_name(name)
+      nameref?(name) ? (resolve_nameref(name) || name) : name
+    end
+
     # `name[subscript]` as a parameter name: [array, subscript] or nil
     SUBSCRIPTED_PARAM = /\A([a-zA-Z_][a-zA-Z0-9_]*)\[(.+)\]\z/m
 

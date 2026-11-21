@@ -274,7 +274,7 @@ module Rubish
 
     def handle_array_element_assignment(assignment)
       if assignment =~ /\A([a-zA-Z_][a-zA-Z0-9_]*)\[([^\]]+)\]\+?=(.*)?\z/
-        var = $1
+        var = Builtins.array_name($1)
         index_expr = $2
         val = $3 || ''
         is_append = assignment.include?('+=')

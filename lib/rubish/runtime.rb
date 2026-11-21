@@ -236,6 +236,7 @@ module Rubish
     # elements. For the positional parameters $0 occupies position 0, as in
     # bash, so `${@:1}` is all of them.
     def __array_slice_values(name, offset, length)
+      name = Builtins.array_name(name)
       values = if name == '@' || name == '*'
                  [respond_to?(:script_name) ? script_name.to_s : 'rubish'] + (positional_params || [])
                else
@@ -382,6 +383,7 @@ module Rubish
     # For associative arrays, index is expanded as string (key lookup)
     # For indexed arrays, index is evaluated as arithmetic expression
     def __array_element(var_name, index)
+      var_name = Builtins.array_name(var_name)
       expanded_index = expand_array_index(var_name, index)
 
       # Check special arrays first
@@ -434,6 +436,7 @@ module Rubish
     # than collapse to a single string. Handles both regular arrays
     # and special arrays (PIPESTATUS / pipestatus, GROUPS, FUNCNAME, …).
     def __array_values(var_name)
+      var_name = Builtins.array_name(var_name)
       values = get_special_array_values(var_name)
       case values
       when Array then values.map(&:to_s)
@@ -450,6 +453,7 @@ module Rubish
 
     # ${#arr[@]} - get array/assoc length
     def __array_length(var_name)
+      var_name = Builtins.array_name(var_name)
       values = get_special_array_values(var_name)
       length = case values
                when Array then values.length
@@ -469,6 +473,7 @@ module Rubish
     # Indices (indexed arrays) or keys (associative arrays) as an Array of
     # strings — the per-word form of ${!arr[@]} used by "${!arr[@]}".
     def __array_key_list(var_name)
+      var_name = Builtins.array_name(var_name)
       values = get_special_array_values(var_name)
       keys = case values
              when Array then (0...values.length).to_a

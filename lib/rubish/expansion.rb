@@ -823,6 +823,7 @@ module Rubish
 
     # Handle array element assignment: arr[0]=value or map[key]=value
     def handle_array_element_assignment(var_name, key, value)
+      var_name = Builtins.array_name(var_name)
       expanded_key = expand_string_content(key)
       expanded_value = expand_assignment_value(value)
       expanded_value = eval_arithmetic_expr(expanded_value).to_s if Builtins.has_attribute?(var_name, :integer)
