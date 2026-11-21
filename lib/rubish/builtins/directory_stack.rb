@@ -26,7 +26,7 @@ module Rubish
           puts 'pushd: no other directory'
           return false
         end
-        current = Dir.pwd
+        current = logical_pwd
         target = @state.dir_stack.shift
         @state.dir_stack.unshift(current)
         return false unless no_cd || chdir_safe(target, 'pushd')
@@ -36,7 +36,7 @@ module Rubish
         # Stack rotation: +N or -N
         arg = remaining_args.first
         n = arg[1..].to_i
-        full_stack = [Dir.pwd] + @state.dir_stack
+        full_stack = [logical_pwd] + @state.dir_stack
 
         if n >= full_stack.length
           puts "pushd: #{arg}: directory stack index out of range"
@@ -67,7 +67,7 @@ module Rubish
         # Push directory
         dir = remaining_args.first
         dir = File.expand_path(dir)
-        current = Dir.pwd
+        current = logical_pwd
 
         unless File.directory?(dir)
           puts "pushd: #{dir}: No such file or directory"
@@ -106,7 +106,7 @@ module Rubish
         return false
       end
 
-      full_stack = [Dir.pwd] + @state.dir_stack
+      full_stack = [logical_pwd] + @state.dir_stack
 
       if index_arg
         n = index_arg[1..].to_i
@@ -188,7 +188,7 @@ module Rubish
       end
 
       home  = ENV['HOME'] || Dir.home
-      stack = [Dir.pwd] + @state.dir_stack
+      stack = [logical_pwd] + @state.dir_stack
 
       # Tildify only when $HOME is a real path prefix — never anywhere
       # mid-path. Plain `dir.sub(home, '~')` would rewrite
@@ -227,7 +227,7 @@ module Rubish
 
     def print_dir_stack
       home = ENV['HOME'] || Dir.home
-      stack = [Dir.pwd] + @state.dir_stack
+      stack = [logical_pwd] + @state.dir_stack
       puts stack.map { |d| d.sub(home, '~') }.join(' ')
     end
 
@@ -237,8 +237,20 @@ module Rubish
 
     private
 
+    # The current directory as the shell names it: $PWD while it still points
+    # at the physical cwd (keeps symlinks such as /tmp), else the physical path
+    def logical_pwd
+      ENV['PWD'] && File.identical?(ENV['PWD'], Dir.pwd) ? ENV['PWD'] : Dir.pwd
+    end
+
+    # Change directory the way cd does: keep the logical path and update
+    # OLDPWD and PWD, so `pwd` and prompts follow pushd/popd
     def chdir_safe(target, cmd_name)
-      Dir.chdir(target)
+      base = logical_pwd
+      logical = File.expand_path(target, base)
+      Dir.chdir(logical)
+      ENV['OLDPWD'] = base
+      ENV['PWD'] = logical
       notify_terminal_of_cwd
       true
     rescue Errno::ENOENT => e
