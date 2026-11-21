@@ -975,7 +975,7 @@ module Rubish
       when 'OSTYPE' then ostype
       when 'HOSTTYPE' then hosttype
       when 'MACHTYPE' then RUBY_PLATFORM
-      when 'RUBISH_COMMAND', 'BASH_COMMAND' then @rubish_command
+      when 'RUBISH_COMMAND', 'BASH_COMMAND' then @state.bash_command
       when 'FUNCNAME' then (@funcname_stack || []).first
       when 'RUBISH_SUBSHELL', 'BASH_SUBSHELL' then @subshell_level.to_s
       when 'COLUMNS' then terminal_columns.to_s

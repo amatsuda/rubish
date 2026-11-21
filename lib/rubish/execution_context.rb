@@ -66,7 +66,6 @@ module Rubish
       @heredoc_content = nil
       @command_number = 1
       @subshell_level = 0
-      @rubish_command = ''
       @next_varname_fd = 10
       @varname_fds = {}
       @random_generator = Random.new
@@ -103,7 +102,6 @@ module Rubish
       @rubish_source_stack = []
       @rubish_argc_stack = []
       @rubish_argv_stack = []
-      @rubish_command = ''
       @current_source_file = 'main'
     end
 
@@ -1308,5 +1306,6 @@ module Rubish
     include Expansion
     include Runtime
     include Builtins
+    include Tracing
   end
 end

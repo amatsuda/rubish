@@ -30,6 +30,8 @@ module Rubish
 
     # Descriptors >= 3 opened with `exec N>file`, keyed by the shell-level number
     attr_accessor :shell_fds
+    # The command being run, for BASH_COMMAND
+    attr_accessor :bash_command
 
     # Functions made readonly with `readonly -f`
     attr_accessor :readonly_functions
@@ -91,6 +93,7 @@ module Rubish
 
     def initialize
       @shell_fds = {}
+      @bash_command = ''
       @readonly_functions = Set.new
 
       # Variables state

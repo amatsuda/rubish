@@ -141,7 +141,7 @@ class TestRUBISH_COMMAND < Test::Unit::TestCase
   def test_rubish_command_initial_value
     # Fresh REPL should have RUBISH_COMMAND as empty initially
     repl = Rubish::REPL.new
-    rubish_command = repl.instance_variable_get(:@rubish_command)
+    rubish_command = repl.instance_variable_get(:@state).bash_command
     assert_equal '', rubish_command
   end
 
@@ -166,8 +166,8 @@ class TestRUBISH_COMMAND < Test::Unit::TestCase
     repl1.send(:execute, "echo first > #{output_file1}")
     repl2.send(:execute, "echo second > #{output_file2}")
 
-    rubish_cmd1 = repl1.instance_variable_get(:@rubish_command)
-    rubish_cmd2 = repl2.instance_variable_get(:@rubish_command)
+    rubish_cmd1 = repl1.instance_variable_get(:@state).bash_command
+    rubish_cmd2 = repl2.instance_variable_get(:@state).bash_command
 
     assert_match(/first/, rubish_cmd1)
     assert_match(/second/, rubish_cmd2)

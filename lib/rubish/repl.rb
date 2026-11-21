@@ -6,6 +6,7 @@ require_relative 'history'
 require_relative 'config'
 require_relative 'arithmetic'
 require_relative 'expansion'
+require_relative 'tracing'
 require_relative 'runtime'
 require_relative 'shell_state'
 require_relative 'execution_context'
@@ -23,6 +24,7 @@ module Rubish
     include Config
     include Arithmetic
     include Expansion
+    include Tracing
     include Runtime
 
     def initialize(login_shell: false, no_profile: false, no_rc: false, restricted: false, rcfile: nil, frontend: nil)
@@ -58,7 +60,6 @@ module Rubish
       @random_generator = Random.new  # For RANDOM variable
       @lineno = 1  # For LINENO variable
       @pipestatus = []  # PIPESTATUS: unset until a command has run, as in bash
-      @rubish_command = ''  # For RUBISH_COMMAND variable (current command being executed)
       @funcname_stack = []  # For FUNCNAME array variable (function call stack)
       @rubish_lineno_stack = []  # For RUBISH_LINENO array variable (line numbers of function calls)
       @current_source_file = 'main'  # Current source file being executed (for RUBISH_SOURCE)
@@ -1012,11 +1013,9 @@ module Rubish
         return if line.empty?
       end
 
-      # Set RUBISH_COMMAND before execution (contains command being executed)
-      @rubish_command = line
-
-      # xtrace: print commands before execution (after expansion)
-      xtrace(line) if Builtins.set_option?('x')
+      # BASH_COMMAND is the command being executed; while a trap runs it
+      # stays the command that triggered the trap
+      @state.bash_command = line if @state.current_trapsig.to_s.empty?
 
       # Check if input looks like a Ruby expression (starts with capital letter)
       # UNIX commands rarely start with capitals, but Ruby constants/classes do
@@ -1117,11 +1116,12 @@ module Rubish
       if ast.is_a?(AST::Command) && Builtins.builtin?(ast.name) && !user_function?(ast.name)
         builtin_name = ast.name
         begin
-          # Run DEBUG trap before command
-          Builtins.debug_trap
-
           # Expand variables in args for builtins
           expanded_args = expand_args_for_builtin(ast.args)
+          announce_words(builtin_name, expanded_args)
+
+          # Run DEBUG trap before command
+          Builtins.debug_trap
           # Temp env prefix (e.g. `IFS= read`) must reach in-process builtins.
           result = with_prefix_env(ast.env) { Builtins.run(builtin_name, expanded_args) }
           Builtins.set_var('_', (expanded_args.last || builtin_name).to_s)
@@ -1154,10 +1154,11 @@ module Rubish
       # Check for user-defined functions (simple command only)
       if ast.is_a?(AST::Command) && @functions.key?(ast.name)
         begin
+          expanded_args = expand_args_for_builtin(ast.args)
+          announce_words(ast.name, expanded_args)
+
           # Run DEBUG trap before function call
           Builtins.debug_trap
-
-          expanded_args = expand_args_for_builtin(ast.args)
           @last_status = call_function(ast.name, expanded_args).exitstatus
           @pipestatus = [@last_status]
           @context.last_status = @last_status
@@ -1237,39 +1238,6 @@ module Rubish
     # still waiting to be autoloaded
     def user_function?(name)
       @functions.key?(name) || Builtins.autoload_pending?(name)
-    end
-
-    def xtrace(line)
-      # Print trace with PS4 prefix (default: '+ ')
-      # PS4 supports the same escape sequences as PS1
-      ps4 = ENV['PS4'] || '+ '
-      expanded_ps4 = expand_prompt(ps4)
-      output = "#{expanded_ps4}#{line}"
-
-      # Check RUBISH_XTRACEFD (or BASH_XTRACEFD for compatibility)
-      xtracefd = ENV['RUBISH_XTRACEFD'] || ENV['BASH_XTRACEFD']
-      if xtracefd && !xtracefd.empty?
-        fd_num = xtracefd.to_i
-        if fd_num >= 0 && xtracefd =~ /\A\d+\z/
-          begin
-            # Use IO.for_fd with autoclose: false to avoid closing the fd when done
-            io = IO.for_fd(fd_num, 'w', autoclose: false)
-            io.puts output
-            io.flush
-          rescue Errno::EBADF
-            # Invalid file descriptor, fall back to stderr
-            $stderr.puts "rubish: #{fd_num}: Bad file descriptor"
-            $stderr.puts output
-          rescue SystemCallError, IOError => e
-            $stderr.puts output
-          end
-        else
-          # Not a valid number, use stderr
-          $stderr.puts output
-        end
-      else
-        $stderr.puts output
-      end
     end
 
     def check_errexit
@@ -1422,7 +1390,6 @@ module Rubish
       @context.instance_variable_set(:@rubish_source_stack, @rubish_source_stack)
       @context.instance_variable_set(:@rubish_argc_stack, @rubish_argc_stack)
       @context.instance_variable_set(:@rubish_argv_stack, @rubish_argv_stack)
-      @context.instance_variable_set(:@rubish_command, @rubish_command)
       @context.instance_variable_set(:@current_line, @current_line)
       @context.instance_variable_set(:@current_source_file, @current_source_file)
       @context.instance_variable_set(:@command_number, @command_number)
@@ -1441,6 +1408,7 @@ module Rubish
       ensure
         @last_status = @context.last_status unless eval_completed
       end
+      announce_command(result)
       if result.is_a?(Command) && result.name == 'exec'
         # Don't auto-run exec - it's handled specially in execute method
         # to support redirections without command replacement

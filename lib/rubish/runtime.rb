@@ -920,8 +920,8 @@ module Rubish
       return ostype if var_name == 'OSTYPE'
       return hosttype if var_name == 'HOSTTYPE'
       return RUBY_PLATFORM if var_name == 'MACHTYPE'
-      return @rubish_command if var_name == 'RUBISH_COMMAND'
-      return @rubish_command if var_name == 'BASH_COMMAND'
+      return @state.bash_command if var_name == 'RUBISH_COMMAND'
+      return @state.bash_command if var_name == 'BASH_COMMAND'
       return @subshell_level.to_s if var_name == 'RUBISH_SUBSHELL'
       return @subshell_level.to_s if var_name == 'BASH_SUBSHELL'
       return terminal_columns.to_s if var_name == 'COLUMNS'
@@ -1717,6 +1717,8 @@ module Rubish
         check_errexit
         # Return ExitStatus so callers (like Subshell) know the real exit status
         ExitStatus.new(@last_status)
+      announce_command(result)
+
       elsif result.is_a?(Command) && @functions.key?(result.name)
         # Call user-defined function with redirects
         status = call_function_with_redirects(result)
