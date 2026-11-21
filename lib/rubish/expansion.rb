@@ -756,11 +756,14 @@ module Rubish
       pieces = WordSegments.split_quoted_array_word(value[1...-1])
       return nil unless pieces
 
-      expanded = pieces.map do |type, content|
+      expanded = pieces.map do |type, content, spec|
         case type
         when :array then __array_values(content)
         when :keys then __array_key_list(content)
         when :prefix_names then __var_names_with_prefix(content)
+        when :slice
+          offset, length = spec.split(':', 2)
+          __array_slice_values(content, offset, length)
         else expand_string_content(content, quoted: true)
         end
       end
