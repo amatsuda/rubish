@@ -125,7 +125,7 @@ module Rubish
             return false
           end
           # Validate variable name
-          unless var_name =~ /\A[a-zA-Z_][a-zA-Z0-9_]*\z/
+          unless var_name =~ /\A[a-zA-Z_][a-zA-Z0-9_]*(\[[^\]]+\])?\z/
             $stderr.puts "printf: `#{var_name}': not a valid identifier"
             return false
           end
@@ -288,8 +288,8 @@ module Rubish
       end
 
       if var_name
-        # Assign to variable instead of printing
-        ENV[var_name] = output
+        # Assign to the variable (or array element) instead of printing
+        set_var(var_name, output)
       else
         print output
       end
