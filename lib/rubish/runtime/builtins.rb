@@ -1579,7 +1579,7 @@ module Rubish
         error = false
         names.each do |name|
           var_name = name.split('=', 2).first
-          if !var_set?(var_name) && !(@state.var_attributes[var_name] || Set.new).any? && !readonly?(var_name)
+          if !var_set?(var_name) && !array?(var_name) && !assoc_array?(var_name) && !(@state.var_attributes[var_name] || Set.new).any? && !readonly?(var_name)
             $stderr.puts "declare: #{var_name}: not found"
             error = true
           else
@@ -1788,7 +1788,8 @@ module Rubish
       ENV[name] = value
     end
 
-    def print_declaration(name)
+    # The attribute letters declare -p shows for a variable, e.g. "irx"
+    def declaration_flags(name)
       attrs = @state.var_attributes[name] || Set.new
       flags = +''
       flags << 'i' if attrs.include?(:integer)
@@ -1799,6 +1800,34 @@ module Rubish
       flags << 'u' if attrs.include?(:uppercase)
       # Exported variables live in ENV, whether exported here or inherited
       flags << 'x' if attrs.include?(:export) || ENV.key?(name)
+      flags
+    end
+
+    # `declare -a name=([0]="x" [1]="y")` or `declare -A name=([k]="v" )`,
+    # as declare -p prints an array and ${name[@]@A} recreates it
+    def array_declaration(name)
+      kind = assoc_array?(name) ? 'A' : 'a'
+      "declare -#{kind}#{declaration_flags(name)} #{name}=#{array_literal(name)}"
+    end
+
+    def array_literal(name)
+      if assoc_array?(name)
+        pairs = get_assoc_array(name).map { |key, value| "[#{key}]=#{value.inspect} " }
+        "(#{pairs.join})"
+      else
+        pairs = (get_array(name) || []).each_with_index.filter_map { |value, i| "[#{i}]=#{value.inspect}" unless value.nil? }
+        "(#{pairs.join(' ')})"
+      end
+    end
+
+    def print_declaration(name)
+      if array?(name) || assoc_array?(name)
+        puts array_declaration(name)
+        return
+      end
+
+      attrs = @state.var_attributes[name] || Set.new
+      flags = declaration_flags(name)
 
       # For namerefs, show the target variable name
       if attrs.include?(:nameref)
@@ -1839,6 +1868,8 @@ module Rubish
       vars_to_print = Set.new
 
       @state.var_attributes.each_key { |name| vars_to_print << name }
+      @state.arrays.each_key { |name| vars_to_print << name }
+      @state.assoc_arrays.each_key { |name| vars_to_print << name }
       @state.readonly_vars.each_key { |name| vars_to_print << name }
       @state.namerefs.each_key { |name| vars_to_print << name }
 
