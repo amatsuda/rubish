@@ -1173,9 +1173,20 @@ module Rubish
   end
 
   class Subshell
-    # Same interface as Command#effective_streams, for pipelines mixing kinds
+    # The streams the subshell runs with, `>&2` and `2>&1` resolved in the
+    # order the redirections were written (see Command#effective_streams).
+    # A pipe assigned by Pipeline has no sequence number, so it counts as
+    # the earliest redirection: `{ ...; } 2>&1 | cmd` sends stderr down
+    # the pipe.
     def effective_streams
-      [@stdin, @stdout, @stderr]
+      out, err = @stdout, @stderr
+      out = err if out == :stderr && err.is_a?(IO) && (@stderr_seq || 0) < (@stdout_seq || 0)
+      err = @stdout if err == :stdout && @stdout.is_a?(IO) && (@stdout_seq || 0) < (@stderr_seq || 0)
+      [@stdin, out, err]
+    end
+
+    def next_redirect_seq
+      @redirect_seq = (@redirect_seq || 0) + 1
     end
 
     # Exit code for the value a subshell's block returned: an ExitStatus,
@@ -1205,6 +1216,21 @@ module Rubish
       @restricted_failed = false
     end
 
+    # Point the child's streams where the (resolved) redirections say. A
+    # remaining :stdout / :stderr marker refers to the stream as it was
+    # before the other one was redirected, so it is applied first.
+    def self.apply_streams(stdin, stdout, stderr)
+      $stdout.reopen($stderr) if stdout == :stderr
+      $stderr.reopen($stdout) if stderr == :stdout
+      [[$stdin, stdin], [$stdout, stdout], [$stderr, stderr]].each do |stream, target|
+        if target == :closed
+          stream.close
+        elsif target.is_a?(IO)
+          stream.reopen(target)
+        end
+      end
+    end
+
     def ran?
       @ran
     end
@@ -1228,13 +1254,7 @@ module Rubish
       end
 
       pid = fork do
-        $stdin.reopen(@stdin) if @stdin
-        $stdout.reopen(@stdout) if @stdout
-        if @stderr == :stdout
-          $stderr.reopen($stdout)
-        elsif @stderr
-          $stderr.reopen(@stderr)
-        end
+        Subshell.apply_streams(*effective_streams)
 
         # The block contains __run_cmd calls which handle execution
         # So we just call the block and exit with the result's status
@@ -1266,6 +1286,7 @@ module Rubish
         return self
       end
       @stdout = File.open(file, 'w')
+      @stdout_seq = next_redirect_seq
       self
     rescue Errno::ENOENT, Errno::EACCES => e
       $stderr.puts "rubish: #{file}: #{e.class.new.message}"
@@ -1280,6 +1301,7 @@ module Rubish
         return self
       end
       @stdout = File.open(file, 'w')
+      @stdout_seq = next_redirect_seq
       self
     rescue Errno::ENOENT, Errno::EACCES => e
       $stderr.puts "rubish: #{file}: #{e.class.new.message}"
@@ -1294,6 +1316,7 @@ module Rubish
         return self
       end
       @stdout = File.open(file, 'a')
+      @stdout_seq = next_redirect_seq
       self
     rescue Errno::ENOENT, Errno::EACCES => e
       $stderr.puts "rubish: #{file}: #{e.class.new.message}"
@@ -1317,6 +1340,7 @@ module Rubish
         return self
       end
       @stderr = File.open(file, 'w')
+      @stderr_seq = next_redirect_seq
       self
     rescue Errno::ENOENT, Errno::EACCES => e
       $stderr.puts "rubish: #{file}: #{e.class.new.message}"
@@ -1331,6 +1355,7 @@ module Rubish
         return self
       end
       @stderr = File.open(file, 'a')
+      @stderr_seq = next_redirect_seq
       self
     rescue Errno::ENOENT, Errno::EACCES => e
       $stderr.puts "rubish: #{file}: #{e.class.new.message}"
@@ -1340,14 +1365,15 @@ module Rubish
 
     def redirect_err_to_out
       @stderr = :stdout
+      @stderr_seq = next_redirect_seq
       self
     end
 
     def dup_out(target)
       case target
       when '1' then self
-      when '2' then @stdout = :stderr; self
-      when '-' then @stdout = :closed; self
+      when '2' then @stdout = :stderr; @stdout_seq = next_redirect_seq; self
+      when '-' then @stdout = :closed; @stdout_seq = next_redirect_seq; self
       else redirect_out(target)
       end
     end
@@ -1362,9 +1388,9 @@ module Rubish
 
     def dup_err(target)
       case target
-      when '1' then @stderr = :stdout; self
+      when '1' then @stderr = :stdout; @stderr_seq = next_redirect_seq; self
       when '2' then self
-      when '-' then @stderr = :closed; self
+      when '-' then @stderr = :closed; @stderr_seq = next_redirect_seq; self
       else redirect_err(target)
       end
     end

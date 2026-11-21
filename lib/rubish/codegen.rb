@@ -798,6 +798,10 @@ module Rubish
                     end
         "__subshell { #{generate(node.command)} }.#{op_method}(#{target})"
       else
+                    when '2>>' then 'redirect_err_append'
+                    when '>&' then 'dup_out'
+                    when '2>&' then 'dup_err'
+                    when '<&' then 'dup_in'
         generate(node)
       end
     end
