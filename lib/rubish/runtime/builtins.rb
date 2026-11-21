@@ -6565,7 +6565,7 @@ module Rubish
 
       # Handle -v flag: print path or type
       if print_path
-        if builtin?(cmd_name)
+        if @state.function_checker&.call(cmd_name) || builtin?(cmd_name)
           puts cmd_name
           return true
         end
@@ -6579,6 +6579,10 @@ module Rubish
 
       # Handle -V flag: print description
       if print_description
+        if @state.function_checker&.call(cmd_name)
+          puts "#{cmd_name} is a function"
+          return true
+        end
         if builtin?(cmd_name)
           puts "#{cmd_name} is a shell builtin"
           return true
