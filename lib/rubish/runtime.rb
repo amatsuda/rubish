@@ -290,7 +290,7 @@ module Rubish
         return words.join(' ')
       end
 
-      value = get_special_var(var_name) || Builtins.get_var(var_name)
+      value = __param_value(var_name)
 
       case operator
       when 'Q' then value.nil? ? "''" : "'" + value.gsub("'") { "'\\''" } + "'"
@@ -355,12 +355,20 @@ module Rubish
       __each_param_element(ref) { |scratch| expand_parameter_expansion("#{scratch}#{tail}") } || []
     end
 
+    # The value of a parameter for the pattern operators: positional and
+    # special parameters included
+    def __param_value(var_name)
+      return get_param_expand_info(var_name).first if var_name.match?(/\A(\d+|[@*#?$!-])\z/)
+
+      get_special_var(var_name) || Builtins.get_var(var_name)
+    end
+
     def __param_replace(var_name, operator, pattern, replacement)
       if (words = __each_param_element(var_name) { |scratch| __param_replace(scratch, operator, pattern, replacement) })
         return words.join(' ')
       end
 
-      value = get_special_var(var_name) || Builtins.get_var(var_name) || ''
+      value = __param_value(var_name) || ''
       return '' if value.empty?
 
       if pattern.start_with?('#')
@@ -393,7 +401,7 @@ module Rubish
         return words.join(' ')
       end
 
-      value = Builtins.get_var(var_name) || ''
+      value = __param_value(var_name) || ''
       return '' if value.empty?
 
       case operator
