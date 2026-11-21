@@ -59,8 +59,10 @@ class TestDeclareFunction < Test::Unit::TestCase
   end
 
   def test_declare_f_nonexistent_function
-    output = capture_stdout { Rubish::Builtins.declare(['-f', 'nonexistent']) }
-    assert_match(/not found/, output)
+    # bash is silent; only the status reports the missing function
+    output = capture_stdout { @declare_result = Rubish::Builtins.declare(['-f', 'nonexistent']) }
+    assert_equal '', output
+    assert_equal false, @declare_result
   end
 
   # declare -F (show function names only)
@@ -85,8 +87,9 @@ class TestDeclareFunction < Test::Unit::TestCase
   end
 
   def test_declare_F_nonexistent_function
-    output = capture_stdout { Rubish::Builtins.declare(['-F', 'nonexistent']) }
-    assert_match(/not found/, output)
+    output = capture_stdout { @declare_result = Rubish::Builtins.declare(['-F', 'nonexistent']) }
+    assert_equal '', output
+    assert_equal false, @declare_result
   end
 
   # Function with complex body

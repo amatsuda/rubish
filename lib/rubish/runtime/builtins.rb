@@ -1902,7 +1902,7 @@ module Rubish
           if info
             print_function(name, info, names_only)
           else
-            puts "declare: #{name}: not found"
+            # bash is silent about a missing function; the status says it
             return false
           end
         end
