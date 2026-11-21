@@ -313,7 +313,8 @@ module Rubish
         if str[j] == '\\'
           j += 2
         elsif str[j] == '`'
-          return [__run_subst(str[pos + 1...j]), j - pos + 1]
+          # A backslash inside backticks escapes `, \ and $
+          return [__run_subst(str[pos + 1...j].gsub(/\\([`\\$])/, '\1')), j - pos + 1]
         else
           j += 1
         end

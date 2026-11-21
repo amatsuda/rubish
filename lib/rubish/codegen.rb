@@ -604,8 +604,9 @@ module Rubish
           # Skip escaped character
           j += 2
         elsif str[j] == '`'
-          # Found closing backtick
-          cmd = str[pos + 1...j]
+          # Found closing backtick. Inside backticks a backslash only
+          # escapes `, \ and $, so the inner command sees those unescaped
+          cmd = str[pos + 1...j].gsub(/\\([`\\$])/, '\1')
           return ["__run_subst(#{cmd.inspect})", j - pos + 1]
         else
           j += 1
