@@ -415,6 +415,9 @@ module Rubish
     end
 
     def __param_indirect(var_name)
+      # ${!ref} of a nameref gives the name it refers to (bash)
+      return Builtins.resolve_nameref(var_name) || '' if Builtins.nameref?(var_name)
+
       indirect_name = Builtins.get_var(var_name)
       return '' if indirect_name.nil? || indirect_name.empty?
       Builtins.get_var(indirect_name) || ''
