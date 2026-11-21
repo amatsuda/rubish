@@ -1089,6 +1089,8 @@ module Rubish
     end
 
     def perform_varname_redirect(fd_num, io, &block)
+      # The descriptor stays open after the command, reachable as `>&$var`
+      @state.shell_fds[fd_num] = io
       result = block.call
       @varname_fds.each do |name, info|
         if info[:fd] == fd_num
@@ -1304,8 +1306,8 @@ module Rubish
 
     include Arithmetic
     include Expansion
+    include Tracing
     include Runtime
     include Builtins
-    include Tracing
   end
 end

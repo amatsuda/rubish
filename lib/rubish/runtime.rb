@@ -658,6 +658,12 @@ module Rubish
     # Handle {varname} redirection syntax: exec {fd}>file
     # Allocates a file descriptor >= 10 and stores it in the named variable
     def __varname_redirect(varname, operator, target, &block)
+      # `{var}>&-` closes the descriptor the variable holds
+      if %w[>& <&].include?(operator) && target == '-'
+        close_fd_by_number(Builtins.get_var(varname).to_i)
+        return block.call
+      end
+
       # Allocate a new FD number (>= 10, avoiding conflicts)
       fd_num = allocate_varname_fd
 
@@ -703,6 +709,36 @@ module Rubish
     # `(if/while/for/...) N>file` for N >= 3. Compound commands run
     # in-process so we'd need to dup the fd at the Ruby level — not
     # wired up yet. Yield silently for now; the redirect is dropped.
+    # `{var}>&N` / `{var}<&N`: the new descriptor is a copy of N
+    def perform_fd_dup(fd_num, src_fd, &block)
+      source = Command.standard_or_shell_fd(src_fd)
+      unless source.is_a?(IO) && !source.closed?
+        $stderr.puts "rubish: #{src_fd}: Bad file descriptor"
+        @varname_fds.delete_if { |_, info| info[:fd] == fd_num }
+        return false
+      end
+
+      perform_varname_redirect(fd_num, source.dup, &block)
+    end
+
+    def close_varname_fd(varname)
+      info = @varname_fds.delete(varname)
+      return unless info
+
+      @state.shell_fds.delete(info[:fd])
+      info[:io].close if info[:io] && !info[:io].closed?
+    end
+
+    # Close a descriptor by number: one allocated for a {var} redirection,
+    # or one opened with `exec N>file`
+    def close_fd_by_number(fd_num)
+      name, = @varname_fds.find { |_, info| info[:fd] == fd_num }
+      return close_varname_fd(name) if name
+
+      io = @state.shell_fds.delete(fd_num)
+      io.close if io.is_a?(IO) && !io.closed?
+    end
+
     def __with_fd_redirect(_fd, _op, _target)
       yield
     end
@@ -1681,6 +1717,8 @@ module Rubish
         return ExitStatus.new(1)
       end
 
+      announce_command(result)
+
       # Run DEBUG trap before each command
       Builtins.debug_trap
 
@@ -1717,8 +1755,6 @@ module Rubish
         check_errexit
         # Return ExitStatus so callers (like Subshell) know the real exit status
         ExitStatus.new(@last_status)
-      announce_command(result)
-
       elsif result.is_a?(Command) && @functions.key?(result.name)
         # Call user-defined function with redirects
         status = call_function_with_redirects(result)

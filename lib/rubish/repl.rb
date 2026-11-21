@@ -92,10 +92,10 @@ module Rubish
       set_shell_variable
       @state.executor = ->(line) { execute(line); @last_status }
       @state.last_status_setter = ->(status) { @last_status = status }
-      @state.script_name_getter = -> { @script_name }
       # $? as seen by a builtin: generated code and function bodies run in
       # the context, and the fast path below keeps it current too
       @state.last_status_getter = -> { @context.last_status }
+      @state.script_name_getter = -> { @script_name }
       @state.script_name_setter = ->(name) { @script_name = name }
       @state.positional_params_getter = -> { @positional_params }
       @state.positional_params_setter = ->(params) { @positional_params = params }
@@ -1160,8 +1160,8 @@ module Rubish
           # Run DEBUG trap before function call
           Builtins.debug_trap
           @last_status = call_function(ast.name, expanded_args).exitstatus
-          @pipestatus = [@last_status]
           @context.last_status = @last_status
+          @pipestatus = [@last_status]
           # Don't run ERR trap here - it was already handled inside the function if errtrace is on
           check_errexit
         rescue NounsetError
@@ -1536,47 +1536,6 @@ module Rubish
     end
 
     # Perform redirection with allocated FD
-    def perform_varname_redirect(fd_num, io, &block)
-      result = block.call
-      # Store the IO object for later use
-      @varname_fds.each do |name, info|
-        if info[:fd] == fd_num
-          info[:io] = io
-          break
-        end
-      end
-      result
-    ensure
-      # Don't close here - the FD should remain open for use
-      # It will be closed by varredir_close or explicit close
-    end
-
-    # Perform FD duplication
-    def perform_fd_dup(fd_num, src_fd, &block)
-      block.call
-    end
-
-    # Close a varname-allocated FD
-    def close_varname_fd(varname)
-      info = @varname_fds.delete(varname)
-      return unless info
-
-      if info[:io] && !info[:io].closed?
-        info[:io].close
-      end
-      ENV.delete(varname)
-    end
-
-    # Close a specific FD by number (for explicit close like exec {fd}>&-)
-    def close_fd_by_number(fd_num)
-      @varname_fds.each do |name, info|
-        if info[:fd] == fd_num
-          close_varname_fd(name)
-          break
-        end
-      end
-    end
-
     def display_select_menu(items)
       # Calculate column width for nice formatting
       max_len = items.map(&:length).max || 0
