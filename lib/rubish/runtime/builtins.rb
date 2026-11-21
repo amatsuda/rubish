@@ -4790,13 +4790,18 @@ module Rubish
         return false
       end
 
-      # Get the frame (stack is stored with most recent first)
-      # But caller 0 should be the immediate caller, so we need to reverse
+      # Frames are pushed as calls are made, so frame 0 is the most recent
       stack_frame = Builtins.call_stack[-(frame + 1)]
       return false unless stack_frame
 
       line_number, function_name, filename = stack_frame
-      puts "#{line_number} #{function_name} #{filename}"
+      if args.empty?
+        # `caller`: the line and file of the current call
+        puts "#{line_number} #{filename}"
+      else
+        # `caller N`: also the calling function (main for the top level)
+        puts "#{line_number} #{function_name} #{filename}"
+      end
       true
     end
 

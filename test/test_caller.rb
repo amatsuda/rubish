@@ -37,7 +37,8 @@ class TestCaller < Test::Unit::TestCase
       result = Rubish::Builtins.run('caller', [])
       assert result
     end
-    assert_equal "25 foo script.sh\n", output
+    # bash: without an argument, caller prints the line and the file
+    assert_equal "25 script.sh\n", output
   end
 
   # Test caller with frame number
@@ -127,7 +128,7 @@ class TestCaller < Test::Unit::TestCase
     Rubish::Builtins.push_call_frame(10, 'myfunc', 'test.sh')
 
     output = capture_output { execute('caller') }
-    assert_equal "10 myfunc test.sh\n", output
+    assert_equal "10 test.sh\n", output
   end
 
   # Test deep call stack

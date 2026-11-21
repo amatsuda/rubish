@@ -1310,6 +1310,8 @@ module Rubish
       func_source = func_info[:source]
 
       # Push function name onto FUNCNAME stack, line number onto RUBISH_LINENO stack, source onto RUBISH_SOURCE stack
+      # Record the frame for `caller`: where this call was made, and by whom
+      Builtins.push_call_frame(@lineno, @funcname_stack.first || 'main', @current_source_file || 'main')
       @funcname_stack.unshift(name)
       @rubish_lineno_stack.unshift(@lineno)
       @rubish_source_stack.unshift(func_source)
@@ -1382,6 +1384,7 @@ module Rubish
 
         # Pop function name from FUNCNAME stack, line number from RUBISH_LINENO stack, source from RUBISH_SOURCE stack
         @funcname_stack.shift
+        Builtins.pop_call_frame
         @rubish_lineno_stack.shift
         @rubish_source_stack.shift
         # Pop argument count from RUBISH_ARGC stack, and corresponding args from RUBISH_ARGV stack
