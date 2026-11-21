@@ -87,9 +87,20 @@ module Rubish
       vars << 'REPLY' if vars.empty? && opts[:array_name].nil?
 
       # Read input
+      @read_delimiter_missing = false
       line = read_input_line(opts)
       return ExitStatus.new(142) if line == :timeout # 128 + SIGALRM, as bash
-      return false if line.nil?
+      if line.nil?
+        # End of file: the variables are emptied, as bash does, so a
+        # `while read x || [ -n "$x" ]` loop sees the end
+        if opts[:array_name]
+          set_array(opts[:array_name], []) unless readonly?(opts[:array_name])
+        else
+          vars.each { |var| set_var(var, '') unless readonly?(var) }
+        end
+        return false
+      end
+      partial = @read_delimiter_missing
 
       # Process backslash escapes unless raw mode
       unless opts[:raw]
@@ -102,7 +113,7 @@ module Rubish
       if opts[:array_name]
         return false if readonly_read_error(opts[:array_name])
         store_read_array(opts[:array_name], line)
-        return true
+        return !partial
       end
 
       if opts[:nchars_exact]
@@ -111,7 +122,8 @@ module Rubish
         return true
       end
 
-      store_read_variables(vars, line)
+      result = store_read_variables(vars, line)
+      partial ? false : result
     end
 
     def read_input_line(opts)
@@ -252,20 +264,28 @@ module Rubish
       line
     end
 
+    # Sets @read_delimiter_missing when end of file came before the
+    # delimiter: the data is still assigned, but read reports failure (bash)
     def read_until_delimiter(input_stream, delimiter)
+      @read_delimiter_missing = false
       if delimiter == "\n"
         line = input_stream.gets
         return nil unless line
+
+        @read_delimiter_missing = !line.end_with?("\n")
         line.chomp
       else
         line = +''
         loop do
           char = input_stream.getc
-          break unless char
+          if char.nil?
+            @read_delimiter_missing = true
+            break
+          end
           break if char == delimiter
           line << char
         end
-        line.empty? && input_stream.eof? ? nil : line
+        line.empty? && @read_delimiter_missing ? nil : line
       end
     end
 
