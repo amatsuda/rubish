@@ -1281,9 +1281,15 @@ module Rubish
       # Identifier must start with letter or underscore
       return false unless lookahead < @input.length && @input[lookahead] =~ /[a-zA-Z_]/
 
-      # Find the closing brace
+      # Find the closing brace; the name may carry a subscript: {arr[1]}>&-
       lookahead += 1
       lookahead += 1 while lookahead < @input.length && @input[lookahead] =~ /[a-zA-Z0-9_]/
+      if lookahead < @input.length && @input[lookahead] == '['
+        close = @input.index(']', lookahead)
+        return false unless close
+
+        lookahead = close + 1
+      end
 
       # Must be followed by }
       return false unless lookahead < @input.length && @input[lookahead] == '}'
@@ -1303,9 +1309,10 @@ module Rubish
     def read_varname_redirect
       @pos += 1  # skip opening {
 
-      # Read variable name
+      # Read variable name, with its subscript if any
       start = @pos
       @pos += 1 while @pos < @input.length && @input[@pos] =~ /[a-zA-Z0-9_]/
+      @pos = @input.index(']', @pos) + 1 if @input[@pos] == '['
       varname = @input[start...@pos]
 
       @pos += 1  # skip closing }
