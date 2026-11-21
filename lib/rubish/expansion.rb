@@ -398,6 +398,9 @@ module Rubish
       # ${#@}, ${#*}, ${#} - number of positional parameters
       return @positional_params.length.to_s if content.match?(/\A#[@*]?\z/)
 
+      # ${#1}, ${##}, ${#?} - length of a positional or special parameter
+      return __param_length($1) if content =~ /\A#(\d+|[#?$!-])\z/
+
       # ${N} - positional parameter (${10} and up need the braces); ${0} is $0
       if content.match?(/\A\d+\z/)
         n = content.to_i

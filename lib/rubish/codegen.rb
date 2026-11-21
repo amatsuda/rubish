@@ -1433,6 +1433,9 @@ module Rubish
       if content =~ /\A#([a-zA-Z_][a-zA-Z0-9_]*)\[[@*]\]\z/
         var_name = $1
         return "__array_length(#{var_name.inspect})"
+      # ${#1}, ${##}, ${#?} - length of a positional or special parameter
+      return "__param_length(#{$1.inspect})" if content =~ /\A#(\d+|[#?$!-])\z/
+
       end
 
       # Handle ${arr[@]} or ${arr[*]} - all array elements

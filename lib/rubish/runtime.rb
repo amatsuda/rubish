@@ -214,7 +214,7 @@ module Rubish
 
     # ${#var} - length of variable value
     def __param_length(var_name)
-      (get_special_var(var_name) || Builtins.get_var(var_name) || '').length.to_s
+      (__param_value(var_name) || '').length.to_s
     end
 
     # ${var:offset} or ${var:offset:length} - substring extraction
