@@ -922,7 +922,7 @@ module Rubish
               else
                 value.empty? ? [] : [value]
               end
-      words.flat_map { |w| w.match?(/[*?\[]/) ? __glob(w) : [w] }
+      words.flat_map { |w| w.match?(/[*?\[]|[+@!]\(/) ? __glob(w) : [w] }
     end
 
     def __glob(pattern)
@@ -1084,6 +1084,39 @@ module Rubish
       expand_braces(pattern)
     end
 
+    # Filename expansion for a pattern with extglob operators. Lives here so
+    # that both the REPL and the ExecutionContext (which run __glob) have it.
+    def expand_extglob(pattern)
+      # Convert extended glob pattern to regex and match files
+      # First, get the directory to search in
+      dir = File.dirname(pattern)
+      dir = '.' if dir == pattern || dir.empty?
+
+      # Build regex from the pattern
+      regex = extglob_to_regex(File.basename(pattern))
+
+      # Get all files in directory and filter by regex
+      begin
+        entries = if pattern.include?('/')
+                    # For paths with directories, we need to handle differently
+                    base_glob = pattern.gsub(/[?*+@!]\([^)]*\)/, '*')
+                    Dir.glob(base_glob)
+                  else
+                    Dir.entries(dir).reject { |e| e.start_with?('.') }
+                  end
+
+        if pattern.include?('/')
+          # Filter full paths
+          full_regex = extglob_to_regex(pattern)
+          entries.select { |f| f.match?(full_regex) }.sort
+        else
+          entries.select { |f| f.match?(regex) }.map { |f| dir == '.' ? f : File.join(dir, f) }.sort
+        end
+      rescue Errno::ENOENT
+        []
+      end
+    end
+
     def __case_match(pattern, word)
       # Shell pattern matching using fnmatch
       # Supports *, ?, [...] patterns
@@ -1091,6 +1124,11 @@ module Rubish
         icase = Builtins.shopt_enabled?('nocasematch')
         rx = posix_glob_to_regex(pattern, icase: icase)
         return rx ? rx.match?(word) : false
+      end
+      if Builtins.shopt_enabled?('extglob') && has_extglob?(pattern)
+        rx = extglob_to_regex(pattern)
+        rx = Regexp.new(rx.source, Regexp::IGNORECASE) if Builtins.shopt_enabled?('nocasematch')
+        return rx.match?(word)
       end
       flags = File::FNM_EXTGLOB
       flags |= File::FNM_CASEFOLD if Builtins.shopt_enabled?('nocasematch')

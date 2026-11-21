@@ -563,6 +563,12 @@ module Rubish
           end
         end
 
+        # extglob: `@(a|b)`, `*(x)`, `+(x)`, `?(x)`, `!(x)` are part of the word
+        if char == '(' && @pos > start && extglob_prefix?(@input[start...@pos]) && extglob_enabled?
+          read_parenthesized_group
+          next
+        end
+
         # General break conditions - exclude { since it's handled above
         break if char =~ /[ \t\n]/ || (OPERATORS.key?(char) && char != '{')
         break if @input[@pos, 2] == '>>' || @input[@pos, 2] == '2>' || @input[@pos, 2] == ';;'
@@ -825,6 +831,38 @@ module Rubish
       end
 
       @input[start...@pos]
+    end
+
+    # `shopt -s extglob` in the shell this lexer serves; false when there is
+    # no shell state (the lexer is also used on its own)
+    def extglob_enabled?
+      Builtins.current_state ? Builtins.shopt_enabled?('extglob') : false
+    end
+
+    # Consume a parenthesised group, honouring nesting, quotes and escapes
+    def read_parenthesized_group
+      depth = 0
+      while @pos < @input.length
+        case @input[@pos]
+        when '('
+          depth += 1
+        when ')'
+          depth -= 1
+          if depth.zero?
+            @pos += 1
+            return
+          end
+        when '\\'
+          @pos += 1
+        when '"'
+          read_double_quoted_string
+          next
+        when "'"
+          read_single_quoted_string
+          next
+        end
+        @pos += 1
+      end
     end
 
     def extglob_prefix?(word)

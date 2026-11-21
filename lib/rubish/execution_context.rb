@@ -950,7 +950,7 @@ module Rubish
             # !(pattern) - anything except
             end_idx = find_matching_paren(pattern, i + 1)
             inner = pattern[i + 2...end_idx]
-            result << "(?!#{extglob_alternatives_to_regex(inner)}).*"
+            result << "(?!(?:#{extglob_alternatives_to_regex(inner)})\\z).*"
             i = end_idx + 1
           else
             result << Regexp.escape(char)

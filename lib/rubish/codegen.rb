@@ -202,8 +202,8 @@ module Rubish
     end
 
     def has_glob_chars?(str)
-      # Check for unquoted glob characters: *, ?, [...]
-      str.match?(/[*?\[]/)
+      # Check for unquoted glob characters: *, ?, [...], or an extglob group
+      str.match?(/[*?\[]|[+@!]\(/)
     end
 
     def has_brace_expansion?(str)

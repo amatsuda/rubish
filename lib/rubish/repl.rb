@@ -1888,37 +1888,6 @@ module Rubish
       pattern.match?(/[?*+@!]\([^)]*\)/)
     end
 
-    def expand_extglob(pattern)
-      # Convert extended glob pattern to regex and match files
-      # First, get the directory to search in
-      dir = File.dirname(pattern)
-      dir = '.' if dir == pattern || dir.empty?
-
-      # Build regex from the pattern
-      regex = extglob_to_regex(File.basename(pattern))
-
-      # Get all files in directory and filter by regex
-      begin
-        entries = if pattern.include?('/')
-                    # For paths with directories, we need to handle differently
-                    base_glob = pattern.gsub(/[?*+@!]\([^)]*\)/, '*')
-                    Dir.glob(base_glob)
-                  else
-                    Dir.entries(dir).reject { |e| e.start_with?('.') }
-                  end
-
-        if pattern.include?('/')
-          # Filter full paths
-          full_regex = extglob_to_regex(pattern)
-          entries.select { |f| f.match?(full_regex) }.sort
-        else
-          entries.select { |f| f.match?(regex) }.map { |f| dir == '.' ? f : File.join(dir, f) }.sort
-        end
-      rescue Errno::ENOENT
-        []
-      end
-    end
-
     def extglob_to_regex(pattern)
       # Convert extended glob pattern to Ruby regex
       result = +''
@@ -1983,7 +1952,7 @@ module Rubish
             # !(pattern) - anything except
             end_idx = find_matching_paren(pattern, i + 1)
             inner = pattern[i + 2...end_idx]
-            result << "(?!#{extglob_alternatives_to_regex(inner)}).*"
+            result << "(?!(?:#{extglob_alternatives_to_regex(inner)})\\z).*"
             i = end_idx + 1
           else
             result << Regexp.escape(char)

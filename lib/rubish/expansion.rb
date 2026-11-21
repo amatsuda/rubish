@@ -192,10 +192,10 @@ module Rubish
                   else
                     expanded.empty? ? [] : [expanded]
                   end
-          words.flat_map { |w| w.match?(/[*?\[]/) ? __glob(w) : [w] }
+          words.flat_map { |w| w.match?(/[*?\[]|[+@!]\(/) ? __glob(w) : [w] }
         else
           next [] if expanded.empty?
-          expanded.match?(/[*?\[]/) ? __glob(expanded) : [expanded]
+          expanded.match?(/[*?\[]|[+@!]\(/) ? __glob(expanded) : [expanded]
         end
       end
     end
@@ -211,7 +211,7 @@ module Rubish
 
       expanded = expand_string_content(arg)
       return [] if expanded.empty?
-      expanded.match?(/[*?\[]/) ? __glob(expanded) : [expanded]
+      expanded.match?(/[*?\[]|[+@!]\(/) ? __glob(expanded) : [expanded]
     end
 
     def expand_single_arg(arg)
