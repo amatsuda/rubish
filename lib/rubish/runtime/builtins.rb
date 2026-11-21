@@ -2656,8 +2656,8 @@ module Rubish
           if opt_name
             set_long_option(opt_name, true)
           else
-            # set -o with no option name lists all options
-            list_set_options
+            # set -o with no option name lists all options as a table
+            list_set_options(reusable: false)
             return true
           end
         elsif arg == '+o'
@@ -2667,7 +2667,8 @@ module Rubish
           if opt_name
             set_long_option(opt_name, false)
           else
-            list_set_options
+            # set +o prints commands that recreate the current settings
+            list_set_options(reusable: true)
             return true
           end
         elsif arg.start_with?('-') && arg.length > 1 && arg != '-'
@@ -2713,8 +2714,9 @@ module Rubish
       true
     end
 
-    def list_set_options
-      # Print current option settings
+    # `set -o`: a table of option name and on/off; `set +o`: `set -o name` /
+    # `set +o name` lines that can be fed back to the shell (bash)
+    def list_set_options(reusable: false)
       long_names = {
         'B' => 'braceexpand', 'H' => 'histexpand',
         'e' => 'errexit', 'E' => 'errtrace', 'T' => 'functrace',
@@ -2730,8 +2732,11 @@ module Rubish
       }
       @state.set_options.each do |flag, value|
         name = long_names[flag] || flag
-        state = value ? '-o' : '+o'
-        puts "set #{state} #{name}"
+        if reusable
+          puts "set #{value ? '-o' : '+o'} #{name}"
+        else
+          puts format("%-15s\t%s", name, value ? 'on' : 'off')
+        end
       end
       true
     end

@@ -401,12 +401,12 @@ class TestSetOptions < Test::Unit::TestCase
   def test_set_o_shows_enabled_options
     execute('set -e')
     output = capture_stdout { execute('set -o') }
-    assert_match(/set -o errexit/, output)
+    assert_match(/^errexit\s+on$/, output)
   end
 
   def test_set_o_shows_disabled_options
     output = capture_stdout { execute('set -o') }
-    assert_match(/set \+o errexit/, output)
+    assert_match(/^errexit\s+off$/, output)
   end
 
   # set -u (nounset)
@@ -870,7 +870,7 @@ class TestSetOptions < Test::Unit::TestCase
     execute('set -m')
     output_file = File.join(@tempdir, 'out')
     execute(%(echo "$(set -o | grep monitor)" > #{output_file}))
-    assert_equal "set +o monitor\n", File.read(output_file)
+    assert_match(/\Amonitor\s+off\n\z/, File.read(output_file))
   end
 
   # And the outer shell's monitor setting is preserved after the
@@ -1705,14 +1705,14 @@ class TestSetOptions < Test::Unit::TestCase
     output = capture_stdout { execute('set -o') }
     execute('set +o ignoreeof')
 
-    assert_match(/set -o ignoreeof/, output)
+    assert_match(/^ignoreeof\s+on$/, output)
   end
 
   def test_ignoreeof_shows_disabled_state
     execute('set +o ignoreeof')
     output = capture_stdout { execute('set -o') }
 
-    assert_match(/set \+o ignoreeof/, output)
+    assert_match(/^ignoreeof\s+off$/, output)
   end
 
   # set -o extglob
@@ -1743,14 +1743,14 @@ class TestSetOptions < Test::Unit::TestCase
     output = capture_stdout { execute('set -o') }
     execute('set +o extglob')
 
-    assert_match(/set -o extglob/, output)
+    assert_match(/^extglob\s+on$/, output)
   end
 
   def test_extglob_shows_disabled_state
     execute('set +o extglob')
     output = capture_stdout { execute('set -o') }
 
-    assert_match(/set \+o extglob/, output)
+    assert_match(/^extglob\s+off$/, output)
   end
 
   # Extglob pattern matching tests
@@ -1895,14 +1895,14 @@ class TestSetOptions < Test::Unit::TestCase
     output = capture_stdout { execute('set -o') }
     execute('set +o physical')
 
-    assert_match(/set -o physical/, output)
+    assert_match(/^physical\s+on$/, output)
   end
 
   def test_physical_shows_disabled_state
     execute('set +o physical')
     output = capture_stdout { execute('set -o') }
 
-    assert_match(/set \+o physical/, output)
+    assert_match(/^physical\s+off$/, output)
   end
 
   # Physical option functionality tests with symlinks
@@ -2091,21 +2091,21 @@ class TestSetOptions < Test::Unit::TestCase
     output = capture_stdout { execute('set -o') }
     execute('set -o emacs')  # Reset
 
-    assert_match(/set -o vi/, output)
+    assert_match(/^vi\s+on$/, output)
   end
 
   def test_vi_shows_disabled_state
     execute('set -o emacs')
     output = capture_stdout { execute('set -o') }
 
-    assert_match(/set \+o vi/, output)
+    assert_match(/^vi\s+off$/, output)
   end
 
   def test_emacs_shows_enabled_state
     execute('set -o emacs')
     output = capture_stdout { execute('set -o') }
 
-    assert_match(/set -o emacs/, output)
+    assert_match(/^emacs\s+on$/, output)
   end
 
   def test_emacs_shows_disabled_state
@@ -2113,7 +2113,7 @@ class TestSetOptions < Test::Unit::TestCase
     output = capture_stdout { execute('set -o') }
     execute('set -o emacs')  # Reset
 
-    assert_match(/set \+o emacs/, output)
+    assert_match(/^emacs\s+off$/, output)
   end
 
   def test_vi_and_emacs_mutually_exclusive
@@ -2155,14 +2155,14 @@ class TestSetOptions < Test::Unit::TestCase
     output = capture_stdout { execute('set -o') }
     execute('set +o nocasematch')
 
-    assert_match(/set -o nocasematch/, output)
+    assert_match(/^nocasematch\s+on$/, output)
   end
 
   def test_nocasematch_shows_disabled_state
     execute('set +o nocasematch')
     output = capture_stdout { execute('set -o') }
 
-    assert_match(/set \+o nocasematch/, output)
+    assert_match(/^nocasematch\s+off$/, output)
   end
 
   # Nocasematch functionality tests
@@ -2273,14 +2273,14 @@ class TestSetOptions < Test::Unit::TestCase
     output = capture_stdout { execute('set -o') }
     execute('set +o onecmd')
 
-    assert_match(/set -o onecmd/, output)
+    assert_match(/^onecmd\s+on$/, output)
   end
 
   def test_onecmd_shows_disabled_state
     execute('set +o onecmd')
     output = capture_stdout { execute('set -o') }
 
-    assert_match(/set \+o onecmd/, output)
+    assert_match(/^onecmd\s+off$/, output)
   end
 
   # set -k (keyword)
@@ -2323,14 +2323,14 @@ class TestSetOptions < Test::Unit::TestCase
     output = capture_stdout { execute('set -o') }
     execute('set +o keyword')
 
-    assert_match(/set -o keyword/, output)
+    assert_match(/^keyword\s+on$/, output)
   end
 
   def test_keyword_shows_disabled_state
     execute('set +o keyword')
     output = capture_stdout { execute('set -o') }
 
-    assert_match(/set \+o keyword/, output)
+    assert_match(/^keyword\s+off$/, output)
   end
 
   # Keyword functionality tests
@@ -2427,13 +2427,13 @@ class TestSetOptions < Test::Unit::TestCase
     output = capture_stdout { execute('set -o') }
     execute('set +o privileged')
 
-    assert_match(/set -o privileged/, output)
+    assert_match(/^privileged\s+on$/, output)
   end
 
   def test_privileged_shows_disabled_state
     execute('set +o privileged')
     output = capture_stdout { execute('set -o') }
 
-    assert_match(/set \+o privileged/, output)
+    assert_match(/^privileged\s+off$/, output)
   end
 end
