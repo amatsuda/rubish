@@ -1427,13 +1427,27 @@ module Rubish
           # Builtins run in-process and read from $stdin directly.
           # Temporarily redirect $stdin to the pipe so the builtin sees the content.
           original_stdin = $stdin.dup
+          saved_out, saved_err = $stdout, $stderr
+          # The command's own output redirections apply to the builtin and to
+          # anything it runs (a mapfile -C callback, for instance)
+          _, out, err = effective_streams
           begin
             $stdin.reopen(reader)
+            case out
+            when IO then $stdout = out
+            when :stderr then $stdout = saved_err
+            end
+            case err
+            when IO then $stderr = err
+            when :stdout then $stderr = saved_out
+            end
             prefix = cmd.respond_to?(:prefix_env) ? cmd.prefix_env : nil
             success = Builtins.with_temporary_vars(prefix) { Builtins.run(cmd.name, cmd.args) }
             exit_code = success.is_a?(ExitStatus) ? success.exitstatus : (success ? 0 : 1)
             @status = ExitStatus.new(exit_code)
           ensure
+            [$stdout, $stderr].each { |io| io.flush if io.respond_to?(:flush) && !io.closed? }
+            $stdout, $stderr = saved_out, saved_err
             $stdin.reopen(original_stdin)
             original_stdin.close
             reader.close unless reader.closed?
