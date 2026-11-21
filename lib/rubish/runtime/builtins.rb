@@ -1758,7 +1758,8 @@ module Rubish
       flags << 'r' if readonly?(name)
       flags << 't' if attrs.include?(:trace)
       flags << 'u' if attrs.include?(:uppercase)
-      flags << 'x' if attrs.include?(:export)
+      # Exported variables live in ENV, whether exported here or inherited
+      flags << 'x' if attrs.include?(:export) || ENV.key?(name)
 
       # For namerefs, show the target variable name
       if attrs.include?(:nameref)
