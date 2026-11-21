@@ -161,6 +161,9 @@ module Rubish
         generate_string_arg_with_glob(arg)
       when AST::ArrayLiteral
         arg.value  # Already valid Ruby: [1, 2, 3]
+      when AST::ArrayAssign
+        elem_code = arg.elements.map { |e| generate_array_element(e) }.join(', ')
+        "__array_word(#{arg.var.inspect}, [#{elem_code}].flatten)"
       when AST::ProcessSubstitution
         generate_process_substitution(arg)
       else

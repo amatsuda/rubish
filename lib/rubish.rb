@@ -31,6 +31,7 @@ else
 end
 
 require_relative 'rubish/parser'
+require_relative 'rubish/array_word'
 require_relative 'rubish/codegen'
 require_relative 'rubish/runtime/command'
 require_relative 'rubish/runtime/job'

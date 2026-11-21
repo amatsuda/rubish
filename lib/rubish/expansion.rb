@@ -147,6 +147,7 @@ module Rubish
     end
 
     def expand_single_arg_with_brace_and_glob(arg)
+      return [ArrayWord.new(arg.var, expand_args_for_builtin(arg.elements))] if arg.is_a?(AST::ArrayAssign)
       return [arg] unless arg.is_a?(String)
 
       # "${arr[@]}" keeps one word per element

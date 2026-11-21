@@ -1054,6 +1054,13 @@ module Rubish
         return false
       end
 
+      # Attribute options other than -n, and `name=(...)` values, are
+      # declare's business; inside a function declare creates local variables
+      declare_option = ->(a) { a.match?(/\A-[aAilrtuxgI]+\z/) }
+      if args.any? { |a| a.is_a?(ArrayWord) || declare_option.call(a) }
+        return declare(args)
+      end
+
       current_scope = @state.local_scope_stack.last
       nameref_mode = false
       remaining_args = []
@@ -1155,7 +1162,16 @@ module Rubish
       scope = @state.local_scope_stack.pop
       # Restore original values
       scope.each do |name, original_value|
-        if original_value.is_a?(Hash)
+        if original_value == :unset_array
+          # A local array that shadowed nothing: remove it entirely
+          delete_var(name)
+          unset_array(name)
+          unset_assoc_array(name)
+        elsif original_value.is_a?(Hash) && original_value.key?(:array_value)
+          set_array(name, original_value[:array_value])
+        elsif original_value.is_a?(Hash) && original_value.key?(:assoc_value)
+          set_assoc_array(name, original_value[:assoc_value])
+        elsif original_value.is_a?(Hash)
           # This was a local nameref - restore both var and nameref state
           var_val = original_value[:var_value]
           nameref_target = original_value[:nameref_target]
@@ -1324,6 +1340,16 @@ module Rubish
       names = args.reject { |a| a == '-p' }
 
       names.each do |arg|
+        if arg.is_a?(ArrayWord)
+          if @state.readonly_vars.key?(arg.name)
+            $stderr.puts "readonly: #{arg.name}: readonly variable"
+            next
+          end
+          assign_array_literal(arg.name, arg.values, append: arg.append?)
+          @state.readonly_vars[arg.name] = true
+          next
+        end
+
         if arg.include?('=')
           name, value = arg.split('=', 2)
           # Check if already readonly with different value
@@ -1495,7 +1521,7 @@ module Rubish
             set_array(var_name, []) unless array?(var_name)
           end
         end
-        return true if add_attrs.empty? && remove_attrs.empty?
+        return true if add_attrs.empty? && remove_attrs.empty? && names.none?(ArrayWord)
       end
 
       # Handle function listing (-f or -F)
@@ -1541,6 +1567,11 @@ module Rubish
       # Process each name
       had_error = false
       names.each do |arg|
+        if arg.is_a?(ArrayWord)
+          had_error = true unless declare_array_word(arg, array_mode, add_attrs, global_mode)
+          next
+        end
+
         if arg.include?('=')
           name, value = arg.split('=', 2)
         else
@@ -1619,6 +1650,40 @@ module Rubish
 
       return ExitStatus.new(1) if had_error
       true
+    end
+
+    # `declare -a name=(elements)`: record the scope and attributes as for a
+    # scalar, then perform the compound assignment
+    def declare_array_word(word, array_mode, add_attrs, global_mode)
+      name = word.name
+      if readonly?(name)
+        $stderr.puts "declare: #{name}: readonly variable"
+        return false
+      end
+
+      if in_function? && !global_mode
+        current_scope = @state.local_scope_stack.last
+        current_scope[name] = saved_array_state(name) unless current_scope.key?(name)
+      end
+
+      @state.var_attributes[name] ||= Set.new
+      add_attrs.each { |attr| @state.var_attributes[name] << attr }
+      declare_assoc_array(name) if array_mode == :associative
+      assign_array_literal(name, word.values, append: word.append?)
+      @state.readonly_vars[name] = true if add_attrs.include?(:readonly)
+      true
+    end
+
+    # What pop_local_scope needs to put an array variable back: the outer
+    # array itself, or a marker that there was none
+    def saved_array_state(name)
+      if assoc_array?(name)
+        {assoc_value: get_assoc_array(name).dup}
+      elsif array?(name)
+        {array_value: get_array(name).dup}
+      else
+        :unset_array
+      end
     end
 
     # Strip surrounding quotes from a value (single or double)

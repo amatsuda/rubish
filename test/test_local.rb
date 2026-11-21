@@ -264,7 +264,7 @@ class TestLocal < Test::Unit::TestCase
 
   def test_local_n_invalid_option
     Rubish::Builtins.push_local_scope
-    output = capture_stderr { Rubish::Builtins.run('local', ['-x', 'var']) }
+    output = capture_stderr { Rubish::Builtins.run('local', ['-z', 'var']) }
     assert_match(/invalid option/, output)
     Rubish::Builtins.pop_local_scope
   end

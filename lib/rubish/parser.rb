@@ -328,8 +328,9 @@ module Rubish
 
       args = []
 
-      # Parse arguments (WORD, ARRAY, REGEXP, PROC_SUB_IN, PROC_SUB_OUT)
-      while peek_any(:WORD, :ARRAY, :PROC_SUB_IN, :PROC_SUB_OUT)
+      # Parse arguments (WORD, ARRAY, PROC_SUB_IN, PROC_SUB_OUT, and
+      # ARRAY_ASSIGN for `declare -a name=(...)`)
+      while peek_any(:WORD, :ARRAY, :PROC_SUB_IN, :PROC_SUB_OUT, :ARRAY_ASSIGN)
         args << parse_arg
       end
 
@@ -1176,6 +1177,8 @@ module Rubish
         token.value
       when :ARRAY
         AST::ArrayLiteral.new(token.value)
+      when :ARRAY_ASSIGN
+        AST::ArrayAssign.new(var: token.value[:var], elements: token.value[:elements])
       when :PROC_SUB_IN
         AST::ProcessSubstitution.new(token.value, :in)
       when :PROC_SUB_OUT

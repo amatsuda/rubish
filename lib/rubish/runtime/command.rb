@@ -508,6 +508,8 @@ module Rubish
       # Globs are expanded at codegen level, here we just handle types
       args.flat_map do |arg|
         case arg
+        when ArrayWord
+          arg
         when Array
           arg.map(&:to_s)
         when Regexp
