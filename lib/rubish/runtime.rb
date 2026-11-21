@@ -575,7 +575,7 @@ module Rubish
         job = JobManager.instance.add(
           pid: pid,
           pgid: pid,
-          command: @last_line
+          command: @current_line || @last_line
         )
         # The notice is for interactive shells only, as in bash
         puts "[#{job.id}] #{pid}" if Builtins.interactive_mode?

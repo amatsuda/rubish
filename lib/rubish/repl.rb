@@ -917,30 +917,6 @@ module Rubish
 
       # onecmd: exit after reading and executing one command
       throw(:exit, @last_status || 0) if Builtins.set_option?('t')
-    rescue Interrupt
-      # Frontend::Tty's CtrlCEcho prepend already wrote `^C` next to
-      # the user's input and Reline's handle_interrupted already
-      # scrolled the cursor down a line. Nothing to do here — the next
-      # loop iteration paints a clean prompt with an empty buffer.
-    rescue Errno::EIO => e
-      handle_read_error(e)
-    rescue => e
-      puts "rubish: #{e.message}"
-    end
-
-    # Reading from the terminal fails with EIO when the shell is not its
-    # foreground process group (a job took it and did not give it back) or
-    # when the terminal is gone. Take the terminal back and retry a few
-    # times; if that does not help, exit instead of spinning on the prompt.
-    MAX_CONSECUTIVE_READ_ERRORS = 3
-
-    def handle_read_error(error)
-      @consecutive_read_errors = (@consecutive_read_errors || 0) + 1
-      Terminal.set_foreground(Process.getpgrp) if Terminal.tty?
-      return if @consecutive_read_errors < MAX_CONSECUTIVE_READ_ERRORS
-
-      $stderr.puts "rubish: read error: #{error.message}"
-      throw(:exit, @last_status || 0)
     end
 
     # Execute a shell command from bind -x key binding
@@ -999,6 +975,7 @@ module Rubish
     end
 
     def execute(line, skip_history_expansion: false)
+      @current_line = line # the text a job started from this line is listed with
       # Outermost call only: the previous command's process-substitution
       # FIFOs are no longer needed once the next command starts
       @execute_depth = (@execute_depth || 0) + 1
@@ -1441,6 +1418,7 @@ module Rubish
       @context.instance_variable_set(:@rubish_argc_stack, @rubish_argc_stack)
       @context.instance_variable_set(:@rubish_argv_stack, @rubish_argv_stack)
       @context.instance_variable_set(:@rubish_command, @rubish_command)
+      @context.instance_variable_set(:@current_line, @current_line)
       @context.instance_variable_set(:@current_source_file, @current_source_file)
       @context.instance_variable_set(:@command_number, @command_number)
       @context.instance_variable_set(:@seconds_base, @seconds_base)
