@@ -708,7 +708,26 @@ module Rubish
     # ? -> .
     # [...] -> [...] (with [! converted to [^)
     # position: :prefix, :suffix, :full, or :any for anchoring
+    # An extended pattern (`+( )`, `@(jpg|jpeg)`) for the # % / operators:
+    # the anchored regex that extglob_to_regex builds, with its quantifiers
+    # made reluctant for the shortest-match operators
+    def extglob_pattern_to_regex(pattern, position, greedy)
+      regex_str = extglob_to_regex(pattern).source.delete_prefix('\A').delete_suffix('\z')
+      regex_str = regex_str.gsub(/([).\]])([*+?])(?!\?)/) { "#{$1}#{$2}?" } if greedy == :shortest
+
+      case position
+      when :prefix then Regexp.new("\\A#{regex_str}")
+      when :suffix then Regexp.new("#{regex_str}\\z")
+      when :full then Regexp.new("\\A#{regex_str}\\z")
+      else Regexp.new(regex_str)
+      end
+    end
+
     def pattern_to_regex(pattern, position, greedy)
+      if Builtins.shopt_enabled?('extglob') && pattern.match?(/[?*+@!]\(/)
+        return extglob_pattern_to_regex(pattern, position, greedy)
+      end
+
       regex_str = +''
       i = 0
       while i < pattern.length
