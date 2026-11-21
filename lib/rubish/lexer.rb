@@ -1207,7 +1207,13 @@ module Rubish
       skip_whitespace
 
       # Read the string (can be quoted or unquoted)
-      if @input[@pos] == '"'
+      if @input[@pos] == '$' && (@input[@pos + 1] == "'" || @input[@pos + 1] == '"')
+        # $'...' / $"..."
+        start = @pos
+        @pos += 1
+        @input[@pos] == "'" ? read_ansi_c_quoted_string : read_double_quoted_string
+        value = @input[start...@pos]
+      elsif @input[@pos] == '"'
         start = @pos
         read_double_quoted_string
         value = @input[start...@pos]
