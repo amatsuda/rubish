@@ -1353,11 +1353,12 @@ module Rubish
         if arg.include?('=')
           name, value = arg.split('=', 2)
           # Check if already readonly with different value
-          if @state.readonly_vars.key?(name) && ENV[name] != value
-            puts "readonly: #{name}: readonly variable"
+          if @state.readonly_vars.key?(name) && get_var(name) != value
+            $stderr.puts "readonly: #{name}: readonly variable"
             next
           end
-          ENV[name] = value
+          # A shell variable, not an exported one: readonly does not export
+          set_var(name, strip_quotes(value))
           @state.readonly_vars[name] = true
         else
           # Mark existing variable as readonly
