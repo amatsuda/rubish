@@ -74,7 +74,9 @@ module Rubish
     # Returns an Integer, or a Float when floating point was involved.
     def evaluate(expr)
       saved = [@tokens, @pos, @source]
-      @source = expr.to_s
+      # Double quotes undergo quote removal before evaluation, as in bash:
+      # $(( "1" + 1 )) is 2. Single quotes stay and are an error, as in bash.
+      @source = expr.to_s.gsub(/"((?:[^"\\]|\\.)*)"/) { $1 }
       @tokens = tokenize(@source)
       @pos = 0
       return 0 if peek.type == :eof
