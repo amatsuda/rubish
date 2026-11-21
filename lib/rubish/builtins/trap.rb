@@ -70,7 +70,7 @@ module Rubish
         # Print in columns like bash
         col = 0
         sorted.each do |num, name|
-          print format('%2d) %-8s', num, name)
+          print format('%2d) SIG%-9s', num, name)
           col += 1
           if col >= 5
             puts
