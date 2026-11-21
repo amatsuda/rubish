@@ -132,8 +132,8 @@ module Rubish
         return read_with_readline(opts)
       end
 
-      # Display prompt
-      if opts[:prompt]
+      # Display prompt, but only when input comes from a terminal (bash)
+      if opts[:prompt] && (input_stream.tty? rescue false)
         $stderr.print opts[:prompt]
         $stderr.flush
       end

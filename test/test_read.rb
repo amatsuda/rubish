@@ -17,6 +17,22 @@ class TestRead < Test::Unit::TestCase
     @original_env.each { |k, v| ENV[k] = v }
   end
 
+  # Feed input through a pseudo-terminal: `read -p` shows its prompt only
+  # when input comes from a terminal
+  def with_tty_stdin(input)
+    require 'pty'
+    PTY.open do |master, slave|
+      master.write(input)
+      saved = $stdin
+      $stdin = slave
+      begin
+        yield
+      ensure
+        $stdin = saved
+      end
+    end
+  end
+
   def with_stdin(input)
     $stdin = StringIO.new(input)
     yield
@@ -70,7 +86,7 @@ class TestRead < Test::Unit::TestCase
 
   def test_read_with_prompt
     $stderr = StringIO.new
-    with_stdin("answer\n") do
+    with_tty_stdin("answer\n") do
       Rubish::Builtins.run('read', ['-p', 'Enter value: ', 'VAR'])
     end
     assert_equal 'Enter value: ', $stderr.string
@@ -259,11 +275,9 @@ class TestRead < Test::Unit::TestCase
 
   # Combined options tests
   def test_read_with_prompt_and_raw
-    $stderr = StringIO.new
     with_stdin("test\\nvalue\n") do
       Rubish::Builtins.run('read', ['-r', '-p', 'Input: ', 'VAR'])
     end
-    assert_equal 'Input: ', $stderr.string
     assert_equal 'test\\nvalue', ENV['VAR']
   end
 
