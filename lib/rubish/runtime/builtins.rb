@@ -6278,8 +6278,8 @@ module Rubish
       if wait_any
         jobs = manager.active
         if jobs.empty? && pids_or_jobs.empty?
-          # No jobs to wait for
-          return true
+          # Nothing to wait for: bash returns 127
+          return ExitStatus.new(127)
         end
 
         # If specific PIDs/jobs given, wait for one of those
