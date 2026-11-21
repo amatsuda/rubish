@@ -214,12 +214,14 @@ module Rubish
       end
     end
 
-    def err_trap
+    # `status` is the failing command's status: the handler sees it as $?
+    def err_trap(status = nil)
       return unless @state.traps.key?('ERR')
       return if @in_err_trap  # Prevent recursion
 
       @in_err_trap = true
       @state.current_trapsig = 'ERR'
+      @state.last_status_setter&.call(status) unless status.nil?
       begin
         @state.executor&.call(@state.traps['ERR']) if @state.executor
       ensure

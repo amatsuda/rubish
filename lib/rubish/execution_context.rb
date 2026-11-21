@@ -161,7 +161,7 @@ module Rubish
     end
 
     def run_err_trap_if_failed
-      err_trap if @last_status != 0
+      err_trap(@last_status) if @last_status != 0
     end
 
     def check_errexit

@@ -90,6 +90,7 @@ module Rubish
       # Set to the rubish binary path if not already set or if running rubish
       set_shell_variable
       @state.executor = ->(line) { execute(line); @last_status }
+      @state.last_status_setter = ->(status) { @last_status = status }
       @state.script_name_getter = -> { @script_name }
       @state.script_name_setter = ->(name) { @script_name = name }
       @state.positional_params_getter = -> { @positional_params }
@@ -1457,6 +1458,7 @@ module Rubish
           else
             @pipestatus = [@last_status]
           end
+          run_err_trap_if_failed
         end
       end
 
@@ -2627,7 +2629,7 @@ module Rubish
     end
 
     def run_err_trap_if_failed
-      Builtins.err_trap if @last_status != 0
+      Builtins.err_trap(@last_status) if @last_status != 0
     end
   end
 end
