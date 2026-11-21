@@ -771,10 +771,10 @@ module Rubish
       # Execute any queued commands (from startup buffering or typeahead)
       if @pending_commands && !@pending_commands.empty?
         line = @pending_commands.shift
-        # Show the command as if it was typed (with prompt)
+        # Show the command as if it was typed (with prompt), then run it
+        # like a typed one, so it reaches history and the hooks
         puts "#{prompt}#{line}"
-        # Execute it
-        execute(line)
+        run_input_line(line)
         return
       end
 
@@ -846,6 +846,36 @@ module Rubish
         end
       end
 
+      run_input_line(line)
+    rescue Interrupt
+      # Frontend::Tty's CtrlCEcho prepend already wrote `^C` next to
+      # the user's input and Reline's handle_interrupted already
+      # scrolled the cursor down a line. Nothing to do here — the next
+      # loop iteration paints a clean prompt with an empty buffer.
+    rescue Errno::EIO => e
+      handle_read_error(e)
+    rescue => e
+      puts "rubish: #{e.message}"
+    end
+
+    # Reading from the terminal fails with EIO when the shell is not its
+    # foreground process group (a job took it and did not give it back) or
+    # when the terminal is gone. Take the terminal back and retry a few
+    # times; if that does not help, exit instead of spinning on the prompt.
+    MAX_CONSECUTIVE_READ_ERRORS = 3
+
+    def handle_read_error(error)
+      @consecutive_read_errors = (@consecutive_read_errors || 0) + 1
+      Terminal.set_foreground(Process.getpgrp) if Terminal.tty?
+      return if @consecutive_read_errors < MAX_CONSECUTIVE_READ_ERRORS
+
+      $stderr.puts "rubish: read error: #{error.message}"
+      throw(:exit, @last_status || 0)
+    end
+
+    # Run one line of input: history, PS0, hooks, then execution. Used for
+    # lines read at the prompt and for lines queued as typeahead alike.
+    def run_input_line(line)
       ignore_history = line.start_with?(' ')
       line = line.strip
       return if line.empty?

@@ -135,7 +135,7 @@ class TestStartupInputBuffering < Test::Unit::TestCase
 
     # Mock the execute method to track calls
     executed = []
-    @repl.define_singleton_method(:execute) do |line|
+    @repl.define_singleton_method(:execute) do |line, **_opts|
       executed << line
     end
 
@@ -153,7 +153,7 @@ class TestStartupInputBuffering < Test::Unit::TestCase
   # Test process_line processes multiple pending commands in order
   def test_process_line_processes_pending_in_order
     executed = []
-    @repl.define_singleton_method(:execute) do |line|
+    @repl.define_singleton_method(:execute) do |line, **_opts|
       executed << line
     end
     @repl.define_singleton_method(:prompt) { '$ ' }
