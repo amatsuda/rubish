@@ -358,9 +358,7 @@ module Rubish
     # The value of a parameter for the pattern operators: positional and
     # special parameters included
     def __param_value(var_name)
-      return get_param_expand_info(var_name).first if var_name.match?(/\A(\d+|[@*#?$!-])\z/)
-
-      get_special_var(var_name) || Builtins.get_var(var_name)
+      get_param_expand_info(var_name).first
     end
 
     def __param_replace(var_name, operator, pattern, replacement)

@@ -1022,6 +1022,17 @@ module Rubish
         value = @last_bg_pid&.to_s || ''
         [value, !@last_bg_pid.nil?, @last_bg_pid.nil?]
       when '-' then [Builtins.current_options, true, Builtins.current_options.empty?]
+      when /\A([a-zA-Z_][a-zA-Z0-9_]*)\[(.+)\]\z/
+        # An element of a special array (${BASH_SOURCE[0]}), else a variable
+        # the subscript-aware lookups handle
+        values = get_special_array_values($1)
+        if values.is_a?(Array)
+          value = (values[safe_eval_index(expand_array_index($1, $2))] || '').to_s
+          [value, true, value.empty?]
+        else
+          value = Builtins.get_var(var_name)
+          [value, Builtins.var_set?(var_name), value.nil? || value.empty?]
+        end
       else
         # Check special variables
         special_value = get_special_var_value(var_name)
@@ -1124,7 +1135,13 @@ module Rubish
       when 'PIPESTATUS', 'pipestatus' then @pipestatus
       when 'FUNCNAME' then @funcname_stack
       when 'RUBISH_LINENO', 'BASH_LINENO' then @rubish_lineno_stack
-      when 'RUBISH_SOURCE', 'BASH_SOURCE' then @rubish_source_stack
+      when 'RUBISH_SOURCE', 'BASH_SOURCE'
+        # Outside any function, the file being sourced is BASH_SOURCE[0]
+        if @rubish_source_stack.empty? && @current_source_file && @current_source_file != 'main'
+          [@current_source_file]
+        else
+          @rubish_source_stack
+        end
       when 'RUBISH_ARGC', 'BASH_ARGC' then @rubish_argc_stack
       when 'RUBISH_ARGV', 'BASH_ARGV' then @rubish_argv_stack
       when 'DIRSTACK' then [Dir.pwd] + Builtins.current_state.dir_stack
