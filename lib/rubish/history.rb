@@ -418,7 +418,9 @@ module Rubish
           end
         end
 
-        if char == '!' && !in_single_quotes
+        # `${!name}`, `${!arr[@]}`, `${!prefix*}` are parameter expansions,
+        # never event designators
+        if char == '!' && !in_single_quotes && !result.end_with?('${')
           expansion, consumed, error, is_print_only = parse_history_expansion(line, i, history)
           if error
             puts error
