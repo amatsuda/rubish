@@ -189,7 +189,7 @@ class TestLet < Test::Unit::TestCase
       Rubish::Builtins.run('let', ['CONST=10'])
     end
     assert_match(/readonly/, output)
-    assert_equal '5', ENV['CONST']
+    assert_equal '5', get_shell_var('CONST')
   end
 
   # Test via REPL
