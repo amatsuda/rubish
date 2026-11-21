@@ -2866,7 +2866,14 @@ module Rubish
 
     def return_(args)
       # Without an argument, the status of the last command run
-      code = args.first ? args.first.to_i : (@state.last_status_getter&.call || 0)
+      code = if args.first.nil?
+               @state.last_status_getter&.call || 0
+             elsif args.first.match?(/\A[+-]?\d+\z/)
+               args.first.to_i & 0xFF
+             else
+               $stderr.puts "rubish: return: #{args.first}: numeric argument required"
+               2
+             end
       throw :return, code
     rescue UncaughtThrowError
       # No enclosing function or sourced script is catching :return
