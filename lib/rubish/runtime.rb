@@ -566,8 +566,9 @@ module Rubish
           pgid: pid,
           command: @last_line
         )
-        puts "[#{job.id}] #{pid}"
-      else
+        # The notice is for interactive shells only, as in bash
+        puts "[#{job.id}] #{pid}" if Builtins.interactive_mode?
+      elsif Builtins.interactive_mode?
         puts "[1] #{pid}"
       end
       nil
