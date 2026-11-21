@@ -833,17 +833,33 @@ module Rubish
                   when '2>&' then 'dup_err'
                   when '<&' then 'dup_in'
                   end
-      target = if node.target.is_a?(AST::ProcessSubstitution)
-                 generate_process_substitution(node.target)
-               else
-                 generate_string_arg(node.target)
-               end
-
       # For compound commands (loops, conditionals, etc.), use block-based redirection
       if compound_command?(node.command)
-        "__with_redirect(#{node.operator.inspect}, #{target}) { #{generate(node.command)} }"
+        generate_compound_redirects(node)
       else
-        "#{generate(node.command)}.#{op_method}(#{target})"
+        "#{generate(node.command)}.#{op_method}(#{generate_redirect_target(node)})"
+      end
+    end
+
+    # `{ ...; } 2>&1 >file`: the parser nests later redirections around
+    # earlier ones, but they take effect in the order written, so the first
+    # one becomes the outermost __with_redirect block
+    def generate_compound_redirects(node)
+      chain = []
+      while node.is_a?(AST::Redirect)
+        chain << node
+        node = node.command
+      end
+      chain.inject(generate(node)) do |code, redirect|
+        "__with_redirect(#{redirect.operator.inspect}, #{generate_redirect_target(redirect)}) { #{code} }"
+      end
+    end
+
+    def generate_redirect_target(node)
+      if node.target.is_a?(AST::ProcessSubstitution)
+        generate_process_substitution(node.target)
+      else
+        generate_string_arg(node.target)
       end
     end
 

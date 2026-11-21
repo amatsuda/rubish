@@ -763,8 +763,61 @@ module Rubish
         __with_stderr_redirect(target) { yield }
       else
         yield
+      when '2>>'
+        __with_stderr_redirect(target, 'a') { yield }
+      when '>&', '2>&', '<&'
+        __with_dup_redirect(operator, target) { yield }
+      else
+        yield
       end
     end
+
+    # `>&N`, `2>&N` and `<&N` on a compound command: for the block, point the
+    # shell's stream at the stream (or `exec N>file` descriptor) N names, as
+    # it is at this point in the redirection list. `>& file` sends both
+    # stdout and stderr to the file.
+    def __with_dup_redirect(operator, target)
+      unless target.match?(/\A\d+\z/)
+        return yield unless operator == '>&' && target != '-'
+
+        return __with_stdout_redirect(target, 'w') { __with_dup_redirect('2>&', '1') { yield } }
+      end
+
+      io = Command.standard_or_shell_fd(target.to_i)
+      unless io
+        $stderr.puts "rubish: #{target}: Bad file descriptor"
+        return ExitStatus.new(1)
+      end
+
+      if operator == '<&'
+        old = $stdin
+        begin
+          $stdin = io
+          yield
+        ensure
+          $stdin = old
+        end
+      end
+        __with_dup_output_stream(operator == '>&' ? :stdout : :stderr, io) { yield }
+      end
+    end
+
+    # The stream gets a copy of the descriptor, as dup(2) would give it: an
+    # alias of the same IO object would follow that object when a later
+    # redirection, or a child process pointing its real fds at the shell's
+    # streams, reopens it (`{ ...; } 2>&1 >/dev/null` must keep stderr on
+    # the original stdout).
+    def __with_dup_output_stream(stream, io)
+      io.flush if io.respond_to?(:flush)
+      copy = io.dup
+      copy.sync = true
+      old = stream == :stdout ? $stdout : $stderr
+      begin
+        stream == :stdout ? $stdout = copy : $stderr = copy
+    end
+      ensure
+        stream == :stdout ? $stdout = old : $stderr = old
+        copy.close unless copy.closed?
 
     def __with_stdout_redirect(file, mode)
       old_stdout = $stdout
@@ -788,10 +841,10 @@ module Rubish
       end
     end
 
-    def __with_stderr_redirect(file)
+    def __with_stderr_redirect(file, mode = 'w')
       old_stderr = $stderr
       begin
-        $stderr = File.open(file, 'w')
+        $stderr = File.open(file, mode)
         yield
       ensure
         $stderr.close unless $stderr == old_stderr || $stderr.closed?
