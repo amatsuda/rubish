@@ -6702,6 +6702,11 @@ module Rubish
     end
 
     def exit(args)
+      if args.first && !args.first.match?(/\A[+-]?\d+\z/)
+        $stderr.puts "rubish: exit: #{args.first}: numeric argument required"
+        throw :exit, 2
+      end
+
       # nil when no argument: callers fall back to $? (the last status)
       code = args.first&.to_i
 
