@@ -7000,7 +7000,7 @@ module Rubish
       editor ||= ENV['FCEDIT'] || ENV['EDITOR'] || 'vi'
 
       # Create temp file with commands
-      Kernel.require 'tempfile'
+      Rubish.require_library('tempfile')
       tempfile = Tempfile.new(['fc', '.sh'])
       begin
         commands.each { |_num, cmd| tempfile.puts cmd }
@@ -7346,7 +7346,7 @@ module Rubish
 
       name = args.first
       begin
-        Kernel.require name
+        Rubish.require_library(name)
         true
       rescue LoadError => e
         $stderr.puts "require: #{e.message}"

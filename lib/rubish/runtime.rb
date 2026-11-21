@@ -1019,7 +1019,7 @@ module Rubish
 
       # Create the FIFO inside a fresh private directory (0700), so another
       # user on a shared /tmp can neither predict nor pre-create its path
-      Kernel.require 'tmpdir' # not the shell's require builtin
+      Rubish.require_library('tmpdir')
       fifo_dir = Dir.mktmpdir('rubish_procsub')
       fifo_path = File.join(fifo_dir, 'fifo')
       File.mkfifo(fifo_path, 0o600)
@@ -1175,7 +1175,7 @@ module Rubish
 
       LazyLoader.register(cmd, @state.executor) do
         # Run command using Open3 - thread-safe, no fork issues
-        Kernel.require 'open3'
+        Rubish.require_library('open3')
         output, status = Open3.capture2(cmd)
         output.chomp
       end

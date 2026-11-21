@@ -9,8 +9,8 @@ module Rubish
     # job control needs them, and loading fiddle costs ~8 ms at startup
     def self.libc
       @libc ||= begin
-        Kernel.require 'fiddle'
-        Kernel.require 'fiddle/import'
+        Rubish.require_library('fiddle')
+        Rubish.require_library('fiddle/import')
         importer = Module.new
         importer.extend Fiddle::Importer
         importer.dlload Fiddle::Handle::DEFAULT

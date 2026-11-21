@@ -39,7 +39,7 @@ module Rubish
 
     # The help invocation as argv, so it never passes through `sh -c`
     def self.help_command_argv(help_cmd)
-      Kernel.require 'shellwords'
+      Rubish.require_library('shellwords')
       Shellwords.split(help_cmd)
     end
 
@@ -70,8 +70,8 @@ module Rubish
     # Run a help command in a sandboxed environment with timeout
     # Returns [output, success] or [nil, false] on failure/timeout
     def sandboxed_help_command(help_cmd)
-      Kernel.require 'open3'
-      Kernel.require 'tempfile'
+      Rubish.require_library('open3')
+      Rubish.require_library('tempfile')
 
       timeout = Builtins.help_command_timeout
       $stderr.puts "[rubish-comp] running: #{help_cmd} (timeout=#{timeout}s)" if ENV['RUBISH_DEBUG_COMPLETION']

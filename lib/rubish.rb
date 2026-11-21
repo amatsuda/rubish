@@ -39,6 +39,15 @@ require_relative 'rubish/frontend'
 require_relative 'rubish/repl'
 
 module Rubish
+  # Load a library on demand from code mixed into the shell context.
+  # There a bare `require` is the shell builtin, and Kernel.require is the
+  # pristine C implementation that bypasses RubyGems, so bundled gems such as
+  # fiddle and syslog cannot be found through it outside Bundler. Resolving
+  # `require` on this module reaches the RubyGems-aware Kernel#require.
+  def self.require_library(name)
+    require name
+  end
+
   # Set a custom prompt function
   # Usage: Rubish.set_prompt { "#{Dir.pwd}> " }
   def self.set_prompt(&block)

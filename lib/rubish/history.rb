@@ -307,7 +307,7 @@ module Rubish
 
     # Log command to syslog (for syslog_history shopt)
     def log_to_syslog(command)
-      Kernel.require 'syslog'
+      Rubish.require_library('syslog')
       Syslog.open('rubish', Syslog::LOG_PID, Syslog::LOG_USER) do |s|
         s.info('HISTORY: PID=%d UID=%d %s', Process.pid, Process.uid, command)
       end

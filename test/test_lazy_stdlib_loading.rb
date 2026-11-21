@@ -12,6 +12,45 @@ class TestLazyStdlibLoading < Test::Unit::TestCase
     out.lines.map(&:strip)
   end
 
+  # The login shell runs without Bundler, so bundled gems such as fiddle and
+  # syslog are only reachable through a RubyGems-aware require
+  def run_outside_bundler(code)
+    argv = [RbConfig.ruby, '-I', LIB, '-e', code]
+    if defined?(Bundler)
+      Bundler.with_unbundled_env { IO.popen(argv, err: %i[child out], &:read) }
+    else
+      IO.popen(argv, err: %i[child out], &:read)
+    end.lines.map(&:strip)
+  end
+
+  def test_terminal_control_loads_fiddle_outside_bundler
+    out = run_outside_bundler(<<~'RUBY')
+      require 'rubish'
+      Rubish::Terminal.libc
+      puts :ok
+    RUBY
+    assert_equal ['ok'], out.grep_v(/warning/)
+  end
+
+  def test_syslog_history_loads_syslog_outside_bundler
+    out = run_outside_bundler(<<~'RUBY')
+      require 'rubish'
+      Rubish::REPL.new.send(:log_to_syslog, 'rubish test')
+      puts :ok
+    RUBY
+    assert_equal ['ok'], out.grep_v(/warning/)
+  end
+
+  def test_require_builtin_loads_bundled_gems_outside_bundler
+    out = run_outside_bundler(<<~'RUBY')
+      require 'rubish'
+      repl = Rubish::REPL.new
+      repl.send(:execute, 'require fiddle')
+      puts defined?(Fiddle) ? :ok : :missing
+    RUBY
+    assert_equal ['ok'], out.grep_v(/warning/)
+  end
+
   def test_requiring_rubish_does_not_load_single_use_libraries
     loaded = loaded_after(<<~'RUBY')
       require 'rubish'
