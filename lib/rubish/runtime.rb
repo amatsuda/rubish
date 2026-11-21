@@ -1419,7 +1419,8 @@ module Rubish
     end
 
     # Builtins that must run in current process (affect shell state)
-    PROCESS_BUILTINS = %w[cd export set shift source . return exit break continue local unset readonly declare typeset let eval command builtin shopt alias unalias trap].freeze
+    PROCESS_BUILTINS = %w[cd export set shift source . return exit break continue local unset readonly declare typeset let eval command builtin shopt alias unalias trap
+                          pushd popd dirs read mapfile readarray getopts umask ulimit hash wait jobs fg bg disown enable times history fc].freeze
 
     # Run a builtin in-process, applying its prefix env (e.g. `IFS= read`)
     # temporarily and restoring it after. Externals get this via fork+ENV;
