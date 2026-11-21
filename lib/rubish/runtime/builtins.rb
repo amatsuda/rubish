@@ -939,11 +939,11 @@ module Rubish
       end
 
       # Get current OPTIND (1-based index)
-      optind = (ENV['OPTIND'] || '1').to_i
+      optind = (get_var('OPTIND') || '1').to_i
 
       # Check if we're done
       if optind > parse_args.length
-        ENV[varname] = '?'
+        set_var(varname, '?')
         return false
       end
 
@@ -952,14 +952,14 @@ module Rubish
 
       # Check if it's an option
       if arg.nil? || arg == '--' || !arg.start_with?('-') || arg == '-'
-        ENV[varname] = '?'
+        set_var(varname, '?')
         return false
       end
 
       # Handle -- to stop option processing
       if arg == '--'
-        ENV['OPTIND'] = (optind + 1).to_s
-        ENV[varname] = '?'
+        set_var('OPTIND', (optind + 1).to_s)
+        set_var(varname, '?')
         return false
       end
 
@@ -978,8 +978,8 @@ module Rubish
 
       if opt_idx.nil?
         # Invalid option
-        ENV[varname] = '?'
-        ENV['OPTARG'] = opt_char if silent_errors
+        set_var(varname, '?')
+        set_var('OPTARG', opt_char) if silent_errors
         unless silent_errors || !opterr
           $stderr.puts "getopts: illegal option -- #{opt_char}"
         end
@@ -987,7 +987,7 @@ module Rubish
         if optpos + 1 < arg.length
           ENV['_OPTPOS'] = (optpos + 1).to_s
         else
-          ENV['OPTIND'] = (optind + 1).to_s
+          set_var('OPTIND', (optind + 1).to_s)
           ENV['_OPTPOS'] = '1'
         end
         return true
@@ -1000,49 +1000,49 @@ module Rubish
         # Check for argument
         if optpos + 1 < arg.length
           # Argument is rest of current arg (e.g., -ovalue)
-          ENV['OPTARG'] = arg[(optpos + 1)..]
-          ENV['OPTIND'] = (optind + 1).to_s
+          set_var('OPTARG', arg[(optpos + 1)..])
+          set_var('OPTIND', (optind + 1).to_s)
           ENV['_OPTPOS'] = '1'
         elsif optind < parse_args.length
           # Argument is next arg
-          ENV['OPTARG'] = parse_args[optind]
-          ENV['OPTIND'] = (optind + 2).to_s
+          set_var('OPTARG', parse_args[optind])
+          set_var('OPTIND', (optind + 2).to_s)
           ENV['_OPTPOS'] = '1'
         else
           # Missing argument
           if silent_errors
-            ENV[varname] = ':'
-            ENV['OPTARG'] = opt_char
+            set_var(varname, ':')
+            set_var('OPTARG', opt_char)
           else
-            ENV[varname] = '?'
+            set_var(varname, '?')
             if opterr
               $stderr.puts "getopts: option requires an argument -- #{opt_char}"
             end
           end
-          ENV['OPTIND'] = (optind + 1).to_s
+          set_var('OPTIND', (optind + 1).to_s)
           ENV['_OPTPOS'] = '1'
           return true
         end
       else
         # No argument required
-        ENV.delete('OPTARG')
+        delete_var('OPTARG')
         # Move to next character or next argument
         if optpos + 1 < arg.length
           ENV['_OPTPOS'] = (optpos + 1).to_s
         else
-          ENV['OPTIND'] = (optind + 1).to_s
+          set_var('OPTIND', (optind + 1).to_s)
           ENV['_OPTPOS'] = '1'
         end
       end
 
-      ENV[varname] = opt_char
+      set_var(varname, opt_char)
       true
     end
 
     def reset_getopts
-      ENV['OPTIND'] = '1'
+      set_var('OPTIND', '1')
       ENV['_OPTPOS'] = '1'
-      ENV.delete('OPTARG')
+      delete_var('OPTARG')
     end
 
     def local(args)
