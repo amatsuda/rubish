@@ -38,6 +38,6 @@ class TestStatefulBuiltinWithRedirect < Test::Unit::TestCase
   end
 
   def test_getopts_with_redirect_in_a_list
-    assert_equal "a 2\n", run_and_read("set -- -a; getopts a opt 2>/dev/null; echo \"$opt $OPTIND\"")
+    assert_equal "a 2\n", run_and_read("OPTIND=1; set -- -a; getopts a opt 2>/dev/null; echo \"$opt $OPTIND\"")
   end
 end
