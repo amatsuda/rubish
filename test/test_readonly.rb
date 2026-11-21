@@ -84,15 +84,15 @@ class TestReadonly < Test::Unit::TestCase
     Rubish::Builtins.run('readonly', ['VAR1=one'])
     Rubish::Builtins.run('readonly', ['VAR2=two'])
     output = capture_output { Rubish::Builtins.run('readonly', []) }
-    assert_match(/readonly VAR1/, output)
-    assert_match(/readonly VAR2/, output)
+    assert_match(/declare -r VAR1="one"/, output)
+    assert_match(/declare -r VAR2="two"/, output)
   end
 
   # Test readonly -p flag
   def test_readonly_p_flag
     Rubish::Builtins.run('readonly', ['MYVAR=test'])
     output = capture_output { Rubish::Builtins.run('readonly', ['-p']) }
-    assert_match(/readonly MYVAR/, output)
+    assert_match(/declare -r MYVAR="test"/, output)
   end
 
   # Test readonly via REPL

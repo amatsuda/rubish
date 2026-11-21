@@ -1324,15 +1324,8 @@ module Rubish
       # -p: print all readonly variables in reusable format
 
       if args.empty? || args == ['-p']
-        # List all readonly variables
-        @state.readonly_vars.each do |name, _|
-          value = get_var(name)
-          if value
-            puts "readonly #{name}=#{value.inspect}"
-          else
-            puts "readonly #{name}"
-          end
-        end
+        # List all readonly variables as declare lines, as bash prints them
+        @state.readonly_vars.keys.sort.each { |name| print_declaration(name) }
         return true
       end
 
@@ -1953,10 +1946,27 @@ module Rubish
     end
 
     def export(args)
-      if args.empty?
-        # List all exported variables (from ENV, which contains only exported vars)
-        ENV.each { |k, v| puts "#{k}=#{v}" }
-      else
+      # export -p (or no arguments): declare -x lines, as bash prints them
+      if args.empty? || args == ['-p']
+        exported = ENV.keys | @state.var_attributes.select { |_, attrs| attrs.include?(:export) }.keys
+        exported.sort.each { |name| print_declaration(name) }
+        return true
+      end
+
+      # export -n NAME: keep the value in the shell, drop it from the environment
+      if args.first == '-n'
+        args.drop(1).each do |name|
+          name = name.split('=', 2).first
+          value = get_var(name)
+          ENV.delete(name)
+          @state.var_attributes[name]&.delete(:export)
+          @state.shell_vars[name] = value unless value.nil?
+        end
+        return true
+      end
+
+      args = args.drop(1) if args.first == '--'
+      begin
         args.each do |arg|
           if arg.include?('=')
             key, value = arg.split('=', 2)
