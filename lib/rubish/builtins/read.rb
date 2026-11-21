@@ -88,6 +88,7 @@ module Rubish
 
       # Read input
       line = read_input_line(opts)
+      return ExitStatus.new(142) if line == :timeout # 128 + SIGALRM, as bash
       return false if line.nil?
 
       # Process backslash escapes unless raw mode
@@ -230,7 +231,7 @@ module Rubish
           end
         end
       rescue Timeout::Error
-        nil
+        :timeout
       end
     end
 

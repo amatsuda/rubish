@@ -267,7 +267,7 @@ class TestRead < Test::Unit::TestCase
     $stdin = read_io
 
     result = Rubish::Builtins.run('read', ['-t', '0.1', 'VAR'])
-    assert_false result
+    assert_equal 142, result.exitstatus # 128 + SIGALRM, as bash
 
     read_io.close
     write_io.close

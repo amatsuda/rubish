@@ -77,7 +77,7 @@ class TestTMOUT < Test::Unit::TestCase
     result = Rubish::Builtins.read(['var'])
     $stdin = original_stdin
 
-    assert_equal false, result
+    assert_equal 142, result.exitstatus # 128 + SIGALRM, as bash
   end
 
   def test_read_explicit_timeout_overrides_tmout
@@ -99,7 +99,7 @@ class TestTMOUT < Test::Unit::TestCase
     $stdin = original_stdin
     elapsed = Time.now - start_time
 
-    assert_equal false, result
+    assert_equal 142, result.exitstatus
     # Should timeout after ~0.1s, not 10s
     assert elapsed < 1.0, "Expected timeout after ~0.1s, but took #{elapsed}s"
   end
