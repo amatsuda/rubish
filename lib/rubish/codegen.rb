@@ -1429,7 +1429,7 @@ module Rubish
       end
 
       # Handle ${#var} - length
-      if content =~ /\A#([a-zA-Z_][a-zA-Z0-9_]*)\z/
+      if content =~ /\A#([a-zA-Z_][a-zA-Z0-9_]*(?:\[[^\]]+\])?)\z/
         var_name = $1
         return "__param_length(#{var_name.inspect})"
       end
@@ -1448,7 +1448,7 @@ module Rubish
       end
 
       # Handle ${var//pattern/replacement} and ${var/pattern/replacement}
-      if content =~ /\A([a-zA-Z_][a-zA-Z0-9_]*)(\/\/|\/)((?:[^\/]|\\.)+)\/((?:[^\/]|\\.)*)?\z/
+      if content =~ /\A([a-zA-Z_][a-zA-Z0-9_]*(?:\[[^\]]+\])?)(\/\/|\/)((?:[^\/]|\\.)+)\/((?:[^\/]|\\.)*)?\z/
         var_name = $1
         operator = $2
         pattern = $3
@@ -1457,7 +1457,7 @@ module Rubish
       end
 
       # Handle ${var/pattern} - delete first match (no replacement)
-      if content =~ /\A([a-zA-Z_][a-zA-Z0-9_]*)(\/\/|\/)((?:[^\/]|\\.)+)\z/
+      if content =~ /\A([a-zA-Z_][a-zA-Z0-9_]*(?:\[[^\]]+\])?)(\/\/|\/)((?:[^\/]|\\.)+)\z/
         var_name = $1
         operator = $2
         pattern = $3
@@ -1465,7 +1465,7 @@ module Rubish
       end
 
       # Handle ${var^^}, ${var^}, ${var,,}, ${var,} - case modification
-      if content =~ /\A([a-zA-Z_][a-zA-Z0-9_]*)(\^\^|\^|,,|,)(?:([^}]*))?\z/
+      if content =~ /\A([a-zA-Z_][a-zA-Z0-9_]*(?:\[[^\]]+\])?)(\^\^|\^|,,|,)(?:([^}]*))?\z/
         var_name = $1
         operator = $2
         pattern = $3 || ''
@@ -1473,7 +1473,7 @@ module Rubish
       end
 
       # Handle ${var##pattern} and ${var%%pattern} - greedy versions first
-      if content =~ /\A([a-zA-Z_][a-zA-Z0-9_]*)(##|%%)(.+)\z/
+      if content =~ /\A([a-zA-Z_][a-zA-Z0-9_]*(?:\[[^\]]+\])?)(##|%%)(.+)\z/
         var_name = $1
         operator = $2
         operand = $3
@@ -1481,7 +1481,7 @@ module Rubish
       end
 
       # Handle ${var#pattern} and ${var%pattern} - non-greedy versions
-      if content =~ /\A([a-zA-Z_][a-zA-Z0-9_]*)(#|%)(.+)\z/
+      if content =~ /\A([a-zA-Z_][a-zA-Z0-9_]*(?:\[[^\]]+\])?)(#|%)(.+)\z/
         var_name = $1
         operator = $2
         operand = $3
@@ -1490,7 +1490,7 @@ module Rubish
 
       # Handle ${var:-default}, ${var:=default}, ${var:+value}, ${var:?message}
       # Also handles positional parameters: ${1:-default}, ${2:=value}, etc.
-      if content =~ /\A([a-zA-Z_][a-zA-Z0-9_]*|\d+|[@*#?$!-])(:-|:=|:\+|:\?)(.*)?\z/
+      if content =~ /\A([a-zA-Z_][a-zA-Z0-9_]*(?:\[[^\]]+\])?|\d+|[@*#?$!-])(:-|:=|:\+|:\?)(.*)?\z/
         var_name = $1
         operator = $2
         operand = $3 || ''
@@ -1499,7 +1499,7 @@ module Rubish
 
       # Handle ${var-default}, ${var=default}, ${var+value}, ${var?message} (unset only, not null)
       # Also handles positional parameters: ${1-default}, ${2=value}, etc.
-      if content =~ /\A([a-zA-Z_][a-zA-Z0-9_]*|\d+|[@*#?$!-])(-|=|\+|\?)(.*)?\z/
+      if content =~ /\A([a-zA-Z_][a-zA-Z0-9_]*(?:\[[^\]]+\])?|\d+|[@*#?$!-])(-|=|\+|\?)(.*)?\z/
         var_name = $1
         operator = $2
         operand = $3 || ''
@@ -1507,7 +1507,7 @@ module Rubish
       end
 
       # Handle ${var@operator} - transformation operators (Q, E, P, A, a, U, u, L, K)
-      if content =~ /\A([a-zA-Z_][a-zA-Z0-9_]*)@([QEPAaUuLK])\z/
+      if content =~ /\A([a-zA-Z_][a-zA-Z0-9_]*(?:\[[^\]]+\])?)@([QEPAaUuLK])\z/
         var_name = $1
         operator = $2
         return "__param_transform(#{var_name.inspect}, #{operator.inspect})"

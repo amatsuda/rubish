@@ -1383,7 +1383,36 @@ module Rubish
     # Get a shell variable's value
     # Checks shell_vars first (for variables set in this shell),
     # then falls back to ENV (for inherited environment variables)
+    # `name[subscript]` as a parameter name: [array, subscript] or nil
+    SUBSCRIPTED_PARAM = /\A([a-zA-Z_][a-zA-Z0-9_]*)\[(.+)\]\z/m
+
+    def subscripted_param(name)
+      m = SUBSCRIPTED_PARAM.match(name)
+      m && [m[1], m[2]]
+    end
+
+    # The element behind `name[subscript]`, nil when it is not set; `@` and
+    # `*` give all elements joined by a space
+    def get_element_param(array, subscript)
+      if subscript == '@' || subscript == '*'
+        values = assoc_array?(array) ? assoc_values(array) : (get_array(array) || []).compact
+        return values.empty? ? nil : values.join(' ')
+      end
+      return get_assoc_array(array)[subscript] if assoc_array?(array)
+
+      values = get_array(array)
+      return nil unless values
+
+      index = let_evaluator.evaluate(subscript).to_i
+      index += values.length if index.negative?
+      index.negative? ? nil : values[index]
+    end
+
     def get_var(name)
+      if (array, subscript = subscripted_param(name))
+        return get_element_param(array, subscript)
+      end
+
       # Resolve through nameref if applicable
       if nameref?(name)
         target = resolve_nameref(name)
@@ -1403,6 +1432,12 @@ module Rubish
     # If the variable is exported or already exists in ENV (inherited), also updates ENV
     # Locale variables (LANG, LC_*) are automatically exported
     def set_var(name, value)
+      if (array, subscript = subscripted_param(name))
+        return set_assoc_element(array, subscript, value) if assoc_array?(array)
+
+        return set_array_element(array, let_evaluator.evaluate(subscript).to_i, value)
+      end
+
       @state.shell_vars[name] = value
       # If variable is exported, was inherited from parent env, or is an auto-export variable, also update ENV
       ENV[name] = value if exported?(name) || ENV.key?(name) || AUTO_EXPORT_VARS.include?(name)
@@ -1417,6 +1452,10 @@ module Rubish
 
     # Check if a shell variable is set (in shell_vars or ENV)
     def var_set?(name)
+      if (array, subscript = subscripted_param(name))
+        return !get_element_param(array, subscript).nil?
+      end
+
       @state.shell_vars.key?(name) || ENV.key?(name)
     end
 

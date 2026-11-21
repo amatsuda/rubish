@@ -106,7 +106,7 @@ module Rubish
     # into a single string.
     # Captures: 1 = "!" for keys, 2 = name, 3 = ":off[:len]" slice spec for
     # an array, 4/5 = "@" and its slice spec for ${@:off[:len]}
-    ARRAY_AT_EXPANSION = /\$\{(!?)([a-zA-Z_][a-zA-Z0-9_]*)\[@\](?::([^}]*))?\}|\$\{(@)(?::([^}]*))?\}|\$\{!([a-zA-Z_][a-zA-Z0-9_]*)@\}/
+    ARRAY_AT_EXPANSION = /\$\{(!?)([a-zA-Z_][a-zA-Z0-9_]*)\[@\](?::(?![-=+?])([^}]*))?\}|\$\{(@)(?::(?![-=+?])([^}]*))?\}|\$\{!([a-zA-Z_][a-zA-Z0-9_]*)@\}/
 
     def self.split_quoted_array_word(inner)
       return nil unless inner.match?(ARRAY_AT_EXPANSION)

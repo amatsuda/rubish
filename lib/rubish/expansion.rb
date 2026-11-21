@@ -435,27 +435,27 @@ module Rubish
       # builtin run directly by the REPL expands exactly like generated code.
 
       # ${var//pattern/replacement}, ${var/pattern/replacement}
-      if content =~ %r{\A([a-zA-Z_][a-zA-Z0-9_]*)(//|/)((?:[^/]|\\.)+)/((?:[^/]|\\.)*)?\z}
+      if content =~ %r{\A([a-zA-Z_][a-zA-Z0-9_]*(?:\[[^\]]+\])?)(//|/)((?:[^/]|\\.)+)/((?:[^/]|\\.)*)?\z}
         return __param_replace($1, $2, $3, $4 || '')
       end
 
       # ${var/pattern}, ${var//pattern} - delete matches
-      if content =~ %r{\A([a-zA-Z_][a-zA-Z0-9_]*)(//|/)((?:[^/]|\\.)+)\z}
+      if content =~ %r{\A([a-zA-Z_][a-zA-Z0-9_]*(?:\[[^\]]+\])?)(//|/)((?:[^/]|\\.)+)\z}
         return __param_replace($1, $2, $3, '')
       end
 
       # ${var^^}, ${var^}, ${var,,}, ${var,} - case modification
-      if content =~ /\A([a-zA-Z_][a-zA-Z0-9_]*)(\^\^|\^|,,|,)(?:([^}]*))?\z/
+      if content =~ /\A([a-zA-Z_][a-zA-Z0-9_]*(?:\[[^\]]+\])?)(\^\^|\^|,,|,)(?:([^}]*))?\z/
         return __param_case($1, $2, $3)
       end
 
       # ${var##pattern}, ${var%%pattern}, ${var#pattern}, ${var%pattern}
-      if content =~ /\A([a-zA-Z_][a-zA-Z0-9_]*)(##|%%|#|%)(.+)\z/
+      if content =~ /\A([a-zA-Z_][a-zA-Z0-9_]*(?:\[[^\]]+\])?)(##|%%|#|%)(.+)\z/
         return __param_expand($1, $2, $3, expand_operand: true)
       end
 
       # ${var@operator} - transformations (Q, E, P, A, a, U, u, L, K)
-      return __param_transform($1, $2) if content =~ /\A([a-zA-Z_][a-zA-Z0-9_]*)@([QEPAaUuLK])\z/
+      return __param_transform($1, $2) if content =~ /\A([a-zA-Z_][a-zA-Z0-9_]*(?:\[[^\]]+\])?)@([QEPAaUuLK])\z/
 
       # ${!prefix*} / ${!prefix@} - variable names with prefix
       if content =~ /\A!([a-zA-Z_][a-zA-Z0-9_]*)([*@])\z/
@@ -468,10 +468,10 @@ module Rubish
 
       # ${var:-default}, ${var-default}, etc.
       # Also handles positional parameters: ${1:-default}, ${10:-default}, etc.
-      return __param_expand($1, $2, $3 || '', expand_operand: true) if content =~ /\A([a-zA-Z_][a-zA-Z0-9_]*|\d+)(:-|:=|:\+|:\?|-|=|\+|\?)(.*)?\z/
+      return __param_expand($1, $2, $3 || '', expand_operand: true) if content =~ /\A([a-zA-Z_][a-zA-Z0-9_]*(?:\[[^\]]+\])?|\d+)(:-|:=|:\+|:\?|-|=|\+|\?)(.*)?\z/
 
       # ${#var} - length
-      return __param_length($1) if content =~ /\A#([a-zA-Z_][a-zA-Z0-9_]*)\z/
+      return __param_length($1) if content =~ /\A#([a-zA-Z_][a-zA-Z0-9_]*(?:\[[^\]]+\])?)\z/
 
       # Simple ${VAR}
       fetch_var_with_nounset(content)
