@@ -117,12 +117,20 @@ module Rubish
     # is an IO, nil (inherit), or a symbol: :closed, :stderr (for stdout,
     # `>&2`), or :stdout (for stderr, `2>&1` / `|&`).
     def self.apply_child_redirections(stdin, stdout, stderr)
-      # The child needs the real streams. If an embedder (or a test) swapped
-      # $stdout/$stderr for a non-IO such as StringIO, go back to the real
-      # ones first: StringIO#reopen cannot take an IO.
-      $stdin = STDIN unless $stdin.is_a?(IO)
-      $stdout = STDOUT unless $stdout.is_a?(IO)
-      $stderr = STDERR unless $stderr.is_a?(IO)
+      # The child needs the real descriptors. A compound redirect
+      # (`{ ...; } > file`, `while ...; done < file`) only swapped the shell's
+      # Ruby streams, so point fds 0-2 at those streams first: the program
+      # exec'd below inherits descriptors, not Ruby objects. An embedder (or
+      # a test) may have swapped in a non-IO such as StringIO; those are
+      # ignored and the real streams used.
+      [[STDIN, $stdin], [STDOUT, $stdout], [STDERR, $stderr]].each do |real, current|
+        next unless current.is_a?(IO) && !current.equal?(real) && !current.closed?
+
+        real.reopen(current)
+      end
+      $stdin = STDIN
+      $stdout = STDOUT
+      $stderr = STDERR
 
       if stdin == :closed
         $stdin.close
@@ -130,19 +138,21 @@ module Rubish
         $stdin.reopen(stdin)
       end
 
-      if stdout == :stderr
-        $stdout.reopen($stderr)
-      elsif stdout == :closed
+      # `>&2` / `2>&1` that refer to the original streams (see
+      # Command#effective_streams) are applied before those streams are
+      # pointed elsewhere
+      $stdout.reopen($stderr) if stdout == :stderr
+      $stderr.reopen($stdout) if stderr == :stdout
+
+      if stdout == :closed
         $stdout.close
-      elsif stdout
+      elsif stdout && !stdout.is_a?(Symbol)
         $stdout.reopen(stdout)
       end
 
-      if stderr == :stdout
-        $stderr.reopen($stdout)
-      elsif stderr == :closed
+      if stderr == :closed
         $stderr.close
-      elsif stderr
+      elsif stderr && !stderr.is_a?(Symbol)
         $stderr.reopen(stderr)
       end
     end
@@ -175,6 +185,20 @@ module Rubish
         options[fd] = persistent || spec
       end
       options.empty? ? nil : options
+    end
+
+    def next_redirect_seq
+      @redirect_seq = (@redirect_seq || 0) + 1
+    end
+
+    # The streams to give the command, with `>&2` and `2>&1` resolved in the
+    # order the redirections were written: `2>file >&2` sends stdout to the
+    # file, while `2>&1 >file` sends stderr to the original stdout.
+    def effective_streams
+      out, err = @stdout, @stderr
+      out = err if out == :stderr && err.is_a?(IO) && (@stderr_seq || 0) < (@stdout_seq || 0)
+      err = @stdout if err == :stdout && @stdout.is_a?(IO) && (@stdout_seq || 0) < (@stderr_seq || 0)
+      [@stdin, out, err]
     end
 
     # Execute a command with proper error handling for command not found / permission denied
@@ -304,6 +328,7 @@ module Rubish
         return self
       end
       @stdout = File.open(file, 'w')
+      @stdout_seq = next_redirect_seq
       self
     rescue Errno::ENOENT, Errno::EACCES => e
       $stderr.puts "rubish: #{file}: #{e.class.new.message}"
@@ -320,6 +345,7 @@ module Rubish
       end
       # Force overwrite even with noclobber (>|)
       @stdout = File.open(file, 'w')
+      @stdout_seq = next_redirect_seq
       self
     rescue Errno::ENOENT, Errno::EACCES => e
       $stderr.puts "rubish: #{file}: #{e.class.new.message}"
@@ -335,6 +361,7 @@ module Rubish
         return self
       end
       @stdout = File.open(file, 'a')
+      @stdout_seq = next_redirect_seq
       self
     rescue Errno::ENOENT, Errno::EACCES => e
       $stderr.puts "rubish: #{file}: #{e.class.new.message}"
@@ -359,6 +386,7 @@ module Rubish
         return self
       end
       @stderr = File.open(file, 'w')
+      @stderr_seq = next_redirect_seq
       self
     rescue Errno::ENOENT, Errno::EACCES => e
       $stderr.puts "rubish: #{file}: #{e.class.new.message}"
@@ -374,6 +402,7 @@ module Rubish
         return self
       end
       @stderr = File.open(file, 'a')
+      @stderr_seq = next_redirect_seq
       self
     rescue Errno::ENOENT, Errno::EACCES => e
       $stderr.puts "rubish: #{file}: #{e.class.new.message}"
@@ -398,6 +427,7 @@ module Rubish
       when '2'
         # >&2 - redirect stdout to stderr
         @stdout = :stderr
+        @stdout_seq = next_redirect_seq
         self
       when '-'
         # >&- - close stdout
@@ -458,6 +488,7 @@ module Rubish
       case target
       when '1'
         @stderr = :stdout
+        @stderr_seq = next_redirect_seq
         self
       when '2'
         self
@@ -558,7 +589,7 @@ module Rubish
           Kernel.trap('TTOU', 'DEFAULT')
         end
 
-        Command.apply_child_redirections(@stdin, @stdout, @stderr)
+        Command.apply_child_redirections(*effective_streams)
 
         # Set keyword environment variables
         keyword_env.each { |k, v| ENV[k] = v }
@@ -908,7 +939,7 @@ module Rubish
             end
           end
 
-          Command.apply_child_redirections(cmd.stdin, cmd.stdout, cmd.stderr)
+          Command.apply_child_redirections(*cmd.effective_streams)
 
           # Set prefix environment variables (e.g., FOO=bar cmd)
           cmd.prefix_env&.each { |k, v| ENV[k] = v } if cmd.respond_to?(:prefix_env)
@@ -1078,7 +1109,7 @@ module Rubish
             end
           end
 
-          Command.apply_child_redirections(cmd.stdin, cmd.stdout, cmd.stderr)
+          Command.apply_child_redirections(*cmd.effective_streams)
 
           # Set prefix environment variables (e.g., FOO=bar cmd)
           cmd.prefix_env&.each { |k, v| ENV[k] = v } if cmd.respond_to?(:prefix_env)
@@ -1135,6 +1166,11 @@ module Rubish
   end
 
   class Subshell
+    # Same interface as Command#effective_streams, for pipelines mixing kinds
+    def effective_streams
+      [@stdin, @stdout, @stderr]
+    end
+
     # Exit code for the value a subshell's block returned: an ExitStatus,
     # a ran Command/Pipeline, anything with success?, or 0.
     def self.exit_code_for(result)
@@ -1339,6 +1375,11 @@ module Rubish
 
   # Wrapper for heredoc/herestring that provides content as stdin
   class HeredocCommand
+    # Same interface as Command#effective_streams, for pipelines mixing kinds
+    def effective_streams
+      [@stdin, @stdout, @stderr]
+    end
+
     attr_reader :status
     attr_accessor :stdin, :stdout, :stderr
 

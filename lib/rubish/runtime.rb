@@ -1553,14 +1553,15 @@ module Rubish
       return ExitStatus.new(1) if cmd.restricted_failed || cmd.noclobber_failed
 
       saved_in, saved_out, saved_err = $stdin, $stdout, $stderr
-      $stdin = cmd.stdin if cmd.stdin.is_a?(IO)
-      case cmd.stdout
-      when IO then $stdout = cmd.stdout
+      stdin, stdout, stderr = cmd.effective_streams
+      $stdin = stdin if stdin.is_a?(IO)
+      case stdout
+      when IO then $stdout = stdout
       when :stderr then $stdout = saved_err
       end
-      case cmd.stderr
-      when IO then $stderr = cmd.stderr
-      when :stdout then $stderr = $stdout
+      case stderr
+      when IO then $stderr = stderr
+      when :stdout then $stderr = saved_out
       end
       begin
         run_builtin_with_prefix(cmd)

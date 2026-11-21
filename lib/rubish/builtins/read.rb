@@ -116,11 +116,12 @@ module Rubish
     def read_input_line(opts)
       input_stream = opts[:fd] ? (Command.shell_fd(opts[:fd]) || IO.new(opts[:fd])) : $stdin
       result = read_input_line_from(input_stream, opts)
-      # A descriptor shared with later commands (`exec 5<file`) must not
-      # keep read-ahead in Ruby's buffer: hand the unread bytes back so the
-      # next reader starts right after this line. IO#pos does that for
-      # seekable streams and raises for pipes, where nothing is lost.
-      input_stream.pos if opts[:fd]
+      # A descriptor shared with other readers (`exec 5<file`, or the loop's
+      # `done < file` seen by external commands in the body) must not keep
+      # read-ahead in Ruby's buffer: hand the unread bytes back so the next
+      # reader starts right after this line. IO#pos does that for seekable
+      # streams and raises for pipes and terminals, where nothing is lost.
+      input_stream.pos if input_stream.is_a?(IO)
       result
     rescue SystemCallError
       result
