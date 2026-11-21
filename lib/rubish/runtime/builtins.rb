@@ -1922,8 +1922,6 @@ module Rubish
           # Use line number if available, otherwise 0 as placeholder
           lineno = info[:lineno] || 0
           puts "#{name} #{lineno} #{info[:file]}"
-        elsif info[:file]
-          puts "declare -f #{name}  # defined in #{info[:file]}"
         else
           puts "declare -f #{name}"
         end
