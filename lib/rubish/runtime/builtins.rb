@@ -171,8 +171,10 @@ module Rubish
       @state.arrays.key?(name)
     end
 
+    # Elements that are set: holes left by `unset 'a[i]'` or sparse
+    # subscripts do not count, as in bash
     def array_length(name)
-      (@state.arrays[name] || []).length
+      (@state.arrays[name] || []).count { |value| !value.nil? }
     end
 
     def array_append(name, values)
