@@ -998,8 +998,9 @@ module Rubish
 
       # Check if input looks like a Ruby expression (starts with capital letter)
       # UNIX commands rarely start with capitals, but Ruby constants/classes do
-      # Exclude shell variable assignments (VAR=value, VAR+=value, VAR[n]=value)
-      if line =~ /\A[A-Z]/ && line !~ /\A[A-Z_][A-Z0-9_]*(\[[^\]]*\])?\+?=/
+      # Exclude shell variable assignments (Var=value, Var+=value, Var[n]=value):
+      # an identifier directly followed by a single `=` is shell syntax
+      if line =~ /\A[A-Z]/ && line !~ /\A[A-Za-z_][A-Za-z0-9_]*(\[[^\]]*\])?\+?=([^=]|\z)/
         return run_inline_ruby(line)
       end
 
