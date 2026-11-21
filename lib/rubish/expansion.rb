@@ -878,7 +878,8 @@ module Rubish
       when *READONLY_SPECIAL_VARS
         # Read-only, silently ignore
       else
-        expanded_value = eval_arithmetic_expr(expanded_value).to_s if Builtins.has_attribute?(var_name, :integer)
+        # -i evaluates, -l / -u change case: the declared attributes apply
+        expanded_value = Builtins.apply_attributes(var_name, expanded_value)
         Builtins.set_var_through_nameref(var_name, expanded_value)
       end
 
