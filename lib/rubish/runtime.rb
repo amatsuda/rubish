@@ -999,7 +999,9 @@ module Rubish
           # nullglob: patterns matching nothing expand to nothing
           []
         else
-          [pattern]
+          # The word stays as written, minus the backslashes that quoted its
+          # glob characters: `echo \*` prints *
+          [pattern.gsub(/\\(.)/, '\1')]
         end
       else
         matches

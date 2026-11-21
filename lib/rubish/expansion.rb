@@ -246,7 +246,9 @@ module Rubish
           if next_char && '$`"\\'.include?(next_char)
             result << next_char
             i += 2
-          elsif !quoted && (next_char == ' ' || next_char == "'")
+          elsif !quoted && next_char && !'*?[]'.include?(next_char)
+            # Unquoted \X is X (quote removal). Glob characters keep their
+            # backslash so __glob sees them as literal; it strips it afterwards.
             result << next_char
             i += 2
           else
