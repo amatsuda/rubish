@@ -442,7 +442,7 @@ module Rubish
         # >&N: a descriptor opened with `exec N>file`; any other number is
         # an error, not a file named "N"
         if target.match?(/\A\d+\z/)
-          io = Command.shell_fd(target.to_i)
+          io = own_or_shell_fd(target.to_i)
           return bad_file_descriptor(target) unless io
 
           @stdout = io.dup
@@ -474,7 +474,7 @@ module Rubish
         self
       else
         if target.match?(/\A\d+\z/)
-          io = Command.shell_fd(target.to_i)
+          io = own_or_shell_fd(target.to_i)
           return bad_file_descriptor(target) unless io
 
           @stdin = io.dup
@@ -502,7 +502,7 @@ module Rubish
         self
       else
         if target.match?(/\A\d+\z/)
-          io = Command.shell_fd(target.to_i)
+          io = own_or_shell_fd(target.to_i)
           return bad_file_descriptor(target) unless io
 
           @stderr = io.dup
@@ -518,24 +518,61 @@ module Rubish
     # run_simple applies them via Kernel#exec's redirect-options hash.
     def fd_redirect(fd, op, target)
       @fd_redirects ||= {}
+      spec = Command.fd_redirect_spec(op, target)
+      @fd_redirects[fd] = spec unless spec.nil?
+      self
+    end
+
+    # The IO behind `>&N` / `<&N` for this command: its own `N<file` or
+    # `N<<< word` redirection when it has one (`cat 3<<< hi <&3`), else the
+    # shell's descriptor N. A path spec is opened once and kept, so the
+    # child's fd N and the duplicated stream share the same open file.
+    def own_or_shell_fd(n)
+      spec = @fd_redirects && @fd_redirects[n]
+      case spec
+      when IO then spec
+      when Array
+        @fd_redirects[n] = File.open(*spec)
+      when Integer then Command.standard_or_shell_fd(spec)
+      else Command.shell_fd(n)
+      end
+    rescue SystemCallError
+      nil
+    end
+    
+    # What descriptor N gets for `N<op> target`: [path, mode] to open, an
+    # Integer descriptor to duplicate, :close, or an IO holding a
+    # herestring (`N<<< word`). nil for an operator this cannot express.
+    def self.fd_redirect_spec(op, target)
       case op
-      when '>', '>|'
-        @fd_redirects[fd] = [target, 'w']
-      when '>>'
-        @fd_redirects[fd] = [target, 'a']
-      when '<'
-        @fd_redirects[fd] = [target, 'r']
+      when '>', '>|' then [target, 'w']
+      when '>>' then [target, 'a']
+      when '<' then [target, 'r']
+      when '<<<' then content_file("#{target}\n")
       when '>&', '<&'
         if target == '-'
-          @fd_redirects[fd] = :close
+          :close
         elsif target =~ /\A\d+\z/
-          @fd_redirects[fd] = target.to_i
+          target.to_i
         else
           # `N>&file` is just `N>file`.
-          @fd_redirects[fd] = [target, op == '>&' ? 'w' : 'r']
+          [target, op == '>&' ? 'w' : 'r']
         end
       end
-      self
+    end
+
+    # A seekable, unlinked file holding heredoc or herestring content. A
+    # regular file rather than a pipe: a body larger than the pipe buffer
+    # cannot deadlock, and `read` can hand unread bytes back to the next
+    # reader (see Builtins#read_input_line).
+    def self.content_file(content)
+      Rubish.require_library('tempfile')
+      file = Tempfile.create('rubish-heredoc')
+      file.write(content)
+      file.flush
+      file.rewind
+      File.unlink(file.path)
+      file
     end
 
     private
@@ -1521,17 +1558,9 @@ module Rubish
 
     # A compound command runs in the shell process, so the content becomes
     # the shell's stdin for the duration: builtins such as `read` see it,
-    # and so do external commands in the body, which inherit fd 0. The
-    # content sits in an unlinked temporary file rather than a pipe, so a
-    # body larger than the pipe buffer cannot deadlock and `read` can hand
-    # unread bytes back to the next reader (see Builtins#read_input_line).
+    # and so do external commands in the body, which inherit fd 0.
     def run_compound
-      Rubish.require_library('tempfile')
-      content_file = Tempfile.create('rubish-heredoc')
-      content_file.write(@content)
-      content_file.flush
-      content_file.rewind
-      File.unlink(content_file.path)
+      content_file = Command.content_file(@content)
 
       original_stdin = $stdin.dup
       saved_out, saved_err = $stdout, $stderr

@@ -741,8 +741,24 @@ module Rubish
       io.close if io.is_a?(IO) && !io.closed?
     end
 
-    def __with_fd_redirect(_fd, _op, _target)
-      yield
+    # `while ...; done 3< file`, `{ ...; } 4<<< word`: descriptor N is set
+    # up for the duration of the compound command, then closed, and what
+    # it was before is put back. A redirection that fails ends the command
+    # with status 1 without running it, as in bash.
+    def __with_fd_redirect(fd, op, target)
+      previous = shell_fds.delete(fd)
+      spec = Command.fd_redirect_spec(op, target)
+      unless apply_fd_redirect_spec(fd, spec)
+        shell_fds[fd] = previous if previous
+        return ExitStatus.new(1)
+      end
+
+      begin
+        yield
+      ensure
+        shell_fds.delete(fd)&.close
+        shell_fds[fd] = previous if previous
+      end
     end
 
     def __with_redirect(operator, target)
@@ -1652,32 +1668,39 @@ module Rubish
     def apply_exec_fd_redirections(cmd)
       status = 0
       cmd.fd_redirects.each do |fd, spec|
-        case spec
-        when :close
-          shell_fds.delete(fd)&.close
-        when Integer
-          source = Command.standard_or_shell_fd(spec)
-          unless source
-            $stderr.puts "rubish: #{spec}: Bad file descriptor"
-            status = 1
-            next
-          end
-          shell_fds.delete(fd)&.close
-          shell_fds[fd] = source.dup
-        when Array
-          path, mode = spec
-          begin
-            io = File.open(path, mode)
-          rescue SystemCallError => e
-            $stderr.puts "rubish: #{path}: #{e.message.sub(/ @ .*/, '')}"
-            status = 1
-            next
-          end
-          shell_fds.delete(fd)&.close
-          shell_fds[fd] = io
-        end
+        status = 1 unless apply_fd_redirect_spec(fd, spec)
       end
       status
+    end
+
+    # Make shell descriptor `fd` what `spec` says (see
+    # Command.fd_redirect_spec), closing what it was before. false when the
+    # source could not be opened or duplicated.
+    def apply_fd_redirect_spec(fd, spec)
+      io = case spec
+           when :close
+             nil
+           when Integer
+             source = Command.standard_or_shell_fd(spec)
+             unless source
+               $stderr.puts "rubish: #{spec}: Bad file descriptor"
+               return false
+             end
+             source.dup
+           when Array
+             path, mode = spec
+             begin
+               File.open(path, mode)
+             rescue SystemCallError => e
+               $stderr.puts "rubish: #{path}: #{e.message.sub(/ @ .*/, '')}"
+               return false
+             end
+           when IO
+             spec
+           end
+      shell_fds.delete(fd)&.close
+      shell_fds[fd] = io if io
+      true
     end
 
     # Apply exec redirections to the current shell permanently

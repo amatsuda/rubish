@@ -252,10 +252,14 @@ module Rubish
       # the runtime can open / dup / close that specific descriptor.
       # Whitespace already got skipped before read_token, so `echo 1
       # >file` (with the space) still keeps `1` as an arg.
-      if (md = @input[@pos..].match(/\A(\d+)(>>|>\||>&|>|<&|<)/))
+      if (md = @input[@pos..].match(/\A(\d+)(<<<|>>|>\||>&|>|<&|<)/))
         fd_str, op = md[1], md[2]
         fd = fd_str.to_i
-        if fd == 0 && %w[< <&].include?(op)
+        if fd == 0 && op == '<<<'
+          # `0<<< word` is the plain herestring
+          @pos += fd_str.length + 3
+          return read_herestring
+        elsif fd == 0 && %w[< <&].include?(op)
           @pos += fd_str.length  # alias for bare op; fall through to operator match
         elsif fd == 1 && %w[> >> >| >&].include?(op)
           @pos += fd_str.length
