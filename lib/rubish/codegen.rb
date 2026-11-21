@@ -845,6 +845,9 @@ module Rubish
       when AST::For, AST::ArithFor, AST::While, AST::Until, AST::Select,
            AST::If, AST::Unless, AST::Case, AST::Function, AST::BraceGroup
         true
+      when AST::ConditionalExpr, AST::ArithmeticCommand
+        # run inline and return an ExitStatus, so a redirect must wrap them
+        true
       when AST::Redirect, AST::FdRedirect
         # `while ...; done < in > out`: each redirect wraps the one inside it
         compound_command?(node.command)
