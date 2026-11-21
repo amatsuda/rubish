@@ -1235,8 +1235,13 @@ module Rubish
           target = consume(:WORD)&.value
           cmd = AST::FdRedirect.new(cmd, fd, redirect_op, target) if target
         else
-          # Regular redirections (>, >>, <, 2>, >&, <&)
-          target = consume(:WORD)&.value
+          # Regular redirections (>, >>, <, 2>, >&, <&); the target may be a
+          # process substitution: `cmd < <(other)`
+          target = if peek(:PROC_SUB_IN) || peek(:PROC_SUB_OUT)
+                     parse_arg
+                   else
+                     consume(:WORD)&.value
+                   end
           cmd = AST::Redirect.new(cmd, op.value, target) if target
         end
       end

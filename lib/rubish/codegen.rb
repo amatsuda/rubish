@@ -829,7 +829,11 @@ module Rubish
                   when '2>&' then 'dup_err'
                   when '<&' then 'dup_in'
                   end
-      target = generate_string_arg(node.target)
+      target = if node.target.is_a?(AST::ProcessSubstitution)
+                 generate_process_substitution(node.target)
+               else
+                 generate_string_arg(node.target)
+               end
 
       # For compound commands (loops, conditionals, etc.), use block-based redirection
       if compound_command?(node.command)
