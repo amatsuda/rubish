@@ -747,7 +747,14 @@ module Rubish
           j = i + 1
           j += 1 if j < pattern.length && pattern[j] == '!'
           j += 1 if j < pattern.length && pattern[j] == ']'
-          j += 1 while j < pattern.length && pattern[j] != ']'
+          while j < pattern.length && pattern[j] != ']'
+            # A POSIX class `[:space:]` inside the bracket keeps its own `]`
+            if pattern[j] == '[' && pattern[j + 1] == ':' && (close = pattern.index(':]', j + 2))
+              j = close + 2
+            else
+              j += 1
+            end
+          end
           if j < pattern.length
             bracket = pattern[i..j].sub('[!', '[^')
             regex_str << bracket
