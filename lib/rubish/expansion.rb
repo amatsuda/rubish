@@ -66,8 +66,17 @@ module Rubish
       assignments.empty? ? nil : assignments
     end
 
+    # Returns false if an assignment was refused (readonly variable)
     def handle_bare_assignments(assignments)
+      ok = true
       assignments.each do |assignment|
+        name = assignment[/\A[a-zA-Z_][a-zA-Z0-9_]*/]
+        if name && Builtins.readonly?(name)
+          $stderr.puts "rubish: #{name}: readonly variable"
+          ok = false
+          next
+        end
+
         if assignment =~ /\A([a-zA-Z_][a-zA-Z0-9_]*)\+?=\((.*)\)\z/m
           handle_array_assignment($1, $2, assignment.include?('+='))
         elsif assignment =~ /\A([a-zA-Z_][a-zA-Z0-9_]*)\[([^\]]+)\]=(.*)\z/
@@ -76,6 +85,7 @@ module Rubish
           handle_scalar_assignment($1, $2)
         end
       end
+      ok
     end
 
     def parse_assoc_array_elements(str)

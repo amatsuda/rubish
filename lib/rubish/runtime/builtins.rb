@@ -1889,7 +1889,7 @@ module Rubish
           if arg.include?('=')
             key, value = arg.split('=', 2)
             if readonly?(key)
-              puts "export: #{key}: readonly variable"
+              $stderr.puts "export: #{key}: readonly variable"
               next
             end
             if restricted_mode? && RESTRICTED_VARIABLES.include?(key)

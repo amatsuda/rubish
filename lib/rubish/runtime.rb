@@ -1492,8 +1492,8 @@ module Rubish
     # last command substitution expanded for it, or 0 (bash semantics). The
     # caller resets @last_subst_status before expanding the words.
     def __run_bare_assignment(result)
-      handle_bare_assignments([result.name] + result.args)
-      @last_status = @last_subst_status || 0
+      ok = handle_bare_assignments([result.name] + result.args)
+      @last_status = ok ? (@last_subst_status || 0) : 1
     end
 
     # Run a process-affecting builtin (cd, export, set, ...) in this process

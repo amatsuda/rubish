@@ -1010,8 +1010,7 @@ module Rubish
 
       # Check for array assignment before tokenizing (arr=(a b c) pattern)
       if (array_assignments = extract_array_assignments(line))
-        handle_bare_assignments(array_assignments)
-        @last_status = 0
+        @last_status = handle_bare_assignments(array_assignments) ? 0 : 1
         Builtins.clear_exit_blocked  # checkjobs: non-exit command resets flag
         return
       end
@@ -1075,8 +1074,8 @@ module Rubish
       if ast.is_a?(AST::Command) && bare_assignment?(ast.name) && ast.args.all? { |a| bare_assignment?(a) }
         # Status is that of the last command substitution in the values, or 0
         @last_subst_status = nil
-        handle_bare_assignments([ast.name] + ast.args)
-        @last_status = @last_subst_status || 0
+        ok = handle_bare_assignments([ast.name] + ast.args)
+        @last_status = ok ? (@last_subst_status || 0) : 1
         @pipestatus = [@last_status]
         @command_number += 1
         # Note: bare assignments don't increment LINENO (bash behavior)
@@ -1416,8 +1415,8 @@ module Rubish
       elsif result.is_a?(Command) && bare_assignment?(result.name) && result.args.all? { |a| bare_assignment?(a) }
         # Handle bare variable assignments (e.g., x=$(echo hello) after expansion).
         # The substitutions already ran in the context; take the last one's status.
-        handle_bare_assignments([result.name] + result.args)
-        @last_status = @context.instance_variable_get(:@last_subst_status) || 0
+        ok = handle_bare_assignments([result.name] + result.args)
+        @last_status = ok ? (@context.instance_variable_get(:@last_subst_status) || 0) : 1
         @pipestatus = [@last_status]
       elsif result.is_a?(Command) && !@functions.key?(result.name) &&
             (PROCESS_BUILTINS.include?(result.name) ||
