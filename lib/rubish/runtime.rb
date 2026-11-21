@@ -1415,6 +1415,15 @@ module Rubish
       ArrayWord.new(var_part, elements)
     end
 
+    # $_ is the last argument of the previous command (its name when it has
+    # none); for a pipeline, that of its last command
+    def __remember_last_argument(result)
+      cmd = result.is_a?(Pipeline) ? result.commands.last : result
+      return unless cmd.is_a?(Command)
+
+      Builtins.set_var('_', (cmd.args.last || cmd.name).to_s)
+    end
+
     def __define_function(name, source_code = nil, params = nil, &block)
       @functions[name] = {block: block, source: @current_source_file, source_code: source_code, lineno: @lineno, params: params}
       nil
@@ -1590,6 +1599,8 @@ module Rubish
 
       # Run DEBUG trap before each command
       Builtins.debug_trap
+
+      __remember_last_argument(result)
 
       if result.is_a?(Command) && result.name == 'exec'
         # Special handling for exec builtin
