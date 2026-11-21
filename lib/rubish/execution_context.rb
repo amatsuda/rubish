@@ -1101,6 +1101,20 @@ module Rubish
       result
     end
 
+    # A list `{a,b}` has a comma at its own level; a comma only inside a
+    # nested group (`{x{1,2}}`) makes the outer braces literal
+    def brace_list?(content)
+      depth = 0
+      content.each_char do |c|
+        case c
+        when "{" then depth += 1
+        when "}" then depth -= 1
+        when "," then return true if depth == 0
+        end
+      end
+      false
+    end
+    
     def expand_braces(str)
       # Find the first brace group to expand
       # Return array of expanded strings
@@ -1136,11 +1150,15 @@ module Rubish
                            expand_letter_sequence($1, $2, $3.to_i)
                          elsif content =~ /\A([a-zA-Z])\.\.([a-zA-Z])\z/
                            expand_letter_sequence($1, $2)
-                         elsif content.include?(',')
+                         elsif brace_list?(content)
                            expand_brace_list(content)
                          else
-                           # Not a valid brace expansion, return as-is
-                           return [str]
+                           # `{a}`: not a brace expansion. Keep it literally and go
+                           # on expanding what is around and inside it (`{a}{b,c}`
+                           # gives `{a}b {a}c`, `{x{1,2}}` gives `{x1} {x2}`)
+                           return expand_braces(content).flat_map do |inner|
+                             expand_braces(suffix).map { |rest| "#{prefix}{#{inner}}#{rest}" }
+                           end
                          end
 
             # Combine prefix, expansions, suffix and recursively expand

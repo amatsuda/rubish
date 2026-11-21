@@ -330,6 +330,10 @@ module Rubish
             # Ruby expression block after if/while/until/elif/elsif/unless: { condition }
             # Or after case: case { expression } in ...
             read_ruby_condition
+          elsif brace_closes_within_word?
+            # `{a}`, `{}`: no whitespace inside, so not a brace group but an
+            # ordinary word, as in bash
+            read_word
           else
             # Shell function body or standalone brace
             @pos += 1
@@ -433,6 +437,24 @@ module Rubish
 
       # Must have found closing brace and have either comma or ..
       depth == 0 && (has_comma || has_dotdot)
+    end
+
+    # `{a}`, `{}`, `{a}{b,c}`: the brace at @pos closes before any whitespace,
+    # so it is part of a word rather than the start of a brace group
+    def brace_closes_within_word?
+      lookahead = @pos + 1
+      depth = 1
+      while lookahead < @input.length
+        case @input[lookahead]
+        when '{' then depth += 1
+        when '}'
+          depth -= 1
+          return true if depth == 0
+        when ' ', "\t", "\n", ';', '|', '&' then return false
+        end
+        lookahead += 1
+      end
+      false
     end
 
     def read_array
@@ -549,6 +571,7 @@ module Rubish
 
     def read_word
       start = @pos
+      literal_braces = 0  # unclosed `{` taken as word characters
       while @pos < @input.length
         char = @input[@pos]
 
@@ -561,10 +584,20 @@ module Rubish
             # Brace expansion pattern like {a,b,c} - read the whole thing
             read_brace_expansion
             next
+          elsif brace_closes_within_word?
+            # `x{a}y`, `x{}y`: literal braces are part of the word
+            literal_braces += 1
+            @pos += 1
+            next
           else
             # Not brace expansion (e.g. shell function body), treat as operator
             break
           end
+        end
+        if char == '}' && literal_braces > 0
+          literal_braces -= 1
+          @pos += 1
+          next
         end
 
         # extglob: `@(a|b)`, `*(x)`, `+(x)`, `?(x)`, `!(x)` are part of the word
