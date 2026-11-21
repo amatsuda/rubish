@@ -39,47 +39,50 @@ module Rubish
     end
   end
 
+  # Job bookkeeping for the shell. Everything here runs on the main thread,
+  # including the SIGCHLD trap installed for `set -b`, and Ruby forbids
+  # taking a Mutex from a trap handler, so this class deliberately has no
+  # lock and does not use Singleton (whose #instance locks too).
   class JobManager
-    include Singleton
+    def self.instance
+      @instance ||= new
+    end
 
     def initialize
       @jobs = {}
       @next_id = 1
-      @mutex = Mutex.new
     end
 
     def add(pid:, pgid:, command:)
-      @mutex.synchronize do
-        id = @next_id
-        @next_id += 1
-        job = Job.new(id: id, pid: pid, pgid: pgid, command: command)
-        @jobs[id] = job
-        job
-      end
+      id = @next_id
+      @next_id += 1
+      job = Job.new(id: id, pid: pid, pgid: pgid, command: command)
+      @jobs[id] = job
+      job
     end
 
     def remove(id)
-      @mutex.synchronize { @jobs.delete(id) }
+      @jobs.delete(id)
     end
 
     def get(id)
-      @mutex.synchronize { @jobs[id] }
+      @jobs[id]
     end
 
     def all
-      @mutex.synchronize { @jobs.values.dup }
+      @jobs.values.dup
     end
 
     def active
-      @mutex.synchronize { @jobs.values.reject(&:done?) }
+      @jobs.values.reject(&:done?)
     end
 
     def last
-      @mutex.synchronize { @jobs.values.last }
+      @jobs.values.last
     end
 
     def find_by_pid(pid)
-      @mutex.synchronize { @jobs.values.find { |j| j.pid == pid } }
+      @jobs.values.find { |j| j.pid == pid }
     end
 
     def update_status(pid, status)
@@ -113,10 +116,8 @@ module Rubish
     end
 
     def clear
-      @mutex.synchronize do
-        @jobs.clear
-        @next_id = 1
-      end
+      @jobs.clear
+      @next_id = 1
     end
 
     # Wait until the number of active jobs is below CHILD_MAX
@@ -139,7 +140,7 @@ module Rubish
     end
 
     def active_count
-      @mutex.synchronize { @jobs.values.count { |j| j.running? || j.stopped? } }
+      @jobs.values.count { |j| j.running? || j.stopped? }
     end
 
     def child_max_limit
