@@ -1082,14 +1082,21 @@ module Rubish
         parts << "__case_word = #{word_expr}"
       end
 
-      node.branches.each_with_index do |(patterns, body), i|
-        keyword = i == 0 ? 'if' : 'elsif'
-        # Pattern matching
+      # Each branch is tested in turn unless the previous one fell through
+      # with `;&`. `;;` ends the case, `;;&` goes on to test the next patterns.
+      parts << 'catch(:__case_done) do'
+      parts << '__case_fall = false'
+      node.branches.each do |patterns, body, terminator|
         conditions = patterns.map { |p| generate_case_pattern_match(p) }
-        parts << "#{keyword} #{conditions.join(' || ')}"
+        parts << "if __case_fall || #{conditions.join(' || ')}"
         parts << generate_loop_body(body)
+        parts << case terminator
+                 when :fall then '__case_fall = true'
+                 when :cont then '__case_fall = false'
+                 else 'throw(:__case_done)'
+                 end
+        parts << 'end'
       end
-
       parts << 'end'
       parts.join("\n")
     end
