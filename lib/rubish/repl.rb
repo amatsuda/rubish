@@ -796,6 +796,7 @@ module Rubish
 
       # Don't auto-add to history; we'll do it ourselves after checking HISTCONTROL/HISTIGNORE
       line = @frontend.read_line(prompt: left_prompt, rprompt: right_prompt)
+      @consecutive_read_errors = 0
 
       # If the user just hit ESC-Q, Reline returned the typed text but
       # we treat it as "pushed, not submitted": skip execution and
@@ -878,10 +879,25 @@ module Rubish
       # the user's input and Reline's handle_interrupted already
       # scrolled the cursor down a line. Nothing to do here — the next
       # loop iteration paints a clean prompt with an empty buffer.
-    rescue Errno::EIO
-      # Ignore I/O errors from terminal control issues during job control
+    rescue Errno::EIO => e
+      handle_read_error(e)
     rescue => e
       puts "rubish: #{e.message}"
+    end
+
+    # Reading from the terminal fails with EIO when the shell is not its
+    # foreground process group (a job took it and did not give it back) or
+    # when the terminal is gone. Take the terminal back and retry a few
+    # times; if that does not help, exit instead of spinning on the prompt.
+    MAX_CONSECUTIVE_READ_ERRORS = 3
+
+    def handle_read_error(error)
+      @consecutive_read_errors = (@consecutive_read_errors || 0) + 1
+      Terminal.set_foreground(Process.getpgrp) if Terminal.tty?
+      return if @consecutive_read_errors < MAX_CONSECUTIVE_READ_ERRORS
+
+      $stderr.puts "rubish: read error: #{error.message}"
+      throw(:exit, @last_status || 0)
     end
 
     # Execute a shell command from bind -x key binding
