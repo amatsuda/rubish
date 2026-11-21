@@ -318,26 +318,25 @@ class TestPrintf < Test::Unit::TestCase
 
   def test_printf_q_single_quote
     output = capture_output { Rubish::Builtins.run('printf', ['%q', "it's"]) }
-    # Should escape the single quote using $'...' syntax
-    assert_match(/\$'it\\'s'/, output)
+    # bash escapes the quote with a backslash
+    assert_equal %q(it\'s), output
   end
 
   def test_printf_q_double_quote
     output = capture_output { Rubish::Builtins.run('printf', ['%q', 'say "hello"']) }
-    # Double quotes inside single quotes are safe
-    assert_match(/'say "hello"'/, output)
+    assert_equal %q(say\ \"hello\"), output
   end
 
   def test_printf_q_special_chars
     output = capture_output { Rubish::Builtins.run('printf', ['%q', 'a*b?c']) }
-    # Glob characters should be quoted
-    assert_match(/^'a\*b\?c'$/, output)
+    # Glob characters are escaped
+    assert_equal %q(a\*b\?c), output
   end
 
   def test_printf_q_dollar_sign
     output = capture_output { Rubish::Builtins.run('printf', ['%q', '$HOME']) }
-    # Dollar sign should be quoted to prevent expansion
-    assert_match(/'\$HOME'/, output)
+    # Dollar sign is escaped to prevent expansion
+    assert_equal %q(\$HOME), output
   end
 
   def test_printf_q_backslash
@@ -387,20 +386,20 @@ class TestPrintf < Test::Unit::TestCase
 
   def test_printf_q_semicolon
     output = capture_output { Rubish::Builtins.run('printf', ['%q', 'cmd1; cmd2']) }
-    # Semicolon should be quoted
-    assert_match(/'cmd1; cmd2'/, output)
+    # Semicolon and space are escaped
+    assert_equal 'cmd1\;\ cmd2', output
   end
 
   def test_printf_q_pipe
     output = capture_output { Rubish::Builtins.run('printf', ['%q', 'a|b']) }
-    # Pipe should be quoted
-    assert_match(/'a\|b'/, output)
+    # Pipe is escaped
+    assert_equal %q(a\|b), output
   end
 
   def test_printf_q_parentheses
     output = capture_output { Rubish::Builtins.run('printf', ['%q', '(subshell)']) }
-    # Parentheses should be quoted
-    assert_match(/'\(subshell\)'/, output)
+    # Parentheses are escaped
+    assert_equal '\(subshell\)', output
   end
 
   def test_printf_q_via_repl

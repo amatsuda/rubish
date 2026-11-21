@@ -407,16 +407,9 @@ module Rubish
         } + "'"
       end
 
-      # For strings with single quotes, use $'...' syntax
-      if str.include?("'")
-        return "$'" + str.gsub(/['\\]/) { |c|
-          c == "'" ? "\\'" : '\\\\'
-        } + "'"
-      end
-
-      # For other special characters, use single quotes
-      # (single quotes preserve everything literally except single quote itself)
-      "'" + str + "'"
+      # Printable text with special characters: backslash-escape each one,
+      # as bash does (`a\ b\'c`)
+      str.gsub(/[^a-zA-Z0-9_\-.\/:@%+=,]/) { |c| "\\#{c}" }
     end
 
     # Integer value of a numeric printf argument with strtol semantics: 0x
