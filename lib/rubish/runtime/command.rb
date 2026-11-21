@@ -23,14 +23,14 @@ module Rubish
     # Give terminal control to a process group
     def self.set_foreground(pgid)
       libc.tcsetpgrp(STDIN_FD, pgid)
-    rescue StandardError
-      # Not a tty, no terminal control, or fiddle unavailable
+    rescue StandardError, LoadError
+      # Not a tty, no terminal control, or fiddle not installed
     end
 
     # Get current foreground process group
     def self.get_foreground
       libc.tcgetpgrp(STDIN_FD)
-    rescue StandardError
+    rescue StandardError, LoadError
       nil
     end
 
