@@ -2680,7 +2680,7 @@ module Rubish
           i += 1
           opt_name = args[i]
           if opt_name
-            set_long_option(opt_name, true)
+            return ExitStatus.new(2) if set_long_option(opt_name, true) == :invalid
           else
             # set -o with no option name lists all options as a table
             list_set_options(reusable: false)
@@ -2691,7 +2691,7 @@ module Rubish
           i += 1
           opt_name = args[i]
           if opt_name
-            set_long_option(opt_name, false)
+            return ExitStatus.new(2) if set_long_option(opt_name, false) == :invalid
           else
             # set +o prints commands that recreate the current settings
             list_set_options(reusable: true)
@@ -2820,7 +2820,10 @@ module Rubish
         'restricted' => 'r'
       }
       flag = mapping[name]
-      return unless flag
+      unless flag
+        $stderr.puts "rubish: set: #{name}: invalid option name"
+        return :invalid
+      end
 
       # Handle restricted mode specially
       if name == 'restricted'
