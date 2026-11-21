@@ -293,7 +293,7 @@ module Rubish
       value = __param_value(var_name)
 
       case operator
-      when 'Q' then value.nil? ? "''" : "'" + value.gsub("'") { "'\\''" } + "'"
+      when 'Q' then value.nil? ? '' : "'" + value.gsub("'") { "'\\''" } + "'"
       when 'E' then value.nil? ? '' : Builtins.process_escape_sequences(value)
       when 'P' then value.nil? ? '' : expand_prompt(value)
       when 'A'

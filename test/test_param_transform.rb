@@ -38,10 +38,11 @@ class TestParamTransform < Test::Unit::TestCase
     assert_equal "'it'\\''s a test'\n", File.read(output_file)
   end
 
+  # An unset variable has no value to quote: bash expands it to nothing
   def test_transform_q_unset
     ENV.delete('UNSET_VAR')
     execute("echo ${UNSET_VAR@Q} > #{output_file}")
-    assert_equal "''\n", File.read(output_file)
+    assert_equal "\n", File.read(output_file)
   end
 
   def test_transform_q_empty
