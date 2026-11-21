@@ -3,7 +3,7 @@
 module Rubish
   class Job
     attr_reader :id, :pid, :pgid, :command
-    attr_accessor :status
+    attr_accessor :status, :termsig
 
     def initialize(id:, pid:, pgid:, command:)
       @id = id
@@ -25,17 +25,32 @@ module Rubish
       @status == :done
     end
 
+    # What strsignal gives for the common ones; bash prints these for a job
+    # that a signal ended, followed by the signal number
+    SIGNAL_DESCRIPTIONS = {
+      'HUP' => 'Hangup', 'INT' => 'Interrupt', 'QUIT' => 'Quit', 'ABRT' => 'Abort trap',
+      'KILL' => 'Killed', 'SEGV' => 'Segmentation fault', 'PIPE' => 'Broken pipe',
+      'ALRM' => 'Alarm clock', 'TERM' => 'Terminated', 'USR1' => 'User defined signal 1',
+      'USR2' => 'User defined signal 2'
+    }.freeze
+
     def status_string
       case @status
       when :running then 'Running'
       when :stopped then 'Stopped'
-      when :done then 'Done'
+      when :done
+        return 'Done' unless @termsig
+
+        name = Signal.signame(@termsig) || @termsig.to_s
+        "#{SIGNAL_DESCRIPTIONS.fetch(name, "Signal #{name}")}: #{@termsig}"
       else @status.to_s
       end
     end
 
+    # bash's layout: `[1]+  Running                 sleep 1 &`, with + for the
+    # current job and - for the previous one
     def to_s
-      "[#{@id}] #{status_string.ljust(10)} #{@command}"
+      format('[%d]%s  %-24s%s', @id, JobManager.instance.marker(self), status_string, @command)
     end
   end
 
@@ -93,8 +108,20 @@ module Rubish
         job.status = :stopped
       elsif status.exited? || status.signaled?
         job.status = :done
+        job.termsig = status.termsig if status.signaled?
       end
       job
+    end
+
+    # `+` for the most recent job, `-` for the one before it, as bash marks
+    # the current and previous jobs
+    def marker(job)
+      recent = @jobs.values.last(2).reverse
+      case recent.index(job)
+      when 0 then '+'
+      when 1 then '-'
+      else ' '
+      end
     end
 
     def check_background_jobs
@@ -105,10 +132,10 @@ module Rubish
 
         job = update_status(pid, status)
         if job&.done?
-          puts "[#{job.id}]  Done                    #{job.command}"
+          puts job
           remove(job.id)
         elsif job&.stopped?
-          puts "[#{job.id}]  Stopped                 #{job.command}"
+          puts job
         end
       end
     rescue Errno::ECHILD
