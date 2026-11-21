@@ -1428,9 +1428,13 @@ module Rubish
     attr_reader :status
     attr_accessor :stdin, :stdout, :stderr, :pipe_stdout
 
-    def initialize(content, &block)
+    # compound: the block is a compound command (brace group, loop,
+    # conditional) that runs when called, rather than one that builds a
+    # Command or Pipeline to run afterwards
+    def initialize(content, compound: false, &block)
       @content = content
       @block = block
+      @compound = compound
       @stdin = nil
       @stdout = nil
       @stderr = nil
@@ -1460,6 +1464,8 @@ module Rubish
         @status = RestrictedStatus.new
         return self
       end
+
+      return run_compound if @compound
 
       cmd = @block.call
       if cmd.is_a?(Command) || cmd.is_a?(Pipeline)
@@ -1509,6 +1515,45 @@ module Rubish
           reader.close unless reader.closed?
           @status = cmd.status
         end
+      end
+      self
+    end
+
+    # A compound command runs in the shell process, so the content becomes
+    # the shell's stdin for the duration: builtins such as `read` see it,
+    # and so do external commands in the body, which inherit fd 0. The
+    # content sits in an unlinked temporary file rather than a pipe, so a
+    # body larger than the pipe buffer cannot deadlock and `read` can hand
+    # unread bytes back to the next reader (see Builtins#read_input_line).
+    def run_compound
+      Rubish.require_library('tempfile')
+      content_file = Tempfile.create('rubish-heredoc')
+      content_file.write(@content)
+      content_file.flush
+      content_file.rewind
+      File.unlink(content_file.path)
+
+      original_stdin = $stdin.dup
+      saved_out, saved_err = $stdout, $stderr
+      _, out, err = effective_streams
+      begin
+        $stdin.reopen(content_file)
+        case out
+        when IO then $stdout = out
+        when :stderr then $stdout = saved_err
+        end
+        case err
+        when IO then $stderr = err
+        when :stdout then $stderr = saved_out
+        end
+        result = @block.call
+        @status = ExitStatus.new(Subshell.exit_code_for(result))
+      ensure
+        [$stdout, $stderr].each { |io| io.flush if io.respond_to?(:flush) && !io.closed? }
+        $stdout, $stderr = saved_out, saved_err
+        $stdin.reopen(original_stdin)
+        original_stdin.close
+        content_file.close
       end
       self
     end

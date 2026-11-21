@@ -1229,17 +1229,20 @@ module Rubish
       "begin; #{generate_loop_body(node.body)}; end"
     end
 
+    # A compound command (`while read ...; done <<EOF`) runs in the shell
+    # process with the content as its stdin; a simple command or pipeline is
+    # built by the block and run afterwards
     def generate_heredoc(node)
       cmd_code = generate(node.command)
       # Content is set by REPL/source before execution
       # At codegen time, we generate a call to __heredoc with placeholder
-      "__heredoc(#{node.delimiter.inspect}, #{node.expand}, #{node.strip_tabs}) { #{cmd_code} }"
+      "__heredoc(#{node.delimiter.inspect}, #{node.expand}, #{node.strip_tabs}, #{compound_command?(node.command)}) { #{cmd_code} }"
     end
 
     def generate_herestring(node)
       cmd_code = generate(node.command)
       string_expr = generate_string_arg(node.string)
-      "__herestring(#{string_expr}) { #{cmd_code} }"
+      "__herestring(#{string_expr}, #{compound_command?(node.command)}) { #{cmd_code} }"
     end
 
     def generate_coproc(node)

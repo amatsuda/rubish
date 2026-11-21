@@ -1360,7 +1360,7 @@ module Rubish
       ExitStatus.new(status ? 1 : 0)
     end
 
-    def __heredoc(delimiter, expand, strip_tabs, &block)
+    def __heredoc(delimiter, expand, strip_tabs, compound = false, &block)
       content = @heredoc_content || ''
 
       # Apply tab stripping if <<- was used
@@ -1374,15 +1374,15 @@ module Rubish
       end
 
       # Return a HeredocCommand that can be redirected and run later
-      HeredocCommand.new(content, &block)
+      HeredocCommand.new(content, compound: compound, &block)
     end
 
-    def __herestring(string, &block)
+    def __herestring(string, compound = false, &block)
       # Herestring provides a single string as stdin (with trailing newline)
       content = "#{string}\n"
 
       # Return a HeredocCommand that can be redirected and run later
-      HeredocCommand.new(content, &block)
+      HeredocCommand.new(content, compound: compound, &block)
     end
 
     # Thread-safe lazy_load for eval "$(cmd)" pattern
