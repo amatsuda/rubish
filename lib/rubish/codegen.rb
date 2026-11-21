@@ -1445,6 +1445,10 @@ module Rubish
         return "__array_keys(#{var_name.inspect}, #{subscript.inspect})"
       end
 
+      # ${@} and ${*} are the parameters themselves
+      return 'positional_params.join(" ")' if content == '@'
+      return 'join_by_ifs(positional_params)' if content == '*'
+
       # Handle ${#arr[@]} or ${#arr[*]} - array length
       if content =~ /\A#([a-zA-Z_][a-zA-Z0-9_]*)\[[@*]\]\z/
         var_name = $1

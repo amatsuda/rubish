@@ -505,6 +505,8 @@ module Rubish
     # than collapse to a single string. Handles both regular arrays
     # and special arrays (PIPESTATUS / pipestatus, GROUPS, FUNCNAME, …).
     def __array_values(var_name)
+      return (positional_params || []).map(&:to_s) if var_name == '@' || var_name == '*'
+
       var_name = Builtins.array_name(var_name)
       values = get_special_array_values(var_name)
       case values
@@ -761,8 +763,6 @@ module Rubish
         __with_stdin_redirect(target) { yield }
       when '2>'
         __with_stderr_redirect(target) { yield }
-      else
-        yield
       when '2>>'
         __with_stderr_redirect(target, 'a') { yield }
       when '>&', '2>&', '<&'
@@ -797,7 +797,7 @@ module Rubish
         ensure
           $stdin = old
         end
-      end
+      else
         __with_dup_output_stream(operator == '>&' ? :stdout : :stderr, io) { yield }
       end
     end
@@ -814,10 +814,12 @@ module Rubish
       old = stream == :stdout ? $stdout : $stderr
       begin
         stream == :stdout ? $stdout = copy : $stderr = copy
-    end
+        yield
       ensure
         stream == :stdout ? $stdout = old : $stderr = old
         copy.close unless copy.closed?
+      end
+    end
 
     def __with_stdout_redirect(file, mode)
       old_stdout = $stdout

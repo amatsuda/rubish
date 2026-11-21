@@ -410,6 +410,10 @@ module Rubish
       # ${-} - current option flags
       return Builtins.current_options if content == '-'
 
+      # ${@} and ${*} are the parameters themselves
+      return @positional_params.join(' ') if content == '@'
+      return Builtins.join_by_ifs(@positional_params) if content == '*'
+
       # ${+VAR} - zsh parameter-is-set test. Evaluates to '1' if the
       # variable is set (even to empty), '0' if not. starship and other
       # zsh prompt themers gate behaviour on this — e.g. precmd uses

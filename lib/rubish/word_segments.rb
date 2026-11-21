@@ -134,7 +134,7 @@ module Rubish
           pieces << [:prefix_names, match[6]]
         elsif match[4] || match[5]
           # ${@:off[:len]}
-          pieces << [:slice, '@', match[5]]
+          pieces << (match[5] ? [:slice, '@', match[5]] : [:array, '@'])
         elsif match[3]
           # ${arr[@]:off[:len]}
           pieces << [:slice, match[2], match[3]]
