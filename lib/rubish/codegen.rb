@@ -789,24 +789,38 @@ module Rubish
       # because they don't return Command objects that implement the | operator
       if pipeline_compound_command?(node)
         "__subshell { #{generate(node)} }"
-      elsif node.is_a?(AST::Redirect) && pipeline_compound_command?(node.command)
-        # Redirect wrapping a compound command - wrap in subshell and apply redirect
-        target = generate_string_arg(node.target)
-        op_method = case node.operator
-                    when '>' then 'redirect_out'
-                    when '>|' then 'redirect_clobber'
-                    when '>>' then 'redirect_append'
-                    when '<' then 'redirect_in'
-                    when '2>' then 'redirect_err'
-                    when '2>>' then 'redirect_err_append'
-                    when '>&' then 'dup_out'
-                    when '2>&' then 'dup_err'
-                    when '<&' then 'dup_in'
-                    else 'redirect_out'
-                    end
-        "__subshell { #{generate(node.command)} }.#{op_method}(#{target})"
+      elsif node.is_a?(AST::Redirect)
+        # Redirections wrapping a compound command (`{ ...; } >f 2>&1 | cmd`):
+        # wrap the command in a subshell and apply them in the order written.
+        # The parser nests each later redirection around the earlier ones.
+        chain = []
+        inner = node
+        while inner.is_a?(AST::Redirect)
+          chain.unshift(inner)
+          inner = inner.command
+        end
+        return generate(node) unless pipeline_compound_command?(inner)
+
+        chain.inject("__subshell { #{generate(inner)} }") do |code, redirect|
+          "#{code}.#{pipeline_redirect_method(redirect.operator)}(#{generate_string_arg(redirect.target)})"
+        end
       else
         generate(node)
+      end
+    end
+
+    def pipeline_redirect_method(operator)
+      case operator
+      when '>' then 'redirect_out'
+      when '>|' then 'redirect_clobber'
+      when '>>' then 'redirect_append'
+      when '<' then 'redirect_in'
+      when '2>' then 'redirect_err'
+      when '2>>' then 'redirect_err_append'
+      when '>&' then 'dup_out'
+      when '2>&' then 'dup_err'
+      when '<&' then 'dup_in'
+      else 'redirect_out'
       end
     end
 

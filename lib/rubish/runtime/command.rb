@@ -87,6 +87,8 @@ module Rubish
   class Command
     attr_reader :name, :pid, :status, :restricted_failed, :noclobber_failed, :fd_redirects
     attr_accessor :stdin, :stdout, :stderr, :block, :prefix_env
+    # The pipe a Pipeline gave this element as its stdout (see effective_streams)
+    attr_accessor :pipe_stdout
 
     # Class-level accessors for function support in pipelines
     @function_checker = nil
@@ -198,6 +200,9 @@ module Rubish
       out, err = @stdout, @stderr
       out = err if out == :stderr && err.is_a?(IO) && (@stderr_seq || 0) < (@stdout_seq || 0)
       err = @stdout if err == :stdout && @stdout.is_a?(IO) && (@stdout_seq || 0) < (@stderr_seq || 0)
+      # In a pipeline the pipe was stdout before any redirection, so
+      # `2>&1 >file` sends stderr down the pipe
+      err = @pipe_stdout if err == :stdout && @pipe_stdout
       [@stdin, out, err]
     end
 
@@ -910,6 +915,7 @@ module Rubish
 
         # Set stdout to next pipe (except last command, but we're not forking last with lastpipe)
         cmd.stdout ||= pipes[i][1] if i < @commands.length - 1
+        cmd.pipe_stdout = pipes[i][1] if i < @commands.length - 1
 
         fork do
           begin
@@ -1102,6 +1108,7 @@ module Rubish
 
         # Set stdout to next pipe
         cmd.stdout ||= pipes[i][1]
+        cmd.pipe_stdout = pipes[i][1]
 
         fork do
           # Close unused pipe ends
@@ -1182,6 +1189,9 @@ module Rubish
       out, err = @stdout, @stderr
       out = err if out == :stderr && err.is_a?(IO) && (@stderr_seq || 0) < (@stdout_seq || 0)
       err = @stdout if err == :stdout && @stdout.is_a?(IO) && (@stdout_seq || 0) < (@stderr_seq || 0)
+      # In a pipeline the pipe was stdout before any redirection, so
+      # `2>&1 >file` sends stderr down the pipe
+      err = @pipe_stdout if err == :stdout && @pipe_stdout
       [@stdin, out, err]
     end
 
@@ -1204,7 +1214,7 @@ module Rubish
     end
 
     attr_reader :status
-    attr_accessor :stdin, :stdout, :stderr
+    attr_accessor :stdin, :stdout, :stderr, :pipe_stdout
 
     def initialize(&block)
       @block = block
@@ -1410,11 +1420,13 @@ module Rubish
   class HeredocCommand
     # Same interface as Command#effective_streams, for pipelines mixing kinds
     def effective_streams
-      [@stdin, @stdout, @stderr]
+      err = @stderr
+      err = @pipe_stdout if err == :stdout && @pipe_stdout && @stdout.equal?(@pipe_stdout)
+      [@stdin, @stdout, err]
     end
 
     attr_reader :status
-    attr_accessor :stdin, :stdout, :stderr
+    attr_accessor :stdin, :stdout, :stderr, :pipe_stdout
 
     def initialize(content, &block)
       @content = content
