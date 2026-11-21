@@ -92,6 +92,9 @@ module Rubish
       @state.executor = ->(line) { execute(line); @last_status }
       @state.last_status_setter = ->(status) { @last_status = status }
       @state.script_name_getter = -> { @script_name }
+      # $? as seen by a builtin: generated code and function bodies run in
+      # the context, and the fast path below keeps it current too
+      @state.last_status_getter = -> { @context.last_status }
       @state.script_name_setter = ->(name) { @script_name = name }
       @state.positional_params_getter = -> { @positional_params }
       @state.positional_params_setter = ->(params) { @positional_params = params }
@@ -1123,6 +1126,7 @@ module Rubish
           result = with_prefix_env(ast.env) { Builtins.run(builtin_name, expanded_args) }
           Builtins.set_var('_', (expanded_args.last || builtin_name).to_s)
           @last_status = result.is_a?(ExitStatus) ? result.exitstatus : (result ? 0 : 1)
+          @context.last_status = @last_status
           @pipestatus = [@last_status]
           run_err_trap_if_failed
           check_errexit
@@ -1156,6 +1160,7 @@ module Rubish
           expanded_args = expand_args_for_builtin(ast.args)
           @last_status = call_function(ast.name, expanded_args).exitstatus
           @pipestatus = [@last_status]
+          @context.last_status = @last_status
           # Don't run ERR trap here - it was already handled inside the function if errtrace is on
           check_errexit
         rescue NounsetError

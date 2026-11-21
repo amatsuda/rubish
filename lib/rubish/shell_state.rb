@@ -36,7 +36,7 @@ module Rubish
     attr_accessor :history_transient
 
     # Execution callbacks
-    attr_accessor :executor, :command_executor, :heredoc_content_setter, :last_status_setter
+    attr_accessor :executor, :command_executor, :heredoc_content_setter, :last_status_setter, :last_status_getter
 
     # Script/position callbacks
     attr_accessor :script_name_getter, :script_name_setter

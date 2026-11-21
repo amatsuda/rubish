@@ -2865,7 +2865,8 @@ module Rubish
     end
 
     def return_(args)
-      code = args.first&.to_i || 0
+      # Without an argument, the status of the last command run
+      code = args.first ? args.first.to_i : (@state.last_status_getter&.call || 0)
       throw :return, code
     rescue UncaughtThrowError
       # No enclosing function or sourced script is catching :return
