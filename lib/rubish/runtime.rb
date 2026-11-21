@@ -1390,25 +1390,63 @@ module Rubish
     # exec is one command of a list: `exec 2>log; echo oops >&2`.
     def handle_exec_command(cmd)
       has_redirections = cmd.stdin || cmd.stdout || cmd.stderr
+      has_fd_redirections = cmd.fd_redirects && !cmd.fd_redirects.empty?
 
-      if cmd.args.empty? && has_redirections
-        # exec with only redirections - modify shell's FDs permanently
-        apply_exec_redirections(cmd)
-        @last_status = 0
-      elsif cmd.args.empty? && !has_redirections
-        # exec with no args and no redirections - just succeed
-        @last_status = 0
+      if cmd.args.empty?
+        # exec with only redirections - modify the shell's descriptors permanently
+        apply_exec_redirections(cmd) if has_redirections
+        @last_status = has_fd_redirections ? apply_exec_fd_redirections(cmd) : 0
+        run_err_trap_if_failed
       else
-        # exec with a command - need to apply redirections then exec
-        if has_redirections
-          # Apply redirections before exec
-          apply_exec_redirections(cmd)
-        end
-        # Run exec builtin (which will replace the process)
+        # exec with a command: apply the redirections, then replace the
+        # process. Descriptors opened here are inherited by the new program.
+        apply_exec_redirections(cmd) if has_redirections
+        apply_exec_fd_redirections(cmd) if has_fd_redirections
         success = Builtins.run('exec', cmd.args)
         @last_status = success ? 0 : 1
         run_err_trap_if_failed
       end
+    end
+
+    # Descriptors >= 3 opened with `exec N>file`, `exec N<file` or
+    # `exec N>&M`, keyed by the shell-level number N. The IO's own fileno is
+    # unrelated: Ruby reserves the low descriptors for itself, so N is only
+    # a name. `>&N`, `<&N` and `read -u N` look it up here, and children get
+    # it as their fd N through exec's redirect options.
+    def shell_fds
+      Builtins.current_state.shell_fds
+    end
+
+    # Returns the exit status: 1 if any descriptor could not be set up
+    def apply_exec_fd_redirections(cmd)
+      status = 0
+      cmd.fd_redirects.each do |fd, spec|
+        case spec
+        when :close
+          shell_fds.delete(fd)&.close
+        when Integer
+          source = Command.standard_or_shell_fd(spec)
+          unless source
+            $stderr.puts "rubish: #{spec}: Bad file descriptor"
+            status = 1
+            next
+          end
+          shell_fds.delete(fd)&.close
+          shell_fds[fd] = source.dup
+        when Array
+          path, mode = spec
+          begin
+            io = File.open(path, mode)
+          rescue SystemCallError => e
+            $stderr.puts "rubish: #{path}: #{e.message.sub(/ @ .*/, '')}"
+            status = 1
+            next
+          end
+          shell_fds.delete(fd)&.close
+          shell_fds[fd] = io
+        end
+      end
+      status
     end
 
     # Apply exec redirections to the current shell permanently

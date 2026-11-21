@@ -27,6 +27,9 @@ module Rubish
 
     # History state
     attr_accessor :history_timestamps
+
+    # Descriptors >= 3 opened with `exec N>file`, keyed by the shell-level number
+    attr_accessor :shell_fds
     attr_accessor :history_transient
 
     # Execution callbacks
@@ -84,6 +87,8 @@ module Rubish
     attr_accessor :push_line_stack, :push_line_pending
 
     def initialize
+      @shell_fds = {}
+
       # Variables state
       @shell_vars = {}
       @arrays = {}

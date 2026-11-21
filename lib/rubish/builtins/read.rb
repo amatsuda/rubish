@@ -114,8 +114,19 @@ module Rubish
     end
 
     def read_input_line(opts)
-      input_stream = opts[:fd] ? IO.new(opts[:fd]) : $stdin
+      input_stream = opts[:fd] ? (Command.shell_fd(opts[:fd]) || IO.new(opts[:fd])) : $stdin
+      result = read_input_line_from(input_stream, opts)
+      # A descriptor shared with later commands (`exec 5<file`) must not
+      # keep read-ahead in Ruby's buffer: hand the unread bytes back so the
+      # next reader starts right after this line. IO#pos does that for
+      # seekable streams and raises for pipes, where nothing is lost.
+      input_stream.pos if opts[:fd]
+      result
+    rescue SystemCallError
+      result
+    end
 
+    def read_input_line_from(input_stream, opts)
       # Use readline if -e specified
       if opts[:use_readline] && $stdin.tty?
         return read_with_readline(opts)

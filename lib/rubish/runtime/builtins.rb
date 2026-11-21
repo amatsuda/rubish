@@ -5783,11 +5783,12 @@ module Rubish
 
       # Execute
       begin
+        fd_options = Command.child_fd_options(nil) || {}
         if clear_env
           # Clear environment and exec
-          Kernel.exec([command, exec_argv0], *command_args, unsetenv_others: true)
+          Kernel.exec([command, exec_argv0], *command_args, fd_options.merge(unsetenv_others: true))
         else
-          Kernel.exec([command, exec_argv0], *command_args)
+          Kernel.exec([command, exec_argv0], *command_args, fd_options)
         end
       rescue Errno::ENOENT
         $stderr.puts "exec: #{cmd_args.first}: not found"

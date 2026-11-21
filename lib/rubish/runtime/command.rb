@@ -147,6 +147,36 @@ module Rubish
       end
     end
 
+    # A descriptor the shell opened with `exec N>file`, or nil
+    def self.shell_fd(n)
+      Builtins.current_state&.shell_fds&.[](n)
+    end
+
+    # The IO behind a numeric redirect target: the standard streams for
+    # 0, 1 and 2, otherwise a descriptor opened with `exec N>file`
+    def self.standard_or_shell_fd(n)
+      case n
+      when 0 then $stdin
+      when 1 then $stdout
+      when 2 then $stderr
+      else shell_fd(n)
+      end
+    end
+
+    # Redirect options for Kernel#exec in a child: the shell's persistent
+    # descriptors under their own numbers, overlaid with this command's
+    # `N>` redirects. `N>&M` naming a persistent descriptor resolves to its
+    # IO, since exec's `fd => M` would mean the parent's real fd M.
+    def self.child_fd_options(fd_redirects)
+      options = {}
+      Builtins.current_state&.shell_fds&.each { |n, io| options[n] = io unless io.closed? }
+      fd_redirects&.each do |fd, spec|
+        persistent = spec.is_a?(Integer) && spec >= 3 ? shell_fd(spec) : nil
+        options[fd] = persistent || spec
+      end
+      options.empty? ? nil : options
+    end
+
     # Execute a command with proper error handling for command not found / permission denied
     def self.safe_exec(cmd_name, cmd_path, *args, fd_options: nil)
       child_pre_exec_hook&.call
@@ -374,8 +404,15 @@ module Rubish
         @stdout = :closed
         self
       else
-        # >&N for an fd the shell never opened is an error, not a file "N"
-        return bad_file_descriptor(target) if target.match?(/\A\d+\z/)
+        # >&N: a descriptor opened with `exec N>file`; any other number is
+        # an error, not a file named "N"
+        if target.match?(/\A\d+\z/)
+          io = Command.shell_fd(target.to_i)
+          return bad_file_descriptor(target) unless io
+
+          @stdout = io.dup
+          return self
+        end
 
         # >&file - redirect to file
         redirect_out(target)
@@ -401,7 +438,13 @@ module Rubish
         @stdin = :closed
         self
       else
-        return bad_file_descriptor(target) if target.match?(/\A\d+\z/)
+        if target.match?(/\A\d+\z/)
+          io = Command.shell_fd(target.to_i)
+          return bad_file_descriptor(target) unless io
+
+          @stdin = io.dup
+          return self
+        end
 
         # <&file - treat as input redirect
         redirect_in(target)
@@ -422,7 +465,13 @@ module Rubish
         @stderr = :closed
         self
       else
-        return bad_file_descriptor(target) if target.match?(/\A\d+\z/)
+        if target.match?(/\A\d+\z/)
+          io = Command.shell_fd(target.to_i)
+          return bad_file_descriptor(target) unless io
+
+          @stderr = io.dup
+          return self
+        end
 
         redirect_err(target)
       end
@@ -532,7 +581,7 @@ module Rubish
           $stderr.puts "rubish: #{cmd_path}: Is a directory"
           exit(126)
         else
-          Command.safe_exec(name, cmd_path, *cmd_args, fd_options: @fd_redirects)
+          Command.safe_exec(name, cmd_path, *cmd_args, fd_options: Command.child_fd_options(@fd_redirects))
         end
       end
 
@@ -613,7 +662,7 @@ module Rubish
         # Set prefix environment variables (e.g., FOO=bar cmd)
         @prefix_env&.each { |k, v| ENV[k] = v }
 
-        Command.safe_exec(name, cmd_path, *cmd_args, fd_options: @fd_redirects)
+        Command.safe_exec(name, cmd_path, *cmd_args, fd_options: Command.child_fd_options(@fd_redirects))
       end
 
       writer.close
@@ -880,7 +929,7 @@ module Rubish
             result = Builtins.run(cmd.name, cmd.args)
             exit(result ? 0 : 1)
           else
-            Command.safe_exec(cmd.name, cmd.name, *cmd.args, fd_options: cmd.fd_redirects)
+            Command.safe_exec(cmd.name, cmd.name, *cmd.args, fd_options: Command.child_fd_options(cmd.fd_redirects))
           end
         end.tap do |pid|
           # Set up process group in parent (first process becomes leader)
@@ -926,7 +975,7 @@ module Rubish
             pid = fork do
               $stdout.reopen(last_cmd.stdout) if last_cmd.stdout
               $stderr.reopen(last_cmd.stderr) if last_cmd.stderr
-              Command.safe_exec(last_cmd.name, last_cmd.name, *last_cmd.args, fd_options: last_cmd.fd_redirects)
+              Command.safe_exec(last_cmd.name, last_cmd.name, *last_cmd.args, fd_options: Command.child_fd_options(last_cmd.fd_redirects))
             end
             Process.wait(pid)
             last_status = $?
@@ -1046,7 +1095,7 @@ module Rubish
             result = Command.call_function(cmd.name, cmd.args)
             exit(result ? 0 : 1)
           else
-            Command.safe_exec(cmd.name, cmd.name, *cmd.args, fd_options: cmd.fd_redirects)
+            Command.safe_exec(cmd.name, cmd.name, *cmd.args, fd_options: Command.child_fd_options(cmd.fd_redirects))
           end
         end
       end
