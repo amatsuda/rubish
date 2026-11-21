@@ -611,6 +611,16 @@ module Rubish
           $stderr.puts "rubish: #{e.message}"
           @last_status = 1
           return
+        rescue NameError => e
+          if e.message.start_with?('uninitialized constant') && line.match?(/\A[A-Z]\w*\z/)
+            # Not a Ruby constant after all: it is an unknown command
+            $stderr.puts "rubish: #{line}: command not found"
+            @last_status = 127
+          else
+            $stderr.puts "rubish: #{e.message}"
+            @last_status = 1
+          end
+          return
         rescue StandardError => e
           $stderr.puts "rubish: #{e.message}"
           @last_status = 1

@@ -77,8 +77,15 @@ class TestRubyExpression < Test::Unit::TestCase
   # Error handling
   # ==========================================================================
 
-  def test_undefined_constant_error
+  # A bare capitalized word with no such constant is an unknown command
+  def test_undefined_constant_alone_is_command_not_found
     err = capture_stderr { execute('UndefinedConstant') }
+    assert_equal "rubish: UndefinedConstant: command not found\n", err
+    assert_equal 127, @repl.instance_variable_get(:@last_status)
+  end
+
+  def test_undefined_constant_error
+    err = capture_stderr { execute('UndefinedConstant.new') }
     assert_match(/uninitialized constant/, err)
     assert_equal 1, @repl.instance_variable_get(:@last_status)
   end
