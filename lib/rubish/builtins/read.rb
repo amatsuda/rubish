@@ -88,6 +88,10 @@ module Rubish
 
       # Read input
       @read_delimiter_missing = false
+      if opts[:fd] && read_input_stream(opts[:fd]).nil?
+        $stderr.puts "rubish: read: #{opts[:fd]}: invalid file descriptor: Bad file descriptor"
+        return false
+      end
       line = read_input_line(opts)
       return ExitStatus.new(142) if line == :timeout # 128 + SIGALRM, as bash
       if line.nil?
@@ -126,8 +130,17 @@ module Rubish
       partial ? false : result
     end
 
+    # The stream `read -u N` reads: a standard stream, a descriptor the shell
+    # opened (`exec 5<file`), or one inherited open; nil for a closed or
+    # unusable descriptor. The wrapper must not close the fd when collected.
+    def read_input_stream(fd)
+      Command.standard_or_shell_fd(fd) || IO.for_fd(fd, autoclose: false)
+    rescue ArgumentError, Errno::EBADF
+      nil
+    end
+
     def read_input_line(opts)
-      input_stream = opts[:fd] ? (Command.shell_fd(opts[:fd]) || IO.new(opts[:fd])) : $stdin
+      input_stream = opts[:fd] ? read_input_stream(opts[:fd]) : $stdin
       result = read_input_line_from(input_stream, opts)
       # A descriptor shared with other readers (`exec 5<file`, or the loop's
       # `done < file` seen by external commands in the body) must not keep
