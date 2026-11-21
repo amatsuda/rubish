@@ -248,7 +248,7 @@ module Rubish
         'C' => false,  # noclobber: don't overwrite files with >
         'a' => false,  # allexport: export all variables
         'b' => false,  # notify: report job status immediately
-        'h' => false,  # hashall: hash commands
+        'h' => true,  # hashall: remember command locations, on by default as in bash
         'm' => false,  # monitor: job control
         'pipefail' => false,  # pipefail: pipeline fails if any command fails
         'globstar' => false,  # globstar: ** matches directories recursively
