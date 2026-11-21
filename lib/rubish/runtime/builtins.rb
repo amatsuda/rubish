@@ -2281,6 +2281,11 @@ module Rubish
     end
 
     def unalias(args)
+      if args == ['-a']
+        @state.aliases.clear
+        return true
+      end
+
       if args.empty?
         puts 'unalias: usage: unalias name [name ...]'
         return false
