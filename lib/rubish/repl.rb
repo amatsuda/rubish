@@ -246,12 +246,16 @@ module Rubish
         @original_termios = nil
       end
 
+      # Put the terminal in raw mode to capture all keystrokes. This runs
+      # synchronously, before the reader thread exists: done from the
+      # thread it could race the restore in inject_buffered_input, and
+      # whichever stty finished last would win, sometimes leaving the
+      # terminal raw for the whole session.
+      run_stty('stty raw -echo') if @original_termios
+
       # Start a thread to read stdin in non-blocking mode
       @stdin_buffer_thread = Thread.new do
         begin
-          # Put terminal in raw mode to capture all keystrokes
-          run_stty('stty raw -echo') if @original_termios
-
           while @stdin_buffering
             # Check if input is available (with short timeout)
             if IO.select([$stdin], nil, nil, 0.05)
@@ -265,28 +269,15 @@ module Rubish
           end
         rescue IOError, SystemCallError
           # Terminal I/O may fail (e.g., not a tty, pipe closed)
-        ensure
-          # Restore terminal settings
-          run_stty("stty #{@original_termios}") if @original_termios
         end
       end
     end
 
     # Stop stdin buffering and inject buffered content into Reline
     def inject_buffered_input
-      # Always restore terminal settings first, even if no thread was started
-      if @original_termios
-        begin
-          run_stty("stty #{@original_termios}")
-        rescue Errno::ENOENT, IOError
-          # stty may not be available
-        end
-        @original_termios = nil
-      end
-
-      # Stop the buffering thread if it's running
+      # Stop the reader thread first, so nothing touches the terminal or
+      # the buffer after the settings are restored
       if @stdin_buffer_thread
-        # Signal the thread to stop
         @stdin_buffering = false
 
         begin
@@ -301,6 +292,16 @@ module Rubish
           # Thread may have already terminated
         end
         @stdin_buffer_thread = nil
+      end
+
+      # Restore terminal settings, even if no thread was started
+      if @original_termios
+        begin
+          run_stty("stty #{@original_termios}")
+        rescue Errno::ENOENT, IOError
+          # stty may not be available
+        end
+        @original_termios = nil
       end
 
       # If we have buffered input, inject it into the first readline
