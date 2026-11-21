@@ -1248,11 +1248,18 @@ module Rubish
         return '__cond_syntax_error("variable used as conditional operator")'
       end
 
-      # Convert tokens to expression parts for runtime evaluation
+      # Convert tokens to expression parts for runtime evaluation. The right
+      # operand of == / != is a pattern whose quoted parts match literally,
+      # as in a case pattern.
+      previous = nil
       parts = node.expression.map do |token|
-        case token.type
+        part = case token.type
         when :WORD
-          generate_string_arg(token.value)
+          if previous&.type == :WORD && %w[== != =].include?(previous.value)
+            generate_pattern_arg(token.value)
+          else
+            generate_string_arg(token.value)
+          end
         when :AND
           '"&&"'
         when :OR
@@ -1272,6 +1279,8 @@ module Rubish
         else
           token.value.inspect
         end
+        previous = token
+        part
       end
       "__cond_test([#{parts.join(', ')}])"
     end
