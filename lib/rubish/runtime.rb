@@ -1303,9 +1303,12 @@ module Rubish
         parent_read.close
         parent_write.close
 
-        # Redirect stdin/stdout
-        $stdin.reopen(child_read)
-        $stdout.reopen(child_write)
+        # Redirect the real descriptors: the shell's $stdin/$stdout may be a
+        # swapped Ruby object (compound redirect, embedder, test harness)
+        STDIN.reopen(child_read)
+        STDOUT.reopen(child_write)
+        $stdin = STDIN
+        $stdout = STDOUT
         child_read.close
         child_write.close
 

@@ -597,8 +597,11 @@ module Rubish
         reader: reader,
         writer: writer
       }
-      # Store file descriptors as array (bash-compatible)
+      # Store file descriptors as array (bash-compatible), and make them
+      # usable as >&N / <&N / read -u N through the shell's descriptor table
       set_array(name, [read_fd.to_s, write_fd.to_s])
+      @state.shell_fds[read_fd] = reader
+      @state.shell_fds[write_fd] = writer
       # Store PID as NAME_PID
       ENV["#{name}_PID"] = pid.to_s
     end
@@ -607,7 +610,9 @@ module Rubish
       coproc = Builtins.coprocs.delete(name)
       return unless coproc
 
-      # Close file descriptors
+      # Close file descriptors and forget their table entries
+      @state.shell_fds.delete(coproc[:read_fd])
+      @state.shell_fds.delete(coproc[:write_fd])
       coproc[:reader]&.close rescue nil
       coproc[:writer]&.close rescue nil
       # Clean up array and PID env var
