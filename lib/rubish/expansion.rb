@@ -782,7 +782,7 @@ module Rubish
 
     # Handle array assignment: arr=(a b c) or arr+=(d e) or map=([k]=v ...)
     def handle_array_assignment(var_name, elements_str, is_append)
-      if elements_str =~ /\A\s*\[/ || Builtins.assoc_array?(var_name)
+      if Builtins.assoc_array?(var_name)
         pairs = parse_assoc_array_elements(elements_str)
         if is_append
           pairs.each { |k, v| Builtins.set_assoc_element(var_name, k, v) }
@@ -798,10 +798,8 @@ module Rubish
             Builtins.compreply = elements.dup
           end
           Builtins.set_array('COMPREPLY', Builtins.compreply.dup)
-        elsif is_append
-          Builtins.array_append(var_name, elements)
         else
-          Builtins.set_array(var_name, elements)
+          Builtins.assign_array_literal(var_name, elements, append: is_append)
         end
       end
     end

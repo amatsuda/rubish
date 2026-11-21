@@ -182,6 +182,48 @@ module Rubish
       @state.arrays[name].concat(values.is_a?(Array) ? values : [values])
     end
 
+    # `[subscript]=value` element of a compound assignment
+    SUBSCRIPTED_ELEMENT = /\A\[(.+?)\]=(.*)\z/m
+
+    # Compound assignment `name=(elements)` / `name+=(elements)` with the
+    # elements already expanded. Associative arrays take `[key]=value`
+    # pairs; indexed arrays may give an element its index with `[i]=value`,
+    # after which unsubscripted elements continue from i + 1, as in bash.
+    def assign_array_literal(name, elements, append: false)
+      if assoc_array?(name)
+        pairs = {}
+        elements.each do |element|
+          if element =~ SUBSCRIPTED_ELEMENT
+            pairs[$1] = $2
+          else
+            $stderr.puts "rubish: #{name}: #{element}: must use subscript when assigning associative array"
+          end
+        end
+        if append
+          pairs.each { |key, value| set_assoc_element(name, key, value) }
+        else
+          set_assoc_array(name, pairs)
+        end
+      elsif elements.any? { |element| element.match?(SUBSCRIPTED_ELEMENT) }
+        values = append ? (get_array(name) || []).dup : []
+        index = values.length
+        elements.each do |element|
+          if element =~ SUBSCRIPTED_ELEMENT
+            index = let_evaluator.evaluate($1).to_i
+            values[index] = $2
+          else
+            values[index] = element
+          end
+          index += 1
+        end
+        set_array(name, values)
+      elsif append
+        array_append(name, elements)
+      else
+        set_array(name, elements)
+      end
+    end
+
     def unset_array(name)
       @state.arrays.delete(name)
     end

@@ -1356,17 +1356,16 @@ module Rubish
       # Handle array assignment: VAR=(a b c) or VAR+=(d e)
       # var_part includes the = or +=, e.g., "arr=" or "arr+="
 
-      if var_part.end_with?('+=')
-        # Append: arr+=(d e)
-        var_name = var_part.chomp('+=')
-        array_append(var_name, elements)
-      else
-        # Assign: arr=(a b c)
-        var_name = var_part.chomp('=')
-        set_array(var_name, elements)
-      end
+      append = var_part.end_with?('+=')
+      var_name = var_part.chomp(append ? '+=' : '=')
+      Builtins.assign_array_literal(var_name, elements, append: append)
 
       ExitStatus.new(0)
+    end
+
+    # `name=(elements)` given as an argument, e.g. `declare -a name=(1 2)`
+    def __array_word(var_part, elements)
+      ArrayWord.new(var_part, elements)
     end
 
     def __define_function(name, source_code = nil, params = nil, &block)
