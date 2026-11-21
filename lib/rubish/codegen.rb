@@ -120,8 +120,12 @@ module Rubish
       when String
         # Special case: $@ or "$@" as standalone arg should expand to array
         # so it becomes nothing when empty (not an empty string argument)
-        if arg == '$@' || arg == '"$@"'
+        if arg == '"$@"'
           return 'positional_params'
+        end
+        # Unquoted, every parameter is word-split and globbed
+        if %w[$@ $* ${@} ${*}].include?(arg)
+          return 'positional_params.flat_map { |p| __split_unquoted_expansion(p, true) }'
         end
         # Special case: unquoted $varname as standalone arg
         # In bash, unquoted empty variable expansion is removed (word splitting)
@@ -794,14 +798,14 @@ module Rubish
                     when '>>' then 'redirect_append'
                     when '<' then 'redirect_in'
                     when '2>' then 'redirect_err'
-                    else 'redirect_out'
-                    end
-        "__subshell { #{generate(node.command)} }.#{op_method}(#{target})"
-      else
                     when '2>>' then 'redirect_err_append'
                     when '>&' then 'dup_out'
                     when '2>&' then 'dup_err'
                     when '<&' then 'dup_in'
+                    else 'redirect_out'
+                    end
+        "__subshell { #{generate(node.command)} }.#{op_method}(#{target})"
+      else
         generate(node)
       end
     end
@@ -1429,6 +1433,9 @@ module Rubish
       # ${#@}, ${#*}, ${#} - number of positional parameters
       return 'positional_params.length.to_s' if content.match?(/\A#[@*]?\z/)
 
+      # ${#1}, ${##}, ${#?} - length of a positional or special parameter
+      return "__param_length(#{$1.inspect})" if content =~ /\A#(\d+|[#?$!-])\z/
+
       # ${N} - positional parameter (${10} and up need the braces); ${0} is $0
       if content.match?(/\A\d+\z/)
         n = content.to_i
@@ -1438,6 +1445,10 @@ module Rubish
       # ${-} - current option flags
       return 'Builtins.current_options' if content == '-'
 
+      # ${@} and ${*} are the parameters themselves
+      return 'positional_params.join(" ")' if content == '@'
+      return 'join_by_ifs(positional_params)' if content == '*'
+
       # Handle ${!arr[@]} or ${!arr[*]} - array keys/indices
       if content =~ /\A!([a-zA-Z_][a-zA-Z0-9_]*)\[([@*])\]\z/
         var_name = $1
@@ -1445,17 +1456,10 @@ module Rubish
         return "__array_keys(#{var_name.inspect}, #{subscript.inspect})"
       end
 
-      # ${@} and ${*} are the parameters themselves
-      return 'positional_params.join(" ")' if content == '@'
-      return 'join_by_ifs(positional_params)' if content == '*'
-
       # Handle ${#arr[@]} or ${#arr[*]} - array length
       if content =~ /\A#([a-zA-Z_][a-zA-Z0-9_]*)\[[@*]\]\z/
         var_name = $1
         return "__array_length(#{var_name.inspect})"
-      # ${#1}, ${##}, ${#?} - length of a positional or special parameter
-      return "__param_length(#{$1.inspect})" if content =~ /\A#(\d+|[#?$!-])\z/
-
       end
 
       # Handle ${arr[@]} or ${arr[*]} - all array elements
