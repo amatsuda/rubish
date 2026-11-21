@@ -417,7 +417,7 @@ module Rubish
       return __array_length($1) if content =~ /\A#([a-zA-Z_][a-zA-Z0-9_]*)\[[@*]\]\z/
 
       # ${!arr[@]} or ${!arr[*]} - array keys/indices
-      return __array_keys($1) if content =~ /\A!([a-zA-Z_][a-zA-Z0-9_]*)\[[@*]\]\z/
+      return __array_keys($1, $2) if content =~ /\A!([a-zA-Z_][a-zA-Z0-9_]*)\[([@*])\]\z/
 
       # ${arr[@]} or ${arr[*]} - all array elements
       return __array_all($1, $2) if content =~ /\A([a-zA-Z_][a-zA-Z0-9_]*)\[([@*])\]\z/
@@ -447,7 +447,7 @@ module Rubish
       end
 
       # ${var^^}, ${var^}, ${var,,}, ${var,} - case modification
-      if content =~ /\A([a-zA-Z_][a-zA-Z0-9_]*(?:\[[^\]]+\])?)(\^\^|\^|,,|,)(?:([^}]*))?\z/
+      if content =~ /\A([a-zA-Z_][a-zA-Z0-9_]*(?:\[[^\]]+\])?)(\^\^|\^|,,|,|~~|~)(?:([^}]*))?\z/
         return __param_case($1, $2, $3)
       end
 
@@ -764,6 +764,7 @@ module Rubish
         when :slice
           offset, length = spec.split(':', 2)
           __array_slice_values(content, offset, length)
+        when :op then __param_element_words(content, spec)
         else expand_string_content(content, quoted: true)
         end
       end

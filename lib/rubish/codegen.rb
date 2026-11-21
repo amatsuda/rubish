@@ -190,6 +190,8 @@ module Rubish
         when :slice
           offset, length = content[1].split(':', 2)
           "__array_slice_values(#{content[0].inspect}, #{offset.inspect}, #{length.inspect})"
+        when :op
+          "__param_element_words(#{content[0].inspect}, #{content[1].inspect})"
         else generate_interpolated_string(content)
         end
       end
@@ -1404,9 +1406,10 @@ module Rubish
       return 'Builtins.current_options' if content == '-'
 
       # Handle ${!arr[@]} or ${!arr[*]} - array keys/indices
-      if content =~ /\A!([a-zA-Z_][a-zA-Z0-9_]*)\[[@*]\]\z/
+      if content =~ /\A!([a-zA-Z_][a-zA-Z0-9_]*)\[([@*])\]\z/
         var_name = $1
-        return "__array_keys(#{var_name.inspect})"
+        subscript = $2
+        return "__array_keys(#{var_name.inspect}, #{subscript.inspect})"
       end
 
       # Handle ${#arr[@]} or ${#arr[*]} - array length
@@ -1478,7 +1481,7 @@ module Rubish
       end
 
       # Handle ${var^^}, ${var^}, ${var,,}, ${var,} - case modification
-      if content =~ /\A([a-zA-Z_][a-zA-Z0-9_]*(?:\[[^\]]+\])?)(\^\^|\^|,,|,)(?:([^}]*))?\z/
+      if content =~ /\A([a-zA-Z_][a-zA-Z0-9_]*(?:\[[^\]]+\])?)(\^\^|\^|,,|,|~~|~)(?:([^}]*))?\z/
         var_name = $1
         operator = $2
         pattern = $3 || ''

@@ -172,6 +172,11 @@ module Rubish
         word
       end
 
+      if %w[# ## % %%].include?(operator) &&
+         (words = __each_param_element(var_name) { |scratch| __param_expand(scratch, operator, operand, expand_operand: expand_operand) })
+        return words.join(' ')
+      end
+
       value, is_set, is_null = get_param_expand_info(var_name)
 
       case operator
@@ -270,6 +275,21 @@ module Rubish
     # L: Lowercase entire value
     # K: For associative arrays, show key-value pairs
     def __param_transform(var_name, operator)
+      if operator == 'K' && var_name =~ /\A([a-zA-Z_][a-zA-Z0-9_]*)\[[@*]\]\z/
+        # subscript/value pairs, values quoted, as bash prints them
+        name = $1
+        pairs = if Builtins.assoc_array?(name)
+                  Builtins.get_assoc_array(name).map { |k, v| "#{k} #{v.inspect}" }
+                else
+                  (Builtins.get_array(name) || []).each_with_index.filter_map { |v, i| "#{i} #{v.inspect}" unless v.nil? }
+                end
+        return pairs.join(' ')
+      end
+      if %w[Q E P U u L].include?(operator) &&
+         (words = __each_param_element(var_name) { |scratch| __param_transform(scratch, operator) })
+        return words.join(' ')
+      end
+
       value = get_special_var(var_name) || Builtins.get_var(var_name)
 
       case operator
@@ -305,7 +325,41 @@ module Rubish
     # ${var/pattern/replacement} or ${var//pattern/replacement}
     # /  - replace first occurrence
     # // - replace all occurrences
+    # `${arr[@]OP}`, `${arr[*]OP}`, `${@OP}`: the operator applies to every
+    # element. Each element is bound to a scratch parameter in turn and the
+    # block gets that parameter's name, so the scalar code path does the work.
+    # Returns the resulting words, or nil when var_name is not such a reference.
+    SCRATCH_PARAM = '__rubish_element'
+
+    def __each_param_element(var_name)
+      elements = case var_name
+                 when '@', '*' then positional_params || []
+                 when /\A([a-zA-Z_][a-zA-Z0-9_]*)\[[@*]\]\z/ then __array_values($1)
+                 end
+      return nil unless elements
+
+      saved = Builtins.get_var(SCRATCH_PARAM)
+      begin
+        elements.map do |element|
+          Builtins.set_var(SCRATCH_PARAM, element)
+          yield SCRATCH_PARAM
+        end
+      ensure
+        saved ? Builtins.set_var(SCRATCH_PARAM, saved) : Builtins.delete_var(SCRATCH_PARAM)
+      end
+    end
+
+    # The words of "${arr[@]OP}" / "${@OP}": OP applied to each element
+    def __param_element_words(name, tail)
+      ref = name == '@' ? '@' : "#{name}[@]"
+      __each_param_element(ref) { |scratch| expand_parameter_expansion("#{scratch}#{tail}") } || []
+    end
+
     def __param_replace(var_name, operator, pattern, replacement)
+      if (words = __each_param_element(var_name) { |scratch| __param_replace(scratch, operator, pattern, replacement) })
+        return words.join(' ')
+      end
+
       value = get_special_var(var_name) || Builtins.get_var(var_name) || ''
       return '' if value.empty?
 
@@ -335,12 +389,18 @@ module Rubish
     # ,  - lowercase first character (if matches pattern)
     # ,, - lowercase all characters (matching pattern)
     def __param_case(var_name, operator, pattern)
+      if (words = __each_param_element(var_name) { |scratch| __param_case(scratch, operator, pattern) })
+        return words.join(' ')
+      end
+
       value = Builtins.get_var(var_name) || ''
       return '' if value.empty?
 
       case operator
       when '^^' then apply_case_transform(value, pattern, :upcase, :all)
       when '^' then apply_case_transform(value, pattern, :upcase, :first)
+      when '~~' then apply_case_transform(value, pattern, :swapcase, :all)
+      when '~' then apply_case_transform(value, pattern, :swapcase, :first)
       when ',,' then apply_case_transform(value, pattern, :downcase, :all)
       when ',' then apply_case_transform(value, pattern, :downcase, :first)
       else value
@@ -466,8 +526,9 @@ module Rubish
     end
 
     # ${!arr[@]} - get array indices or assoc keys
-    def __array_keys(var_name)
-      __array_key_list(var_name).join(' ')
+    def __array_keys(var_name, mode = '@')
+      keys = __array_key_list(var_name)
+      mode == '*' ? Builtins.join_by_ifs(keys) : keys.join(' ')
     end
 
     # Indices (indexed arrays) or keys (associative arrays) as an Array of
