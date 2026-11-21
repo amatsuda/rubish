@@ -912,6 +912,7 @@ module Rubish
         cmd.stdout ||= pipes[i][1] if i < @commands.length - 1
 
         fork do
+          begin
           # Set up job control in child if enabled
           if job_control
             # First process becomes the process group leader
@@ -963,6 +964,12 @@ module Rubish
             exit(result ? 0 : 1)
           else
             Command.safe_exec(cmd.name, cmd.name, *cmd.args, fd_options: Command.child_fd_options(cmd.fd_redirects))
+          end
+          rescue ParameterExpansionError, NounsetError, ArithmeticEvaluator::Error, ShellSyntaxError => e
+            # An expansion error inside the child ends only this element, as
+            # it would end the command in the shell; 127 is what bash gives
+            $stderr.puts "rubish: #{e.message}"
+            exit(127)
           end
         end.tap do |pid|
           # Set up process group in parent (first process becomes leader)
