@@ -2440,6 +2440,12 @@ module Rubish
       @state.set_options['m'] = true  # Job control enabled for interactive shells
     end
 
+    # Turn off job control in a forked asynchronous job: its commands stay in
+    # the job's process group and never take the terminal from the shell
+    def disable_job_control
+      @state.set_options['m'] = false
+    end
+
     # List of variables that cannot be modified in restricted mode
     RESTRICTED_VARIABLES = %w[SHELL ENV PATH BASH_ENV SHELLOPTS RUBISHOPTS].freeze
 

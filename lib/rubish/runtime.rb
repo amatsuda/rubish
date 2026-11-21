@@ -536,8 +536,12 @@ module Rubish
         Kernel.trap('INT', 'DEFAULT')
         Kernel.trap('TSTP', 'DEFAULT')
 
-        # Create new process group if job control is enabled
-        Process.setpgid(0, 0) if Builtins.set_option?('m')
+        # Create new process group if job control is enabled, then run the
+        # job without job control: its commands must not take the terminal
+        if Builtins.set_option?('m')
+          Process.setpgid(0, 0)
+          Builtins.disable_job_control
+        end
 
         # Execute the command. `exit N` inside the job ends only the job,
         # and the job's exit status is the command's, so `wait $!` sees it.
