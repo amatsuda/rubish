@@ -618,13 +618,24 @@ module Rubish
     def collect_continuation_lines(accumulated_lines, initial_error)
       loop do
         begin
-          cont_line = @frontend.read_continuation_line(continuation_prompt)
+          # A non-interactive shell reading a pipe or file (rubish -c, a
+          # script) has nothing to prompt: the command is simply unfinished
+          cont_line = if !Builtins.interactive_mode? && @frontend.is_a?(Frontend::Tty) && !$stdin.tty?
+                        nil
+                      else
+                        @frontend.read_continuation_line(continuation_prompt)
+                      end
         rescue Interrupt
           puts
           return nil  # User cancelled
         end
 
-        return nil unless cont_line  # EOF
+        unless cont_line
+          # EOF with the command still open: bash reports it as a syntax error
+          $stderr.puts 'rubish: syntax error: unexpected end of file'
+          @last_status = 2
+          return nil
+        end
 
         accumulated_lines << cont_line
 
@@ -1049,8 +1060,15 @@ module Rubish
           # Prompt for continuation lines until parsing succeeds
           ast = collect_continuation_lines(accumulated_lines, e)
           return unless ast  # User cancelled (Ctrl+C) or error
+        elsif incomplete_command_error?(e.message)
+          # The sourced text is all there is, so the command is unfinished
+          @last_status = 2
+          raise ShellSyntaxError, 'syntax error: unexpected end of file'
         else
-          raise  # Re-raise actual syntax errors
+          # A real syntax error: $? is 2, and callers that run without a
+          # prompt loop (rubish -c, scripts) see a ShellSyntaxError
+          @last_status = 2
+          raise ShellSyntaxError, e.message
         end
       end
       return unless ast

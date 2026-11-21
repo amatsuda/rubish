@@ -2477,6 +2477,10 @@ module Rubish
 
         begin
           execute_sourced_command(buffer, file_label, buffer_start_line)
+        rescue ShellSyntaxError => e
+          # The rest of the file is not run, as in bash; $? is already 2
+          $stderr.puts "#{file_label}: line #{buffer_start_line}: #{e.message}"
+          return 2
         rescue SyntaxError, StandardError => e
           puts "#{file_label}: syntax error (starting at line #{buffer_start_line}): #{e.message}"
         end

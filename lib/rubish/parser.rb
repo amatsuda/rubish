@@ -1,6 +1,9 @@
 # frozen_string_literal: true
 
 module Rubish
+  # A shell syntax error that cannot be resolved by reading more input
+  class ShellSyntaxError < StandardError; end
+
   class Parser
     def initialize(tokens)
       @tokens = tokens
@@ -16,7 +19,14 @@ module Rubish
       consume(:SEMICOLON) while peek(:SEMICOLON)
       return nil if @pos >= @tokens.length
 
-      parse_list
+      ast = parse_list
+      consume(:SEMICOLON) while peek(:SEMICOLON)
+      # Anything the grammar did not consume is an error, not something to
+      # drop quietly: `echo )` must fail like it does in bash
+      if (leftover = current)
+        raise "syntax error near unexpected token `#{leftover.value}'"
+      end
+      ast
     end
 
     private

@@ -173,7 +173,12 @@ if command_string
   # Enable restricted mode AFTER sourcing startup files
   Rubish::Builtins.enable_restricted_mode if restricted
 
-  exit_code = catch(:exit) { repl.send(:execute, command_string) }
+  exit_code = begin
+    catch(:exit) { repl.send(:execute, command_string) }
+  rescue Rubish::ShellSyntaxError => e
+    $stderr.puts "rubish: #{e.message}"
+    2
+  end
   last_status = repl.send(:run_exit_trap, exit_code)
   repl.send(:cleanup_all_proc_sub_fifos)
   exit(last_status)
@@ -197,13 +202,18 @@ elsif read_stdin
   Rubish::Builtins.enable_restricted_mode if restricted
 
   # Read and execute commands from stdin
-  exit_code = catch(:exit) do
-    $stdin.each_line(chomp: true) do |line|
-      next if line.strip.empty? || line.strip.start_with?('#')
+  exit_code = begin
+    catch(:exit) do
+      $stdin.each_line(chomp: true) do |line|
+        next if line.strip.empty? || line.strip.start_with?('#')
 
-      repl.send(:execute, line)
+        repl.send(:execute, line)
+      end
+      nil
     end
-    nil
+  rescue Rubish::ShellSyntaxError => e
+    $stderr.puts "rubish: #{e.message}"
+    2
   end
 
   last_status = repl.send(:run_exit_trap, exit_code)
