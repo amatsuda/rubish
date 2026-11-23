@@ -24,7 +24,7 @@ module Rubish
     # `$#`, `$?`, `$$`, `$!`, and a `$name` right after a base prefix
     # (`10#$x`) are expanded here.
     def expand_arith_parameters(expr)
-      return expr unless expr.include?('$') || expr.include?('`')
+      return expr unless expr.include?('$') || expr.include?('`') || expr.include?('[')
 
       out = +''
       i = 0
@@ -40,6 +40,10 @@ module Rubish
           # A backtick substitution is expanded like `$(...)` would be
           out << expand_string_content(expr[i..close])
           i = close + 1
+        elsif c.match?(/[a-zA-Z_]/) && (m = expr[i..].match(/\A([a-zA-Z_][a-zA-Z0-9_]*)\[([^\]]+)\]/)) && Builtins.assoc_array?(m[1])
+          # `m[key]` of an associative array: the key is a string, not an index
+          out << expand_string_content("${#{m[1]}[#{m[2]}]}")
+          i += m[0].length
         elsif c == '#' && expr[i + 1] == '$' && expr[i + 2].to_s.match?(/[a-zA-Z_0-9]/)
           j = i + 2
           j += 1 while j < expr.length && expr[j].match?(/[a-zA-Z0-9_]/)
