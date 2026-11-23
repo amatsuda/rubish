@@ -492,7 +492,7 @@ module Rubish
 
       # If IFS has no whitespace, split on each non-whitespace char
       if ws_chars.empty?
-        return str.split(/[#{Regexp.escape(non_ws_chars)}]/, -1)
+        return drop_trailing_empty_field(str.split(/[#{Regexp.escape(non_ws_chars)}]/, -1))
       end
 
       # Mixed: whitespace sequences or non-whitespace chars as delimiters
@@ -504,7 +504,15 @@ module Rubish
       non_ws_pattern = "[#{Regexp.escape(non_ws_chars)}]"
       pattern = /#{ws_pattern}#{non_ws_pattern}#{ws_pattern}|[#{Regexp.escape(ws_chars)}]+/
 
-      str.split(pattern).reject(&:empty?)
+      # Adjacent non-whitespace delimiters leave an empty field between them
+      drop_trailing_empty_field(str.split(pattern, -1))
+    end
+
+    # A non-whitespace delimiter at the very end of the string terminates the
+    # last field rather than starting an empty one (`a:b:` is two fields)
+    def drop_trailing_empty_field(fields)
+      fields.pop if fields.length > 1 && fields.last.empty?
+      fields
     end
 
     def split_by_ifs_n(str, n)
