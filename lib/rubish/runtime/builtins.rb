@@ -2935,31 +2935,65 @@ module Rubish
       false
     end
 
+    # A malformed test expression: reported, and the command fails with 2
+    class TestSyntaxError < StandardError; end
+
     def test(args)
+      name = args.last == ']' ? '[' : 'test'
       # Remove trailing ] if called as [
       args = args[0...-1] if args.last == ']'
+      evaluate_test(args)
+    rescue TestSyntaxError => e
+      $stderr.puts "rubish: #{name}: #{e.message}"
+      ExitStatus.new(2)
+    end
 
+    # The index of `op` outside any parentheses, or nil
+    def top_level_test_index(args, op)
+      depth = 0
+      args.each_with_index do |arg, i|
+        return i if depth == 0 && arg == op && i > 0
+        depth += 1 if arg == '('
+        depth -= 1 if arg == ')'
+      end
+      nil
+    end
+
+    def balanced_parens?(args)
+      depth = 0
+      args.each do |arg|
+        depth += 1 if arg == '('
+        depth -= 1 if arg == ')'
+        return false if depth < 0
+      end
+      depth == 0
+    end
+
+    def evaluate_test(args)
       return false if args.empty?
+
+      # ( expr )
+      if args.length > 2 && args.first == '(' && args.last == ')' && balanced_parens?(args[1...-1])
+        return evaluate_test(args[1...-1])
+      end
 
       # Handle compound expressions with -a (AND) and -o (OR)
       # -o has lower precedence than -a
-      if args.include?('-o')
-        idx = args.index('-o')
-        left_result = test(args[0...idx])
-        right_result = test(args[(idx + 1)..])
+      if (idx = top_level_test_index(args, '-o'))
+        left_result = evaluate_test(args[0...idx])
+        right_result = evaluate_test(args[(idx + 1)..])
         return left_result || right_result
       end
 
-      if args.include?('-a')
-        idx = args.index('-a')
-        left_result = test(args[0...idx])
-        right_result = test(args[(idx + 1)..])
+      if (idx = top_level_test_index(args, '-a'))
+        left_result = evaluate_test(args[0...idx])
+        right_result = evaluate_test(args[(idx + 1)..])
         return left_result && right_result
       end
 
       # Negation
       if args.first == '!'
-        return !test(args[1..])
+        return !evaluate_test(args[1..])
       end
 
       # Single argument - true if non-empty
@@ -3023,13 +3057,18 @@ module Rubish
           return File.exist?(arg) && File.mtime(arg) > File.atime(arg)
         end
         # No valid unary operator matched — parse error
-        $stderr.puts "test: #{op}: unary operator expected"
+        raise TestSyntaxError, "#{op}: unary operator expected"
         return ExitStatus.new(2)
       end
 
       # Binary operators
       if args.length == 3
         left, op, right = args
+        if %w[-eq -ne -lt -le -gt -ge].include?(op)
+          [left, right].each do |v|
+            raise TestSyntaxError, "#{v}: integer expected" unless v.match?(/\A[+-]?\d+\z/)
+          end
+        end
         case op
         # String comparisons
         when '=' then return left == right
@@ -3060,7 +3099,10 @@ module Rubish
           stat2 = File.stat(right)
           return stat1.dev == stat2.dev && stat1.ino == stat2.ino
         end
+        raise TestSyntaxError, "#{op}: binary operator expected"
       end
+
+      raise TestSyntaxError, 'too many arguments' if args.length > 3
 
       false
     end
