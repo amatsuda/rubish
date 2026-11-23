@@ -25,7 +25,7 @@ class TestReadIfsAndFlags < Test::Unit::TestCase
 
   def test_prefix_ifs_does_not_leak
     execute('IFS=: read -r p q <<< "a:b"')
-    assert_nil get_shell_var('IFS')
+    assert_equal " \t\n", get_shell_var('IFS')
   end
 
   def test_prefix_ifs_with_clustered_array_flag

@@ -96,8 +96,8 @@ module Rubish
       @bash_command = ''
       @readonly_functions = Set.new
 
-      # Variables state
-      @shell_vars = {}
+      # Variables state; IFS is set from the start, as in bash
+      @shell_vars = { 'IFS' => " \t\n" }
       @arrays = {}
       @assoc_arrays = {}
       @namerefs = {}
