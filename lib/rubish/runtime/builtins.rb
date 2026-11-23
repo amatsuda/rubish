@@ -2396,7 +2396,8 @@ module Rubish
       @state.source_file_setter&.call(old_source_file) if old_source_file
       @state.sourcing_file = old_sourcing
 
-      return_code.nil? || return_code == 0
+      # `return N` in the file gives N; otherwise the last command's status
+      ExitStatus.new(return_code || @state.last_status_getter&.call || 0)
     end
 
     # Walk a list of lines (already chomped) the same way `source` does:
