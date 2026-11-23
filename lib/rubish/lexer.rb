@@ -84,7 +84,7 @@ module Rubish
       SEMICOLON DOUBLE_SEMI CASE_FALL CASE_CONT AMPERSAND AND OR
       PIPE PIPE_BOTH NEWLINE LPAREN RPAREN LBRACE RBRACE
       IF UNLESS THEN ELSE ELIF ELSIF FI WHILE UNTIL FOR SELECT
-      CASE WHEN ESAC COPROC TIME FUNCTION DEF LAZY_LOAD
+      CASE WHEN ESAC COPROC TIME FUNCTION DEF LAZY_LOAD PARENS
     ].freeze
 
     # `do`, `done`, `in` and `end` are lexed as WORDs (see KEYWORDS) but
@@ -665,7 +665,7 @@ module Rubish
         if @input[@pos + 1] == ')'
           peek = @pos + 2
           peek += 1 while peek < @input.length && @input[peek] =~ /[ \t]/
-          return read_func_call(value) unless @input[peek] == '{'
+          return read_func_call(value) unless function_body_start?(peek)
         else
           return read_func_call(value)
         end
@@ -677,6 +677,14 @@ module Rubish
       else
         Token.new(:WORD, value)
       end
+    end
+
+    # After `name()`: does a function body follow? A brace group, a
+    # subshell or arithmetic command, or another compound command
+    # (`f() if ...; fi`), as bash allows
+    def function_body_start?(pos)
+      rest = @input[pos..] || ''
+      rest.start_with?('{', '(', '[[') || rest.match?(/\A(if|unless|while|until|for|case|select)(\s|\z)/)
     end
 
     def keyword_position?

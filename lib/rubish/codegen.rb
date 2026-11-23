@@ -1627,6 +1627,8 @@ module Rubish
       when AST::Redirect
         cmd = to_shell(node.command)
         "#{cmd} #{node.operator} #{node.target}"
+      when AST::BraceGroup
+        "{ #{to_shell(node.body)}; }"
       when AST::Background
         "#{to_shell(node.command)} &"
       when AST::And

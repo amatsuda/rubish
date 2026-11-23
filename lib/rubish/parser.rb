@@ -365,6 +365,7 @@ module Rubish
     def parse_function_keyword
       consume(:FUNCTION)
       name = consume(:WORD)&.value || raise('Expected function name after "function"')
+      consume(:PARENS) if peek(:PARENS) # `function name() { ... }`
       parse_function_body(name)
     end
 
@@ -498,12 +499,26 @@ module Rubish
       commands.length == 1 ? commands.first : AST::List.new(commands)
     end
 
-    # Parse function body: { commands }
+    # Parse a function body: `{ commands }`, possibly followed by
+    # redirections that apply to every call (`f() { ...; } > log`), or any
+    # other compound command (`f() ( ... )`, `f() if ...; fi`)
     def parse_function_body(name)
-      consume(:LBRACE) || raise('Expected "{" for function body')
+      unless peek(:LBRACE)
+        body = parse_command if compound_command_start?
+        raise 'Expected "{" for function body' unless body
+
+        return AST::Function.new(name, body, nil)
+      end
+
+      consume(:LBRACE)
       body = parse_function_body_commands
       consume(:RBRACE) || raise('Expected "}" to close function body')
+      body = parse_redirections(AST::BraceGroup.new(body)) if redirection_token?
       AST::Function.new(name, body, nil)
+    end
+
+    def compound_command_start?
+      peek_any(:LPAREN, :IF, :UNLESS, :WHILE, :UNTIL, :FOR, :SELECT, :CASE, :DOUBLE_LBRACKET, :ARITH_CMD)
     end
 
     # Parse commands inside function body (stops at })
@@ -1202,13 +1217,17 @@ module Rubish
       end
     end
 
+    REDIRECTION_TOKENS = %i[
+      REDIRECT_OUT REDIRECT_CLOBBER REDIRECT_APPEND REDIRECT_IN REDIRECT_ERR REDIRECT_ERR_APPEND
+      DUP_OUT DUP_IN DUP_ERR FD_REDIRECT HEREDOC HEREDOC_INDENT HERESTRING VARNAME_REDIRECT
+    ].freeze
+
+    def redirection_token?
+      peek_any(*REDIRECTION_TOKENS)
+    end
+
     def parse_redirections(cmd)
-      while peek(:REDIRECT_OUT) || peek(:REDIRECT_CLOBBER) || peek(:REDIRECT_APPEND) ||
-            peek(:REDIRECT_IN) || peek(:REDIRECT_ERR) || peek(:REDIRECT_ERR_APPEND) ||
-            peek(:DUP_OUT) || peek(:DUP_IN) || peek(:DUP_ERR) ||
-            peek(:FD_REDIRECT) ||
-            peek(:HEREDOC) || peek(:HEREDOC_INDENT) || peek(:HERESTRING) ||
-            peek(:VARNAME_REDIRECT)
+      while redirection_token?
         op = consume
 
         case op.type
