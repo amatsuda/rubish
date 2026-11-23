@@ -57,7 +57,7 @@ module Rubish
     def xtrace(line)
       # Print trace with PS4 prefix (default: '+ ')
       # PS4 supports the same escape sequences as PS1
-      ps4 = ENV['PS4'] || '+ '
+      ps4 = Builtins.get_var('PS4') || '+ ' # a shell variable, exported or not
       expanded_ps4 = expand_prompt(ps4)
       output = "#{expanded_ps4}#{line}"
 
