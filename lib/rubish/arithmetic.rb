@@ -20,11 +20,11 @@ module Rubish
 
     # Bash expands the parameters in an arithmetic expression as text
     # before evaluating it. The evaluator reads `$name`, `$N` and `$(cmd)`
-    # itself; the braced forms (`${#arr[@]}`, `${u:-0}`), the specials
+    # itself; backticks, the braced forms (`${#arr[@]}`, `${u:-0}`), the specials
     # `$#`, `$?`, `$$`, `$!`, and a `$name` right after a base prefix
     # (`10#$x`) are expanded here.
     def expand_arith_parameters(expr)
-      return expr unless expr.include?('$')
+      return expr unless expr.include?('$') || expr.include?('`')
 
       out = +''
       i = 0
@@ -36,6 +36,10 @@ module Rubish
         elsif c == '$' && '#?$!'.include?(expr[i + 1].to_s)
           out << expand_string_content(expr[i, 2])
           i += 2
+        elsif c == '`' && (close = expr.index('`', i + 1))
+          # A backtick substitution is expanded like `$(...)` would be
+          out << expand_string_content(expr[i..close])
+          i = close + 1
         elsif c == '#' && expr[i + 1] == '$' && expr[i + 2].to_s.match?(/[a-zA-Z_0-9]/)
           j = i + 2
           j += 1 while j < expr.length && expr[j].match?(/[a-zA-Z0-9_]/)
