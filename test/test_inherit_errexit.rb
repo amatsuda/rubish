@@ -41,7 +41,8 @@ class TestInheritErrexit < Test::Unit::TestCase
   # Without inherit_errexit: command substitution runs all commands even after failure
   def test_command_substitution_without_inherit_errexit
     # Create a script that should run completely without inherit_errexit
-    execute('x=$(false; echo after)')
+    # Under set -e the failing assignment exits the shell; keep the test going
+    catch(:exit) { execute('x=$(false; echo after)') }
     # Without inherit_errexit, 'echo after' should run even after false fails
     assert_equal 'after', get_shell_var('x')
   end
@@ -51,7 +52,8 @@ class TestInheritErrexit < Test::Unit::TestCase
     execute('shopt -s inherit_errexit')
     execute('set -e')
 
-    execute('x=$(false; echo after)')
+    # Under set -e the failing assignment exits the shell; keep the test going
+    catch(:exit) { execute('x=$(false; echo after)') }
     # With inherit_errexit and errexit, 'false' causes exit before 'echo after'
     assert_equal '', get_shell_var('x')
   end
@@ -61,7 +63,8 @@ class TestInheritErrexit < Test::Unit::TestCase
     execute('shopt -s inherit_errexit')
     execute('set -e')
 
-    execute('x=`false; echo after`')
+    # Under set -e the failing assignment exits the shell; keep the test going
+    catch(:exit) { execute('x=`false; echo after`') }
     # With inherit_errexit and errexit, 'false' causes exit before 'echo after'
     assert_equal '', get_shell_var('x')
   end
@@ -71,7 +74,8 @@ class TestInheritErrexit < Test::Unit::TestCase
     execute('shopt -s inherit_errexit')
     # errexit is not set
 
-    execute('x=$(false; echo after)')
+    # Under set -e the failing assignment exits the shell; keep the test going
+    catch(:exit) { execute('x=$(false; echo after)') }
     # Without errexit, inherit_errexit has no effect - all commands run
     assert_equal 'after', get_shell_var('x')
   end
@@ -82,7 +86,8 @@ class TestInheritErrexit < Test::Unit::TestCase
     execute('set -e')
 
     # First command succeeds, second fails, third should not run
-    execute('x=$(echo first; false; echo third)')
+    # Under set -e the failing assignment exits the shell; keep the test going
+    catch(:exit) { execute('x=$(echo first; false; echo third)') }
     assert_equal 'first', get_shell_var('x')
   end
 
@@ -91,7 +96,8 @@ class TestInheritErrexit < Test::Unit::TestCase
     execute('shopt -s inherit_errexit')
     execute('set -e')
 
-    execute('x=$(echo hello)')
+    # Under set -e the failing assignment exits the shell; keep the test going
+    catch(:exit) { execute('x=$(echo hello)') }
     assert_equal 'hello', get_shell_var('x')
   end
 
@@ -101,7 +107,8 @@ class TestInheritErrexit < Test::Unit::TestCase
     execute('set -e')
 
     # Inner substitution fails, outer should get empty result
-    execute('x=$(echo $(false; echo inner))')
+    # Under set -e the failing assignment exits the shell; keep the test going
+    catch(:exit) { execute('x=$(echo $(false; echo inner))') }
     assert_equal '', get_shell_var('x')
   end
 
@@ -111,7 +118,8 @@ class TestInheritErrexit < Test::Unit::TestCase
     execute('set -e')
 
     # With inherit_errexit and errexit, false causes empty output
-    execute('x=$(false)')
+    # Under set -e the failing assignment exits the shell; keep the test going
+    catch(:exit) { execute('x=$(false)') }
     assert_equal '', get_shell_var('x')
   end
 
@@ -120,7 +128,8 @@ class TestInheritErrexit < Test::Unit::TestCase
     execute('shopt -s inherit_errexit')
     execute('set -e')
 
-    execute('x=$(true; echo done)')
+    # Under set -e the failing assignment exits the shell; keep the test going
+    catch(:exit) { execute('x=$(true; echo done)') }
     assert_equal 'done', get_shell_var('x')
   end
 
@@ -138,7 +147,8 @@ class TestInheritErrexit < Test::Unit::TestCase
     execute('shopt -s inherit_errexit')
     execute('set -e')
 
-    execute('x=$(echo hello | tr a-z A-Z)')
+    # Under set -e the failing assignment exits the shell; keep the test going
+    catch(:exit) { execute('x=$(echo hello | tr a-z A-Z)') }
     assert_equal 'HELLO', get_shell_var('x')
   end
 
@@ -149,7 +159,8 @@ class TestInheritErrexit < Test::Unit::TestCase
     execute('shopt -u inherit_errexit')
 
     # With inherit_errexit disabled, even with errexit, substitution doesn't inherit it
-    execute('x=$(false; echo after)')
+    # Under set -e the failing assignment exits the shell; keep the test going
+    catch(:exit) { execute('x=$(false; echo after)') }
     assert_equal 'after', get_shell_var('x')
   end
 
@@ -158,7 +169,8 @@ class TestInheritErrexit < Test::Unit::TestCase
     execute('shopt -s inherit_errexit')
     execute('set -e')
 
-    execute('x=$(false; echo should_not_appear)')
+    # Under set -e the failing assignment exits the shell; keep the test going
+    catch(:exit) { execute('x=$(false; echo should_not_appear)') }
     assert_equal '', get_shell_var('x')
   end
 
@@ -168,7 +180,8 @@ class TestInheritErrexit < Test::Unit::TestCase
     execute('set -e')
 
     # With inherit_errexit, exit 42 stops execution before echo end
-    execute('x=$(echo start; exit 42; echo end)')
+    # Under set -e the failing assignment exits the shell; keep the test going
+    catch(:exit) { execute('x=$(echo start; exit 42; echo end)') }
     assert_equal 'start', get_shell_var('x')
   end
 

@@ -1857,7 +1857,11 @@ module Rubish
       elsif result.is_a?(Command) && bare_assignment?(result.name) && result.args.all? { |a| bare_assignment?(a) }
         # Handle bare variable assignments in lists (VAR=value). Return an
         # ExitStatus so the caller sees this status rather than the unrun Command's.
-        ExitStatus.new(__run_bare_assignment(result))
+        # `x=$(false)` fails like any command: ERR trap and errexit apply
+        status = __run_bare_assignment(result)
+        run_err_trap_if_failed
+        check_errexit
+        ExitStatus.new(status)
       else
         result.run if result.is_a?(Command) || result.is_a?(Pipeline) || result.is_a?(Subshell) || result.is_a?(HeredocCommand)
         if result.respond_to?(:status)

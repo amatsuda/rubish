@@ -1122,6 +1122,9 @@ module Rubish
         @command_number += 1
         # Note: bare assignments don't increment LINENO (bash behavior)
         Builtins.clear_exit_blocked  # checkjobs: non-exit command resets flag
+        # `x=$(false)` fails like any command: ERR trap and errexit apply
+        run_err_trap_if_failed
+        check_errexit
         return
       end
 
