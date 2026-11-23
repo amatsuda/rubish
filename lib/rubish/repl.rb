@@ -1173,7 +1173,8 @@ module Rubish
 
           # Run DEBUG trap before function call
           Builtins.debug_trap
-          @last_status = call_function(ast.name, expanded_args).exitstatus
+          # `VAR=value f`: the assignment is in effect inside the function
+          @last_status = with_prefix_env(ast.env) { call_function(ast.name, expanded_args) }.exitstatus
           @context.last_status = @last_status
           @pipestatus = [@last_status]
           # Don't run ERR trap here - it was already handled inside the function if errtrace is on

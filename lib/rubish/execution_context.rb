@@ -215,7 +215,8 @@ module Rubish
           $stdin.reopen(cmd.stdin)
         end
 
-        status = call_function(cmd.name, cmd.args)
+        # `VAR=value f`: the assignment is in effect inside the function
+        status = Builtins.with_temporary_vars(cmd.prefix_env) { call_function(cmd.name, cmd.args) }
         @last_status = status.exitstatus
         status
       ensure
