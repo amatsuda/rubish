@@ -1356,6 +1356,12 @@ module Rubish
         return "__array_values(#{name.inspect})"
       end
 
+      # "${arr[@]}" (possibly with text around it) gives one element per
+      # element of arr, as it gives one word per element in a command
+      if (code = generate_quoted_array_word(str))
+        return code
+      end
+
       # Check if this element is purely a command substitution (handles nested $(...))
       if pure_command_substitution?(str)
         # Pure command substitution: $(cmd) - word-split the result
