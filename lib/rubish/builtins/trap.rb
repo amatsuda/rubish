@@ -55,7 +55,7 @@ module Rubish
         # List all traps
         @state.traps.each do |sig, cmd|
           sig_name = signal_display_name(sig)
-          puts "trap -- #{cmd.inspect} #{sig_name}"
+          puts "trap -- #{shell_single_quote(cmd)} #{sig_name}"
         end
         return true
       end
@@ -87,7 +87,7 @@ module Rubish
         if signals.empty?
           @state.traps.each do |sig, cmd|
             sig_name = signal_display_name(sig)
-            puts "trap -- #{cmd.inspect} #{sig_name}"
+            puts "trap -- #{shell_single_quote(cmd)} #{sig_name}"
           end
         else
           signals.each do |sig_arg|
@@ -96,7 +96,7 @@ module Rubish
 
             if @state.traps.key?(sig)
               sig_name = signal_display_name(sig)
-              puts "trap -- #{@state.traps[sig].inspect} #{sig_name}"
+              puts "trap -- #{shell_single_quote(@state.traps[sig])} #{sig_name}"
             end
           end
         end
@@ -338,7 +338,14 @@ module Rubish
     private
 
     def signal_display_name(sig)
-      sig == 0 ? 'EXIT' : sig
+      return 'EXIT' if sig == 0
+
+      PSEUDO_SIGNALS.include?(sig) ? sig : "SIG#{sig}"
+    end
+
+    # Quote a trap command so that the printed `trap -- ... SIG` reads back
+    def shell_single_quote(str)
+      "'" + str.gsub("'") { "'\\''" } + "'"
     end
   end
 end
