@@ -14,8 +14,49 @@ module Rubish
     # Shell arithmetic is integer-valued: floats may appear inside an
     # expression (zsh-style maths functions) but the result is truncated
     def eval_arithmetic_expr(expr)
-      result = arithmetic_evaluator.evaluate(expr)
+      result = arithmetic_evaluator.evaluate(expand_arith_parameters(expr))
       result.is_a?(Float) ? result.to_i : result
+    end
+
+    # Bash expands the parameters in an arithmetic expression as text
+    # before evaluating it. The evaluator reads `$name`, `$N` and `$(cmd)`
+    # itself; the braced forms (`${#arr[@]}`, `${u:-0}`), the specials
+    # `$#`, `$?`, `$$`, `$!`, and a `$name` right after a base prefix
+    # (`10#$x`) are expanded here.
+    def expand_arith_parameters(expr)
+      return expr unless expr.include?('$')
+
+      out = +''
+      i = 0
+      while i < expr.length
+        c = expr[i]
+        if c == '$' && expr[i + 1] == '{' && (close = matching_brace_in(expr, i + 1))
+          out << expand_string_content(expr[i..close])
+          i = close + 1
+        elsif c == '$' && '#?$!'.include?(expr[i + 1].to_s)
+          out << expand_string_content(expr[i, 2])
+          i += 2
+        elsif c == '#' && expr[i + 1] == '$' && expr[i + 2].to_s.match?(/[a-zA-Z_0-9]/)
+          j = i + 2
+          j += 1 while j < expr.length && expr[j].match?(/[a-zA-Z0-9_]/)
+          out << '#' << expand_string_content(expr[(i + 1)...j])
+          i = j
+        else
+          out << c
+          i += 1
+        end
+      end
+      out
+    end
+
+    def matching_brace_in(str, open_pos)
+      depth = 0
+      (open_pos...str.length).each do |k|
+        depth += 1 if str[k] == '{'
+        depth -= 1 if str[k] == '}'
+        return k if depth == 0
+      end
+      nil
     end
 
     def arithmetic_evaluator

@@ -353,15 +353,15 @@ module Rubish
       when '$$' then return [Process.pid.to_s, 2]
       when '$!' then return [@last_bg_pid&.to_s || '', 2]
       when '$0' then return [argv0, 2]
-      when '$#' then return [@positional_params.length.to_s, 2]
+      when '$#' then return [positional_params.length.to_s, 2]
       when '$-' then return [Builtins.current_options, 2]
-      when '$@' then return [@positional_params.join(' '), 2]
-      when '$*' then return [Builtins.join_by_ifs(@positional_params), 2]
+      when '$@' then return [positional_params.join(' '), 2]
+      when '$*' then return [Builtins.join_by_ifs(positional_params), 2]
       end
 
       # Positional parameters $1-$9
       if str[pos + 1] =~ /[1-9]/
-        return [@positional_params[str[pos + 1].to_i - 1] || '', 2]
+        return [positional_params[str[pos + 1].to_i - 1] || '', 2]
       end
 
       # ${VAR} or ${VAR-default} form
@@ -397,7 +397,7 @@ module Rubish
 
     def expand_parameter_expansion(content)
       # ${#@}, ${#*}, ${#} - number of positional parameters
-      return @positional_params.length.to_s if content.match?(/\A#[@*]?\z/)
+      return positional_params.length.to_s if content.match?(/\A#[@*]?\z/)
 
       # ${#1}, ${##}, ${#?} - length of a positional or special parameter
       return __param_length($1) if content =~ /\A#(\d+|[#?$!-])\z/
@@ -405,15 +405,15 @@ module Rubish
       # ${N} - positional parameter (${10} and up need the braces); ${0} is $0
       if content.match?(/\A\d+\z/)
         n = content.to_i
-        return n.zero? ? argv0 : (@positional_params[n - 1] || '')
+        return n.zero? ? argv0 : (positional_params[n - 1] || '')
       end
 
       # ${-} - current option flags
       return Builtins.current_options if content == '-'
 
       # ${@} and ${*} are the parameters themselves
-      return @positional_params.join(' ') if content == '@'
-      return Builtins.join_by_ifs(@positional_params) if content == '*'
+      return positional_params.join(' ') if content == '@'
+      return Builtins.join_by_ifs(positional_params) if content == '*'
 
       # ${+VAR} - zsh parameter-is-set test. Evaluates to '1' if the
       # variable is set (even to empty), '0' if not. starship and other
@@ -1044,12 +1044,12 @@ module Rubish
           value = argv0
           [value, true, value.empty?]
         else
-          value = @positional_params[n - 1]
-          [value || '', n <= @positional_params.length, value.nil? || value.empty?]
+          value = positional_params[n - 1]
+          [value || '', n <= positional_params.length, value.nil? || value.empty?]
         end
-      when '#' then [@positional_params.length.to_s, true, false]
-      when '@' then [@positional_params.join(' '), true, @positional_params.empty?]
-      when '*' then [Builtins.join_by_ifs(@positional_params), true, @positional_params.empty?]
+      when '#' then [positional_params.length.to_s, true, false]
+      when '@' then [positional_params.join(' '), true, positional_params.empty?]
+      when '*' then [Builtins.join_by_ifs(positional_params), true, positional_params.empty?]
       when '?' then [@last_status.to_s, true, false]
       when '$' then [Process.pid.to_s, true, false]
       when '!'
