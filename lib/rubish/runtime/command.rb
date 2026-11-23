@@ -1079,7 +1079,18 @@ module Rubish
           $stdin.reopen(last_pipe_reader)
 
           # Run the last command in current shell
-          if last_cmd.is_a?(Command) && Builtins.builtin?(last_cmd.name)
+          if last_cmd.is_a?(Subshell) || last_cmd.is_a?(HeredocCommand)
+            # A brace group or loop as the last element runs here too, so a
+            # variable it sets stays set (bash)
+            result = if last_cmd.is_a?(Subshell)
+                       last_cmd.instance_variable_get(:@block).call
+                     else
+                       last_cmd.run
+                       last_cmd
+                     end
+            result.run if result.is_a?(Command) || result.is_a?(Pipeline)
+            last_status = ExitStatus.new(Subshell.exit_code_for(result))
+          elsif last_cmd.is_a?(Command) && Builtins.builtin?(last_cmd.name)
             success = Builtins.run(last_cmd.name, last_cmd.args)
             last_status = ExitStatus.new(success ? 0 : 1)
           elsif last_cmd.is_a?(Command) && Command.function?(last_cmd.name)
