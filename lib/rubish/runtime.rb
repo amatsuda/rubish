@@ -1306,8 +1306,7 @@ module Rubish
           $stdin = STDIN
         end
         child_end.close
-        STDERR.reopen('/dev/null', 'w')
-        $stderr = STDERR
+        # The command keeps the shell's stderr, as in bash
 
         begin
           execute(command, skip_history_expansion: true)
