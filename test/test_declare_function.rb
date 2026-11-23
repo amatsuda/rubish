@@ -70,7 +70,7 @@ class TestDeclareFunction < Test::Unit::TestCase
   def test_declare_F_shows_name_only
     execute('myfunc() { echo test; }')
     output = capture_stdout { Rubish::Builtins.declare(['-F', 'myfunc']) }
-    assert_match(/declare -f myfunc/, output)
+    assert_equal "myfunc\n", output # bash prints the bare name for a given function
     # Should not show the body
     refute_match(/echo test/, output)
   end

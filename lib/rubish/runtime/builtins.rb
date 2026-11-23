@@ -1943,7 +1943,7 @@ module Rubish
       if names.empty?
         # List all functions
         functions.each do |name, info|
-          print_function(name, info, names_only)
+          print_function(name, info, names_only, listing: true)
         end
       else
         # List specific functions
@@ -1960,7 +1960,9 @@ module Rubish
       true
     end
 
-    def print_function(name, info, names_only)
+    # -F prints `declare -f name` when listing every function, and the bare
+    # name when asked about a particular one (bash)
+    def print_function(name, info, names_only, listing: false)
       if names_only
         # -F: just print the name (optionally with file info)
         # extdebug: when enabled, output in bash format "funcname lineno filename"
@@ -1969,7 +1971,7 @@ module Rubish
           lineno = info[:lineno] || 0
           puts "#{name} #{lineno} #{info[:file]}"
         else
-          puts "declare -f #{name}"
+          puts(listing ? "declare -f #{name}" : name)
         end
       else
         # -f: print full definition

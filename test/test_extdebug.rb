@@ -98,7 +98,7 @@ class TestExtdebug < Test::Unit::TestCase
     output = capture_output do
       execute('declare -F myfunc')
     end
-    assert_match(/declare -f myfunc/, output)
+    assert_equal "myfunc\n", output
   end
 
   # Test declare -F output format with extdebug enabled
@@ -152,7 +152,7 @@ class TestExtdebug < Test::Unit::TestCase
     output = capture_output do
       execute('declare -F interactivefunc')
     end
-    assert_match(/declare -f interactivefunc/, output)
+    assert_equal "interactivefunc\n", output
   end
 
   # Test shopt -q for extdebug
