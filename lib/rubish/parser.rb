@@ -647,6 +647,13 @@ module Rubish
       wrapper.with(member => graft_redirections(wrapper.public_send(member), inner))
     end
 
+    CASE_PATTERN_STOPPERS = %i[RPAREN LPAREN PIPE ESAC DOUBLE_SEMI CASE_FALL CASE_CONT SEMICOLON NEWLINE].freeze
+
+    def case_pattern_keyword?
+      current && current.value.is_a?(String) && !CASE_PATTERN_STOPPERS.include?(current.type) &&
+        current.value.match?(/\A[A-Za-z_][A-Za-z0-9_]*\z/)
+    end
+
     def skip_semicolon
       consume(:SEMICOLON) if peek(:SEMICOLON)
     end
@@ -924,12 +931,14 @@ module Rubish
       else
         # Shell-style: case value in pattern) ... ;; esac
 
-        while !peek(:ESAC) && !peek_end && current
+        # A keyword-like word followed by `|` or `)` starts a pattern (`do|done)`)
+        while !peek(:ESAC) && current && (!peek_end || peek_at(1, :PIPE) || peek_at(1, :RPAREN))
           # Parse patterns (separated by |), optional leading (
           consume(:LPAREN) if peek(:LPAREN)
           patterns = []
           loop do
-            pattern = consume(:WORD)&.value
+            # A pattern word may be one the lexer took for a keyword (`def`, `do`)
+            pattern = consume.value if peek(:WORD) || case_pattern_keyword?
             break unless pattern
 
             patterns << pattern

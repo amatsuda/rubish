@@ -382,8 +382,9 @@ module Rubish
         end
       when 'd'
         # Check for Ruby 'do' block (do |x| ... end or do ... end after 'each')
-        # Only treat as block if followed by space/| (not 'done' or other words)
-        if @input[@pos, 2] == 'do' && @input[@pos + 2] =~ /[\s|]/
+        # Only treat as block if followed by whitespace (not 'done', and not a
+        # `do|done)` case pattern: a Ruby block has a space before its |args|)
+        if @input[@pos, 2] == 'do' && @input[@pos + 2] =~ /\s/
           # Look ahead to see if this has block args (|...|) - distinguishes from shell 'do'
           lookahead = @pos + 2
           lookahead += 1 while lookahead < @input.length && @input[lookahead] =~ /\s/
