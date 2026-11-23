@@ -82,7 +82,8 @@ class TestCoproc < Test::Unit::TestCase
   # Test coproc execution
   def test_coproc_creates_background_process
     output = capture_output { execute('coproc cat') }
-    assert_match(/\[coproc\] COPROC \d+/, output)
+    # The "[coproc] NAME pid" notice is for interactive shells only
+    assert_equal '', output
 
     # Check that coproc exists
     assert Rubish::Builtins.coproc?('COPROC')
@@ -95,7 +96,7 @@ class TestCoproc < Test::Unit::TestCase
 
   def test_coproc_with_custom_name
     output = capture_output { execute('coproc mycat cat') }
-    assert_match(/\[coproc\] mycat \d+/, output)
+    assert_equal '', output
 
     assert Rubish::Builtins.coproc?('mycat')
     assert_false Rubish::Builtins.coproc?('COPROC')

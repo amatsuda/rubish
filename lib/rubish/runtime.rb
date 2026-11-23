@@ -1559,7 +1559,8 @@ module Rubish
       )
 
       @last_bg_pid = pid
-      puts "[coproc] #{name} #{pid}"
+      # The notice is for interactive shells only, as in bash
+      puts "[coproc] #{name} #{pid}" if Builtins.interactive_mode?
 
       ExitStatus.new(0)
     end
