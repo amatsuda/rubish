@@ -2720,8 +2720,16 @@ module Rubish
     end
 
     # $- : the single-letter set options currently enabled (e.g. "himBH")
+    # $-: the one-letter options that are on, in bash's order; histexpand
+    # counts only in an interactive shell, and `c` marks a shell run with -c
+    OPTION_FLAG_ORDER = %w[a b e f h i k m n p r t u v x B C E H P T].freeze
+
     def current_options
-      @state.set_options.select { |flag, on| on && flag.is_a?(String) && flag.length == 1 }.keys.sort.join
+      on = @state.set_options.select { |flag, value| value && flag.is_a?(String) && flag.length == 1 }.keys
+      on.delete('H') unless interactive_mode?
+      flags = OPTION_FLAG_ORDER.select { |f| on.include?(f) }
+      flags << 'c' if ENV.key?('RUBISH_EXECUTION_STRING')
+      flags.join
     end
 
     # Check if shell is interactive
