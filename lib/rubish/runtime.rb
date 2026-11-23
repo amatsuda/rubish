@@ -523,6 +523,10 @@ module Rubish
       end
 
       if Builtins.assoc_array?(var_name)
+        if Builtins.set_option?('u') && !Builtins.get_assoc_array(var_name).key?(expanded_index)
+          $stderr.puts Builtins.format_error('unbound variable', command: "#{var_name}[#{expanded_index}]")
+          raise NounsetError, "#{var_name}[#{expanded_index}]: unbound variable"
+        end
         Builtins.get_assoc_element(var_name, expanded_index)
       else
         Builtins.get_array_element(var_name, safe_eval_index(expanded_index))
