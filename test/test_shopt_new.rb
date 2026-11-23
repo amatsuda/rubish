@@ -70,9 +70,11 @@ class TestShoptNew < Test::Unit::TestCase
 
   def test_globskipdots_option_exists
     assert Rubish::Builtins::SHELL_OPTIONS.key?('globskipdots')
+    # On by default, as in bash 5.2
+    assert Rubish::Builtins.shopt_enabled?('globskipdots')
+    execute('shopt -u globskipdots')
     assert_false Rubish::Builtins.shopt_enabled?('globskipdots')
     execute('shopt -s globskipdots')
-    assert Rubish::Builtins.shopt_enabled?('globskipdots')
   end
 
   def test_huponexit_option_exists

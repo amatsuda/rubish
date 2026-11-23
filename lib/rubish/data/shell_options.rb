@@ -40,7 +40,7 @@ module Rubish
       'failglob' => [false, 'patterns which fail to match produce an error'],
       'force_fignore' => [true, 'apply FIGNORE to word completion'],
       'globasciiranges' => [true, 'use ASCII ordering for range expressions in bracket patterns'],
-      'globskipdots' => [false, 'skip . and .. in pathname expansion'],
+      'globskipdots' => [true, 'skip . and .. in pathname expansion'], # on by default since bash 5.2
       'globstar' => [false, 'enable ** for recursive globbing'],
       'gnu_errfmt' => [false, 'print error messages in GNU format'],
       'histappend' => [false, 'append to history file'],
