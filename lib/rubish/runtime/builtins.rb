@@ -6261,8 +6261,8 @@ module Rubish
       # Send signals to processes or jobs
 
       if args.empty?
-        puts 'kill: usage: kill [-s signal | -signal] pid|%jobspec ... or kill -l [signal]'
-        return false
+        $stderr.puts 'kill: usage: kill [-s sigspec | -n signum | -sigspec] pid | jobspec ... or kill -l [sigspec]'
+        return ExitStatus.new(2)
       end
 
       # Handle -l (list signals)
