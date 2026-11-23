@@ -3109,6 +3109,8 @@ module Rubish
       false
     end
 
+    SHELL_KEYWORDS = %w[if then else elif fi case esac for select while until do done in function time coproc { } ! [[ ]]].freeze
+
     def type(args)
       # type [-afptP] name [name ...]
       # -a: display all locations containing an executable named name
@@ -3167,6 +3169,17 @@ module Rubish
             end
             next unless show_all
           end
+        end
+
+        # Reserved words
+        if !force_path && SHELL_KEYWORDS.include?(name)
+          found = true
+          if type_only
+            puts 'keyword'
+          elsif !path_only
+            puts "#{name} is a shell keyword"
+          end
+          next
         end
 
         # Check function (unless force_path or suppress_functions)
