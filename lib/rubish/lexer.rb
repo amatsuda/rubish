@@ -733,8 +733,9 @@ module Rubish
       elements = []
 
       while @pos < @input.length
-        skip_whitespace
-        break if @input[@pos] == ')'
+        # Elements may be spread over several lines
+        @pos += 1 while @pos < @input.length && @input[@pos] =~ /[ \t\n]/
+        break if @pos >= @input.length || @input[@pos] == ')'
 
         elem = read_array_element
         elements << elem if elem && !elem.empty?
