@@ -1093,7 +1093,7 @@ module Rubish
     def expand_heredoc_content(content)
       # Heredoc content follows the same backslash rules as double-quoted
       # strings — `\X` is preserved for any X not in $/`/"/\/newline.
-      expand_string_content(content, quoted: true)
+      expand_string_content(content, quoted: true, heredoc: true)
     end
 
     def perform_varname_redirect(fd_num, io, &block)

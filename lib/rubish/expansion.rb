@@ -235,7 +235,10 @@ module Rubish
     # Other `\X` sequences are still preserved in both regimes — rubish's
     # `echo -e hello\nworld` tests rely on `\n` flowing through, and bind
     # accepts `\C-a` from unquoted args.
-    def expand_string_content(str, quoted: false)
+    def expand_string_content(str, quoted: false, heredoc: false)
+      # In a heredoc body quotes are ordinary characters, and a backslash
+      # is special only before `$`, a backtick, a backslash or a newline
+      escapable = heredoc ? "$`\\\n" : '$`"\\'
       result = +''
       i = 0
 
@@ -244,7 +247,7 @@ module Rubish
 
         if char == '\\'
           next_char = str[i + 1]
-          if next_char && '$`"\\'.include?(next_char)
+          if next_char && escapable.include?(next_char)
             result << next_char
             i += 2
           elsif !quoted && next_char && !'*?[]'.include?(next_char)
@@ -266,7 +269,7 @@ module Rubish
           expanded, consumed = expand_variable_at(str, i)
           result << (consumed > 0 ? expanded : char)
           i += consumed > 0 ? consumed : 1
-        elsif char == '"'
+        elsif char == '"' && !heredoc
           i += 1  # Quote removal
         else
           result << char

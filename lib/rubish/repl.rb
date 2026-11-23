@@ -2544,7 +2544,7 @@ module Rubish
     def expand_heredoc_content(content)
       # Expand variables in heredoc content. Heredocs follow DQ backslash
       # rules — `\X` for any X not in $/`/"/\/newline is preserved.
-      expand_string_content(content, quoted: true)
+      expand_string_content(content, quoted: true, heredoc: true)
     end
 
     def find_heredoc(ast)
