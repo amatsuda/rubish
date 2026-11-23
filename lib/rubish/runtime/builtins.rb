@@ -3682,7 +3682,7 @@ module Rubish
           if print_mode
             puts "shopt #{value ? '-s' : '-u'} #{name}"
           else
-            puts "#{name}\t\t#{value ? 'on' : 'off'}"
+            puts format("%-15s\t%s", name, value ? 'on' : 'off')
           end
         end
       end
@@ -3770,7 +3770,7 @@ module Rubish
           if print_mode
             puts "shopt #{value ? '-so' : '-uo'} #{name}"
           else
-            puts "#{name}\t\t#{value ? 'on' : 'off'}"
+            puts format("%-15s\t%s", name, value ? 'on' : 'off')
           end
         end
       end
