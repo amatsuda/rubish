@@ -1155,6 +1155,10 @@ module Rubish
       # When disabled, treat ** as * (non-recursive)
       glob_pattern = if pattern.include?('**') && !Builtins.shopt_enabled?('globstar')
                        pattern.gsub('**', '*')
+                     elsif pattern.end_with?('**')
+                       # A final `**` names everything below (bash); Ruby's would
+                       # act like `*`. `dir/**` also matches `dir/` itself.
+                       "#{pattern}/*"
                      else
                        pattern
                      end
@@ -1178,7 +1182,9 @@ module Rubish
       if Builtins.shopt_enabled?('extglob') && has_extglob?(glob_pattern)
         matches = expand_extglob(glob_pattern)
       else
+        globstar_self = pattern[/\A(.+\/)\*\*\z/, 1] if Builtins.shopt_enabled?('globstar')
         matches = Dir.glob(glob_pattern, glob_flags)
+        matches.unshift(globstar_self) if globstar_self && File.directory?(globstar_self)
       end
 
       # Filter out . and .. when dotglob is enabled or globskipdots is set
