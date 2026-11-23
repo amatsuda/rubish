@@ -256,16 +256,29 @@ module Rubish
     # bash, so `${@:1}` is all of them.
     def __array_slice_values(name, offset, length)
       name = Builtins.array_name(name)
-      values = if name == '@' || name == '*'
-                 [respond_to?(:script_name) ? script_name.to_s : 'rubish'] + (positional_params || [])
-               else
-                 __array_values(name)
-               end
-      offset = __slice_index(offset)
-      offset += values.length if offset < 0
-      return [] if offset < 0 || offset > values.length
+      if name == '@' || name == '*'
+        values = [respond_to?(:script_name) ? script_name.to_s : 'rubish'] + (positional_params || [])
+        offset = __slice_index(offset)
+        offset += values.length if offset < 0
+        return [] if offset < 0 || offset > values.length
 
-      rest = values[offset..] || []
+        rest = values[offset..] || []
+      elsif Builtins.indexed_array?(name) && !get_special_array_values(name)
+        # The offset is an index: `arr=([3]=x [7]=y); ${arr[@]:4}` is y (bash)
+        pairs = Builtins.get_array(name).each_with_index.reject { |v, _| v.nil? }
+        offset = __slice_index(offset)
+        offset += (pairs.last&.last || -1) + 1 if offset < 0
+        return [] if offset < 0
+
+        rest = pairs.select { |_, i| i >= offset }.map(&:first)
+      else
+        values = __array_values(name)
+        offset = __slice_index(offset)
+        offset += values.length if offset < 0
+        return [] if offset < 0 || offset > values.length
+
+        rest = values[offset..] || []
+      end
       return rest if length.nil?
 
       length = __slice_index(length)
