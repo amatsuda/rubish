@@ -6582,7 +6582,13 @@ module Rubish
           # Use WNOHANG in a loop with sleep to check specific PIDs
           # Or use wait2(-1) if we're waiting for any child
           if pids_or_jobs.empty?
-            # Wait for any child
+            # Wait for any child; a job the manager already saw finish counts
+            done_job = manager.active.find(&:done?)
+            if done_job
+              manager.remove(done_job.id)
+              code = done_job.respond_to?(:exit_code) ? done_job.exit_code : nil
+              return code ? ExitStatus.new(code) : true
+            end
             pid, status = Process.wait2(-1)
           else
             # Poll each target PID
@@ -6640,7 +6646,7 @@ module Rubish
           rescue Errno::ECHILD
             # No more children
           end
-          return last_status
+          return true # a bare wait succeeds, as in bash
         end
 
         jobs.each do |job|
@@ -6655,6 +6661,7 @@ module Rubish
             manager.remove(job.id)
           end
         end
+        return true # a bare wait succeeds, as in bash
       else
         # Wait for specific jobs
         pids_or_jobs.each do |arg|
@@ -6989,12 +6996,37 @@ module Rubish
       exit(args)
     end
 
-    def jobs(_args)
+    def jobs(args)
+      # jobs [-lprs] [jobspec ...]
+      pids_only = false
+      long = false
+      running_only = false
+      stopped_only = false
+      args.each do |arg|
+        next unless arg.start_with?('-') && arg.length > 1
+
+        arg[1..].each_char do |c|
+          case c
+          when 'p' then pids_only = true
+          when 'l' then long = true
+          when 'r' then running_only = true
+          when 's' then stopped_only = true
+          end
+        end
+      end
+
       jobs = JobManager.instance.active
-      if jobs.empty?
-        # No output when no jobs
-      else
-        jobs.each { |job| puts job }
+      jobs = jobs.select(&:running?) if running_only
+      jobs = jobs.select(&:stopped?) if stopped_only
+      jobs.each do |job|
+        if pids_only
+          puts job.pid
+        elsif long
+          # bash: `[1]+ 12345 Running                 sleep 1 &`
+          puts format('[%d]%s %d %-24s%s', job.id, JobManager.instance.marker(job), job.pid, job.status_string, job.command)
+        else
+          puts job
+        end
       end
       true
     end

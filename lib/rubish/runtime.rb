@@ -664,19 +664,16 @@ module Rubish
 
       @last_bg_pid = pid
 
-      # Only track jobs if monitor mode is enabled
-      if Builtins.set_option?('m')
-        Process.setpgid(pid, pid) rescue nil  # May fail if child already set it
-        job = JobManager.instance.add(
-          pid: pid,
-          pgid: pid,
-          command: @current_line || @last_line
-        )
-        # The notice is for interactive shells only, as in bash
-        puts "[#{job.id}] #{pid}" if Builtins.interactive_mode?
-      elsif Builtins.interactive_mode?
-        puts "[1] #{pid}"
-      end
+      # Every background job is tracked, so that `jobs`, `wait -n` and
+      # `%1` work in scripts too; its own process group only with job control
+      Process.setpgid(pid, pid) rescue nil if Builtins.set_option?('m') # May fail if child already set it
+      job = JobManager.instance.add(
+        pid: pid,
+        pgid: pid,
+        command: @current_line || @last_line
+      )
+      # The notice is for interactive shells only, as in bash
+      puts "[#{job.id}] #{pid}" if Builtins.interactive_mode?
       nil
     end
 
