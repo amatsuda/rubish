@@ -726,12 +726,18 @@ module Rubish
       end
 
       variable = consume(:WORD)&.value || raise('Expected variable name after "for"')
-      consume_word('in') || raise('Expected "in" after for variable')
 
-      # Parse items until 'do' or ';'
       items = []
-      while !peek_word('do') && !peek(:SEMICOLON) && peek(:WORD)
-        items << consume(:WORD).value
+      if consume_word('in')
+        # Parse items until 'do' or ';'
+        while !peek_word('do') && !peek(:SEMICOLON) && peek(:WORD)
+          items << consume(:WORD).value
+        end
+      elsif peek(:SEMICOLON) || peek_word('do')
+        # `for name; do ...` loops over the positional parameters
+        items << '"$@"'
+      else
+        raise 'Expected "in" after for variable'
       end
 
       skip_semicolon
