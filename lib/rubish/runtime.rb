@@ -1309,7 +1309,11 @@ module Rubish
       # Only expand if braceexpand option is enabled
       return [pattern] unless Builtins.set_option?('B')
 
-      expand_braces(pattern)
+      # Quotes inside an alternative (`{a,"b c"}`) are removed afterwards,
+      # as bash expands braces before it removes quotes
+      expand_braces(pattern).map do |word|
+        word.match?(/["']/) ? expand_multi_segment_word(word) : word
+      end
     end
 
     # Filename expansion for a pattern with extglob operators. Lives here so

@@ -445,6 +445,12 @@ module Rubish
       while lookahead < @input.length && depth > 0
         char = @input[lookahead]
         case char
+        when '"', "'"
+          # A quoted alternative may hold anything: skip to the closing quote
+          close = @input.index(char, lookahead + 1)
+          return false unless close
+
+          lookahead = close
         when '{'
           depth += 1
         when '}'
@@ -1213,7 +1219,12 @@ module Rubish
       depth = 0
       while @pos < @input.length
         char = @input[@pos]
-        if char == '{'
+        if char == '"' || char == "'"
+          # Quoted alternative: skip to its closing quote
+          close = @input.index(char, @pos + 1)
+          @pos = close ? close + 1 : @input.length
+          next
+        elsif char == '{'
           depth += 1
         elsif char == '}'
           depth -= 1

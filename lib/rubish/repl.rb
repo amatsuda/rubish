@@ -2200,7 +2200,7 @@ module Rubish
           current << char
         end
       end
-      items << current unless current.empty?
+      items << current # an empty alternative yields the surrounding text alone
 
       # Recursively expand any nested braces in items
       items.flat_map { |item| expand_braces(item) }
