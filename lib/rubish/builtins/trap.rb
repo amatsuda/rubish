@@ -170,8 +170,10 @@ module Rubish
         # Set up the handler
         # Capture signal name for RUBISH_TRAPSIG/BASH_TRAPSIG
         sig_name = sig.is_a?(Integer) ? Signal.signame(sig) : sig.to_s.sub(/^SIG/, '')
+        # BASH_TRAPSIG is the signal's number (bash)
+        sig_number = (Signal.list[sig_name] || sig).to_s
         Signal.trap(sig) do
-          @state.current_trapsig = sig_name
+          @state.current_trapsig = sig_number
           begin
             @state.executor&.call(command) if @state.executor
           ensure
