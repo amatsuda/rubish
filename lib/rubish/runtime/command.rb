@@ -797,6 +797,12 @@ module Rubish
       # If absolute path or not using hashall, return as-is
       return cmd if cmd.include?('/') || !Builtins.set_option?('h')
 
+      # `PATH=dirs cmd`: the assignment governs this lookup, and the hash
+      # table, built from the shell's own PATH, does not apply
+      if (prefix_path = @prefix_env&.[]('PATH'))
+        return find_executable_in(prefix_path, cmd) || cmd
+      end
+
       # Check hash first
       cached = Builtins.hash_lookup(cmd)
       if cached && !Builtins.execignore?(cached)
@@ -812,18 +818,22 @@ module Rubish
       end
 
       # Search PATH and cache if found
-      path_dirs = (ENV['PATH'] || '').split(File::PATH_SEPARATOR)
-      path_dirs.each do |dir|
-        full_path = File.join(dir, cmd)
-        next if Builtins.execignore?(full_path)
-        if File.executable?(full_path) && !File.directory?(full_path)
-          Builtins.hash_store(cmd, full_path)
-          return full_path
-        end
+      if (full_path = find_executable_in(ENV['PATH'], cmd))
+        Builtins.hash_store(cmd, full_path)
+        return full_path
       end
 
       # Not found in PATH, return original (exec will fail with proper error)
       cmd
+    end
+
+    def find_executable_in(path, cmd)
+      (path || '').split(File::PATH_SEPARATOR).each do |dir|
+        full_path = File.join(dir, cmd)
+        next if Builtins.execignore?(full_path)
+        return full_path if File.executable?(full_path) && !File.directory?(full_path)
+      end
+      nil
     end
 
     def extract_keyword_assignments(args)
