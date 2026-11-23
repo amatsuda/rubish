@@ -165,8 +165,9 @@ module Rubish
       words = expand_quoted_array_word(arg)
       return words if words
 
-      # Handle quoted strings
-      result = expand_quoted_string(arg) { nil }
+      # Handle quoted strings; a word with a brace list goes on to brace
+      # expansion even when an alternative is quoted (`{a,"b c"}`)
+      result = expand_quoted_string(arg) { nil } unless Builtins.set_option?('B') && WordSegments.brace_list?(arg)
       return [result] if result
 
       # Brace expansion first (only if braceexpand option is enabled)
@@ -180,7 +181,8 @@ module Rubish
       # Per POSIX, IFS word splitting only applies to results of variable expansion,
       # command substitution, and arithmetic expansion -- not to literal text.
       brace_expanded.flat_map do |item|
-        expanded = expand_string_content(item)
+        # An alternative that was quoted (`{a,'b c'}`) loses its quotes here
+        expanded = item.match?(/['"]/) ? expand_multi_segment_word(item) : expand_string_content(item)
         if item.include?('$') || item.include?('`')
           # With shwordsplit unset (zsh behavior), scalar variable
           # expansions stay one word. Command substitutions still split

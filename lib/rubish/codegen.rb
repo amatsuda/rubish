@@ -218,15 +218,14 @@ module Rubish
       # But NOT ${...} which is parameter expansion
       return false unless str.include?('{') && str.include?('}')
 
-      # Check for brace expansion, but exclude ${...} parameter expansion
-      # ${var,} or ${var,,} are case modification, not brace expansion
-      str.match?(/(?<!\$)\{[^}]*(?:,|\.\.)[^}]*\}/)
+      WordSegments.brace_list?(str)
     end
 
     def generate_string_arg_with_glob(str)
       # Quoted strings (any form) are handled entirely by generate_string_arg.
-      # Glob and brace expansion only apply to unquoted words.
-      if str.start_with?("'", '"', "$'") || WordSegments.multi_segment?(str)
+      # Glob and brace expansion only apply to unquoted words, but an
+      # alternative inside braces may be quoted: `{a,"b c"}`
+      if str.start_with?("'", '"', "$'") || (WordSegments.multi_segment?(str) && !has_brace_expansion?(str))
         return generate_string_arg(str)
       end
 

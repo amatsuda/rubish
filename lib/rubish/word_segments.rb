@@ -150,6 +150,47 @@ module Rubish
 
     # Returns true when str contains more than one segment (ie. it is an
     # adjacent/mixed quoted word rather than a plain quoted or bare token).
+    # Does the word hold a brace expansion, `{a,b}` or `{1..5}`, outside
+    # quotes? Quoted text inside the braces (`{a,"b c"}`) is skipped, and
+    # `${...}` is a parameter expansion, not a brace list.
+    def self.brace_list?(str)
+      i = 0
+      while i < str.length
+        case str[i]
+        when '\\' then i += 2; next
+        when "'", '"'
+          close = str.index(str[i], i + 1)
+          return false unless close
+
+          i = close + 1
+          next
+        when '{'
+          unless i > 0 && str[i - 1] == '$'
+            depth = 1
+            j = i + 1
+            has_sep = false
+            while j < str.length && depth > 0
+              case str[j]
+              when "'", '"'
+                close = str.index(str[j], j + 1)
+                return false unless close
+
+                j = close
+              when '{' then depth += 1
+              when '}' then depth -= 1
+              when ',' then has_sep = true if depth == 1
+              when '.' then has_sep = true if depth == 1 && str[j + 1] == '.'
+              end
+              j += 1
+            end
+            return true if depth == 0 && has_sep
+          end
+        end
+        i += 1
+      end
+      false
+    end
+
     def self.multi_segment?(str)
       return false unless str.match?(/['"]/)
       return false if str.start_with?("$'") && str.end_with?("'")
