@@ -2269,6 +2269,7 @@ module Rubish
     end
 
     def alias(args)
+      ok = true
       if args.empty?
         # List all aliases
         @state.aliases.each { |name, value| puts "alias #{name}='#{value}'" }
@@ -2284,12 +2285,13 @@ module Rubish
             if @state.aliases.key?(arg)
               puts "alias #{arg}='#{@state.aliases[arg]}'"
             else
-              puts "alias: #{arg}: not found"
+              $stderr.puts "rubish: alias: #{arg}: not found"
+              ok = false
             end
           end
         end
       end
-      true
+      ok
     end
 
     def unalias(args)
