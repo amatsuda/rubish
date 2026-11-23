@@ -46,7 +46,7 @@ class TestTrap < Test::Unit::TestCase
   def test_trap_list
     Rubish::Builtins.run('trap', ['echo int', 'INT'])
     output = capture_output { Rubish::Builtins.run('trap', []) }
-    assert_match(/trap -- "echo int" INT/, output)
+    assert_match(/trap -- \x27echo int\x27 SIGINT/, output)
   end
 
   def test_trap_list_signals
