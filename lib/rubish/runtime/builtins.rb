@@ -1363,8 +1363,16 @@ module Rubish
 
       # readonly -f NAME...: the functions can no longer be redefined
       if args.first == '-f'
-        args.drop(1).each { |name| @state.readonly_functions << name }
-        return true
+        ok = true
+        args.drop(1).each do |name|
+          unless @state.function_checker&.call(name)
+            $stderr.puts "rubish: readonly: #{name}: not a function"
+            ok = false
+            next
+          end
+          @state.readonly_functions << name
+        end
+        return ok
       end
 
       # Filter out -p flag
@@ -2009,6 +2017,23 @@ module Rubish
           @state.shell_vars[name] = value unless value.nil?
         end
         return true
+      end
+
+      # export -f NAME...: pass the functions to child bash shells the way
+      # bash does, through BASH_FUNC_name%% in the environment
+      if args.first == '-f'
+        ok = true
+        args.drop(1).each do |name|
+          info = @state.function_getter&.call(name)
+          unless info
+            $stderr.puts "rubish: export: #{name}: not a function"
+            ok = false
+            next
+          end
+          # info[:source] is the body as `declare -f` prints it inside the braces
+          ENV["BASH_FUNC_#{name}%%"] = "() { #{info[:source].to_s.strip}\n}"
+        end
+        return ok
       end
 
       args = args.drop(1) if args.first == '--'
