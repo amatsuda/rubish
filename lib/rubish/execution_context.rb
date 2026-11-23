@@ -547,7 +547,7 @@ module Rubish
     end
 
     def apply_globignore(matches)
-      globignore = ENV['GLOBIGNORE']
+      globignore = Builtins.get_var('GLOBIGNORE')
       return matches if globignore.nil? || globignore.empty?
       patterns = globignore.split(':').reject(&:empty?)
       return matches if patterns.empty?

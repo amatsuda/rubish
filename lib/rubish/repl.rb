@@ -1582,7 +1582,7 @@ module Rubish
     # Apply GLOBIGNORE filtering to glob results
     # GLOBIGNORE is a colon-separated list of patterns to exclude
     def apply_globignore(matches)
-      globignore = ENV['GLOBIGNORE']
+      globignore = Builtins.get_var('GLOBIGNORE')
       return matches if globignore.nil? || globignore.empty?
 
       patterns = globignore.split(':').reject(&:empty?)
