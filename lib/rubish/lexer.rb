@@ -1339,7 +1339,7 @@ module Rubish
       next_one = @input[after_brace]
 
       # Check for valid redirection operators
-      %w[>> >| >& <& < >].any? { |op| @input[after_brace, op.length] == op }
+      %w[<<< >> >| >& <& < >].any? { |op| @input[after_brace, op.length] == op }
     end
 
     # Read a {varname} redirection: {fd}>file or {fd}<file
@@ -1356,7 +1356,10 @@ module Rubish
 
       # Read the redirection operator
       two_char = @input[@pos, 2]
-      if %w[>> >| >& <&].include?(two_char)
+      if @input[@pos, 3] == '<<<'
+        op = '<<<'
+        @pos += 3
+      elsif %w[>> >| >& <&].include?(two_char)
         op = two_char
         @pos += 2
       else

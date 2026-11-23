@@ -689,6 +689,10 @@ module Rubish
         # Open file for reading
         io = File.open(expand_single_arg(target), 'r')
         perform_varname_redirect(fd_num, io, &block)
+      when '<<<'
+        # `{fd}<<< word`: the word, with a newline, readable from the descriptor
+        io = Command.content_file("#{expand_single_arg(target)}\n")
+        perform_varname_redirect(fd_num, io, &block)
       when '>&'
         # Duplicate output FD
         src_fd = target.to_i
