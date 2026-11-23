@@ -102,9 +102,9 @@ class TestSelect < Test::Unit::TestCase
   # Unit tests for helper methods
   def test_display_select_menu
     output = StringIO.new
-    $stdout = output
+    $stderr = output
     @repl.send(:display_select_menu, %w[apple banana cherry])
-    $stdout = STDOUT
+    $stderr = STDERR
 
     expected = "1) apple\n2) banana\n3) cherry\n"
     assert_equal expected, output.string
@@ -112,10 +112,10 @@ class TestSelect < Test::Unit::TestCase
 
   def test_display_select_menu_with_padding
     output = StringIO.new
-    $stdout = output
+    $stderr = output
     items = (1..10).map { |i| "item#{i}" }
     @repl.send(:display_select_menu, items)
-    $stdout = STDOUT
+    $stderr = STDERR
 
     lines = output.string.lines
     # First item should be right-justified like " 1) item1"
@@ -130,12 +130,12 @@ class TestSelect < Test::Unit::TestCase
     $stdin = StringIO.new("1\n")
 
     # Suppress menu output
-    old_stdout = $stdout
+    old_stderr = $stderr
     $stdout = StringIO.new
 
     ENV.delete('REPLY')
     @repl.send(:__select_loop, 'choice', %w[a b c]) { }
-    $stdout = old_stdout
+    $stderr = old_stderr
     $stdin = old_stdin
 
     assert_equal '1', get_shell_var('REPLY')
@@ -145,12 +145,12 @@ class TestSelect < Test::Unit::TestCase
     old_stdin = $stdin
     $stdin = StringIO.new("2\n")
 
-    old_stdout = $stdout
+    old_stderr = $stderr
     $stdout = StringIO.new
 
     ENV.delete('choice')
     @repl.send(:__select_loop, 'choice', %w[apple banana cherry]) { }
-    $stdout = old_stdout
+    $stderr = old_stderr
     $stdin = old_stdin
 
     assert_equal 'banana', get_shell_var('choice')
@@ -160,12 +160,12 @@ class TestSelect < Test::Unit::TestCase
     old_stdin = $stdin
     $stdin = StringIO.new("99\n")
 
-    old_stdout = $stdout
+    old_stderr = $stderr
     $stdout = StringIO.new
 
     ENV['choice'] = 'initial'
     @repl.send(:__select_loop, 'choice', %w[a b c]) { }
-    $stdout = old_stdout
+    $stderr = old_stderr
     $stdin = old_stdin
 
     assert_equal '', get_shell_var('choice')
@@ -175,12 +175,12 @@ class TestSelect < Test::Unit::TestCase
     old_stdin = $stdin
     $stdin = StringIO.new("invalid\n")
 
-    old_stdout = $stdout
+    old_stderr = $stderr
     $stdout = StringIO.new
 
     ENV['choice'] = 'initial'
     @repl.send(:__select_loop, 'choice', %w[a b c]) { }
-    $stdout = old_stdout
+    $stderr = old_stderr
     $stdin = old_stdin
 
     assert_equal '', get_shell_var('choice')
@@ -190,13 +190,13 @@ class TestSelect < Test::Unit::TestCase
     old_stdin = $stdin
     $stdin = StringIO.new("1\n")
 
-    old_stdout = $stdout
+    old_stderr = $stderr
     output = StringIO.new
-    $stdout = output
+    $stderr = output
 
     ENV['PS3'] = 'Choose: '
     @repl.send(:__select_loop, 'choice', %w[a]) { }
-    $stdout = old_stdout
+    $stderr = old_stderr
     $stdin = old_stdin
 
     assert_match(/Choose: /, output.string)
@@ -206,13 +206,13 @@ class TestSelect < Test::Unit::TestCase
     old_stdin = $stdin
     $stdin = StringIO.new("1\n")
 
-    old_stdout = $stdout
+    old_stderr = $stderr
     output = StringIO.new
-    $stdout = output
+    $stderr = output
 
     ENV.delete('PS3')
     @repl.send(:__select_loop, 'choice', %w[a]) { }
-    $stdout = old_stdout
+    $stderr = old_stderr
     $stdin = old_stdin
 
     assert_match(/#\? /, output.string)
@@ -223,12 +223,12 @@ class TestSelect < Test::Unit::TestCase
     old_stdin = $stdin
     $stdin = StringIO.new("1\n")
 
-    old_stdout = $stdout
+    old_stderr = $stderr
     $stdout = StringIO.new
 
     block_called = false
     @repl.send(:__select_loop, 'choice', []) { block_called = true }
-    $stdout = old_stdout
+    $stderr = old_stderr
     $stdin = old_stdin
 
     assert_false block_called
@@ -238,12 +238,12 @@ class TestSelect < Test::Unit::TestCase
     old_stdin = $stdin
     $stdin = StringIO.new("1\n")
 
-    old_stdout = $stdout
+    old_stderr = $stderr
     $stdout = StringIO.new
 
     block_called = false
     @repl.send(:__select_loop, 'choice', %w[a b]) { block_called = true }
-    $stdout = old_stdout
+    $stderr = old_stderr
     $stdin = old_stdin
 
     assert_true block_called
@@ -254,12 +254,12 @@ class TestSelect < Test::Unit::TestCase
     # Select 1, then 2, then EOF
     $stdin = StringIO.new("1\n2\n")
 
-    old_stdout = $stdout
+    old_stderr = $stderr
     $stdout = StringIO.new
 
     selections = []
     @repl.send(:__select_loop, 'choice', %w[a b c]) { selections << get_shell_var('choice') }
-    $stdout = old_stdout
+    $stderr = old_stderr
     $stdin = old_stdin
 
     assert_equal %w[a b], selections
@@ -269,11 +269,11 @@ class TestSelect < Test::Unit::TestCase
     old_stdin = $stdin
     $stdin = StringIO.new("1\n")
 
-    old_stdout = $stdout
+    old_stderr = $stderr
     $stdout = StringIO.new
 
     @repl.send(:__select_loop, 'choice', %w[first second third]) { }
-    $stdout = old_stdout
+    $stderr = old_stderr
     $stdin = old_stdin
 
     assert_equal 'first', get_shell_var('choice')
@@ -283,12 +283,12 @@ class TestSelect < Test::Unit::TestCase
     old_stdin = $stdin
     $stdin = StringIO.new("0\n")
 
-    old_stdout = $stdout
+    old_stderr = $stderr
     $stdout = StringIO.new
 
     ENV['choice'] = 'initial'
     @repl.send(:__select_loop, 'choice', %w[a b c]) { }
-    $stdout = old_stdout
+    $stderr = old_stderr
     $stdin = old_stdin
 
     assert_equal '', get_shell_var('choice')

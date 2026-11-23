@@ -251,8 +251,9 @@ module Rubish
 
     def display_select_menu(items)
       num_width = items.length.to_s.length
+      # The menu goes to stderr, like the PS3 prompt (bash)
       items.each_with_index do |item, i|
-        puts "#{(i + 1).to_s.rjust(num_width)}) #{item}"
+        $stderr.puts "#{(i + 1).to_s.rjust(num_width)}) #{item}"
       end
     end
 

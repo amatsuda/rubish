@@ -1017,7 +1017,7 @@ module Rubish
         # PS3 supports the same escape sequences as PS1
         ps3 = ENV['PS3'] || '#? '
         expanded_prompt = expand_prompt(ps3)
-        print expanded_prompt
+        $stderr.print expanded_prompt
 
         # Read user input
         reply = $stdin.gets
