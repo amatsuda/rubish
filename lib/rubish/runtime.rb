@@ -1389,6 +1389,8 @@ module Rubish
         status = result ? true : false
       end
 
+      # A `!` command is exempt from errexit and the ERR trap, as in bash
+      @errexit_exempt = true
       # Return negated status
       ExitStatus.new(status ? 1 : 0)
     end

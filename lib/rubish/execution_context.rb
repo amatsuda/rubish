@@ -158,8 +158,12 @@ module Rubish
       status
     end
 
+    # The ERR trap obeys errexit's exemptions: not for a command before
+    # `&&` or `||`, nor for one negated with `!`
     def run_err_trap_if_failed
-      err_trap(@last_status) if @last_status != 0
+      return if @last_status == 0 || @errexit_suppressed || @errexit_exempt
+
+      err_trap(@last_status)
     end
 
     def check_errexit
