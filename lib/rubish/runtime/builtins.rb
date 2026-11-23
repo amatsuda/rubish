@@ -979,15 +979,15 @@ module Rubish
       # Get current argument
       arg = parse_args[optind - 1]
 
-      # Check if it's an option
-      if arg.nil? || arg == '--' || !arg.start_with?('-') || arg == '-'
+      # `--` ends the options: OPTIND moves past it
+      if arg == '--'
+        set_var('OPTIND', (optind + 1).to_s)
         set_var(varname, '?')
         return false
       end
 
-      # Handle -- to stop option processing
-      if arg == '--'
-        set_var('OPTIND', (optind + 1).to_s)
+      # Check if it's an option
+      if arg.nil? || !arg.start_with?('-') || arg == '-'
         set_var(varname, '?')
         return false
       end
