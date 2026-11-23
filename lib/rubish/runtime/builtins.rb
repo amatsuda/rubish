@@ -813,8 +813,8 @@ module Rubish
       @state.zsh_hook_runner&.call('chpwd')
 
       true
-    rescue Errno::ENOENT => e
-      $stderr.puts "cd: #{e.message}"
+    rescue Errno::ENOENT
+      $stderr.puts "rubish: cd: #{args.reject { |a| a.start_with?('-') }.first}: No such file or directory"
       false
     end
 
