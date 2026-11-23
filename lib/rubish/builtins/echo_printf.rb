@@ -113,6 +113,7 @@ module Rubish
       # Handle single array argument (from shell command) vs multiple args (from Ruby code)
       args = args.first if args.length == 1 && args.first.is_a?(Array)
       var_name = nil
+      @printf_failed = false
 
       # Parse -v option
       while args.first&.start_with?('-')
@@ -293,7 +294,7 @@ module Rubish
       else
         print output
       end
-      true
+      !@printf_failed
     end
 
     def process_escape_sequences(str)
@@ -443,7 +444,10 @@ module Rubish
                 else
                   numeric_arg.match?(/\A\s*[+-]?(\d+(\.\d*)?|\.\d+)([eE][+-]?\d+)?\z/)
                 end
-        $stderr.puts "rubish: printf: #{numeric_arg}: invalid number" unless valid
+        unless valid
+          $stderr.puts "rubish: printf: #{numeric_arg}: invalid number"
+          @printf_failed = true # the command's status is 1
+        end
       end
 
       result = case specifier
@@ -463,7 +467,7 @@ module Rubish
                when 'u'
                  # Unsigned integer
                  num = printf_integer(numeric_arg)
-                 num = num & 0xFFFFFFFF if num < 0
+                 num &= 0xFFFFFFFFFFFFFFFF if num < 0 # 64-bit, as in bash
                  num.to_s
                when 'o'
                  # Octal
