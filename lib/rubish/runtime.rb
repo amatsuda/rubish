@@ -1135,7 +1135,8 @@ module Rubish
       unless Builtins.zsh_option_enabled?('sh_word_split')
         return value.empty? ? [] : [value]
       end
-      Builtins.split_by_ifs(value)
+      # Each word is a pattern: `x='*.txt'; echo $x` lists the files (bash)
+      Builtins.split_by_ifs(value).flat_map { |w| w.match?(/[*?\[]/) ? __glob(w) : [w] }
     end
 
     # Word-split the result of a standalone unquoted ${...} expansion and
