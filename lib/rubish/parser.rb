@@ -654,6 +654,21 @@ module Rubish
         current.value.match?(/\A[A-Za-z_][A-Za-z0-9_]*\z/)
     end
 
+    # A loop body: `do ...; done`, or bash's `{ ...; }` form
+    def parse_loop_body(missing_do_message)
+      if peek(:LBRACE)
+        consume(:LBRACE)
+        body = parse_brace_group_body
+        consume(:RBRACE) || raise('Expected "}" to close loop body')
+        return body
+      end
+
+      consume_word('do') || raise(missing_do_message)
+      body = parse_while_body
+      consume_done_or_end || raise('Expected "done" or "end" to close loop')
+      body
+    end
+
     def skip_semicolon
       consume(:SEMICOLON) if peek(:SEMICOLON)
     end
@@ -803,9 +818,7 @@ module Rubish
       end
 
       skip_semicolon
-      consume_word('do') || raise('Expected "do" after for items')
-      body = parse_while_body  # Reuse while body parser (stops at done/end)
-      consume_done_or_end || raise('Expected "done" or "end" to close for loop')
+      body = parse_loop_body('Expected "do" after for items')
 
       AST::For.new(variable, items, body)
     end
@@ -823,9 +836,7 @@ module Rubish
       update = parts[2] || ''
 
       skip_semicolon
-      consume_word('do') || raise('Expected "do" after for ((...))' )
-      body = parse_while_body
-      consume_done_or_end || raise('Expected "done" or "end" to close for loop')
+      body = parse_loop_body('Expected "do" after for ((...))')
 
       AST::ArithFor.new(init, condition, update, body)
     end
@@ -864,12 +875,18 @@ module Rubish
       consume(:SELECT)
 
       variable = consume(:WORD)&.value || raise('Expected variable name after "select"')
-      consume_word('in') || raise('Expected "in" after select variable')
 
-      # Parse items until 'do' or ';'
       items = []
-      while !peek_word('do') && !peek(:SEMICOLON) && peek(:WORD)
-        items << consume(:WORD).value
+      if consume_word('in')
+        # Parse items until 'do' or ';'
+        while !peek_word('do') && !peek(:SEMICOLON) && peek(:WORD)
+          items << consume(:WORD).value
+        end
+      elsif peek(:SEMICOLON) || peek_word('do')
+        # `select name; do ...` offers the positional parameters
+        items << '"$@"'
+      else
+        raise 'Expected "in" after select variable'
       end
 
       skip_semicolon
