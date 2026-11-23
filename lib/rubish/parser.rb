@@ -1257,7 +1257,12 @@ module Rubish
           # N>file, N>>file, N<file, N>&M, N<&M, etc. for fd N >= 3
           fd = op.value[:fd]
           redirect_op = op.value[:op]
-          target = consume(:WORD)&.value
+          # The target may be a process substitution: `exec 3< <(cmd)`
+          target = if peek(:PROC_SUB_IN) || peek(:PROC_SUB_OUT)
+                     parse_arg
+                   else
+                     consume(:WORD)&.value
+                   end
           cmd = AST::FdRedirect.new(cmd, fd, redirect_op, target) if target
         else
           # Regular redirections (>, >>, <, 2>, >&, <&); the target may be a

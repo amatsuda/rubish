@@ -910,7 +910,7 @@ module Rubish
 
     def generate_fd_redirect(node)
       # N>file, N>>file, N<file, N>&M, N<&-, etc. for fd N >= 3
-      target = generate_string_arg(node.target)
+      target = generate_redirect_target(node)
       if compound_command?(node.command)
         "__with_fd_redirect(#{node.fd}, #{node.op.inspect}, #{target}) { #{generate(node.command)} }"
       else
