@@ -2911,9 +2911,28 @@ module Rubish
       false
     end
 
+    # The count given to break/continue: 1 when absent; a non-number is an
+    # error (status 2) and 0 is out of range (status 1), as in bash
+    def loop_control_count(name, args)
+      return 1 if args.first.nil?
+
+      unless args.first.match?(/\A[+-]?\d+\z/)
+        $stderr.puts "rubish: #{name}: #{args.first}: numeric argument required"
+        return ExitStatus.new(2)
+      end
+      count = args.first.to_i
+      if count < 1
+        $stderr.puts "rubish: #{name}: #{args.first}: loop count out of range"
+        return ExitStatus.new(1)
+      end
+      count
+    end
+
     def break_(args)
       # Optional: break N to break out of N levels (default 1)
-      levels = args.first&.to_i || 1
+      levels = loop_control_count('break', args)
+      return levels if levels.is_a?(ExitStatus)
+
       throw :break_loop, levels
     rescue UncaughtThrowError
       # bash prints this and returns success
@@ -2923,7 +2942,9 @@ module Rubish
 
     def continue(args)
       # Optional: continue N to continue Nth enclosing loop (default 1)
-      levels = args.first&.to_i || 1
+      levels = loop_control_count('continue', args)
+      return levels if levels.is_a?(ExitStatus)
+
       throw :continue_loop, levels
     rescue UncaughtThrowError
       $stderr.puts "rubish: continue: only meaningful in a `for', `while', or `until' loop"
