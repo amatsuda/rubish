@@ -2601,13 +2601,14 @@ module Rubish
     end
 
     # Execute a command from a sourced file, with optional profiling
-    # The text so far cannot be a whole statement: it ends with a backslash
-    # that joins the next line, or it has an unclosed parenthesis
-    # (`arr=(` ... `)`)
+    # The text so far cannot be a whole statement: it ends with a list or
+    # pipe operator, with a backslash that joins the next line, or it has
+    # an unclosed parenthesis (`arr=(` ... `)`)
     def statement_continues?(buffer)
+      code = buffer.gsub(/'[^']*'|"(?:\\.|[^"\\])*"/, '') # quoted text aside
+      return true if code.match?(/(\|\||&&|\|&|\|)\s*\z/)
       return true if buffer.match?(/(?<!\\)(\\\\)*\\\z/)
 
-      code = buffer.gsub(/'[^']*'|"(?:\\.|[^"\\])*"/, '') # quoted text aside
       code.count('(') > code.count(')')
     end
 

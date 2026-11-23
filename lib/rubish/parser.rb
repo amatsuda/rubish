@@ -81,7 +81,10 @@ module Rubish
 
       while peek(:AND) || peek(:OR)
         op = consume
+        skip_newline_tokens # the list may go on on the next line
         right = parse_pipeline
+        raise "Expected command after '#{op.value}'" unless right
+
         left = if op.type == :AND
                  AST::And.new(left, right)
                else
@@ -116,6 +119,7 @@ module Rubish
             (peek(:WORD) && current.value =~ /\A\.(each|map|select|detect)\z/ && peek_at(1, :BLOCK))
         if peek(:PIPE_BOTH)
           consume(:PIPE_BOTH)
+          skip_newline_tokens
           pipe_types << :pipe_both
         elsif peek(:WORD) && current.value =~ /\A\.(each|map|select|detect)\z/ && peek_at(1, :BLOCK)
           # .each/.map/.select/.detect {block} after FUNC_CALL - tokenized as single WORD
@@ -163,6 +167,7 @@ module Rubish
           next
         else
           consume(:PIPE)
+          skip_newline_tokens # the pipeline may go on on the next line
           pipe_types << :pipe
         end
         # Check for select { block } - filtering select (not shell select loop)
@@ -620,6 +625,12 @@ module Rubish
       consume(:SEMICOLON) if peek(:SEMICOLON)
     end
 
+    # Newlines (which the lexer hands over as `;` tokens carrying "\n") are
+    # allowed after `&&`, `||`, `|` and `|&`
+    def skip_newline_tokens
+      consume while peek(:SEMICOLON) && current.value == "\n"
+    end
+
     # Parse condition for if/elif (stops at then/do)
     def parse_conditional_for_if
       # Check for Ruby block condition: { expression }
@@ -632,7 +643,10 @@ module Rubish
 
       while peek(:AND) || peek(:OR)
         op = consume
+        skip_newline_tokens # the list may go on on the next line
         right = parse_pipeline
+        raise "Expected command after '#{op.value}'" unless right
+
         left = if op.type == :AND
                  AST::And.new(left, right)
                else

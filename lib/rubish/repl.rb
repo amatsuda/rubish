@@ -533,6 +533,7 @@ module Rubish
         /Expected ['"]do['"]/,
         /Expected ['"]in['"]/,
         /Expected ['"]?\]\]?['"]?/,
+        /Expected command after/,
       ]
       incomplete_patterns.any? { |pattern| message =~ pattern }
     end
