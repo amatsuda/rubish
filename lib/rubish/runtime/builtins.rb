@@ -994,7 +994,7 @@ module Rubish
         set_var(varname, '?')
         set_var('OPTARG', opt_char) if silent_errors
         unless silent_errors || !opterr
-          $stderr.puts "getopts: illegal option -- #{opt_char}"
+          $stderr.puts "rubish: illegal option -- #{opt_char}"
         end
         # Move to next character or next argument
         if optpos + 1 < arg.length
@@ -1029,7 +1029,7 @@ module Rubish
           else
             set_var(varname, '?')
             if opterr
-              $stderr.puts "getopts: option requires an argument -- #{opt_char}"
+              $stderr.puts "rubish: option requires an argument -- #{opt_char}"
             end
           end
           set_var('OPTIND', (optind + 1).to_s)
