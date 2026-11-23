@@ -2895,6 +2895,11 @@ module Rubish
     end
 
     def return_(args)
+      if args.length > 1
+        $stderr.puts 'rubish: return: too many arguments'
+        throw :return, 1
+      end
+
       # Without an argument, the status of the last command run
       code = if args.first.nil?
                @state.last_status_getter&.call || 0
@@ -6817,9 +6822,14 @@ module Rubish
     end
 
     def exit(args)
+      # A bad argument is reported and the shell goes on (bash 5.3)
       if args.first && !args.first.match?(/\A[+-]?\d+\z/)
         $stderr.puts "rubish: exit: #{args.first}: numeric argument required"
-        throw :exit, 2
+        return ExitStatus.new(2)
+      end
+      if args.length > 1
+        $stderr.puts 'rubish: exit: too many arguments'
+        return ExitStatus.new(1)
       end
 
       # nil when no argument: callers fall back to $? (the last status)
