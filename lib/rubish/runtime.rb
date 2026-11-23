@@ -1718,32 +1718,25 @@ module Rubish
       @original_stdout ||= $stdout.dup
       @original_stderr ||= $stderr.dup
 
-      # Apply redirections permanently to the shell
-      # Use the file path from the File object for reopening
-      if cmd.stdin
-        path = cmd.stdin.respond_to?(:path) ? cmd.stdin.path : cmd.stdin.to_s
-        mode = cmd.stdin.respond_to?(:internal_encoding) ? 'r' : 'r'
-        $stdin.reopen(path, mode)
-        cmd.stdin.close unless cmd.stdin.closed?
-        @shell_stdin = path
-      end
+      # Apply redirections permanently to the shell's own streams
+      @shell_stdin = exec_reopen($stdin, cmd.stdin) if cmd.stdin
+      @shell_stdout = exec_reopen($stdout, cmd.stdout) if cmd.stdout
+      @shell_stderr = exec_reopen($stderr, cmd.stderr) if cmd.stderr
+    end
 
-      if cmd.stdout
-        path = cmd.stdout.respond_to?(:path) ? cmd.stdout.path : cmd.stdout.to_s
-        # Check if append mode
-        mode = cmd.stdout.respond_to?(:stat) && cmd.stdout.stat.size > 0 ? 'a' : 'w'
-        $stdout.reopen(path, mode)
-        cmd.stdout.close unless cmd.stdout.closed?
-        @shell_stdout = path
+    # Point one of the shell's streams at a redirection target for good:
+    # an opened file, or the `:stdout` / `:stderr` / `:closed` markers of
+    # `exec 2>&1`, `exec >&2` and `exec >&-`. Returns the target's path.
+    def exec_reopen(stream, target)
+      case target
+      when :stdout then stream.reopen($stdout)
+      when :stderr then stream.reopen($stderr)
+      when :closed then stream.reopen(File::NULL, 'w')
+      else
+        stream.reopen(target)
+        target.close unless target.closed?
       end
-
-      if cmd.stderr
-        path = cmd.stderr.respond_to?(:path) ? cmd.stderr.path : cmd.stderr.to_s
-        mode = 'w'
-        $stderr.reopen(path, mode)
-        cmd.stderr.close unless cmd.stderr.closed?
-        @shell_stderr = path
-      end
+      target.respond_to?(:path) ? target.path : target.to_s
     end
 
     # `VAR=value ...` with no command name: every word is an assignment
