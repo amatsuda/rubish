@@ -1064,7 +1064,7 @@ module Rubish
       # If input has embedded heredoc body (eg. from execute() or source), strip the body
       # before lexing so it isn't tokenized as additional commands, and pre-set the content.
       lex_line = line
-      if line.include?("\n") && @heredoc_content.nil? && (m = line.match(/<<(-?)\s*(['"]?)(\w+)\2/))
+      if line.include?("\n") && @heredoc_content.nil? && (m = line.match(/(?<!<)<<(?!<)(-?)\s*(['"]?)(\w+)\2/))
         strip_tabs = m[1] == '-'
         delimiter  = m[3]
         lex_line, @heredoc_content = extract_heredoc_from_string(line, delimiter, strip_tabs)
