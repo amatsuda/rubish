@@ -41,7 +41,7 @@ class TestWait < Test::Unit::TestCase
   def test_wait_invalid_pid
     output = capture_output do
       result = Rubish::Builtins.run('wait', ['999999'])
-      assert_false result
+      assert_equal 127, result.exitstatus
     end
     assert_match(/not a child/, output)
   end

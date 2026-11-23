@@ -6572,8 +6572,8 @@ module Rubish
                 last_status = wait_exit_status(status)
                 next
               rescue Errno::ECHILD
-                puts "wait: pid #{pid} is not a child of this shell"
-                last_status = false
+                $stderr.puts "rubish: wait: pid #{pid} is not a child of this shell"
+                last_status = ExitStatus.new(127)
                 next
               end
             end
