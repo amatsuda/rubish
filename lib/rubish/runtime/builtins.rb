@@ -797,7 +797,18 @@ module Rubish
       else
         # Logical $PWD (bash default): keep symlinks. Use $PWD as the base only
         # while it still names the current dir, else the physical cwd.
-        base = ENV['PWD'] && File.identical?(ENV['PWD'], Dir.pwd) ? ENV['PWD'] : Dir.pwd
+        # The current directory may have been removed under us: then only
+        # $PWD, or an absolute target, can say where we are
+        cwd = begin
+          Dir.pwd
+        rescue SystemCallError
+          nil
+        end
+        base = if ENV['PWD'] && (cwd.nil? || File.identical?(ENV['PWD'], cwd))
+                 ENV['PWD']
+               else
+                 cwd || ENV['PWD'] || '/'
+               end
         logical = File.expand_path(dir, base)
         Dir.chdir(logical)
         ENV['PWD'] = logical
@@ -2046,6 +2057,10 @@ module Rubish
         end
       end
       true
+    rescue Errno::ENOENT
+      # The current directory has been removed
+      $stderr.puts 'rubish: pwd: error retrieving current directory: getcwd: cannot access parent directories: No such file or directory'
+      false
     end
 
     # Record timestamp for a history entry
