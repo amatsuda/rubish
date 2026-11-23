@@ -358,7 +358,14 @@ module Rubish
       block = consume(:BLOCK).value if peek(:BLOCK)
 
       cmd = AST::Command.new(name: name, args: args, block: block, env: prefix_env)
-      parse_redirections(cmd)
+      node = parse_redirections(cmd)
+      # Arguments may follow a redirection (`cat f > out g`): they belong to
+      # the same command, so they go into the args array the node shares
+      while peek_any(:WORD, :ARRAY, :PROC_SUB_IN, :PROC_SUB_OUT, :ARRAY_ASSIGN)
+        args << parse_arg while peek_any(:WORD, :ARRAY, :PROC_SUB_IN, :PROC_SUB_OUT, :ARRAY_ASSIGN)
+        node = parse_redirections(node)
+      end
+      node
     end
 
     # Check if a string looks like a variable assignment (VAR=value or VAR+=value)
