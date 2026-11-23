@@ -470,7 +470,7 @@ module Rubish
       end
 
       # ${var@operator} - transformations (Q, E, P, A, a, U, u, L, K)
-      return __param_transform($1, $2) if content =~ /\A([a-zA-Z_][a-zA-Z0-9_]*(?:\[[^\]]+\])?|\d+|[@*])@([QEPAaUuLK])\z/
+      return __param_transform($1, $2) if content =~ /\A([a-zA-Z_][a-zA-Z0-9_]*(?:\[[^\]]+\])?|\d+|[@*])@([QEPAaUuLKk])\z/
 
       # ${!prefix*} / ${!prefix@} - variable names with prefix
       if content =~ /\A!([a-zA-Z_][a-zA-Z0-9_]*)([*@])\z/

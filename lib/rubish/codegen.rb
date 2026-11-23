@@ -1650,7 +1650,7 @@ module Rubish
       end
 
       # Handle ${var@operator} - transformation operators (Q, E, P, A, a, U, u, L, K)
-      if content =~ /\A([a-zA-Z_][a-zA-Z0-9_]*(?:\[[^\]]+\])?|\d+|[@*])@([QEPAaUuLK])\z/
+      if content =~ /\A([a-zA-Z_][a-zA-Z0-9_]*(?:\[[^\]]+\])?|\d+|[@*])@([QEPAaUuLKk])\z/
         var_name = $1
         operator = $2
         return "__param_transform(#{var_name.inspect}, #{operator.inspect})"

@@ -289,6 +289,16 @@ module Rubish
     # L: Lowercase entire value
     # K: For associative arrays, show key-value pairs
     def __param_transform(var_name, operator)
+      # @k: the key/value pairs of @K, unquoted
+      if operator == 'k' && var_name =~ /\A([a-zA-Z_][a-zA-Z0-9_]*)\[[@*]\]\z/
+        name = $1
+        pairs = if Builtins.assoc_array?(name)
+                  Builtins.get_assoc_array(name).flat_map { |k, v| [k, v] }
+                else
+                  Builtins.get_array(name).each_with_index.reject { |v, _| v.nil? }.flat_map { |v, i| [i.to_s, v] }
+                end
+        return pairs.join(' ')
+      end
       if operator == 'K' && var_name =~ /\A([a-zA-Z_][a-zA-Z0-9_]*)\[[@*]\]\z/
         # subscript/value pairs, values quoted, as bash prints them
         name = $1
@@ -341,6 +351,7 @@ module Rubish
       when 'u' then value.nil? || value.empty? ? '' : value[0].upcase + (value[1..] || '')
       when 'L' then value&.downcase || ''
       when 'K' then value.nil? ? "''" : __param_transform(var_name, 'Q')
+      when 'k' then value || ''
       else value || ''
       end
     end
