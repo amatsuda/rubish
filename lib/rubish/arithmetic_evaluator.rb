@@ -506,6 +506,9 @@ module Rubish
     def to_value(raw)
       text = raw.to_s.strip
       return 0 if text.empty?
+      # A leading 0 makes the value octal, as for a literal (bash)
+      return Integer(text, 8) if text.match?(/\A-?0[0-7]+\z/)
+      error("value too great for base (error token is \"#{text}\")") if text.match?(/\A-?0[0-9]+\z/)
       return text.to_i if text.match?(/\A-?[0-9]+\z/)
       return text.to_f if text.match?(/\A-?[0-9]+\.[0-9]+\z/)
 
