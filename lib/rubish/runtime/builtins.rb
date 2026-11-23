@@ -2548,7 +2548,7 @@ module Rubish
         # - depth is 0 (no unclosed control structures)
         # - not waiting for function body
         # - no unclosed quotes in the buffer
-        if depth == 0 && !pending_function_def && !has_unclosed_quotes(buffer)
+        if depth == 0 && !pending_function_def && !has_unclosed_quotes(buffer) && !statement_continues?(buffer)
           begin
             execute_sourced_command(buffer, file_label, buffer_start_line)
           rescue SyntaxError, StandardError => e
@@ -2601,6 +2601,12 @@ module Rubish
     end
 
     # Execute a command from a sourced file, with optional profiling
+    # The text so far cannot be a whole statement: it ends with a backslash
+    # that joins the next line
+    def statement_continues?(buffer)
+      buffer.match?(/(?<!\\)(\\\\)*\\\z/)
+    end
+
     def execute_sourced_command(buffer, file, line_number)
       if defined?(Rubish::StartupProfiler) && Rubish::StartupProfiler.enabled
         # Truncate long commands for display, show file:line prefix

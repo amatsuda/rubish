@@ -92,7 +92,7 @@ module Rubish
     KEYWORD_POSITION_WORDS = %w[do done in end !].freeze
 
     def initialize(input)
-      @input = input
+      @input = remove_line_continuations(input)
       @pos = 0
       @last_token_type = nil
       @prev_token_type = nil
@@ -130,6 +130,34 @@ module Rubish
     end
 
     private
+
+    # A backslash-newline pair outside single quotes joins two lines, and
+    # is removed before anything else looks at the text (bash)
+    def remove_line_continuations(input)
+      return input unless input.include?("\\\n")
+
+      result = +''
+      in_single = false
+      i = 0
+      while i < input.length
+        char = input[i]
+        if in_single
+          in_single = false if char == "'"
+          result << char
+          i += 1
+        elsif char == '\\' && input[i + 1] == "\n"
+          i += 2
+        elsif char == '\\'
+          result << char << input[i + 1].to_s
+          i += 2
+        else
+          in_single = true if char == "'"
+          result << char
+          i += 1
+        end
+      end
+      result
+    end
 
     def skip_whitespace
       # Only skip spaces and tabs, not newlines
