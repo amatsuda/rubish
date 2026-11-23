@@ -3882,7 +3882,7 @@ module Rubish
       print_option = lambda do |name, value|
         unless quiet_mode
           if print_mode
-            puts "shopt #{value ? '-so' : '-uo'} #{name}"
+            puts "set #{value ? '-o' : '+o'} #{name}" # bash prints set -o lines for -o options
           else
             puts format("%-15s\t%s", name, value ? 'on' : 'off')
           end

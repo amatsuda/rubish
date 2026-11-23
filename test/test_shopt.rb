@@ -274,12 +274,12 @@ class TestShopt < Test::Unit::TestCase
   def test_shopt_po_reusable_format
     Rubish::Builtins.run('shopt', ['-so', 'errexit'])
     output = capture_output { Rubish::Builtins.run('shopt', ['-po', 'errexit']) }
-    assert_equal "shopt -so errexit\n", output
+    assert_equal "set -o errexit\n", output # bash prints set lines for -o options
   end
 
   def test_shopt_po_disabled_format
     output = capture_output { Rubish::Builtins.run('shopt', ['-po', 'errexit']) }
-    assert_equal "shopt -uo errexit\n", output
+    assert_equal "set +o errexit\n", output
   end
 
   def test_shopt_qo_quiet_mode
