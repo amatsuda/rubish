@@ -243,14 +243,23 @@ module Rubish
       if two_char == '[['
         # Check if followed by space (conditional) or digit/quote (array)
         next_char = @input[@pos + 2]
-        if next_char.nil? || next_char =~ /[\s\-!]/
+        if next_char.nil? || next_char =~ /[\s\-!;)|&]/
           @pos += 2
+          # `[[` opens a conditional only where a command may start; as an
+          # argument (`type [[`) it is a word
+          return Token.new(:WORD, '[[') unless keyword_position?
+
+          @cond_depth = (@cond_depth || 0) + 1
           return Token.new(:DOUBLE_LBRACKET, '[[')
         end
         # Otherwise it's a nested array, fall through to array handling
       end
       if two_char == ']]'
         @pos += 2
+        # `]]` closes a conditional; elsewhere it is a word
+        return Token.new(:WORD, ']]') unless (@cond_depth || 0) > 0
+
+        @cond_depth -= 1
         return Token.new(:DOUBLE_RBRACKET, ']]')
       end
       # Process substitution: <(...) and >(...)
