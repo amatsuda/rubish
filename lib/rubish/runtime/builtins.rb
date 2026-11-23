@@ -6649,7 +6649,8 @@ module Rubish
       @state.sourcing_file = true
       begin
         process_script_lines(command.split("\n", -1), '(eval)')
-        true
+        # The status of the last command the text ran
+        ExitStatus.new(@state.last_status_getter&.call || 0)
       rescue => e
         puts "eval: #{e.message}"
         false
