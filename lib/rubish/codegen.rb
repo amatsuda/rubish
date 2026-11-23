@@ -1178,6 +1178,59 @@ module Rubish
       result
     end
 
+    # The right operand of =~: quoted parts and backslash-escaped characters
+    # match literally, the rest is a regular expression (bash)
+    def generate_regex_arg(word)
+      result = +'"'
+      WordSegments.each_segment(word) do |type, content|
+        case type
+        when :single
+          result << '#{Regexp.escape(' << content.inspect << ')}'
+        when :ansi_c
+          result << '#{Regexp.escape(process_escape_sequences(' << content.inspect << '))}'
+        when :double
+          result << '#{Regexp.escape(' << generate_interpolated_string(content) << ')}'
+        when :bare
+          append_bare_regex(result, content)
+        end
+      end
+      result << '"'
+      result
+    end
+
+    def append_bare_regex(result, content)
+      i = 0
+      while i < content.length
+        char = content[i]
+        if char == '\\' && i + 1 < content.length
+          # `\.` is a literal dot in the regex, as is any escaped character
+          result << '#{Regexp.escape(' << content[i + 1].inspect << ')}'
+          i += 2
+        elsif char == '$'
+          expr, consumed = parse_variable(content, i)
+          if expr
+            result << '#{' << expr << '}'
+            i += consumed
+          else
+            result << '$'
+            i += 1
+          end
+        elsif char == '`'
+          cmd_expr, consumed = parse_backtick_substitution(content, i)
+          if cmd_expr
+            result << '#{' << cmd_expr << '}'
+            i += consumed
+          else
+            result << '`'
+            i += 1
+          end
+        else
+          append_escaped_char(result, char)
+          i += 1
+        end
+      end
+    end
+
     # Bare segment: wildcards stay active, variables/commands expand with
     # their values' wildcards active too (bash unquoted behavior). Only a
     # backslash escape turns the next char into a glob-escaped literal.
@@ -1298,6 +1351,8 @@ module Rubish
         when :WORD
           if previous&.type == :WORD && %w[== != =].include?(previous.value)
             generate_pattern_arg(token.value)
+          elsif previous&.type == :WORD && previous.value == '=~'
+            generate_regex_arg(token.value)
           else
             generate_string_arg(token.value)
           end
