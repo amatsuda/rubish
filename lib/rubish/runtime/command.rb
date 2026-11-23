@@ -207,6 +207,17 @@ module Rubish
     end
 
     # Execute a command with proper error handling for command not found / permission denied
+    # Run a builtin or function inside a forked child and return the code
+    # the child should exit with. `exit` (and errexit) throw :exit, which
+    # nothing else in the child would catch
+    def self.child_status
+      code = catch(:exit) do
+        result = yield
+        return result.is_a?(ExitStatus) ? result.exitstatus : (result ? 0 : 1)
+      end
+      code.to_i
+    end
+
     def self.safe_exec(cmd_name, cmd_path, *args, fd_options: nil)
       child_pre_exec_hook&.call
       if fd_options && !fd_options.empty?
@@ -641,15 +652,13 @@ module Rubish
 
         # Check if this is a user-defined function (unless skip_functions is set)
         if !@skip_functions && Command.function?(name)
-          result = Command.call_function(name, cmd_args)
-          exit(result ? 0 : 1)
+          exit(Command.child_status { Command.call_function(name, cmd_args) })
         elsif Builtins.builtin?(name)
           # A builtin that reached the fork because of its redirections:
           # run it here, on the redirected streams, rather than exec'ing a
           # same-named external (or failing when there is none, as for
           # `help cd > file` or `history > file`)
-          success = Builtins.run(name, cmd_args)
-          exit(success.is_a?(ExitStatus) ? success.exitstatus : (success ? 0 : 1))
+          exit(Command.child_status { Builtins.run(name, cmd_args) })
         elsif cmd_path.include?('/') && File.directory?(cmd_path)
           # Only check for directory if path was explicitly given or resolved
           # Don't check bare command names against current directory
@@ -999,12 +1008,10 @@ module Rubish
             cmd.run
             exit(cmd.success? ? 0 : 1)
           elsif Command.function?(cmd.name)
-            result = Command.call_function(cmd.name, cmd.args)
-            exit(result ? 0 : 1)
+            exit(Command.child_status { Command.call_function(cmd.name, cmd.args) })
           elsif Builtins.builtin?(cmd.name)
             # Run builtin in forked process (e.g., history | grep)
-            result = Builtins.run(cmd.name, cmd.args)
-            exit(result ? 0 : 1)
+            exit(Command.child_status { Builtins.run(cmd.name, cmd.args) })
           else
             Command.safe_exec(cmd.name, cmd.name, *cmd.args, fd_options: Command.child_fd_options(cmd.fd_redirects))
           end
