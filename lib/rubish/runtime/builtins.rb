@@ -6898,8 +6898,9 @@ module Rubish
       # For simplicity, we treat rubish as always being a login shell
       # and logout behaves the same as exit
       unless @state.shell_options['login_shell']
-        # If not a login shell, warn but still exit (bash behavior varies)
-        $stderr.puts 'logout: not login shell: use `exit\''
+        # Not a login shell: complain and go on, as bash does
+        $stderr.puts 'rubish: logout: not login shell: use `exit\''
+        return ExitStatus.new(1)
       end
       exit(args)
     end

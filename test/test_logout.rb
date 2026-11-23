@@ -8,6 +8,8 @@ class TestLogout < Test::Unit::TestCase
     @saved_stderr = $stderr
     # Save shell options state
     @saved_shell_options = Rubish::Builtins.current_state.shell_options.dup
+    # logout acts only in a login shell, as in bash
+    Rubish::Builtins.current_state.shell_options['login_shell'] = true
   end
 
   def teardown
@@ -76,15 +78,16 @@ class TestLogout < Test::Unit::TestCase
     assert_equal '', output
   end
 
-  def test_logout_still_exits_when_not_login_shell
+  def test_logout_fails_when_not_login_shell
     Rubish::Builtins.current_state.shell_options['login_shell'] = false
 
     $stderr = StringIO.new  # Suppress warning
-    exit_code = catch(:exit) do
+    result = catch(:exit) do
       Rubish::Builtins.logout(['5'])
     end
 
-    assert_equal 5, exit_code
+    # bash complains and goes on with status 1 rather than exiting
+    assert_equal 1, result.exitstatus
   end
 
   # Exit traps

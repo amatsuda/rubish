@@ -186,7 +186,8 @@ class TestHuponexit < Test::Unit::TestCase
 
     Rubish::JobManager.instance.add(pid: child_pid, pgid: child_pid, command: 'sleep 10')
 
-    # Capture stderr to suppress logout warning
+    # logout acts only in a login shell
+    Rubish::Builtins.current_state.shell_options['login_shell'] = true
     original_stderr = $stderr
     $stderr = StringIO.new
 

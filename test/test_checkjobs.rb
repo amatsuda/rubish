@@ -170,6 +170,7 @@ class TestCheckjobs < Test::Unit::TestCase
   # logout also respects checkjobs
   def test_logout_respects_checkjobs
     execute('shopt -s checkjobs')
+    Rubish::Builtins.current_state.shell_options['login_shell'] = true
 
     # Add a fake running job
     Rubish::JobManager.instance.add(pid: 99999, pgid: 99999, command: 'sleep 100')
