@@ -2713,7 +2713,16 @@ module Rubish
         elsif arg.start_with?('-') && arg.length > 1 && arg != '-'
           # Short options: -e, -x, -ex
           arg[1..].each_char do |c|
-            if @state.set_options.key?(c)
+            if c == 'o'
+              # `-eo pipefail`: o ends the cluster and names the next word
+              i += 1
+              opt_name = args[i]
+              if opt_name.nil?
+                list_set_options(reusable: false)
+                return true
+              end
+              return ExitStatus.new(2) if set_long_option(opt_name, true) == :invalid
+            elsif @state.set_options.key?(c)
               if c == 'r'
                 # Enable restricted mode (syncs with restricted_shell shopt)
                 enable_restricted_mode
@@ -2729,7 +2738,16 @@ module Rubish
         elsif arg.start_with?('+') && arg.length > 1
           # Disable short options: +e, +x
           arg[1..].each_char do |c|
-            if @state.set_options.key?(c)
+            if c == 'o'
+              # `+eo pipefail`: o ends the cluster and names the next word
+              i += 1
+              opt_name = args[i]
+              if opt_name.nil?
+                list_set_options(reusable: true)
+                return true
+              end
+              return ExitStatus.new(2) if set_long_option(opt_name, false) == :invalid
+            elsif @state.set_options.key?(c)
               if c == 'r' && restricted_mode?
                 # Cannot disable restricted mode once enabled
                 $stderr.puts 'rubish: set: restricted: cannot modify in restricted mode'
