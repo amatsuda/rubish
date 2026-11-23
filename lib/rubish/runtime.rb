@@ -1852,7 +1852,9 @@ module Rubish
       elsif result.is_a?(Command) && @functions.key?(result.name)
         # Call user-defined function with redirects
         status = call_function_with_redirects(result)
-        # Don't run ERR trap here - it was already handled inside the function
+        # A failing call runs the ERR trap here, at the call site; inside the
+        # function it ran only with errtrace
+        run_err_trap_if_failed
         check_errexit
         # Return ExitStatus (not the Command) to prevent eval_in_context from calling the function again
         status

@@ -91,7 +91,10 @@ module Rubish
       # Set to the rubish binary path if not already set or if running rubish
       set_shell_variable
       @state.executor = ->(line) { execute(line); @last_status }
-      @state.last_status_setter = ->(status) { @last_status = status }
+      @state.last_status_setter = lambda do |status|
+        @last_status = status
+        @context.last_status = status if @context # generated code reads $? here
+      end
       # $? as seen by a builtin: generated code and function bodies run in
       # the context, and the fast path below keeps it current too
       @state.last_status_getter = -> { @context.last_status }
@@ -1180,7 +1183,9 @@ module Rubish
           @last_status = with_prefix_env(ast.env) { call_function(ast.name, expanded_args) }.exitstatus
           @context.last_status = @last_status
           @pipestatus = [@last_status]
-          # Don't run ERR trap here - it was already handled inside the function if errtrace is on
+          # A failing call runs the ERR trap here, at the call site; inside the
+          # function it ran only with errtrace
+          run_err_trap_if_failed
           check_errexit
         rescue NounsetError
           @last_status = 1

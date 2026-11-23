@@ -225,6 +225,9 @@ module Rubish
       begin
         @state.executor&.call(@state.traps['ERR']) if @state.executor
       ensure
+        # The trap's own commands do not change the status of the command
+        # that failed: a function whose body tripped the trap still fails
+        @state.last_status_setter&.call(status) unless status.nil?
         @in_err_trap = false
         @state.current_trapsig = ''
       end

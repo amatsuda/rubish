@@ -997,7 +997,8 @@ class TestSetOptions < Test::Unit::TestCase
   def test_no_errtrace_err_trap_not_inherited_by_function
     execute('set +E')  # Ensure errtrace is off
     execute("trap 'echo ERR_IN_FUNC' ERR")
-    execute('myfunc() { false; }')
+    # The call itself succeeds, so only a trap inherited by the body could print
+    execute('myfunc() { false; true; }')
     output = capture_stdout do
       execute('myfunc')
     end
