@@ -410,7 +410,8 @@ module Rubish
 
       # Printable text with special characters: backslash-escape each one,
       # as bash does (`a\ b\'c`)
-      str.gsub(/[^a-zA-Z0-9_\-.\/:@%+=,]/) { |c| "\\#{c}" }
+      # Non-ASCII printable text is left alone, as bash leaves it
+      str.gsub(/[^a-zA-Z0-9_\-.\/:@%+=,\u0080-\u{10FFFF}]/) { |c| "\\#{c}" }
     end
 
     # Integer value of a numeric printf argument with strtol semantics: 0x
