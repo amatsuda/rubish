@@ -353,7 +353,7 @@ module Rubish
       two_char = str[pos, 2]
       case two_char
       when '$?' then return [@last_status.to_s, 2]
-      when '$$' then return [Process.pid.to_s, 2]
+      when '$$' then return [Rubish::SHELL_PID.to_s, 2]
       when '$!' then return [@last_bg_pid&.to_s || '', 2]
       when '$0' then return [argv0, 2]
       when '$#' then return [positional_params.length.to_s, 2]
@@ -1058,7 +1058,7 @@ module Rubish
       when '@' then [positional_params.join(' '), true, positional_params.empty?]
       when '*' then [Builtins.join_by_ifs(positional_params), true, positional_params.empty?]
       when '?' then [@last_status.to_s, true, false]
-      when '$' then [Process.pid.to_s, true, false]
+      when '$' then [Rubish::SHELL_PID.to_s, true, false]
       when '!'
         value = @last_bg_pid&.to_s || ''
         [value, !@last_bg_pid.nil?, @last_bg_pid.nil?]

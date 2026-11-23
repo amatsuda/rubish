@@ -332,7 +332,7 @@ module Rubish
       when '$?'
         'last_status.to_s'
       when '$$'
-        'Process.pid.to_s'
+        'Rubish::SHELL_PID.to_s'
       when '$!'
         '(last_bg_pid ? last_bg_pid.to_s : "")'
       when '$0'
@@ -561,7 +561,7 @@ module Rubish
       when '$?'
         return ['last_status.to_s', 2]
       when '$$'
-        return ['Process.pid.to_s', 2]
+        return ['Rubish::SHELL_PID.to_s', 2]
       when '$!'
         return ['(last_bg_pid ? last_bg_pid.to_s : "")', 2]
       when '$0'

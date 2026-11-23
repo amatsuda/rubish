@@ -40,6 +40,9 @@ require_relative 'rubish/frontend'
 require_relative 'rubish/repl'
 
 module Rubish
+  # `$$` is the pid of the shell that was started, in subshells too
+  SHELL_PID = Process.pid
+
   # Load a library on demand from code mixed into the shell context.
   # There a bare `require` is the shell builtin, and Kernel.require is the
   # pristine C implementation that bypasses RubyGems, so bundled gems such as
