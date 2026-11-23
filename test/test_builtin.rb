@@ -69,10 +69,10 @@ class TestBuiltin < Test::Unit::TestCase
     assert_equal "real\n", output
   end
 
-  # Test usage error
+  # A bare builtin does nothing and succeeds, as in bash
   def test_builtin_no_args
-    output = capture_output { Rubish::Builtins.run('builtin', []) }
-    assert_match(/usage/, output)
+    output = capture_output { assert_true Rubish::Builtins.run('builtin', []) }
+    assert_equal '', output
   end
 
   # Test type identifies builtin as builtin

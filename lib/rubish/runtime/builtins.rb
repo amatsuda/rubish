@@ -6726,10 +6726,7 @@ module Rubish
       # Run a shell builtin directly, bypassing functions and aliases
       # Returns error if command is not a builtin
 
-      if args.empty?
-        puts 'builtin: usage: builtin command [arguments]'
-        return false
-      end
+      return true if args.empty? # nothing to run, as in bash
 
       cmd_name = args.first
       cmd_args = args[1..] || []
