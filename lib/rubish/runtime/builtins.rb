@@ -725,6 +725,11 @@ module Rubish
         end
       end
 
+      if remaining_args.first == ''
+        $stderr.puts 'rubish: cd: null directory'
+        return false
+      end
+
       dir = remaining_args.first || ENV['HOME']
       found_via_cdpath = false
       print_dir = false
