@@ -119,10 +119,12 @@ module Rubish
         return false
       end
 
+      ok = true
       signals.each do |sig_arg|
         sig = normalize_signal(sig_arg)
         unless sig
-          puts "trap: #{sig_arg}: invalid signal specification"
+          $stderr.puts "rubish: trap: #{sig_arg}: invalid signal specification"
+          ok = false
           next
         end
 
@@ -138,7 +140,7 @@ module Rubish
         end
       end
 
-      true
+      ok
     end
 
     # Pseudo-signals that are not real OS signals
@@ -329,8 +331,8 @@ module Rubish
       result = SIGNALS[sig_upper]
       return result if result
 
-      # For pure numeric input not in SIGNALS, return as integer
-      return sig_str.to_i if sig_str =~ /\A\d+\z/
+      # A number is a signal only if the system has one by that number
+      return sig_str.to_i if sig_str =~ /\A\d+\z/ && Signal.list.value?(sig_str.to_i)
 
       nil
     end
