@@ -262,11 +262,16 @@ module Rubish
       var, val = assignment.split('+=', 2)
       val ||= ''
       expanded_val = expand_assignment_value(val)
+      if Builtins.indexed_array?(var)
+        # `arr+=word` appends to element 0, as in bash
+        Builtins.set_array_element(var, 0, Builtins.get_array_element(var, 0) + expanded_val)
+        return
+      end
       current = get_var(var)
       if Builtins.has_attribute?(var, :integer)
         set_var(var, (eval_arithmetic_expr(current.to_s) + eval_arithmetic_expr(expanded_val)).to_s)
       else
-        set_var(var, current + expanded_val)
+        set_var(var, current.to_s + expanded_val)
       end
     end
 
