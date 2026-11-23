@@ -186,10 +186,12 @@ module Rubish
           next
         end
 
-        if assignment.include?('[')
+        # The kind of assignment is decided by what follows the name: a `[`
+        # or `+=` inside the value (`re="[0-9]"`) does not change it
+        if assignment.match?(/\A[a-zA-Z_][a-zA-Z0-9_]*\[/)
           # Array element assignment: arr[n]=value or arr[n]+=value
           handle_array_element_assignment(assignment)
-        elsif assignment.include?('+=')
+        elsif assignment.match?(/\A[a-zA-Z_][a-zA-Z0-9_]*\+=/)
           # Append: VAR+=value
           handle_append_assignment(assignment)
         else
