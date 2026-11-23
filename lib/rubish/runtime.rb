@@ -324,9 +324,18 @@ module Rubish
           flags.empty? ? assignment : "declare -#{flags} #{assignment}"
         end
       when 'a'
+        # Every attribute, in bash's order
+        attrs = Builtins.var_attributes_of(var_name)
         flags = +''
-        flags << 'x' if Builtins.exported?(var_name)
+        flags << 'a' if Builtins.indexed_array?(var_name)
+        flags << 'A' if Builtins.assoc_array?(var_name)
+        flags << 'i' if attrs.include?(:integer)
+        flags << 'l' if attrs.include?(:lowercase)
+        flags << 'n' if attrs.include?(:nameref)
         flags << 'r' if Builtins.readonly?(var_name)
+        flags << 't' if attrs.include?(:trace)
+        flags << 'u' if attrs.include?(:uppercase)
+        flags << 'x' if Builtins.exported?(var_name)
         flags
       when 'U' then value&.upcase || ''
       when 'u' then value.nil? || value.empty? ? '' : value[0].upcase + (value[1..] || '')

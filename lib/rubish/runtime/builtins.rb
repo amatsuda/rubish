@@ -1839,6 +1839,10 @@ module Rubish
     end
 
     # The attribute letters declare -p shows for a variable, e.g. "irx"
+    def var_attributes_of(name)
+      @state.var_attributes[name] || Set.new
+    end
+
     def declaration_flags(name)
       attrs = @state.var_attributes[name] || Set.new
       flags = +''

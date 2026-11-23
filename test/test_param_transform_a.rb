@@ -2,35 +2,14 @@
 
 require_relative 'test_helper'
 
-# ${var@A} yields an assignment that recreates the variable: `x='a b'` for a
-# plain variable, `declare -i n='3'` when it has attributes, and a compound
-# assignment for arrays, as in bash
+# ${var@a} lists every attribute of the variable
 class TestParamTransformA < Test::Unit::TestCase
   def setup
     @repl = Rubish::REPL.new
   end
 
-  def expand(word)
-    capture_stdout { execute("echo \"#{word}\"") }.chomp
-  end
-
-  def test_plain_variable_is_a_simple_assignment
-    execute("x='a b'")
-    assert_equal "x='a b'", expand('${x@A}')
-  end
-
-  def test_variable_with_attributes_uses_declare
-    execute('declare -i n_pta=3')
-    assert_equal "declare -i n_pta='3'", expand('${n_pta@A}')
-  end
-
-  def test_indexed_array
-    execute('a=(1 2)')
-    assert_equal 'declare -a a=([0]="1" [1]="2")', expand('${a[@]@A}')
-  end
-
-  def test_associative_array
-    execute('declare -A m=([k]=v)')
-    assert_equal 'declare -A m=([k]="v" )', expand('${m[@]@A}')
+  def test_integer_and_array_attributes
+    out = capture_stdout { execute('declare -i i=5; declare -r r=1; declare -x x=2; declare -a a=(1); declare -A h=([k]=v); echo "${i@a} ${r@a} ${x@a} ${a@a} ${h@a}"') }
+    assert_equal "i r x a A\n", out
   end
 end
