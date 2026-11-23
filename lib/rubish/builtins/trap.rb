@@ -310,6 +310,17 @@ module Rubish
       @state.original_traps.clear
     end
 
+    # A subshell starts with the traps the shell inherited from its own
+    # parent: an ignored signal (`trap '' SIG`) stays ignored, every other
+    # trap is reset, as in bash
+    def reset_traps_for_subshell
+      @state.traps.keys.each do |sig|
+        next if @state.traps[sig] == '' && !PSEUDO_SIGNALS.include?(sig)
+
+        reset_trap(sig)
+      end
+    end
+
     def normalize_signal(sig_arg)
       sig_str = sig_arg.to_s
 

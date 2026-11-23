@@ -1360,6 +1360,9 @@ module Rubish
       # Wrap the block to increment subshell level before executing (in the forked process)
       Subshell.new do
         @subshell_level += 1
+        # The parent's traps are not inherited (ignored signals aside); an
+        # EXIT trap set inside runs when the subshell ends, as in bash
+        Builtins.reset_traps_for_subshell
         # `exit N` inside the subshell ends only the subshell: catch it here
         # and hand the status to Subshell#run. A plain `exit` uses $?.
         exited = true
@@ -1368,7 +1371,10 @@ module Rubish
           exited = false
           value
         end
-        exited ? ExitStatus.new(result || @last_status || 0) : result
+        status = exited ? ExitStatus.new(result || @last_status || 0) : result
+        @last_status = status.exitstatus if status.respond_to?(:exitstatus) && status.exitstatus
+        Builtins.exit_traps
+        status
       end
     end
 
