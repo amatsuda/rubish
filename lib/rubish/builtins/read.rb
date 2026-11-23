@@ -269,7 +269,7 @@ module Rubish
       # -n: read up to count chars or until delimiter
       line = +''
       count.times do
-        char = input_stream.getc
+        char = read_char(input_stream)
         break unless char
         break if char == delimiter
         line << char
@@ -281,7 +281,7 @@ module Rubish
     # delimiter: the data is still assigned, but read reports failure (bash)
     def read_until_delimiter(input_stream, delimiter)
       @read_delimiter_missing = false
-      if delimiter == "\n"
+      if delimiter == "\n" && !unbuffered_stream?(input_stream)
         line = input_stream.gets
         return nil unless line
 
@@ -290,7 +290,7 @@ module Rubish
       else
         line = +''
         loop do
-          char = input_stream.getc
+          char = read_char(input_stream)
           if char.nil?
             @read_delimiter_missing = true
             break
@@ -300,6 +300,29 @@ module Rubish
         end
         line.empty? && @read_delimiter_missing ? nil : line
       end
+    end
+
+    # A pipe or terminal is read one byte at a time (readpartial: what Ruby
+    # already buffered first, then at most one byte from the descriptor), so
+    # that what follows the line stays in the pipe for the next command
+    # (`{ read a; cat; }`); a regular file can be read through the buffer
+    def unbuffered_stream?(stream)
+      stream.respond_to?(:stat) && stream.respond_to?(:sysread) && !stream.stat.file?
+    rescue SystemCallError
+      false
+    end
+
+    def read_char(stream)
+      return stream.getc unless unbuffered_stream?(stream)
+
+      byte = stream.readpartial(1)
+      # Complete a multibyte character
+      while byte.dup.force_encoding(Encoding.default_external) && !byte.dup.force_encoding(Encoding.default_external).valid_encoding? && byte.bytesize < 4
+        byte << stream.readpartial(1)
+      end
+      byte.force_encoding(Encoding.default_external)
+    rescue EOFError
+      nil
     end
 
     def process_read_escapes(line)
