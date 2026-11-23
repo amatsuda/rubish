@@ -806,9 +806,10 @@ module Rubish
 
       items = []
       if consume_word('in')
-        # Parse items until 'do' or ';'
-        while !peek_word('do') && !peek(:SEMICOLON) && peek(:WORD)
-          items << consume(:WORD).value
+        # The list runs to the `;` or newline; a word that looks like a
+        # keyword (`do`, `done`, `def`) is still an item there (bash)
+        while !peek(:SEMICOLON) && (peek(:WORD) || case_pattern_keyword?)
+          items << consume.value
         end
       elsif peek(:SEMICOLON) || peek_word('do')
         # `for name; do ...` loops over the positional parameters
@@ -878,9 +879,10 @@ module Rubish
 
       items = []
       if consume_word('in')
-        # Parse items until 'do' or ';'
-        while !peek_word('do') && !peek(:SEMICOLON) && peek(:WORD)
-          items << consume(:WORD).value
+        # The list runs to the `;` or newline; a word that looks like a
+        # keyword (`do`, `done`, `def`) is still an item there (bash)
+        while !peek(:SEMICOLON) && (peek(:WORD) || case_pattern_keyword?)
+          items << consume.value
         end
       elsif peek(:SEMICOLON) || peek_word('do')
         # `select name; do ...` offers the positional parameters
