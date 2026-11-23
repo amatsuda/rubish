@@ -290,6 +290,16 @@ module Rubish
       # Check for function call syntax: cmd(arg1, arg2)
       return parse_func_call if peek(:FUNC_CALL)
 
+      # Redirections may come before the command name (`</dev/null cat`,
+      # `2>/dev/null ls`); they are parsed around a placeholder and grafted
+      # onto the command once it is known. `> file` alone runs no command.
+      if redirection_token?
+        leading = parse_redirections(AST::Command.new(name: ':', args: []))
+        return leading unless peek(:WORD)
+
+        return graft_redirections(leading, parse_command)
+      end
+
       return nil unless peek(:WORD)
 
       # Collect prefix environment variable assignments (e.g., FOO=bar BAZ=qux cmd)
@@ -626,6 +636,15 @@ module Rubish
       end
 
       commands.length == 1 ? commands.first : AST::List.new(commands)
+    end
+
+    # Replace the placeholder at the bottom of a chain of redirection nodes
+    # with the real command node
+    def graft_redirections(wrapper, inner)
+      return inner if wrapper.is_a?(AST::Command)
+
+      member = wrapper.to_h.keys.first # the wrapped command comes first in every redirection node
+      wrapper.with(member => graft_redirections(wrapper.public_send(member), inner))
     end
 
     def skip_semicolon
