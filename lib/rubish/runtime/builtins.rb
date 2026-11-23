@@ -2464,6 +2464,7 @@ module Rubish
       @state.positional_params_setter&.call(old_positional_params) if old_positional_params
       @state.source_file_setter&.call(old_source_file) if old_source_file
       @state.sourcing_file = old_sourcing
+      return_trap # a sourced file "returns" like a function (bash)
 
       # `return N` in the file gives N; otherwise the last command's status
       ExitStatus.new(return_code || @state.last_status_getter&.call || 0)
