@@ -180,7 +180,7 @@ if command_string
     2
   end
   last_status = repl.send(:run_exit_trap, exit_code)
-  repl.send(:cleanup_all_proc_sub_fifos)
+  repl.send(:cleanup_all_proc_subs)
   exit(last_status)
 elsif read_stdin
   # -s mode: read commands from stdin, args are positional parameters
@@ -217,7 +217,7 @@ elsif read_stdin
   end
 
   last_status = repl.send(:run_exit_trap, exit_code)
-  repl.send(:cleanup_all_proc_sub_fifos)
+  repl.send(:cleanup_all_proc_subs)
   exit(last_status)
 elsif script_file && !force_interactive
   # Script mode: execute script file (non-interactive)
@@ -235,7 +235,7 @@ elsif script_file && !force_interactive
   # Pass script_args so they become positional params in the script
   Rubish::Builtins.source([script_file] + script_args)
   last_status = repl.send(:run_exit_trap, nil)
-  repl.send(:cleanup_all_proc_sub_fifos)
+  repl.send(:cleanup_all_proc_subs)
   exit(last_status)
 elsif script_file && force_interactive
   # Script mode with -i: run script with interactive settings (sources bashrc)
@@ -256,7 +256,7 @@ elsif script_file && force_interactive
   Rubish::Builtins.source([script_file] + script_args)
 
   last_status = repl.send(:run_exit_trap, nil)
-  repl.send(:cleanup_all_proc_sub_fifos)
+  repl.send(:cleanup_all_proc_subs)
   exit(last_status)
 else
   # Interactive mode

@@ -10,7 +10,7 @@ class TestProcessSubstitution < Test::Unit::TestCase
 
   def teardown
     FileUtils.rm_rf(@tempdir)
-    @repl.send(:cleanup_proc_sub_fifos) if @repl.instance_variable_get(:@proc_sub_fifos)
+    @repl.send(:cleanup_proc_subs)
   end
 
   def output_file

@@ -63,7 +63,7 @@ module Rubish
 
       pid = fork do
         reader.close
-        @proc_sub_fifos = nil # the parent owns and removes the FIFOs
+        @proc_sub_fds = nil # the parent owns the pipe ends it keeps
         # Redirect stdout to the pipe using the constant STDOUT
         # This works even if $stdout has been redirected to a StringIO (for testing)
         STDOUT.reopen(writer)
@@ -615,7 +615,7 @@ module Rubish
       # Fork and run in background
       pid = fork do
         # Reset signal handlers in child
-        @proc_sub_fifos = nil # the parent owns and removes the FIFOs
+        @proc_sub_fds = nil # the parent owns the pipe ends it keeps
         Kernel.trap('INT', 'DEFAULT')
         Kernel.trap('TSTP', 'DEFAULT')
 
@@ -1203,80 +1203,71 @@ module Rubish
       end
     end
 
-    # Remove the FIFOs (and their private directories) created by __proc_sub.
-    # Called by the REPL before the next top-level command runs, so a
-    # background job started by the previous command has had time to open
-    # its end of the pipe.
-    def cleanup_proc_sub_fifos
-      return unless @proc_sub_fifos
+    # Close the pipe ends kept open for process substitutions, from the
+    # given position in the list on. The command they were made for is
+    # over; a child that runs or uses the substitution has its own copy.
+    def cleanup_proc_subs(from = 0)
+      return unless @proc_sub_fds
 
-      @proc_sub_fifos.each do |fifo|
-        File.unlink(fifo) if File.exist?(fifo)
-        dir = File.dirname(fifo)
-        Dir.rmdir(dir) if File.basename(dir).start_with?('rubish_procsub') && Dir.exist?(dir)
+      @proc_sub_fds.slice!(from..).each do |io|
+        io.close unless io.closed?
       rescue SystemCallError
         # Already gone
       end
-      @proc_sub_fifos.clear
     end
 
+    # Run a command's block; the process substitutions it makes are closed
+    # once it is over, as bash closes them after each command
+    def __closing_proc_subs
+      mark = @proc_sub_fds ? @proc_sub_fds.size : 0
+      yield
+    ensure
+      cleanup_proc_subs(mark)
+    end
+
+    # Process substitution: `<(cmd)` or `>(cmd)` expands to the /dev/fd/N
+    # path of a pipe, as in bash. The command runs in a child writing to
+    # (or reading from) the pipe's other end. The shell keeps this end open
+    # until the command it belongs to is over and lets exec'd children
+    # inherit it, so that they can open the path. Nothing ever waits for a
+    # FIFO to be opened: `echo <(true)` leaves no child behind.
     def __proc_sub(command, direction)
-      # Process substitution: <(cmd) or >(cmd)
-      # Creates a named pipe and returns its path
-      # The command runs in background, reading from or writing to the pipe
+      reader, writer = IO.pipe
+      # Ruby makes its pipes non-blocking; an external command reading the
+      # path would get EAGAIN ("Resource temporarily unavailable")
+      Rubish.require_library('fcntl')
+      [reader, writer].each { |io| io.fcntl(Fcntl::F_SETFL, io.fcntl(Fcntl::F_GETFL) & ~Fcntl::O_NONBLOCK) }
+      child_end, shell_end = direction == :in ? [writer, reader] : [reader, writer]
 
-      # Create the FIFO inside a fresh private directory (0700), so another
-      # user on a shared /tmp can neither predict nor pre-create its path
-      Rubish.require_library('tmpdir')
-      fifo_dir = Dir.mktmpdir('rubish_procsub')
-      fifo_path = File.join(fifo_dir, 'fifo')
-      File.mkfifo(fifo_path, 0o600)
-
-      # Track the FIFO for cleanup (see cleanup_proc_sub_fifos)
-      @proc_sub_fifos ||= []
-      @proc_sub_fifos << fifo_path
-
-      if direction == :in
-        # <(cmd) - command output becomes readable file
-        # Fork a process to run the command and write to FIFO
-        pid = fork do
-          # Redirect stdout to the FIFO
-          @proc_sub_fifos = nil # the parent owns and removes the FIFOs
-          fifo = File.open(fifo_path, 'w')
-          $stdout.reopen(fifo)
-          $stderr.reopen('/dev/null', 'w')
-
-          begin
-            execute(command, skip_history_expansion: true)
-            Kernel.exit(@last_status || 0)
-          rescue => e
-            $stderr.puts "rubish: #{e.message}"
-            Kernel.exit(1)
-          end
+      pid = fork do
+        shell_end.close
+        @proc_sub_fds = nil # the parent owns the pipe ends it keeps
+        # Use the constants: $stdout/$stdin may be StringIOs under test
+        if direction == :in
+          STDOUT.reopen(child_end)
+          $stdout = STDOUT
+        else
+          STDIN.reopen(child_end)
+          $stdin = STDIN
         end
-        Process.detach(pid)
-      else
-        # >(cmd) - writable file whose content goes to command stdin
-        # Fork a process to read from FIFO and pipe to command
-        pid = fork do
-          # Read from FIFO and pipe to command
-          @proc_sub_fifos = nil # the parent owns and removes the FIFOs
-          fifo = File.open(fifo_path, 'r')
-          $stdin.reopen(fifo)
-          $stderr.reopen('/dev/null', 'w')
+        child_end.close
+        STDERR.reopen('/dev/null', 'w')
+        $stderr = STDERR
 
-          begin
-            execute(command, skip_history_expansion: true)
-            Kernel.exit(@last_status || 0)
-          rescue => e
-            $stderr.puts "rubish: #{e.message}"
-            Kernel.exit(1)
-          end
+        begin
+          execute(command, skip_history_expansion: true)
+          Kernel.exit(@last_status || 0)
+        rescue => e
+          $stderr.puts "rubish: #{e.message}"
+          Kernel.exit(1)
         end
-        Process.detach(pid)
       end
+      Process.detach(pid)
+      child_end.close
 
-      fifo_path
+      shell_end.close_on_exec = false
+      (@proc_sub_fds ||= []) << shell_end
+      "/dev/fd/#{shell_end.fileno}"
     end
 
     def __brace(pattern)
@@ -1794,6 +1785,10 @@ module Rubish
     end
 
     def __run_cmd(&block)
+      __closing_proc_subs { __run_cmd_body(&block) }
+    end
+
+    def __run_cmd_body(&block)
       @last_subst_status = nil
       begin
         result = block.call

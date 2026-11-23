@@ -185,7 +185,7 @@ module Rubish
       fire_zsh_hooks('zshexit')
       save_history
       load_logout_config
-      cleanup_all_proc_sub_fifos
+      cleanup_all_proc_subs
       exit_code
     end
 
@@ -993,10 +993,10 @@ module Rubish
 
     def execute(line, skip_history_expansion: false)
       @current_line = line # the text a job started from this line is listed with
-      # Outermost call only: the previous command's process-substitution
-      # FIFOs are no longer needed once the next command starts
+      # Outermost call only: anything left open by the previous command's
+      # process substitutions is no longer needed once the next one starts
       @execute_depth = (@execute_depth || 0) + 1
-      cleanup_all_proc_sub_fifos if @execute_depth == 1
+      cleanup_all_proc_subs if @execute_depth == 1
 
       # verbose: print input lines as read (before any processing)
       $stderr.puts line if Builtins.set_option?('v')
@@ -1137,6 +1137,7 @@ module Rubish
           Builtins.debug_trap
           # Temp env prefix (e.g. `IFS= read`) must reach in-process builtins.
           result = with_prefix_env(ast.env) { Builtins.run(builtin_name, expanded_args) }
+          cleanup_proc_subs # `echo <(cmd)`: the builtin is done with the pipe
           Builtins.set_var('_', (expanded_args.last || builtin_name).to_s)
           @last_status = result.is_a?(ExitStatus) ? result.exitstatus : (result ? 0 : 1)
           @context.last_status = @last_status
@@ -1237,14 +1238,17 @@ module Rubish
       @last_status = 1
     ensure
       @execute_depth -= 1
+      # The outermost command is over: its process substitutions are too
+      cleanup_all_proc_subs if @execute_depth == 0
       @heredoc_content = nil
     end
 
-    # FIFOs are registered on whichever object evaluated the <(...): the
-    # execution context for generated code, the REPL for builtin fast paths
-    def cleanup_all_proc_sub_fifos
-      cleanup_proc_sub_fifos
-      @context&.cleanup_proc_sub_fifos
+    # Process substitutions are registered on whichever object evaluated
+    # the <(...): the execution context for generated code, the REPL for
+    # builtin fast paths
+    def cleanup_all_proc_subs
+      cleanup_proc_subs
+      @context&.cleanup_proc_subs
     end
 
     # Functions shadow builtins (bash semantics), including ones that are
