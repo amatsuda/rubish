@@ -53,10 +53,10 @@ class TestUnset < Test::Unit::TestCase
     assert result
   end
 
-  # Test unset no args shows usage
+  # A bare unset does nothing and succeeds, as in bash
   def test_unset_no_args
-    output = capture_output { Rubish::Builtins.run('unset', []) }
-    assert_match(/usage/, output)
+    output = capture_output { assert_true Rubish::Builtins.run('unset', []) }
+    assert_equal '', output
   end
 
   # Test unset only flags shows usage

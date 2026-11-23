@@ -1252,10 +1252,7 @@ module Rubish
       # -v: treat names as variable names (default)
       mode = :variable  # default mode
 
-      if args.empty?
-        puts 'unset: usage: unset [-f] [-v] name [name ...]'
-        return false
-      end
+      return true if args.empty? # nothing to do, as in bash
 
       names = []
       args.each do |arg|
@@ -1310,6 +1307,12 @@ module Rubish
           if readonly?(name)
             $stderr.puts "unset: #{name}: readonly variable"
             had_error = true
+            next
+          end
+
+          # No variable of that name: a function of that name goes (bash)
+          if !var_set?(name) && !array?(name) && !assoc_array?(name) && @state.function_checker&.call(name)
+            @state.function_remover&.call(name)
             next
           end
 
