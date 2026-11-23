@@ -61,7 +61,14 @@ module Rubish
 
     def arithmetic_evaluator
       @arithmetic_evaluator ||= ArithmeticEvaluator.new(
-        get_var: ->(name) { get_special_var(name) || Builtins.get_var(name) },
+        get_var: lambda { |name|
+          value = get_special_var(name) || Builtins.get_var(name)
+          if value.nil? && Builtins.set_option?('u') && !Builtins.array?(name)
+            $stderr.puts Builtins.format_error('unbound variable', command: name)
+            raise NounsetError, "#{name}: unbound variable"
+          end
+          value
+        },
         set_var: ->(name, value) { Builtins.set_var(name, value) },
         get_array_element: ->(name, index) { Builtins.get_array_element(name, index) },
         set_array_element: ->(name, index, value) { Builtins.set_array_element(name, index, value) },

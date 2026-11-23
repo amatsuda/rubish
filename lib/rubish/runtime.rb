@@ -214,7 +214,21 @@ module Rubish
 
     # ${#var} - length of variable value
     def __param_length(var_name)
+      if Builtins.set_option?('u') && var_name.match?(/\A[a-zA-Z_][a-zA-Z0-9_]*\z/) && !Builtins.var_set?(var_name) && !Builtins.array?(var_name)
+        $stderr.puts Builtins.format_error('unbound variable', command: var_name)
+        raise NounsetError, "#{var_name}: unbound variable"
+      end
       (__param_value(var_name) || '').length.to_s
+    end
+
+    # $N: an unset positional parameter is an error under set -u, as in bash
+    def __positional(n)
+      value = positional_params[n - 1]
+      if value.nil? && Builtins.set_option?('u')
+        $stderr.puts Builtins.format_error('unbound variable', command: "$#{n}")
+        raise NounsetError, "$#{n}: unbound variable"
+      end
+      value || ''
     end
 
     # ${var:offset} or ${var:offset:length} - substring extraction

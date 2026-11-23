@@ -338,7 +338,7 @@ module Rubish
       when '$0'
         '((a0 = get_var("RUBISH_ARGV0")) && !a0.empty? ? a0 : script_name)'
       when /\A\$([1-9])\z/
-        "(positional_params[#{$1.to_i - 1}] || '')"
+        "__positional(#{$1.to_i})"
       when '$#'
         'positional_params.length.to_s'
       when '$-'
@@ -576,7 +576,7 @@ module Rubish
         return ['join_by_ifs(positional_params)', 2]
       when /\$[1-9]/
         n = str[pos + 1].to_i
-        return ["(positional_params[#{n - 1}] || '')", 2]
+        return ["__positional(#{n})", 2]
       end
 
       # ${VAR} or ${VAR:operation} form
@@ -1462,7 +1462,7 @@ module Rubish
       # ${N} - positional parameter (${10} and up need the braces); ${0} is $0
       if content.match?(/\A\d+\z/)
         n = content.to_i
-        return n.zero? ? generate_special_variable('$0') : "(positional_params[#{n - 1}] || '')"
+        return n.zero? ? generate_special_variable('$0') : "__positional(#{n})"
       end
 
       # ${-} - current option flags
