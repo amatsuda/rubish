@@ -429,6 +429,15 @@ module Rubish
       Builtins.get_var(indirect_name) || ''
     end
 
+    # ${!name<op>...}: expand indirectly through name, then apply the
+    # operator to the parameter it names (`${!n:-def}`, `${!n#pat}`)
+    def __param_indirect_rest(var_name, rest)
+      target = Builtins.nameref?(var_name) ? Builtins.resolve_nameref(var_name).to_s : Builtins.get_var(var_name).to_s
+      return '' unless target.match?(/\A[a-zA-Z_][a-zA-Z0-9_]*(\[[^\]]*\])?\z/)
+
+      expand_parameter_expansion("#{target}#{rest}")
+    end
+
     # $"string" - locale-specific translation using TEXTDOMAIN
     # Uses gettext if available, otherwise returns original string
     def __translate(string)

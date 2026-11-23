@@ -1499,6 +1499,11 @@ module Rubish
         return "#{joiner}(__var_names_with_prefix(#{$1.inspect}))"
       end
 
+      # ${!name<op>...}: indirect expansion with an operator applied to it
+      if content =~ %r{\A!([a-zA-Z_][a-zA-Z0-9_]*)((?::|[-=+?#%/^,@]).*)\z}m
+        return "__param_indirect_rest(#{$1.inspect}, #{$2.inspect})"
+      end
+
       # Handle ${!var} - indirect expansion
       if content =~ /\A!([a-zA-Z_][a-zA-Z0-9_]*)\z/
         var_name = $1

@@ -473,6 +473,10 @@ module Rubish
         return $2 == '*' ? Builtins.join_by_ifs(names) : names.join(' ')
       end
 
+      # ${!name<op>...}: expand indirectly through name, then apply the
+      # operator to what it names (`${!n:-def}`, `${!n#pat}`, `${!n:1:2}`)
+      return __param_indirect_rest($1, $2) if content =~ %r{\A!([a-zA-Z_][a-zA-Z0-9_]*)((?::|[-=+?#%/^,@]).*)\z}m
+
       # ${!var} - indirect expansion
       return __param_indirect($1) if content =~ /\A!([a-zA-Z_][a-zA-Z0-9_]*)\z/
 
