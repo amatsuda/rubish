@@ -495,6 +495,7 @@ module Rubish
     def read_array
       start = @pos
       depth = 0
+      closed = false
       while @pos < @input.length
         char = @input[@pos]
         if char == '['
@@ -503,6 +504,7 @@ module Rubish
           depth -= 1
           if depth == 0
             @pos += 1
+            closed = true
             break
           end
         elsif char == '"'
@@ -513,6 +515,11 @@ module Rubish
           next
         end
         @pos += 1
+      end
+      unless closed
+        # A `[` with no closing bracket is an ordinary word (`type [`)
+        @pos = start + 1
+        return Token.new(:WORD, '[')
       end
       Token.new(:ARRAY, @input[start...@pos])
     end
