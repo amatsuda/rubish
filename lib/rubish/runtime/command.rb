@@ -647,6 +647,8 @@ module Rubish
       job_control = Builtins.set_option?('m')
 
       @pid = fork do
+        # The child is a subshell: no inherited traps (bash)
+        Builtins.reset_traps_for_subshell
         # Set up job control in child if enabled
         if job_control
           # Create new process group with this process as leader
@@ -990,6 +992,8 @@ module Rubish
 
         fork do
           begin
+          # A pipeline element is a subshell: no inherited traps (bash)
+          Builtins.reset_traps_for_subshell
           # Set up job control in child if enabled
           if job_control
             # First process becomes the process group leader

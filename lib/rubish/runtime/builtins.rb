@@ -6930,6 +6930,8 @@ module Rubish
         send_hup_to_active_jobs
       end
 
+      # The EXIT trap sees the status the shell is leaving with as $?
+      @state.last_status_setter&.call(code) unless code.nil?
       exit_traps
       throw :exit, code
     end
