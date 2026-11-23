@@ -440,6 +440,9 @@ module Rubish
 
       indirect_name = Builtins.get_var(var_name)
       return '' if indirect_name.nil? || indirect_name.empty?
+      # A number names a positional parameter: `${!OPTIND}` is `$3` when OPTIND is 3
+      return (positional_params[indirect_name.to_i - 1] || '') if indirect_name.match?(/\A[1-9][0-9]*\z/)
+
       Builtins.get_var(indirect_name) || ''
     end
 
