@@ -335,7 +335,7 @@ module Rubish
       @stdout = File.open(file, 'w')
       @stdout_seq = next_redirect_seq
       self
-    rescue Errno::ENOENT, Errno::EACCES => e
+    rescue SystemCallError => e
       $stderr.puts "rubish: #{file}: #{e.class.new.message}"
       @restricted_failed = true
       self
@@ -352,7 +352,7 @@ module Rubish
       @stdout = File.open(file, 'w')
       @stdout_seq = next_redirect_seq
       self
-    rescue Errno::ENOENT, Errno::EACCES => e
+    rescue SystemCallError => e
       $stderr.puts "rubish: #{file}: #{e.class.new.message}"
       @restricted_failed = true
       self
@@ -368,7 +368,7 @@ module Rubish
       @stdout = File.open(file, 'a')
       @stdout_seq = next_redirect_seq
       self
-    rescue Errno::ENOENT, Errno::EACCES => e
+    rescue SystemCallError => e
       $stderr.puts "rubish: #{file}: #{e.class.new.message}"
       @restricted_failed = true
       self
@@ -377,7 +377,7 @@ module Rubish
     def redirect_in(file)
       @stdin = File.open(file, 'r')
       self
-    rescue Errno::ENOENT, Errno::EACCES => e
+    rescue SystemCallError => e
       $stderr.puts "rubish: #{file}: #{e.class.new.message}"
       @restricted_failed = true
       self
@@ -393,7 +393,7 @@ module Rubish
       @stderr = File.open(file, 'w')
       @stderr_seq = next_redirect_seq
       self
-    rescue Errno::ENOENT, Errno::EACCES => e
+    rescue SystemCallError => e
       $stderr.puts "rubish: #{file}: #{e.class.new.message}"
       @restricted_failed = true
       self
@@ -409,7 +409,7 @@ module Rubish
       @stderr = File.open(file, 'a')
       @stderr_seq = next_redirect_seq
       self
-    rescue Errno::ENOENT, Errno::EACCES => e
+    rescue SystemCallError => e
       $stderr.puts "rubish: #{file}: #{e.class.new.message}"
       @restricted_failed = true
       self
@@ -1335,7 +1335,7 @@ module Rubish
       @stdout = File.open(file, 'w')
       @stdout_seq = next_redirect_seq
       self
-    rescue Errno::ENOENT, Errno::EACCES => e
+    rescue SystemCallError => e
       $stderr.puts "rubish: #{file}: #{e.class.new.message}"
       @restricted_failed = true
       self
@@ -1350,7 +1350,7 @@ module Rubish
       @stdout = File.open(file, 'w')
       @stdout_seq = next_redirect_seq
       self
-    rescue Errno::ENOENT, Errno::EACCES => e
+    rescue SystemCallError => e
       $stderr.puts "rubish: #{file}: #{e.class.new.message}"
       @restricted_failed = true
       self
@@ -1365,7 +1365,7 @@ module Rubish
       @stdout = File.open(file, 'a')
       @stdout_seq = next_redirect_seq
       self
-    rescue Errno::ENOENT, Errno::EACCES => e
+    rescue SystemCallError => e
       $stderr.puts "rubish: #{file}: #{e.class.new.message}"
       @restricted_failed = true
       self
@@ -1374,7 +1374,7 @@ module Rubish
     def redirect_in(file)
       @stdin = File.open(file, 'r')
       self
-    rescue Errno::ENOENT, Errno::EACCES => e
+    rescue SystemCallError => e
       $stderr.puts "rubish: #{file}: #{e.class.new.message}"
       @restricted_failed = true
       self
@@ -1389,7 +1389,7 @@ module Rubish
       @stderr = File.open(file, 'w')
       @stderr_seq = next_redirect_seq
       self
-    rescue Errno::ENOENT, Errno::EACCES => e
+    rescue SystemCallError => e
       $stderr.puts "rubish: #{file}: #{e.class.new.message}"
       @restricted_failed = true
       self
@@ -1404,7 +1404,7 @@ module Rubish
       @stderr = File.open(file, 'a')
       @stderr_seq = next_redirect_seq
       self
-    rescue Errno::ENOENT, Errno::EACCES => e
+    rescue SystemCallError => e
       $stderr.puts "rubish: #{file}: #{e.class.new.message}"
       @restricted_failed = true
       self
@@ -1604,7 +1604,7 @@ module Rubish
       end
       @stdout = File.open(file, 'w')
       self
-    rescue Errno::ENOENT, Errno::EACCES => e
+    rescue SystemCallError => e
       $stderr.puts "rubish: #{file}: #{e.class.new.message}"
       @restricted_failed = true
       self
@@ -1618,7 +1618,7 @@ module Rubish
       end
       @stdout = File.open(file, 'w')
       self
-    rescue Errno::ENOENT, Errno::EACCES => e
+    rescue SystemCallError => e
       $stderr.puts "rubish: #{file}: #{e.class.new.message}"
       @restricted_failed = true
       self
@@ -1632,7 +1632,7 @@ module Rubish
       end
       @stdout = File.open(file, 'a')
       self
-    rescue Errno::ENOENT, Errno::EACCES => e
+    rescue SystemCallError => e
       $stderr.puts "rubish: #{file}: #{e.class.new.message}"
       @restricted_failed = true
       self
@@ -1651,7 +1651,7 @@ module Rubish
       end
       @stderr = File.open(file, 'w')
       self
-    rescue Errno::ENOENT, Errno::EACCES => e
+    rescue SystemCallError => e
       $stderr.puts "rubish: #{file}: #{e.class.new.message}"
       @restricted_failed = true
       self
@@ -1665,7 +1665,7 @@ module Rubish
       end
       @stderr = File.open(file, 'a')
       self
-    rescue Errno::ENOENT, Errno::EACCES => e
+    rescue SystemCallError => e
       $stderr.puts "rubish: #{file}: #{e.class.new.message}"
       @restricted_failed = true
       self

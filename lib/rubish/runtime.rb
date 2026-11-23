@@ -837,10 +837,21 @@ module Rubish
       end
     end
 
+    # Open a compound command's redirection target. A target that cannot be
+    # opened is reported and the command is skipped with status 1, as for a
+    # simple command
+    def __open_redirect_target(file, mode)
+      File.open(file, mode)
+    rescue SystemCallError => e
+      $stderr.puts "rubish: #{file}: #{e.class.new.message}"
+      nil
+    end
+    
     def __with_stdout_redirect(file, mode)
+      io = __open_redirect_target(file, mode) or return ExitStatus.new(1)
       old_stdout = $stdout
       begin
-        $stdout = File.open(file, mode)
+        $stdout = io
         yield
       ensure
         $stdout.close unless $stdout == old_stdout || $stdout.closed?
@@ -849,9 +860,10 @@ module Rubish
     end
 
     def __with_stdin_redirect(file)
+      io = __open_redirect_target(file, 'r') or return ExitStatus.new(1)
       old_stdin = $stdin
       begin
-        $stdin = File.open(file, 'r')
+        $stdin = io
         yield
       ensure
         $stdin.close unless $stdin == old_stdin || $stdin.closed?
@@ -860,9 +872,10 @@ module Rubish
     end
 
     def __with_stderr_redirect(file, mode = 'w')
+      io = __open_redirect_target(file, mode) or return ExitStatus.new(1)
       old_stderr = $stderr
       begin
-        $stderr = File.open(file, mode)
+        $stderr = io
         yield
       ensure
         $stderr.close unless $stderr == old_stderr || $stderr.closed?
