@@ -2841,6 +2841,22 @@ module Rubish
 
     # `set -o`: a table of option name and on/off; `set +o`: `set -o name` /
     # `set +o name` lines that can be fed back to the shell (bash)
+    # Is the `set -o` option of this (long or one-letter) name on?
+    def set_option_named?(name)
+      flag = SET_OPTION_LONG_NAMES.key(name) || name
+      return false unless @state.set_options.key?(flag)
+
+      @state.set_options[flag] ? true : false
+    end
+
+    SET_OPTION_LONG_NAMES = {
+      'B' => 'braceexpand', 'H' => 'histexpand', 'e' => 'errexit', 'E' => 'errtrace',
+      'T' => 'functrace', 'x' => 'xtrace', 'u' => 'nounset', 'n' => 'noexec', 'v' => 'verbose',
+      'f' => 'noglob', 'C' => 'noclobber', 'a' => 'allexport', 'b' => 'notify', 'h' => 'hashall',
+      'm' => 'monitor', 'P' => 'physical', 't' => 'onecmd', 'k' => 'keyword', 'p' => 'privileged',
+      'r' => 'restricted'
+    }.freeze
+
     def list_set_options(reusable: false)
       long_names = {
         'B' => 'braceexpand', 'H' => 'histexpand',

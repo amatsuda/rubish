@@ -822,6 +822,7 @@ module Rubish
 
     def eval_unary_test(op, arg)
       case op
+      when '-o' then Builtins.set_option_named?(arg.to_s) # [[ -o errexit ]]
       when '-z' then arg.to_s.empty?
       when '-n' then !arg.to_s.empty?
       when '-e' then File.exist?(arg)
