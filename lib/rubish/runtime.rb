@@ -1584,7 +1584,12 @@ module Rubish
       result = nil
       begin
         result = block.call
-        result.run if result.is_a?(Command) || result.is_a?(Pipeline)
+        if __bare_assignment_command?(result)
+          # `time x=2`: the assignment is made here, in the shell
+          result = ExitStatus.new(__run_bare_assignment(result))
+        elsif result.is_a?(Command) || result.is_a?(Pipeline) || result.is_a?(Subshell) || result.is_a?(HeredocCommand)
+          result.run
+        end
       rescue => e
         $stderr.puts "rubish: time: #{e.message}"
       end
