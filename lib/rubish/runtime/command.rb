@@ -198,6 +198,17 @@ module Rubish
     # file, while `2>&1 >file` sends stderr to the original stdout.
     def effective_streams
       out, err = @stdout, @stderr
+      if out == :stderr && err == :stdout
+        # Each dup takes the other stream as it was at that point: after
+        # `2>&1 1>&2` both go where stdout went (the pipe, or stdout itself);
+        # after `1>&2 2>&1` both go to stderr
+        if (@stderr_seq || 0) < (@stdout_seq || 0)
+          out = @pipe_stdout
+          err = @pipe_stdout || :stdout
+        else
+          err = nil
+        end
+      end
       out = err if out == :stderr && err.is_a?(IO) && (@stderr_seq || 0) < (@stdout_seq || 0)
       err = @stdout if err == :stdout && @stdout.is_a?(IO) && (@stdout_seq || 0) < (@stderr_seq || 0)
       # In a pipeline the pipe was stdout before any redirection, so
@@ -1241,6 +1252,17 @@ module Rubish
     # the pipe.
     def effective_streams
       out, err = @stdout, @stderr
+      if out == :stderr && err == :stdout
+        # Each dup takes the other stream as it was at that point: after
+        # `2>&1 1>&2` both go where stdout went (the pipe, or stdout itself);
+        # after `1>&2 2>&1` both go to stderr
+        if (@stderr_seq || 0) < (@stdout_seq || 0)
+          out = @pipe_stdout
+          err = @pipe_stdout || :stdout
+        else
+          err = nil
+        end
+      end
       out = err if out == :stderr && err.is_a?(IO) && (@stderr_seq || 0) < (@stdout_seq || 0)
       err = @stdout if err == :stdout && @stdout.is_a?(IO) && (@stdout_seq || 0) < (@stderr_seq || 0)
       # In a pipeline the pipe was stdout before any redirection, so
