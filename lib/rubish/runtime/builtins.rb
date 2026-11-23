@@ -2789,7 +2789,8 @@ module Rubish
         'p' => 'privileged', 'history' => 'history', 'nolog' => 'nolog',
         'r' => 'restricted'
       }
-      @state.set_options.each do |flag, value|
+      # Listed by name, as bash does
+      @state.set_options.sort_by { |flag, _| long_names[flag] || flag }.each do |flag, value|
         name = long_names[flag] || flag
         if reusable
           puts "set #{value ? '-o' : '+o'} #{name}"
