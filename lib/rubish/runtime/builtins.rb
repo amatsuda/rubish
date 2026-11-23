@@ -6417,6 +6417,10 @@ module Rubish
           # -s SIGNAL
           signal = args[i + 1].upcase.delete_prefix('SIG')
           i += 2
+        elsif arg == '-n' && i + 1 < args.length
+          # -n NUMBER
+          signal = args[i + 1].to_i
+          i += 2
         elsif arg =~ /\A-(\d+)\z/
           # -N (signal number)
           signal = $1.to_i
