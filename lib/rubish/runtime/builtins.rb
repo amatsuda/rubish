@@ -1686,6 +1686,11 @@ module Rubish
 
         # Remove attributes (except readonly)
         remove_attrs.each { |attr| @state.var_attributes[name].delete(attr) }
+        # `declare +x`: the value stays in the shell, out of the environment
+        if remove_attrs.include?(:export) && ENV.key?(name)
+          @state.shell_vars[name] = ENV[name] unless @state.shell_vars.key?(name)
+          ENV.delete(name)
+        end
 
         # Handle nameref attribute
         if add_attrs.include?(:nameref)
