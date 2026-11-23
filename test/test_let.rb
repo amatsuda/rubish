@@ -211,10 +211,10 @@ class TestLet < Test::Unit::TestCase
     assert_equal '5', ENV['a']  # x defaults to 0
   end
 
-  # Test usage error
+  # A bare let reports "expression expected", as in bash
   def test_let_no_args
-    output = capture_output { Rubish::Builtins.run('let', []) }
-    assert_match(/usage/, output)
+    output = capture_output { assert_false Rubish::Builtins.run('let', []) }
+    assert_match(/let: expression expected/, output)
   end
 
   # Test division by zero: reported as an error, variable left unchanged (bash)

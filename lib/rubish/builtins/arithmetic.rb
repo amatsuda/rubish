@@ -10,7 +10,7 @@ module Rubish
       # Returns 0 (true) if last expression is non-zero, 1 (false) if zero
 
       if args.empty?
-        puts 'let: usage: let expression [expression ...]'
+        $stderr.puts 'rubish: let: expression expected'
         return false
       end
 
