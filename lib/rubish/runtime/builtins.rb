@@ -762,8 +762,8 @@ module Rubish
       if dir && !dir.start_with?('/') && !dir.start_with?('./') && !dir.start_with?('../') && dir != '.' && dir != '..'
         # First check if directory exists relative to current directory
         unless File.directory?(dir)
-          # Search CDPATH
-          cdpath = ENV['CDPATH']
+          # Search CDPATH (a shell variable, exported or not)
+          cdpath = get_var('CDPATH')
           if cdpath && !cdpath.empty?
             cdpath.split(':').each do |path|
               path = '.' if path.empty?  # Empty entry means current directory
