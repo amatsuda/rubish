@@ -196,7 +196,9 @@ module Rubish
           words.flat_map { |w| w.match?(/[*?\[]|[+@!]\(/) ? __glob(w) : [w] }
         else
           next [] if expanded.empty?
-          expanded.match?(/[*?\[]|[+@!]\(/) ? __glob(expanded) : [expanded]
+          # A word that is not a pattern still loses the backslashes that
+          # quoted glob characters (`echo \]` prints `]`)
+          expanded.match?(/[*?\[]|[+@!]\(/) ? __glob(expanded) : [expanded.gsub(/\\([*?\[\]])/, '\1')]
         end
       end
     end

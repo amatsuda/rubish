@@ -1069,8 +1069,8 @@ module Rubish
         # Glob pattern - expand
         "__glob(#{item.inspect})"
       else
-        # Literal - no splitting needed
-        item.inspect
+        # Literal: a backslash quoting a character is removed (`a\ b`)
+        shell_unescape(item).inspect
       end
     end
 
