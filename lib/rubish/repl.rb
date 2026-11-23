@@ -2593,8 +2593,12 @@ module Rubish
     def collect_heredoc_content(delimiter, strip_tabs)
       lines = []
       loop do
-        line = @frontend.read_simple_line('> ')
-        break unless line
+        # A non-interactive shell on a non-tty stdin has no line to offer
+        line = continuation_available? ? @frontend.read_simple_line('> ') : nil
+        unless line
+          $stderr.puts "rubish: warning: here-document delimited by end-of-file (wanted `#{delimiter}')"
+          break
+        end
 
         # Check for delimiter (possibly with leading tabs if strip_tabs)
         check_line = strip_tabs ? line.sub(/\A\t+/, '') : line
