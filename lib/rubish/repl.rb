@@ -638,6 +638,12 @@ module Rubish
     # script) has nothing to prompt: the command is simply unfinished, and
     # waiting on that stdin for a line would block for as long as it stays
     # open.
+    # PIPESTATUS as seen by generated code (which reads it on the context)
+    def set_pipestatus(statuses)
+      @pipestatus = statuses
+      @context.pipestatus = statuses if @context
+    end
+
     def continuation_available?
       Builtins.interactive_mode? || !@frontend.is_a?(Frontend::Tty) || $stdin.tty?
     end
@@ -1122,7 +1128,7 @@ module Rubish
         @last_subst_status = nil
         ok = handle_bare_assignments([ast.name] + ast.args)
         @last_status = ok ? (@last_subst_status || 0) : 1
-        @pipestatus = [@last_status]
+        set_pipestatus([@last_status])
         @command_number += 1
         # Note: bare assignments don't increment LINENO (bash behavior)
         Builtins.clear_exit_blocked  # checkjobs: non-exit command resets flag
@@ -1148,16 +1154,16 @@ module Rubish
           Builtins.set_var('_', (expanded_args.last || builtin_name).to_s)
           @last_status = result.is_a?(ExitStatus) ? result.exitstatus : (result ? 0 : 1)
           @context.last_status = @last_status
-          @pipestatus = [@last_status]
+          set_pipestatus([@last_status])
           run_err_trap_if_failed
           check_errexit
         rescue NounsetError
           @last_status = 1
-          @pipestatus = [@last_status]
+          set_pipestatus([@last_status])
           throw(:exit, 1) if Builtins.set_option?('u')
         rescue FailglobError
           @last_status = 1
-          @pipestatus = [@last_status]
+          set_pipestatus([@last_status])
         ensure
           @command_number += 1
           @lineno += 1
@@ -1183,18 +1189,18 @@ module Rubish
           # `VAR=value f`: the assignment is in effect inside the function
           @last_status = with_prefix_env(ast.env) { call_function(ast.name, expanded_args) }.exitstatus
           @context.last_status = @last_status
-          @pipestatus = [@last_status]
+          set_pipestatus([@last_status])
           # A failing call runs the ERR trap here, at the call site; inside the
           # function it ran only with errtrace
           run_err_trap_if_failed
           check_errexit
         rescue NounsetError
           @last_status = 1
-          @pipestatus = [@last_status]
+          set_pipestatus([@last_status])
           throw(:exit, 1) if Builtins.set_option?('u')
         rescue FailglobError
           @last_status = 1
-          @pipestatus = [@last_status]
+          set_pipestatus([@last_status])
         ensure
           @command_number += 1
           @lineno += 1
@@ -1209,7 +1215,7 @@ module Rubish
         if File.directory?(dir)
           result = Builtins.run('cd', [dir])
           @last_status = result ? 0 : 1
-          @pipestatus = [@last_status]
+          set_pipestatus([@last_status])
           @command_number += 1
           @lineno += 1
           Builtins.clear_exit_blocked  # checkjobs: non-exit command resets flag
@@ -1443,13 +1449,13 @@ module Rubish
       elsif result.is_a?(Command) && @functions.key?(result.name)
         # Call user-defined function, handling redirects
         call_function_with_redirects(result)
-        @pipestatus = [@last_status]
+        set_pipestatus([@last_status])
       elsif result.is_a?(Command) && bare_assignment?(result.name) && result.args.all? { |a| bare_assignment?(a) }
         # Handle bare variable assignments (e.g., x=$(echo hello) after expansion).
         # The substitutions already ran in the context; take the last one's status.
         ok = handle_bare_assignments([result.name] + result.args)
         @last_status = ok ? (@context.instance_variable_get(:@last_subst_status) || 0) : 1
-        @pipestatus = [@last_status]
+        set_pipestatus([@last_status])
       elsif result.is_a?(Command) && !@functions.key?(result.name) &&
             (PROCESS_BUILTINS.include?(result.name) ||
              (Builtins.builtin?(result.name) && !result.stdout && !result.stderr))
@@ -1457,7 +1463,7 @@ module Rubish
         # here as a Command; it must run in this process, not in a fork
         success = __run_process_builtin(result)
         @last_status = success.is_a?(ExitStatus) ? success.exitstatus : (success ? 0 : 1)
-        @pipestatus = [@last_status]
+        set_pipestatus([@last_status])
         # Hand back the status, not the unrun Command, so execute keeps it
         result = ExitStatus.new(@last_status)
       elsif result.is_a?(Command) || result.is_a?(Pipeline) || result.is_a?(Subshell) || result.is_a?(HeredocCommand)
@@ -1468,7 +1474,7 @@ module Rubish
           if result.is_a?(Pipeline) && result.statuses
             @pipestatus = result.statuses.map { |s| ExitStatus.code_of(s) }
           else
-            @pipestatus = [@last_status]
+            set_pipestatus([@last_status])
           end
           run_err_trap_if_failed
         end

@@ -1046,6 +1046,7 @@ module Rubish
     def __fetch_var(var_name)
       # Special handling for SECONDS, RANDOM, LINENO, PPID, UID, EUID, GROUPS, HOSTNAME, RUBISHPID, BASHPID, HISTCMD, and EPOCHSECONDS
       return (@funcname_stack || []).first.to_s if var_name == 'FUNCNAME'
+      return (@pipestatus || []).first.to_s if var_name == 'PIPESTATUS' # $PIPESTATUS is its first element
       return seconds.to_s if var_name == 'SECONDS'
       return random.to_s if var_name == 'RANDOM'
       return @lineno.to_s if var_name == 'LINENO'
@@ -1410,6 +1411,11 @@ module Rubish
       when Command, Pipeline, Subshell
         result.run unless result.ran?
         status = result.success?
+        # `! a | b` still records each element's status
+        if result.is_a?(Pipeline) && result.statuses
+          @pipestatus = result.statuses.map { |s| ExitStatus.code_of(s) }
+          @pipestatus_from_negation = true
+        end
       when ExitStatus
         status = result.success?
       when true, false
@@ -1858,6 +1864,7 @@ module Rubish
         # Run process-affecting builtins directly in current process
         success = __run_process_builtin(result)
         @last_status = success.is_a?(ExitStatus) ? success.exitstatus : (success ? 0 : 1)
+        @pipestatus = [@last_status]
         run_err_trap_if_failed
         check_errexit
         # Return ExitStatus to prevent eval_in_context from trying to run command again
@@ -1877,6 +1884,7 @@ module Rubish
         end
         success = __run_process_builtin(result)
         @last_status = success.is_a?(ExitStatus) ? success.exitstatus : (success ? 0 : 1)
+        @pipestatus = [@last_status]
         run_err_trap_if_failed
         check_errexit
         # Return ExitStatus so callers (like Subshell) know the real exit status
@@ -1884,6 +1892,7 @@ module Rubish
       elsif result.is_a?(Command) && @functions.key?(result.name)
         # Call user-defined function with redirects
         status = call_function_with_redirects(result)
+        @pipestatus = [@last_status]
         # A failing call runs the ERR trap here, at the call site; inside the
         # function it ran only with errtrace
         run_err_trap_if_failed
@@ -1913,7 +1922,9 @@ module Rubish
         elsif result.respond_to?(:exitstatus)
           # Handle ExitStatus objects (from __cond_test, etc.)
           @last_status = result.exitstatus || 0
-          @pipestatus = [@last_status]
+          # `! a | b` keeps the pipeline's statuses (bash)
+          @pipestatus = [@last_status] unless @pipestatus_from_negation
+          @pipestatus_from_negation = false
           run_err_trap_if_failed
           check_errexit
         end
