@@ -2,7 +2,7 @@
 
 require_relative 'test_helper'
 
-# `shopt name` lists like bash: the name padded to 15 columns, a tab, on/off
+# `shopt name` lists like bash: the name padded to 20 columns, a tab, on/off
 class TestShoptListingFormat < Test::Unit::TestCase
   def setup
     @repl = Rubish::REPL.new
@@ -14,6 +14,6 @@ class TestShoptListingFormat < Test::Unit::TestCase
 
   def test_padded_name
     out = capture_stdout { execute('shopt -s extglob; shopt extglob; shopt -u extglob; shopt extglob') }
-    assert_equal "extglob        \ton\nextglob        \toff\n", out
+    assert_equal "extglob             \ton\nextglob             \toff\n", out
   end
 end

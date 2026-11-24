@@ -4007,7 +4007,7 @@ module Rubish
           if print_mode
             puts "shopt #{value ? '-s' : '-u'} #{name}"
           else
-            puts format("%-15s\t%s", name, value ? 'on' : 'off')
+            puts format("%-20s\t%s", name, value ? 'on' : 'off') # bash's shopt column; set -o uses 15
           end
         end
       end
