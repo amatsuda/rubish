@@ -1300,8 +1300,8 @@ module Rubish
         # Run as external command, skipping function lookup
         cmd = Command.new(name, *cmd_args, skip_functions: true)
         cmd.run
-        @last_status = cmd.success? ? 0 : 1
-        cmd.success?
+        @last_status = ExitStatus.code_of(cmd.status)
+        ExitStatus.new(@last_status)
       end
     end
 

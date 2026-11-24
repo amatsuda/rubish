@@ -6790,7 +6790,7 @@ module Rubish
 
       # Handle -v flag: print path or type
       if print_path
-        if @state.function_checker&.call(cmd_name) || builtin?(cmd_name)
+        if @state.function_checker&.call(cmd_name) || builtin?(cmd_name) || SHELL_KEYWORDS.include?(cmd_name)
           puts cmd_name
           return true
         end
@@ -6821,10 +6821,10 @@ module Rubish
         return false
       end
 
-      # Execute command bypassing functions and aliases
+      # Execute command bypassing functions and aliases; the status is the
+      # command's own (127 when there is no such command)
       if @state.command_executor
         @state.command_executor.call(cmd_args)
-        true
       else
         # Fallback: just use regular executor with the command
         # This won't bypass functions but at least runs something
