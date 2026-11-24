@@ -1499,6 +1499,10 @@ module Rubish
         return set_array_element(array, let_evaluator.evaluate(subscript).to_i, value)
       end
 
+      # `a=x` on an array variable assigns element 0 (bash)
+      return set_array_element(name, 0, value) if indexed_array?(name)
+      return set_assoc_element(name, '0', value) if assoc_array?(name)
+
       @state.shell_vars[name] = value
       # If variable is exported, was inherited from parent env, or is an auto-export variable, also update ENV
       ENV[name] = value if exported?(name) || ENV.key?(name) || AUTO_EXPORT_VARS.include?(name)
