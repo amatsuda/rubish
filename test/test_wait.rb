@@ -32,7 +32,7 @@ class TestWait < Test::Unit::TestCase
   def test_wait_invalid_job_spec
     output = capture_output do
       result = Rubish::Builtins.run('wait', ['%999'])
-      assert_false result
+      assert_equal 127, result.exitstatus # bash
     end
     assert_match(/no such job/, output)
   end

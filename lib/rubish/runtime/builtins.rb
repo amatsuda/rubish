@@ -6710,10 +6710,9 @@ module Rubish
         begin
           if pid_arg.start_with?('%')
             # Job spec
-            job_id = pid_arg[1..].to_i
-            job = manager.get(job_id)
+            job = manager.find_by_spec(pid_arg)
             unless job
-              puts "kill: %#{job_id}: no such job"
+              $stderr.puts "rubish: kill: #{pid_arg}: no such job"
               all_success = false
               next
             end
@@ -6834,8 +6833,7 @@ module Rubish
         else
           pids_or_jobs.each do |arg|
             if arg.start_with?('%')
-              job_id = arg[1..].to_i
-              job = manager.get(job_id)
+              job = manager.find_by_spec(arg)
               target_pids << job.pid if job
             else
               target_pids << arg.to_i
@@ -6939,11 +6937,10 @@ module Rubish
 
           if arg.start_with?('%')
             # Job spec
-            job_id = arg[1..].to_i
-            job = manager.get(job_id)
+            job = manager.find_by_spec(arg)
             unless job
-              puts "wait: %#{job_id}: no such job"
-              last_status = false
+              $stderr.puts "rubish: wait: #{arg}: no such job"
+              last_status = ExitStatus.new(127)
               next
             end
           else

@@ -98,6 +98,19 @@ module Rubish
       @jobs.values.last
     end
 
+    # A job spec: %N, %% or %+ (the current job), %- (the previous one),
+    # %name (a command starting with name) or %?text (one containing it)
+    def find_by_spec(spec)
+      body = spec.delete_prefix('%')
+      case body
+      when '', '%', '+' then @jobs.values.last
+      when '-' then @jobs.values[-2] || @jobs.values.last # with one job, it is also the previous one
+      when /\A\d+\z/ then @jobs[body.to_i]
+      when /\A\?(.+)\z/ then @jobs.values.find { |j| j.command.include?($1) }
+      else @jobs.values.find { |j| j.command.start_with?(body) }
+      end
+    end
+
     def find_by_pid(pid)
       @jobs.values.find { |j| j.pid == pid }
     end
