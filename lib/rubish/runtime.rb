@@ -1135,6 +1135,7 @@ module Rubish
       # Special handling for SECONDS, RANDOM, LINENO, PPID, UID, EUID, GROUPS, HOSTNAME, RUBISHPID, BASHPID, HISTCMD, and EPOCHSECONDS
       return (@funcname_stack || []).first.to_s if var_name == 'FUNCNAME'
       return (@pipestatus || []).first.to_s if var_name == 'PIPESTATUS' # $PIPESTATUS is its first element
+      return get_special_array_values(var_name).first.to_s if var_name == 'BASH_SOURCE' || var_name == 'RUBISH_SOURCE'
       return seconds.to_s if var_name == 'SECONDS'
       return random.to_s if var_name == 'RANDOM'
       return @lineno.to_s if var_name == 'LINENO'
