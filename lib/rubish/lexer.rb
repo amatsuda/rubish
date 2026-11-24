@@ -1282,21 +1282,27 @@ module Rubish
     def read_heredoc_delimiter(type)
       skip_whitespace
 
-      # Check for quoted delimiter (no variable expansion)
+      # The delimiter is a word; quoting any part of it (`'EOF'`, `EO"F"`,
+      # `\EOF`) turns off expansion of the body (bash)
       quoted = false
-      if @input[@pos] == "'" || @input[@pos] == '"'
-        quote = @input[@pos]
-        @pos += 1
-        start = @pos
-        @pos += 1 while @pos < @input.length && @input[@pos] != quote
-        delimiter = @input[start...@pos]
-        @pos += 1 if @pos < @input.length # skip closing quote
-        quoted = true
-      else
-        # Unquoted delimiter
-        start = @pos
-        @pos += 1 while @pos < @input.length && @input[@pos] =~ /[a-zA-Z0-9_]/
-        delimiter = @input[start...@pos]
+      delimiter = +''
+      while @pos < @input.length
+        char = @input[@pos]
+        if char == "'" || char == '"'
+          close = @input.index(char, @pos + 1) || @input.length
+          delimiter << @input[(@pos + 1)...close]
+          @pos = close + 1
+          quoted = true
+        elsif char == '\\' && @pos + 1 < @input.length
+          delimiter << @input[@pos + 1]
+          @pos += 2
+          quoted = true
+        elsif char =~ /[\s;|&<>()]/
+          break
+        else
+          delimiter << char
+          @pos += 1
+        end
       end
 
       # Return token with delimiter info: "delimiter:quoted" format

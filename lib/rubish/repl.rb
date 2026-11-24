@@ -2580,8 +2580,14 @@ module Rubish
       found
     end
 
-    # A heredoc operator and its delimiter word; not a herestring
-    HEREDOC_OPERATOR = /(?<![<>])<<(?!<)(-?)\s*(['"]?)(\w+)\2/
+    # A heredoc operator and its delimiter word (which may be quoted in
+    # part: `'EOF'`, `EO"F"`, `\EOF`); not a herestring
+    HEREDOC_OPERATOR = /(?<![<>])<<(?!<)(-?)\s*((?:[^\s;|&<>()'"\\]|'[^']*'|"[^"]*"|\\.)+)/
+
+    # The delimiter a heredoc operator's word stands for, quotes removed
+    def self.heredoc_delimiter(word)
+      word.gsub(/'([^']*)'|"([^"]*)"|\\(.)/) { $1 || $2 || $3 }
+    end
 
     # Split input that carries heredoc bodies into the text to lex and the
     # bodies, in order: each line's operators are followed by their bodies
@@ -2594,7 +2600,8 @@ module Rubish
         line = lines[i]
         i += 1
         lex_lines << line
-        line.scan(HEREDOC_OPERATOR).each do |dash, _quote, delimiter|
+        line.scan(HEREDOC_OPERATOR).each do |dash, word|
+          delimiter = REPL.heredoc_delimiter(word)
           strip_tabs = dash == '-'
           body = []
           while i < lines.length

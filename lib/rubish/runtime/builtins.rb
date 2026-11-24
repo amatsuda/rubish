@@ -8064,7 +8064,7 @@ module Rubish
     def detect_heredocs(line)
       return [] unless line.include?('<<')
 
-      line.scan(REPL::HEREDOC_OPERATOR).map { |dash, _quote, delimiter| [delimiter, dash == '-'] }
+      line.scan(REPL::HEREDOC_OPERATOR).map { |dash, word| [REPL.heredoc_delimiter(word), dash == '-'] }
     end
   end
 end
