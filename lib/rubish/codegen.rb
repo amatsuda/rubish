@@ -236,6 +236,12 @@ module Rubish
         return generate_string_arg(str)
       end
 
+      # A word with braces and a variable (`${x}{a,b}`, `{$x..3}`): the
+      # braces expand first, then each result is expanded at runtime
+      if has_brace_expansion?(str) && (str.include?('$') || str.include?('`'))
+        return "expand_single_arg_with_brace_and_glob(#{str.inspect})"
+      end
+
       # Check for brace expansion (happens before glob)
       if has_brace_expansion?(str)
         # Brace expansion returns an array, each element may need glob expansion
@@ -1061,6 +1067,9 @@ module Rubish
       elsif item =~ /\A\$\{([^}]+)\}\z/
         # Braced variable - expand and word-split by IFS
         "Builtins.split_by_ifs(#{generate_interpolated_string(item)})"
+      elsif has_brace_expansion?(item) && (item.include?('$') || item.include?('`'))
+        # Braces and a variable: braces first, then the results expand
+        "expand_single_arg_with_brace_and_glob(#{item.inspect})"
       elsif item.include?('$')
         # Mixed content with variable - expand as string, then word-split by IFS
         "Builtins.split_by_ifs(#{generate_interpolated_string(item)})"

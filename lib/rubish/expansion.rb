@@ -171,7 +171,7 @@ module Rubish
       return [result] if result
 
       # Brace expansion first (only if braceexpand option is enabled)
-      brace_expanded = if Builtins.set_option?('B') && arg.include?('{') && !arg.start_with?('$')
+      brace_expanded = if Builtins.set_option?('B') && WordSegments.brace_list?(arg)
                          expand_braces(arg)
                        else
                          [arg]
