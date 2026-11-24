@@ -989,6 +989,16 @@ module Rubish
     end
 
     def __condition(&block)
+      # A condition is exempt from errexit all the way down: a function
+      # called here may fail inside and go on (bash)
+      prev = @errexit_suppressed
+      @errexit_suppressed = true
+      __evaluate_condition(&block)
+    ensure
+      @errexit_suppressed = prev
+    end
+
+    def __evaluate_condition(&block)
       @last_subst_status = nil
       result = block.call
       if __bare_assignment_command?(result)
@@ -1476,7 +1486,22 @@ module Rubish
     end
 
     def __negate(&block)
-      # Run command and negate exit status
+      # Run command and negate exit status; a function called here is
+      # exempt from errexit inside, like one in a condition
+      prev = @errexit_suppressed
+      @errexit_suppressed = true
+      begin
+        status = __negated_command_status(&block)
+      ensure
+        @errexit_suppressed = prev
+      end
+
+      # A `!` command is exempt from errexit and the ERR trap, as in bash
+      @errexit_exempt = true
+      ExitStatus.new(status ? 1 : 0)
+    end
+
+    def __negated_command_status(&block)
       @last_subst_status = nil
       result = block.call
 
@@ -1485,6 +1510,9 @@ module Rubish
       when ->(r) { __bare_assignment_command?(r) }
         # `! x=$(cmd)` negates the substitution's status
         status = __run_bare_assignment(result) == 0
+      when ->(r) { r.is_a?(Command) && Command.function?(r.name) }
+        # `! myfunc`: call the function here, not in a fork (bash)
+        status = call_function_with_redirects(result).success?
       when Command, Pipeline, Subshell
         result.run unless result.ran?
         status = result.success?
@@ -1502,11 +1530,7 @@ module Rubish
       else
         status = result ? true : false
       end
-
-      # A `!` command is exempt from errexit and the ERR trap, as in bash
-      @errexit_exempt = true
-      # Return negated status
-      ExitStatus.new(status ? 1 : 0)
+      status
     end
 
     def __heredoc(delimiter, expand, strip_tabs, compound = false, content = nil, &block)
