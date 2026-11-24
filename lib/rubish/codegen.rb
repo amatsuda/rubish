@@ -1537,7 +1537,7 @@ module Rubish
     # ${name:offset[:length]} where offset is not one of the :-/:=/:+/:?
     # operators (bash requires a space before a negative offset for the
     # same reason)
-    SUBSTRING_EXPANSION = /\A([a-zA-Z_][a-zA-Z0-9_]*):(?![-=+?])([^:]*)(?::(.*))?\z/
+    SUBSTRING_EXPANSION = /\A([a-zA-Z_][a-zA-Z0-9_]*|\d+):(?![-=+?])([^:]*)(?::(.*))?\z/
     # ${arr[@]:offset[:length]}, ${arr[*]:...}, ${@:...}, ${*:...}
     SLICE_EXPANSION = /\A(?:([a-zA-Z_][a-zA-Z0-9_]*)\[([@*])\]|(@|\*)):(?![-=+?])([^:]*)(?::(.*))?\z/
 

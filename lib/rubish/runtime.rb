@@ -258,7 +258,11 @@ module Rubish
     # counts from the end, a negative length leaves that many characters off
     # the end.
     def __param_substring(var_name, offset, length)
-      value = get_special_var(var_name) || Builtins.get_var(var_name) || ''
+      value = if var_name.match?(/\A[1-9]\d*\z/)
+                __positional(var_name.to_i).to_s # ${1:1:2}
+              else
+                get_special_var(var_name) || Builtins.get_var(var_name) || ''
+              end
       offset = __slice_index(offset)
       offset += value.length if offset < 0
       return '' if offset < 0 || offset > value.length
