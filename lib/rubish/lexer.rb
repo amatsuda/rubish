@@ -369,9 +369,9 @@ module Rubish
             # Ruby expression block after if/while/until/elif/elsif/unless: { condition }
             # Or after case: case { expression } in ...
             read_ruby_condition
-          elsif brace_closes_within_word?
-            # `{a}`, `{}`: no whitespace inside, so not a brace group but an
-            # ordinary word, as in bash
+          elsif brace_closes_within_word? || (@input[@pos + 1] && @input[@pos + 1] !~ /\s/)
+            # `{a}`, `{}`, `{a,b`: the brace is not a word of its own, so it
+            # is an ordinary character of this word, as in bash
             read_word
           else
             # Shell function body or standalone brace
@@ -380,8 +380,13 @@ module Rubish
           end
         end
       when '}'
-        @pos += 1
-        Token.new(:RBRACE, '}')
+        if @input[@pos + 1] && @input[@pos + 1] !~ /[\s;|&()<>]/
+          # `}c,d{`: part of a word, not the end of a group (bash)
+          read_word
+        else
+          @pos += 1
+          Token.new(:RBRACE, '}')
+        end
       when '.'
         # Check if this is a method chain: .identifier(
         # Not: .hidden (hidden file), ./path (relative path)
@@ -643,12 +648,15 @@ module Rubish
             @pos += 1
             next
           else
-            # Not brace expansion (e.g. shell function body), treat as operator
-            break
+            # `ab{c,d`, `{a,b`: a brace that opens no group or expansion is
+            # an ordinary character (bash)
+            @pos += 1
+            next
           end
         end
-        if char == '}' && literal_braces > 0
-          literal_braces -= 1
+        if char == '}' && (literal_braces > 0 || @pos > start || (@input[@pos + 1] && @input[@pos + 1] !~ /[\s;|&()<>]/))
+          # A closing brace inside a word (`ab}c`) is an ordinary character
+          literal_braces -= 1 if literal_braces > 0
           @pos += 1
           next
         end
