@@ -101,8 +101,8 @@ module Rubish
         end
       end
 
-      if @state.dir_stack.empty? && index_arg.nil?
-        puts 'popd: directory stack empty'
+      if @state.dir_stack.empty?
+        $stderr.puts 'rubish: popd: directory stack empty'
         return false
       end
 
