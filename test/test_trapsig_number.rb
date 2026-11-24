@@ -10,6 +10,7 @@ class TestTrapsigNumber < Test::Unit::TestCase
   end
 
   def test_trapsig_is_numeric
-    assert_equal "sig=30\n", run_shell("trap 'echo \"sig=$BASH_TRAPSIG\"' USR1; kill -USR1 $$")
+    # USR1 is 30 on macOS and 10 on Linux
+    assert_equal "sig=#{Signal.list['USR1']}\n", run_shell("trap 'echo \"sig=$BASH_TRAPSIG\"' USR1; kill -USR1 $$")
   end
 end

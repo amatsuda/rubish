@@ -10,6 +10,6 @@ class TestKillNOption < Test::Unit::TestCase
   end
 
   def test_kill_n
-    assert_equal "got\ngot\nend\n", run_shell("trap 'echo got' SIGUSR1; kill -s USR1 $$; kill -n 30 $$; echo end")
+    assert_equal "got\ngot\nend\n", run_shell("trap 'echo got' SIGUSR1; kill -s USR1 $$; kill -n #{Signal.list['USR1']} $$; echo end") # USR1 is 30 on macOS, 10 on Linux
   end
 end
