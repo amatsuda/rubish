@@ -107,7 +107,7 @@ module Rubish
       @assoc_arrays = {}
       @namerefs = {}
       @var_attributes = {}
-      @readonly_vars = {}
+      @readonly_vars = { 'UID' => true, 'EUID' => true, 'PPID' => true } # readonly from the start (bash)
       @local_scope_stack = []
 
       # Options state

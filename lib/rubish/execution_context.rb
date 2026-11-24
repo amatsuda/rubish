@@ -185,6 +185,8 @@ module Rubish
         name = assignment[/\A[a-zA-Z_][a-zA-Z0-9_]*/]
         if name && Builtins.readonly?(name)
           $stderr.puts "rubish: #{name}: readonly variable"
+          # fatal in a script or -c string (bash)
+          throw(:exit, 1) unless Builtins.interactive_mode?
           ok = false
           next
         end

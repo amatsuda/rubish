@@ -90,7 +90,7 @@ class TestUIDEUID < Test::Unit::TestCase
 
   def test_uid_assignment_ignored
     original_uid = Process.uid
-    execute('UID=12345')
+    catch(:exit) { execute('UID=12345') } # readonly: fatal outside an interactive shell
     output_file = File.join(@tempdir, 'output.txt')
     execute("echo $UID > #{output_file}")
     value = File.read(output_file).strip.to_i
@@ -99,7 +99,7 @@ class TestUIDEUID < Test::Unit::TestCase
 
   def test_euid_assignment_ignored
     original_euid = Process.euid
-    execute('EUID=12345')
+    catch(:exit) { execute('EUID=12345') } # readonly: fatal outside an interactive shell
     output_file = File.join(@tempdir, 'output.txt')
     execute("echo $EUID > #{output_file}")
     value = File.read(output_file).strip.to_i
@@ -110,7 +110,7 @@ class TestUIDEUID < Test::Unit::TestCase
     assert_nil ENV['UID'], 'UID should not be stored in ENV'
     execute('echo $UID')
     assert_nil ENV['UID'], 'UID should still not be in ENV after access'
-    execute('UID=123')
+    catch(:exit) { execute('UID=123') } # readonly: fatal outside an interactive shell
     assert_nil ENV['UID'], 'UID should not be in ENV after assignment attempt'
   end
 
@@ -118,7 +118,7 @@ class TestUIDEUID < Test::Unit::TestCase
     assert_nil ENV['EUID'], 'EUID should not be stored in ENV'
     execute('echo $EUID')
     assert_nil ENV['EUID'], 'EUID should still not be in ENV after access'
-    execute('EUID=123')
+    catch(:exit) { execute('EUID=123') } # readonly: fatal outside an interactive shell
     assert_nil ENV['EUID'], 'EUID should not be in ENV after assignment attempt'
   end
 

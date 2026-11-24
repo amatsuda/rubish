@@ -68,7 +68,7 @@ class TestPPID < Test::Unit::TestCase
 
   def test_ppid_assignment_ignored
     original_ppid = Process.ppid
-    execute('PPID=12345')
+    catch(:exit) { execute('PPID=12345') } # readonly: fatal outside an interactive shell
     output_file = File.join(@tempdir, 'output.txt')
     execute("echo $PPID > #{output_file}")
     value = File.read(output_file).strip.to_i
@@ -79,7 +79,7 @@ class TestPPID < Test::Unit::TestCase
     assert_nil ENV['PPID'], 'PPID should not be stored in ENV'
     execute('echo $PPID')
     assert_nil ENV['PPID'], 'PPID should still not be in ENV after access'
-    execute('PPID=123')
+    catch(:exit) { execute('PPID=123') } # readonly: fatal outside an interactive shell
     assert_nil ENV['PPID'], 'PPID should not be in ENV after assignment attempt'
   end
 

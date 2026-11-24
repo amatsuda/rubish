@@ -21,15 +21,16 @@ class TestReadonlyEnforcement < Test::Unit::TestCase
 
   def test_lone_assignment_to_readonly_scalar_is_refused
     execute("readonly #{@name}=first")
-    err = capture_stderr { execute("#{@name}=second") }
+    # fatal outside an interactive shell, with status 1 (bash)
+    err = capture_stderr { @status = catch(:exit) { execute("#{@name}=second") } }
     assert_match(/#{@name}: readonly variable/, err)
-    assert_equal 1, @repl.instance_variable_get(:@last_status)
+    assert_equal 1, @status
     assert_equal "first\n", run_and_read("echo $#{@name}")
   end
 
   def test_assignment_in_a_list_to_readonly_scalar_is_refused
     execute("readonly #{@name}=first")
-    err = capture_stderr { execute("#{@name}=second; true") }
+    err = capture_stderr { catch(:exit) { execute("#{@name}=second; true") } }
     assert_match(/#{@name}: readonly variable/, err)
     assert_equal "first\n", run_and_read("echo $#{@name}")
   end
@@ -37,7 +38,7 @@ class TestReadonlyEnforcement < Test::Unit::TestCase
   def test_readonly_array_element_assignment_is_refused
     execute("#{@name}=(a b)")
     execute("readonly #{@name}")
-    err = capture_stderr { execute("#{@name}[0]=c") }
+    err = capture_stderr { catch(:exit) { execute("#{@name}[0]=c") } }
     assert_match(/#{@name}: readonly variable/, err)
     assert_equal "a b\n", run_and_read("echo \"${#{@name}[@]}\"")
   end
@@ -45,7 +46,7 @@ class TestReadonlyEnforcement < Test::Unit::TestCase
   def test_readonly_compound_reassignment_is_refused
     execute("#{@name}=(a b)")
     execute("readonly #{@name}")
-    err = capture_stderr { execute("#{@name}=(x)") }
+    err = capture_stderr { catch(:exit) { execute("#{@name}=(x)") } }
     assert_match(/#{@name}: readonly variable/, err)
     assert_equal "a b\n", run_and_read("echo \"${#{@name}[@]}\"")
   end
