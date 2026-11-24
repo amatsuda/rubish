@@ -1285,6 +1285,9 @@ module Rubish
           # Remove function
           @state.function_remover&.call(name)
         else
+          # `unset a[@]` and `unset a[*]` remove the whole array (bash)
+          name = $1 if name =~ /\A([a-zA-Z_][a-zA-Z0-9_]*)\[[@*]\]\z/
+
           # Check for array element reference: arr[index] or arr[key]
           if name =~ /\A([a-zA-Z_][a-zA-Z0-9_]*)\[(.+)\]\z/
             var_name = $1
