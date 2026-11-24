@@ -122,6 +122,19 @@ module Rubish
     # eligible, fork as usual". Functions and aliases take precedence over
     # builtins, so their presence disables the shortcut for that name.
     def __subst_in_process(cmd)
+      # $(< file): the file's contents, trailing newlines dropped (bash)
+      if cmd =~ /\A\s*<\s*([^\s<>|&;]+)\s*\z/
+        path = expand_string_content($1)
+        begin
+          @last_status = @last_subst_status = 0
+          return File.read(path).sub(/\n+\z/, '')
+        rescue SystemCallError => e
+          $stderr.puts "rubish: #{path}: #{e.class.new.message}"
+          @last_status = @last_subst_status = 1
+          return ''
+        end
+      end
+
       return nil if cmd.include?("\n") || Builtins.set_option?('x')
 
       ast = Parser.new(Lexer.new(cmd).tokenize).parse
