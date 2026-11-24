@@ -1120,6 +1120,12 @@ module Rubish
         end
       end
 
+      # `local` alone lists the function's local variables (bash)
+      if remaining_args.empty?
+        current_scope.each_key { |name| print_declaration(name) }
+        return true
+      end
+
       remaining_args.each do |arg|
         if arg.include?('=')
           name, value = arg.split('=', 2)
