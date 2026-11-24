@@ -1620,8 +1620,16 @@ module Rubish
         names.each do |name|
           var_name = name.split('=').first
           if array_mode == :associative
+            if array?(var_name)
+              $stderr.puts "rubish: declare: #{var_name}: cannot convert indexed to associative array"
+              return ExitStatus.new(1)
+            end
             declare_assoc_array(var_name)
           else
+            if assoc_array?(var_name)
+              $stderr.puts "rubish: declare: #{var_name}: cannot convert associative to indexed array"
+              return ExitStatus.new(1)
+            end
             set_array(var_name, []) unless array?(var_name)
           end
         end
