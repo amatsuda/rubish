@@ -26,7 +26,7 @@ module Rubish
     # are mapped via NAME_TO_METHOD to their method names
     BUILTIN_METHODS = Set.new(%i[
       cd exit logout jobs fg bg export pwd history alias unalias source shift set
-      return_ read echo test break_ continue pushd popd dirs trap getopts local
+      return_ read echo test bracket_test break_ continue pushd popd dirs trap getopts local
       unset readonly declare let printf type which true_ false_ eval command builtin
       wait kill umask exec times hash disown ulimit suspend shopt enable caller
       complete compgen compopt bind bindkey help fc mapfile basename dirname realpath
@@ -677,7 +677,7 @@ module Rubish
     NAME_TO_METHOD = {
       '.' => :source,
       ':' => :true_,
-      '[' => :test,
+      '[' => :bracket_test,
       'typeset' => :declare,
       'readarray' => :mapfile,
       'return' => :return_,
@@ -3083,6 +3083,19 @@ module Rubish
 
     # A malformed test expression: reported, and the command fails with 2
     class TestSyntaxError < StandardError; end
+
+    # `[ expr ]`: the closing bracket is required (bash: "missing `]'")
+    def bracket_test(args)
+      unless args.last == ']'
+        $stderr.puts "rubish: [: missing `]'"
+        return ExitStatus.new(2)
+      end
+
+      evaluate_test(args[0...-1])
+    rescue TestSyntaxError => e
+      $stderr.puts "rubish: [: #{e.message}"
+      ExitStatus.new(2)
+    end
 
     def test(args)
       name = args.last == ']' ? '[' : 'test'
