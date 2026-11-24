@@ -6442,7 +6442,7 @@ module Rubish
         if path
           command = path
         else
-          $stderr.puts "exec: #{cmd_args.first}: not found"
+          $stderr.puts(cmd_args.first.include?('/') ? "rubish: #{cmd_args.first}: No such file or directory" : "rubish: exec: #{cmd_args.first}: not found")
           # execfail: if enabled, don't exit on exec failure
           return false if shopt_enabled?('execfail')
           throw :exit, 127  # Command not found
@@ -6471,7 +6471,7 @@ module Rubish
           Kernel.exec([command, exec_argv0], *command_args, fd_options)
         end
       rescue Errno::ENOENT
-        $stderr.puts "exec: #{cmd_args.first}: not found"
+        $stderr.puts(cmd_args.first.include?('/') ? "rubish: #{cmd_args.first}: No such file or directory" : "rubish: exec: #{cmd_args.first}: not found")
         # execfail: if enabled, don't exit on exec failure
         return false if shopt_enabled?('execfail')
         throw :exit, 127  # Command not found
