@@ -48,7 +48,8 @@ module Rubish
           i += 2
         when '-d'
           delim = args[i + 1]
-          opts[:delimiter] = delim&.slice(0, 1) || "\n"
+          # `-d ''` reads up to a NUL byte (bash)
+          opts[:delimiter] = if delim.nil? then "\n" elsif delim.empty? then "\0" else delim[0] end
           i += 2
         when '-e'
           opts[:use_readline] = true
