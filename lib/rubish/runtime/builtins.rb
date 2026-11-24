@@ -1656,6 +1656,13 @@ module Rubish
         return true
       end
 
+      # `declare -x`, `declare -i` alone: list the variables with those
+      # attributes (bash)
+      if names.empty? && remove_attrs.empty? && !array_mode
+        print_all_declarations(add_attrs)
+        return true
+      end
+
       # -l and -u together cancel each other: remove both rather than applying last-wins
       if add_attrs.include?(:lowercase) && add_attrs.include?(:uppercase)
         add_attrs.delete(:lowercase)
