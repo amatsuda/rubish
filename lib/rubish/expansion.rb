@@ -251,7 +251,10 @@ module Rubish
 
         if char == '\\'
           next_char = str[i + 1]
-          if next_char && escapable.include?(next_char)
+          if next_char == "\n" && heredoc
+            # A backslash-newline in a heredoc body joins the lines
+            i += 2
+          elsif next_char && escapable.include?(next_char)
             result << next_char
             i += 2
           elsif !quoted && next_char && !'*?[]'.include?(next_char)
