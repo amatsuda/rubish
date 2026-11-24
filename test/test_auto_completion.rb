@@ -9,9 +9,14 @@ class TestAutoCompletion < Test::Unit::TestCase
     Rubish::Builtins.context.instance_variable_set(:@help_completion_cache, {})
     Rubish::Builtins.clear_completions
     Rubish::Builtins.setup_default_completions
+    # Help parsing is allowed for any command, as on macOS where the sandbox
+    # runs it; elsewhere only commands in PATH qualify, and the fake ones
+    # these tests stub are not
+    Rubish::Builtins.context.define_singleton_method(:help_command_allowed?) { |_command| true }
   end
 
   def teardown
+    Rubish::Builtins.context.singleton_class.send(:remove_method, :help_command_allowed?)
     Rubish::Builtins.clear_completion_context
     Rubish::Builtins.set_array('COMPREPLY', [])
     Rubish::Builtins.context.instance_variable_set(:@help_completion_cache, {})
