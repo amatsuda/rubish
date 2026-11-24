@@ -2133,14 +2133,11 @@ module Rubish
       start_val = start_str.to_i
       end_val = end_str.to_i
 
-      # Check for zero-padding
-      width = if start_str.start_with?('0') || start_str.start_with?('-0')
-                start_str.sub(/^-/, '').length
-              elsif end_str.start_with?('0') || end_str.start_with?('-0')
-                end_str.sub(/^-/, '').length
-              else
-                0
-              end
+      # Zero padding: a leading zero on either end pads every number to the
+      # longer of the two as written, sign included (`{-05..05..5}` gives
+      # -05 000 005, as in bash)
+      padded = [start_str, end_str].any? { |str| str.match?(/\A-?0\d/) }
+      width = padded ? [start_str.length, end_str.length].max : 0
 
       # Determine step (use absolute value, direction is determined by start/end)
       step = step&.abs || 1
@@ -2198,7 +2195,16 @@ module Rubish
       current = +''
       depth = 0
 
-      content.each_char do |char|
+      i = 0
+      while i < content.length
+        char = content[i]
+        if char == '\\'
+          # `{a\,b,c}`: an escaped comma or brace is part of the alternative
+          current << char << content[i + 1].to_s
+          i += 2
+          next
+        end
+        i += 1
         case char
         when '{'
           depth += 1

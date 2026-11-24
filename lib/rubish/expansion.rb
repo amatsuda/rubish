@@ -188,7 +188,7 @@ module Rubish
       brace_expanded.flat_map do |item|
         # An alternative that was quoted (`{a,'b c'}`) loses its quotes here
         expanded = item.match?(/['"]/) ? expand_multi_segment_word(item) : expand_string_content(item)
-        if item.include?('$') || item.include?('`')
+        if WordSegments.bare_expansion?(item)
           # With shwordsplit unset (zsh behavior), scalar variable
           # expansions stay one word. Command substitutions still split
           # (zsh splits those regardless of shwordsplit), and array

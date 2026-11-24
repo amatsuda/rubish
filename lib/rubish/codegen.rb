@@ -241,7 +241,7 @@ module Rubish
       # Quoted strings (any form) are handled entirely by generate_string_arg.
       # Glob and brace expansion only apply to unquoted words, but an
       # alternative inside braces may be quoted: `{a,"b c"}`
-      if str.start_with?("'", '"', "$'") || (WordSegments.multi_segment?(str) && !has_brace_expansion?(str))
+      if !has_brace_expansion?(str) && (str.start_with?("'", '"', "$'") || WordSegments.multi_segment?(str))
         return generate_string_arg(str)
       end
 

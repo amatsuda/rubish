@@ -1435,7 +1435,7 @@ module Rubish
       # Quotes inside an alternative (`{a,"b c"}`) are removed afterwards,
       # as bash expands braces before it removes quotes
       expand_braces(pattern).map do |word|
-        word.match?(/["']/) ? expand_multi_segment_word(word) : word
+        word.match?(/["'\\]/) ? expand_multi_segment_word(word) : word
       end
     end
 

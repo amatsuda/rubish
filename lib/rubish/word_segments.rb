@@ -211,6 +211,13 @@ module Rubish
       false
     end
 
+    # Does an unquoted part of the word hold an expansion (`$`, backtick)
+    # whose result is subject to word splitting? A `$'...'` or "$x" is not.
+    def self.bare_expansion?(str)
+      each_segment(str) { |type, content| return true if type == :bare && content.match?(/[$`]/) }
+      false
+    end
+
     def self.multi_segment?(str)
       return false unless str.match?(/['"]/)
       return false if str.start_with?("$'") && str.end_with?("'")
