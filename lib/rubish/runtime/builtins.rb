@@ -3391,7 +3391,7 @@ module Rubish
         end
 
         unless found
-          puts "type: #{name}: not found" unless type_only
+          puts "type: #{name}: not found" unless type_only || path_only || force_path # -p/-P say nothing (bash)
           all_found = false
         end
       end
