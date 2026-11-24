@@ -1348,11 +1348,14 @@ module Rubish
           return [expanded] if expanded && File.exist?(expanded)
         end
 
-        if Builtins.shopt_enabled?('failglob')
+        # A word without pattern characters is not a pattern: nullglob and
+        # failglob leave it alone (bash)
+        glob_chars = pattern.match?(/[*?\[]|[+@!]\(/)
+        if Builtins.shopt_enabled?('failglob') && glob_chars
           # failglob: patterns matching nothing cause an error
           $stderr.puts Builtins.format_error("no match: #{pattern}")
           raise FailglobError, "no match: #{pattern}"
-        elsif Builtins.shopt_enabled?('nullglob')
+        elsif Builtins.shopt_enabled?('nullglob') && glob_chars
           # nullglob: patterns matching nothing expand to nothing
           []
         else
