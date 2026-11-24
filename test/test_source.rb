@@ -165,15 +165,19 @@ class TestSource < Test::Unit::TestCase
     assert Rubish::Builtins.builtin?('.')
   end
 
-  def test_source_sets_script_name
+  def test_source_keeps_script_name
+    # $0 stays the shell's while a file is sourced; BASH_SOURCE names the file (bash)
     output_file = File.join(@tempdir, 'script_name.txt')
     script = create_script('check_name.sh', <<~SCRIPT)
-      echo $0 > #{output_file}
+      echo "$0" > #{output_file}
     SCRIPT
+    shell_zero = File.join(@tempdir, 'shell_zero.txt')
+    execute("echo \"$0\" > #{shell_zero}")
 
     execute("source #{script}")
 
-    assert_equal "#{script}\n", File.read(output_file)
+    assert_equal File.read(shell_zero), File.read(output_file)
+    assert_not_equal "#{script}\n", File.read(output_file)
   end
 
   def test_source_restores_script_name

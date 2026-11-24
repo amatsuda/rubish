@@ -2672,11 +2672,9 @@ module Rubish
         return false
       end
 
-      # Save and set script name, positional params, and source file
-      old_script_name = @state.script_name_getter&.call
+      # Save and set positional params and source file; $0 stays the shell's (bash)
       old_positional_params = @state.positional_params_getter&.call
       old_source_file = @state.source_file_getter&.call
-      @state.script_name_setter&.call(file)
       @state.positional_params_setter&.call(args[1..] || [])
       # bash_source_fullpath: when enabled, store full path; when disabled, use filename as specified
       source_file_value = shopt_enabled?('bash_source_fullpath') ? file : original_file
@@ -2690,8 +2688,7 @@ module Rubish
         process_script_lines(File.readlines(file, chomp: true), file)
       end
 
-      # Restore script name, positional params, source file, and sourcing flag
-      @state.script_name_setter&.call(old_script_name) if old_script_name
+      # Restore positional params, source file, and sourcing flag
       @state.positional_params_setter&.call(old_positional_params) if old_positional_params
       @state.source_file_setter&.call(old_source_file) if old_source_file
       @state.sourcing_file = old_sourcing
