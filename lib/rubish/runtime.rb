@@ -1050,7 +1050,8 @@ module Rubish
         # Run builtin directly and check its return value
         run_builtin_with_prefix(result)
       else
-        result.run if result.is_a?(Command) || result.is_a?(Pipeline)
+        # `if (cmd); then`: a subshell is run here too
+        result.run if result.is_a?(Command) || result.is_a?(Pipeline) || result.is_a?(Subshell)
         result.success?
       end
     end
