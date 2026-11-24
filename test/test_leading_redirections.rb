@@ -19,7 +19,8 @@ class TestLeadingRedirections < Test::Unit::TestCase
   end
 
   def test_stderr_redirection_first
-    out, err = run_shell('2>/dev/null ls /nonexistent_dir_x; echo "status $?"')
+    # cat fails with status 1 everywhere; GNU ls would give 2
+    out, err = run_shell('2>/dev/null cat /nonexistent_file_x; echo "status $?"')
     assert_equal "status 1\n", out
     assert_equal '', err
   end
