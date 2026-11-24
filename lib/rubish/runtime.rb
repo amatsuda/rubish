@@ -1354,6 +1354,11 @@ module Rubish
       else
         globstar_self = pattern[/\A(.+\/)\*\*\z/, 1] if Builtins.shopt_enabled?('globstar')
         matches = Dir.glob(glob_pattern, glob_flags)
+        # Ruby's glob folds case on a case-insensitive filesystem (macOS);
+        # bash matches names as written unless nocaseglob is on
+        unless Builtins.shopt_enabled?('nocaseglob')
+          matches.select! { |m| File.fnmatch?(glob_pattern, m, File::FNM_PATHNAME | File::FNM_DOTMATCH | File::FNM_EXTGLOB) }
+        end
         matches.unshift(globstar_self) if globstar_self && File.directory?(globstar_self)
       end
 
