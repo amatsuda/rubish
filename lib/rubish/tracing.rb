@@ -43,21 +43,38 @@ module Rubish
       end
     end
 
+    # The trace lines for a runnable result: bash shows each prefix
+    # assignment of a command on a line of its own before the command
+    def self.trace_lines_for(result)
+      commands = case result
+                 when Command then [result]
+                 when Pipeline then result.commands.select { |c| c.is_a?(Command) }
+                 else return []
+                 end
+      commands.flat_map { |c| env_lines(c.prefix_env) + [words_text([c.name, *c.args])] }
+    end
+
+    def self.env_lines(env)
+      (env || {}).map { |k, v| "#{k}=#{trace_word(v.to_s)}" }
+    end
+
     # Record a command that is about to run and trace it under set -x
     def announce_command(result)
-      announce_texts(Tracing.texts_for(result))
+      announce_texts(Tracing.texts_for(result), Tracing.trace_lines_for(result))
     end
 
-    def announce_words(name, args)
-      announce_texts([Tracing.words_text([name, *args])])
+    # `env` holds the command's prefix assignments, values expanded
+    def announce_words(name, args, env = nil)
+      text = Tracing.words_text([name, *args])
+      announce_texts([text], Tracing.env_lines(env) + [text])
     end
 
-    def announce_texts(texts)
+    def announce_texts(texts, trace_lines = texts)
       return if texts.empty?
 
       # While a trap runs, BASH_COMMAND stays the command that triggered it
       @state.bash_command = texts.join(' | ') if @state.current_trapsig.to_s.empty?
-      texts.each { |text| xtrace(text) } if Builtins.set_option?('x')
+      trace_lines.each { |text| xtrace(text) } if Builtins.set_option?('x')
     end
 
     def xtrace(line)

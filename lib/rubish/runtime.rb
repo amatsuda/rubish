@@ -1863,6 +1863,7 @@ module Rubish
 
       append = var_part.end_with?('+=')
       var_name = var_part.chomp(append ? '+=' : '=')
+      announce_texts(["#{var_part}(#{elements.map { |e| Tracing.trace_word(e.to_s) }.join(' ')})"])
       ok = Builtins.assign_array_literal(var_name, elements, append: append)
 
       ExitStatus.new(ok == false ? 1 : 0)

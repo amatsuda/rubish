@@ -1000,13 +1000,21 @@ module Rubish
 
     # Apply prefix env assignments (e.g. `IFS= read`) to ENV for the duration of
     # the block, restoring after. Lets in-process builtins see the temp env.
-    def with_prefix_env(env_assignments)
-      return yield if env_assignments.nil? || env_assignments.empty?
-
-      vars = env_assignments.to_h do |assignment|
+    # The prefix assignments of a command (`x=1 cmd`), values expanded
+    def prefix_env_vars(env_assignments)
+      Array(env_assignments).to_h do |assignment|
         k, v = assignment.split('=', 2)
         [k, expand_assignment_value(v || '')]
       end
+    end
+
+    def with_prefix_env(env_assignments)
+      with_prefix_env_vars(prefix_env_vars(env_assignments)) { yield }
+    end
+
+    def with_prefix_env_vars(vars)
+      return yield if vars.empty?
+
       Builtins.with_temporary_vars(vars) { yield }
     end
 
@@ -1156,12 +1164,13 @@ module Rubish
         begin
           # Expand variables in args for builtins
           expanded_args = expand_args_for_builtin(ast.args)
-          announce_words(builtin_name, expanded_args)
+          env_vars = prefix_env_vars(ast.env)
+          announce_words(builtin_name, expanded_args, env_vars)
 
           # Run DEBUG trap before command
           Builtins.debug_trap
           # Temp env prefix (e.g. `IFS= read`) must reach in-process builtins.
-          result = with_prefix_env(ast.env) { Builtins.run(builtin_name, expanded_args) }
+          result = with_prefix_env_vars(env_vars) { Builtins.run(builtin_name, expanded_args) }
           cleanup_proc_subs # `echo <(cmd)`: the builtin is done with the pipe
           Builtins.set_var('_', (expanded_args.last || builtin_name).to_s)
           @last_status = result.is_a?(ExitStatus) ? result.exitstatus : (result ? 0 : 1)
@@ -1195,12 +1204,13 @@ module Rubish
       if ast.is_a?(AST::Command) && @functions.key?(ast.name)
         begin
           expanded_args = expand_args_for_builtin(ast.args)
-          announce_words(ast.name, expanded_args)
+          env_vars = prefix_env_vars(ast.env)
+          announce_words(ast.name, expanded_args, env_vars)
 
           # Run DEBUG trap before function call
           Builtins.debug_trap
           # `VAR=value f`: the assignment is in effect inside the function
-          @last_status = with_prefix_env(ast.env) { call_function(ast.name, expanded_args) }.exitstatus
+          @last_status = with_prefix_env_vars(env_vars) { call_function(ast.name, expanded_args) }.exitstatus
           @context.last_status = @last_status
           set_pipestatus([@last_status])
           # A failing call runs the ERR trap here, at the call site; inside the
