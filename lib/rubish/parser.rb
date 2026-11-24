@@ -286,7 +286,7 @@ module Rubish
       end
 
       # Check for array assignment: VAR=(a b c) or VAR+=(d e)
-      return parse_array_assign if peek(:ARRAY_ASSIGN)
+      return parse_redirections(parse_array_assign) if peek(:ARRAY_ASSIGN)
 
       # Check for function call syntax: cmd(arg1, arg2)
       return parse_func_call if peek(:FUNC_CALL)

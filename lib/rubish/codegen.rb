@@ -908,7 +908,7 @@ module Rubish
       # and needs the redirect set on the object itself
       case node
       when AST::For, AST::ArithFor, AST::While, AST::Until, AST::Select,
-           AST::If, AST::Unless, AST::Case, AST::Function, AST::BraceGroup
+           AST::If, AST::Unless, AST::Case, AST::Function, AST::BraceGroup, AST::ArrayAssign
         true
       when AST::ConditionalExpr, AST::ArithmeticCommand
         # run inline and return an ExitStatus, so a redirect must wrap them

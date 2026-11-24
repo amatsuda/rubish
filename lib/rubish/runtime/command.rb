@@ -98,6 +98,14 @@ module Rubish
       attr_accessor :function_checker, :function_caller
     end
 
+    # `x=1`, `arr[2]=v`, `x+=1` with no arguments: an assignment that ended
+    # up as a command (in a pipeline, or with redirections)
+    ASSIGNMENT_NAME = /\A[a-zA-Z_][a-zA-Z0-9_]*(\[[^\]]*\])?\+?=/
+
+    def assignment_only?
+      @args.empty? && name.match?(ASSIGNMENT_NAME)
+    end
+
     def self.function?(name)
       @function_checker&.call(name) || false
     end
@@ -1040,6 +1048,8 @@ module Rubish
             # Run heredoc command in child process
             cmd.run
             exit(cmd.success? ? 0 : 1)
+          elsif cmd.assignment_only?
+            exit(0) # `x=1 | cmd`: the assignment happens in the subshell (bash)
           elsif Command.function?(cmd.name)
             exit(Command.child_status(cmd.name) { Command.call_function(cmd.name, cmd.args) })
           elsif Builtins.builtin?(cmd.name)
@@ -1226,6 +1236,8 @@ module Rubish
             # Run heredoc command in child process
             cmd.run
             exit(cmd.success? ? 0 : 1)
+          elsif cmd.assignment_only?
+            exit(0) # the assignment happens in the subshell (bash)
           elsif Command.function?(cmd.name)
             result = Command.call_function(cmd.name, cmd.args)
             exit(result ? 0 : 1)
