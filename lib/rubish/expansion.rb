@@ -354,6 +354,11 @@ module Rubish
     def expand_variable_at(str, pos)
       return ['', 0] unless str[pos] == '$'
 
+      # $[expr]: the old form of arithmetic expansion
+      if str[pos + 1] == '[' && (close = str.index(']', pos + 2))
+        return [__arith(str[pos + 2...close]), close + 1 - pos]
+      end
+
       # Arithmetic expansion $((...))
       if str[pos + 1] == '(' && str[pos + 2] == '('
         end_pos = find_matching_parens(str, pos + 1, 2)

@@ -513,6 +513,11 @@ module Rubish
     def parse_variable(str, pos)
       return nil unless str[pos] == '$'
 
+      # $[expr]: the old form of arithmetic expansion (bash still takes it)
+      if str[pos + 1] == '[' && (close = str.index(']', pos + 2))
+        return ["__arith(#{str[pos + 2...close].inspect})", close + 1 - pos]
+      end
+
       # Check for arithmetic expansion $((...))
       if str[pos + 1] == '(' && str[pos + 2] == '('
         depth = 2
