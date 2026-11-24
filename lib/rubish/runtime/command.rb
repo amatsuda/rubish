@@ -1075,6 +1075,10 @@ module Rubish
           # Set prefix environment variables (e.g., FOO=bar cmd)
           cmd.prefix_env&.each { |k, v| ENV[k] = v } if cmd.respond_to?(:prefix_env)
 
+          # A redirection that already failed (`>&3` on a closed descriptor,
+          # noclobber) means the element does not run (bash)
+          exit(1) if cmd.is_a?(Command) && (cmd.restricted_failed || cmd.noclobber_failed)
+
           # Handle different command types
           if cmd.is_a?(Subshell)
             # Run subshell block
@@ -1264,6 +1268,10 @@ module Rubish
 
           # Set prefix environment variables (e.g., FOO=bar cmd)
           cmd.prefix_env&.each { |k, v| ENV[k] = v } if cmd.respond_to?(:prefix_env)
+
+          # A redirection that already failed (`>&3` on a closed descriptor,
+          # noclobber) means the element does not run (bash)
+          exit(1) if cmd.is_a?(Command) && (cmd.restricted_failed || cmd.noclobber_failed)
 
           # Handle different command types
           if cmd.is_a?(Subshell)
