@@ -953,8 +953,8 @@ module Rubish
       # getopts optstring name [args...]
       # Returns true if option found, false when done
       if args.length < 2
-        puts 'getopts: usage: getopts optstring name [arg ...]'
-        return false
+        $stderr.puts 'getopts: usage: getopts optstring name [arg ...]'
+        return ExitStatus.new(2)
       end
 
       optstring = args[0]
