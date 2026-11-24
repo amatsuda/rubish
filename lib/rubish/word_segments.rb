@@ -42,6 +42,20 @@ module Rubish
           j = str.index("'", i + 1) || str.length
           yield :single, str[i + 1...j]
           i = j < str.length ? j + 1 : str.length
+        elsif str[i, 2] == '$"'
+          # $"..." is a double-quoted string (translation has no catalogue here)
+          j = i + 2
+          while j < str.length && str[j] != '"'
+            if str[j] == '\\'
+              j += 2
+            elsif (skip = skip_expansion(str, j))
+              j = skip
+            else
+              j += 1
+            end
+          end
+          yield :double, str[i + 2...j]
+          i = j < str.length ? j + 1 : str.length
         elsif str[i] == '"'
           j = i + 1
           while j < str.length && str[j] != '"'
@@ -65,8 +79,8 @@ module Rubish
               j += 2
             elsif c == '$' && j + 1 < str.length
               nc = str[j + 1]
-              if nc == "'"
-                break
+              if nc == "'" || nc == '"'
+                break # $'...' and $"..." are segments of their own
               elsif nc == '(' || nc == '{'
                 open_c = nc; close_c = nc == '(' ? ')' : '}'; depth = 1; j += 2
                 while j < str.length && depth > 0

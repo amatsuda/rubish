@@ -324,6 +324,8 @@ module Rubish
       if val.start_with?("$'") && val.end_with?("'")
         return expand_ansi_c_string(val[2...-1])
       end
+      # $"..." is a double-quoted string (no translation catalogue here)
+      val = val[1..] if val.start_with?('$"') && val.end_with?('"')
       # Remove surrounding quotes if present
       if (val.start_with?('"') && val.end_with?('"')) ||
          (val.start_with?("'") && val.end_with?("'"))

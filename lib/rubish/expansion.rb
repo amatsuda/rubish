@@ -827,6 +827,8 @@ module Rubish
     def expand_quoted_string(value)
       if value.start_with?("$'") && value.end_with?("'")
         Builtins.process_escape_sequences(value[2...-1])
+      elsif value.start_with?('$"') && value.end_with?('"') && !WordSegments.multi_segment?(value[1..])
+        expand_string_content(value[2...-1], quoted: true) # $"..." is a double-quoted string
       elsif WordSegments.multi_segment?(value)
         expand_multi_segment_word(value)
       elsif value.start_with?("'") && value.end_with?("'")
