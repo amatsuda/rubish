@@ -2929,9 +2929,16 @@ module Rubish
     end
 
     def shift(args)
-      n = args.first&.to_i || 1
-
-      return false if n < 0
+      arg = args.first
+      if arg && !arg.match?(/\A[+-]?\d+\z/)
+        $stderr.puts "rubish: shift: #{arg}: numeric argument required"
+        return ExitStatus.new(2)
+      end
+      n = arg ? arg.to_i : 1
+      if n < 0
+        $stderr.puts "rubish: shift: #{arg}: shift count out of range"
+        return false
+      end
 
       params = @state.positional_params_getter&.call || []
 
