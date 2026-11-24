@@ -657,6 +657,10 @@ module Rubish
     # ${#arr[@]} - get array/assoc length
     def __array_length(var_name)
       var_name = Builtins.array_name(var_name)
+      if Builtins.set_option?('u') && !Builtins.array?(var_name) && !Builtins.assoc_array?(var_name) && !Builtins.var_set?(var_name) && get_special_array_values(var_name).nil?
+        $stderr.puts Builtins.format_error('unbound variable', command: var_name)
+        raise NounsetError, "#{var_name}: unbound variable"
+      end
       values = get_special_array_values(var_name)
       length = case values
                when Array then values.length
