@@ -45,7 +45,7 @@ class TestDeclareFunction < Test::Unit::TestCase
   def test_declare_f_shows_function_definition
     execute('testfn() { echo hello world; }')
     output = capture_stdout { Rubish::Builtins.declare(['-f', 'testfn']) }
-    assert_match(/testfn\(\) \{/, output)
+    assert_match(/testfn \(\) \n\{ /, output)
     assert_match(/echo hello world/, output)
     assert_match(/\}/, output)
   end
@@ -54,8 +54,8 @@ class TestDeclareFunction < Test::Unit::TestCase
     execute('fn1() { echo one; }')
     execute('fn2() { echo two; }')
     output = capture_stdout { Rubish::Builtins.declare(['-f']) }
-    assert_match(/fn1\(\) \{/, output)
-    assert_match(/fn2\(\) \{/, output)
+    assert_match(/fn1 \(\) \n\{ /, output)
+    assert_match(/fn2 \(\) \n\{ /, output)
   end
 
   def test_declare_f_nonexistent_function

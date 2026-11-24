@@ -2068,7 +2068,9 @@ module Rubish
       else
         # -f: print full definition
         source = info[:source] || '# (source not available)'
-        puts "#{name}() {"
+        # bash's layout: `name () ` and `{ ` on their own lines
+        puts "#{name} () "
+        puts '{ '
         source.each_line do |line|
           puts "    #{line}"
         end
