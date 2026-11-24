@@ -1176,6 +1176,7 @@ module Rubish
         rescue FailglobError
           @last_status = 1
           set_pipestatus([@last_status])
+          throw(:exit, 1) unless Builtins.interactive_mode? # fatal in a script or -c string (bash)
         ensure
           @command_number += 1
           @lineno += 1
@@ -1213,6 +1214,7 @@ module Rubish
         rescue FailglobError
           @last_status = 1
           set_pipestatus([@last_status])
+          throw(:exit, 1) unless Builtins.interactive_mode? # fatal in a script or -c string (bash)
         ensure
           @command_number += 1
           @lineno += 1
@@ -1262,8 +1264,10 @@ module Rubish
       @last_status = 1
       throw(:exit, e.status) unless Builtins.interactive_mode?
     rescue FailglobError
-      # Glob pattern matched nothing with failglob enabled
+      # Glob pattern matched nothing with failglob enabled: fatal in a script
+      # or -c string (bash)
       @last_status = 1
+      throw(:exit, 1) unless Builtins.interactive_mode?
     ensure
       @execute_depth -= 1
       # The outermost command is over: its process substitutions are too

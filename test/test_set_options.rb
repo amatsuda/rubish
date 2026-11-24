@@ -1418,7 +1418,7 @@ class TestSetOptions < Test::Unit::TestCase
     $stderr = File.open(stderr_file, 'w')
     begin
       # Pattern that matches nothing should cause error
-      execute("echo #{@tempdir}/nonexistent_*.xyz")
+      catch(:exit) { execute("echo #{@tempdir}/nonexistent_*.xyz") } # fatal outside an interactive shell
     ensure
       $stderr.close
       $stderr = old_stderr
@@ -1470,7 +1470,7 @@ class TestSetOptions < Test::Unit::TestCase
     old_stderr = $stderr
     $stderr = File.open(stderr_file, 'w')
     begin
-      execute("echo #{@tempdir}/nonexistent_*.xyz")
+      catch(:exit) { execute("echo #{@tempdir}/nonexistent_*.xyz") } # fatal outside an interactive shell
     ensure
       $stderr.close
       $stderr = old_stderr
