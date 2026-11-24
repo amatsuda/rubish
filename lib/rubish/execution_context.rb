@@ -847,7 +847,8 @@ module Rubish
       when '-g' then File.exist?(arg) && File.stat(arg).setgid?
       when '-u' then File.exist?(arg) && File.stat(arg).setuid?
       when '-N' then File.exist?(arg) && File.stat(arg).mtime > File.stat(arg).atime
-      when '-v' then Builtins.var_set?(arg)
+      when '-v' then Builtins.var_set?(arg) || Builtins.array?(arg) || Builtins.assoc_array?(arg) # a set array counts
+      when '-R' then Builtins.nameref?(arg)
       else false
       end
     rescue SystemCallError
