@@ -15,7 +15,13 @@ class TestLazyStdlibLoading < Test::Unit::TestCase
   # The login shell runs without Bundler, so bundled gems such as fiddle and
   # syslog are only reachable through a RubyGems-aware require
   def run_outside_bundler(code)
-    argv = [RbConfig.ruby, '-I', LIB, '-e', code]
+    argv = [RbConfig.ruby, '-I', LIB]
+    # reline is a default gem from Ruby 2.7; before that the child, which
+    # runs without Bundler, is handed the bundled copy
+    if RUBY_VERSION < '2.7' && (reline = Gem.loaded_specs['reline'])
+      argv += ['-I', File.join(reline.full_gem_path, 'lib')]
+    end
+    argv += ['-e', code]
     if defined?(Bundler)
       Bundler.with_unbundled_env { IO.popen(argv, err: %i[child out], &:read) }
     else
