@@ -1100,6 +1100,10 @@ module Rubish
     end
 
     def assign_default(var_name, operand)
+      if var_name.match?(/\A\d+\z/) || %w[@ * # ? - $ !].include?(var_name)
+        raise ParameterExpansionError.new("$#{var_name}: cannot assign in this way", status: 1)
+      end
+
       if Builtins.restricted_mode? && Builtins::RESTRICTED_VARIABLES.include?(var_name)
         $stderr.puts "rubish: #{var_name}: readonly variable"
         ''

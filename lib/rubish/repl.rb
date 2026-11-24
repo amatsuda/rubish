@@ -14,7 +14,16 @@ require_relative 'execution_context'
 module Rubish
   class NounsetError < StandardError; end
   # ${VAR:?msg} / ${VAR?msg} on an unset (or null) variable
-  class ParameterExpansionError < StandardError; end
+  # A failed parameter expansion (`${x:?}`, `${2:=v}`); status is what a
+  # non-interactive shell exits with (bash: 127, or 1 for a bad assignment)
+  class ParameterExpansionError < StandardError
+    attr_reader :status
+
+    def initialize(message = nil, status: 127)
+      super(message)
+      @status = status
+    end
+  end
   class FailglobError < StandardError; end
 
   class REPL
@@ -1251,7 +1260,7 @@ module Rubish
       # ${VAR:?msg}: like bash, report it and exit a non-interactive shell
       $stderr.puts "rubish: #{e.message}"
       @last_status = 1
-      throw(:exit, 127) unless Builtins.interactive_mode?
+      throw(:exit, e.status) unless Builtins.interactive_mode?
     rescue FailglobError
       # Glob pattern matched nothing with failglob enabled
       @last_status = 1
