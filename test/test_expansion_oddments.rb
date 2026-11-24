@@ -18,7 +18,7 @@ class TestExpansionOddments < Test::Unit::TestCase
   def test_transform_k_on_arrays
     execute('arr_t=(1 2); declare -A m_t=([k]=v)')
     out = capture_stdout { execute('echo "${arr_t[@]@K}" "${m_t[@]@K}"') }
-    assert_equal %(0 "1" 1 "2" k "v"\n), out
+    assert_equal %(0 "1" 1 "2" k "v" \n), out # bash ends an associative pair with a space
   end
 
   # ${var~~} toggles the case of every character, ${var~} of the first

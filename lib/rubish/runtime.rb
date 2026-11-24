@@ -323,7 +323,8 @@ module Rubish
                 else
                   (Builtins.get_array(name) || []).each_with_index.filter_map { |v, i| "#{i} #{v.inspect}" unless v.nil? }
                 end
-        return pairs.join(' ')
+        # bash ends each pair of an associative array with a space
+        return Builtins.assoc_array?(name) ? pairs.map { |pair| "#{pair} " }.join : pairs.join(' ')
       end
       if %w[Q E P U u L].include?(operator) &&
          (words = __each_param_element(var_name) { |scratch| __param_transform(scratch, operator) })
