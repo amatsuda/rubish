@@ -973,6 +973,9 @@ module Rubish
       at_word_start = !is_regex_op && (prev_char.nil? || prev_char =~ /[\s"'=:]/)
 
       return ['~', 1] unless at_word_start
+      # Not a tilde-prefix at all (`~~5` in arithmetic, `~"x"`): left as
+      # written. A word delimiter after the tilde (`~;`, `~|`) ends a bare `~`
+      return ['~', 1] if next_char && next_char !~ %r{[a-zA-Z0-9_+\-/\s:;|&()<>]}
 
       case next_char
       when '+'
