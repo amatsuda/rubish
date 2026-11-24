@@ -2,6 +2,10 @@
 
 # Polyfill Data.define for Ruby < 3.2
 unless defined?(Data) && Data.respond_to?(:define)
+  # Ruby 2.x has a deprecated ::Data that cannot be instantiated or
+  # subclassed into something that can; the polyfill replaces it
+  Object.send(:remove_const, :Data) if Object.const_defined?(:Data)
+
   class Data
     def self.define(*keys, &block)
       # Use a module for initialize so that custom initialize can call super
@@ -37,7 +41,8 @@ unless defined?(Data) && Data.respond_to?(:define)
         end
       end
 
-      Class.new do
+      # A subclass of Data, so `case node when Data` sees these as it does the real ones
+      Class.new(Data) do
         include init_module
 
         keys.each do |key|
@@ -48,6 +53,7 @@ unless defined?(Data) && Data.respond_to?(:define)
         define_method(:deconstruct_keys) { |_| keys.to_h { |k| [k, send(k)] } }
         define_method(:to_h) { keys.to_h { |k| [k, send(k)] } }
         define_method(:members) { keys }
+        define_method(:with) { |**changes| self.class.new(**to_h.merge(changes)) }
 
         define_method(:==) do |other|
           other.class == self.class && keys.all? { |k| send(k) == other.send(k) }
