@@ -3091,7 +3091,12 @@ module Rubish
     def top_level_test_index(args, op)
       depth = 0
       args.each_with_index do |arg, i|
-        return i if depth == 0 && arg == op && i > 0
+        # A binary -a/-o needs a complete expression on its left: not `!`
+        # alone, and not a unary operator waiting for its operand
+        # (`[ ! -o nounset ]`, `[ -o errexit -o -o nounset ]`)
+        left_incomplete = i == 0 || args[i - 1] == '!' ||
+                          (args[i - 1].match?(/\A-[a-zA-Z]\z/) && (i == 1 || args[i - 2] == '!'))
+        return i if depth == 0 && arg == op && !left_incomplete
         depth += 1 if arg == '('
         depth -= 1 if arg == ')'
       end
@@ -3145,6 +3150,7 @@ module Rubish
         # String tests
         when '-z' then return arg.empty?
         when '-n' then return !arg.empty?
+        when '-o' then return set_option_named?(arg) # [ -o optname ]
         # Variable tests
         when '-v' then return var_set?(arg) || nameref?(arg)
         when '-R' then return nameref?(arg)
