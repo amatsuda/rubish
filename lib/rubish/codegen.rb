@@ -1650,7 +1650,7 @@ module Rubish
       end
 
       # Handle ${var##pattern} and ${var%%pattern} - greedy versions first
-      if content =~ /\A([a-zA-Z_][a-zA-Z0-9_]*(?:\[[^\]]+\])?|\d+|[@*])(##|%%)(.+)\z/
+      if content =~ /\A([a-zA-Z_][a-zA-Z0-9_]*(?:\[[^\]]+\])?|\d+|[@*])(##|%%)(.*)\z/
         var_name = $1
         operator = $2
         operand = $3
@@ -1658,7 +1658,7 @@ module Rubish
       end
 
       # Handle ${var#pattern} and ${var%pattern} - non-greedy versions
-      if content =~ /\A([a-zA-Z_][a-zA-Z0-9_]*(?:\[[^\]]+\])?|\d+|[@*])(#|%)(.+)\z/
+      if content =~ /\A([a-zA-Z_][a-zA-Z0-9_]*(?:\[[^\]]+\])?|\d+|[@*])(#|%)(.*)\z/
         var_name = $1
         operator = $2
         operand = $3
