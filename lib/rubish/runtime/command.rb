@@ -451,6 +451,17 @@ module Rubish
       self
     end
 
+    # `&>file` and `&>>file`: stdout to the file, and stderr along with it
+    def redirect_both(file)
+      redirect_out(file)
+      redirect_err_to_out
+    end
+
+    def redirect_both_append(file)
+      redirect_append(file)
+      redirect_err_to_out
+    end
+
     def redirect_err_to_out
       # Used for |& - redirect stderr to stdout before piping
       @stderr = :stdout
@@ -947,6 +958,17 @@ module Rubish
     def redirect_err_append(file)
       @commands.last.redirect_err_append(file)
       self
+    end
+
+    # `&>file` and `&>>file`: stdout to the file, and stderr along with it
+    def redirect_both(file)
+      redirect_out(file)
+      redirect_err_to_out
+    end
+
+    def redirect_both_append(file)
+      redirect_append(file)
+      redirect_err_to_out
     end
 
     def redirect_err_to_out
@@ -1484,6 +1506,17 @@ module Rubish
       self
     end
 
+    # `&>file` and `&>>file`: stdout to the file, and stderr along with it
+    def redirect_both(file)
+      redirect_out(file)
+      redirect_err_to_out
+    end
+
+    def redirect_both_append(file)
+      redirect_append(file)
+      redirect_err_to_out
+    end
+
     def redirect_err_to_out
       @stderr = :stdout
       @stderr_seq = next_redirect_seq
@@ -1755,6 +1788,17 @@ module Rubish
       $stderr.puts "rubish: #{file}: #{e.class.new.message}"
       @restricted_failed = true
       self
+    end
+
+    # `&>file` and `&>>file`: stdout to the file, and stderr along with it
+    def redirect_both(file)
+      redirect_out(file)
+      redirect_err_to_out
+    end
+
+    def redirect_both_append(file)
+      redirect_append(file)
+      redirect_err_to_out
     end
 
     def redirect_err_to_out

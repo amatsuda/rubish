@@ -21,6 +21,8 @@ module Rubish
       '<<<' => :HERESTRING,  # Here string
       '2>' => :REDIRECT_ERR,
       '2>>' => :REDIRECT_ERR_APPEND,  # Append stderr to file
+      '&>' => :REDIRECT_BOTH,         # Both stdout and stderr to file
+      '&>>' => :REDIRECT_BOTH_APPEND, # Append both to file
       '>&' => :DUP_OUT,       # Duplicate output FD
       '2>&' => :DUP_ERR,      # Duplicate stderr FD (2>&1, 2>&-, etc.)
       '<&' => :DUP_IN,        # Duplicate input FD
@@ -72,7 +74,7 @@ module Rubish
       AND OR AMPERSAND NEWLINE LPAREN LBRACE
       REDIRECT_OUT REDIRECT_CLOBBER REDIRECT_APPEND
       REDIRECT_IN REDIRECT_ERR
-      DUP_OUT DUP_IN DUP_ERR REDIRECT_ERR_APPEND FD_REDIRECT
+      DUP_OUT DUP_IN DUP_ERR REDIRECT_ERR_APPEND FD_REDIRECT REDIRECT_BOTH REDIRECT_BOTH_APPEND
       HEREDOC HEREDOC_INDENT HERESTRING
       VARNAME_REDIRECT
     ].freeze
@@ -285,6 +287,10 @@ module Rubish
         @pos += 3
         return Token.new(:REDIRECT_ERR_APPEND, '2>>')
       end
+      if three_char_op == '&>>'
+        @pos += 3
+        return Token.new(:REDIRECT_BOTH_APPEND, '&>>')
+      end
       # Fd-prefixed redirects. For fds 0 and 1, the digit is just a
       # verbose alias for the bare form (`1>file` == `>file`). For fds
       # >= 3, emit a single FD_REDIRECT token carrying the source fd so
@@ -310,7 +316,7 @@ module Rubish
         # operator checks above before we get here.
       end
       two_char = @input[@pos, 2]  # refresh after possibly consuming a digit prefix
-      if %w[>> >| 2> >& <& && || () ;; ;& |&].include?(two_char)
+      if %w[>> >| 2> >& <& &> && || () ;; ;& |&].include?(two_char)
         @pos += 2
         return Token.new(OPERATORS[two_char], two_char)
       end

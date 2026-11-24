@@ -912,6 +912,9 @@ module Rubish
         __with_stderr_redirect(target) { yield }
       when '2>>'
         __with_stderr_redirect(target, 'a') { yield }
+      when '&>', '&>>'
+        # Both streams to the file (bash)
+        __with_stdout_redirect(target, operator == '&>' ? 'w' : 'a') { __with_dup_redirect('2>&', '1') { yield } }
       when '>&', '2>&', '<&'
         __with_dup_redirect(operator, target) { yield }
       else
