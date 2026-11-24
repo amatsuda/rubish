@@ -1652,7 +1652,8 @@ module Rubish
         error = false
         names.each do |name|
           var_name = name.split('=', 2).first
-          if !var_set?(var_name) && !array?(var_name) && !assoc_array?(var_name) && !(@state.var_attributes[var_name] || Set.new).any? && !readonly?(var_name)
+          # A variable declared without a value (`declare x`) is listed too
+          if !var_set?(var_name) && !array?(var_name) && !assoc_array?(var_name) && !@state.var_attributes.key?(var_name) && !readonly?(var_name)
             $stderr.puts "declare: #{var_name}: not found"
             error = true
           else
