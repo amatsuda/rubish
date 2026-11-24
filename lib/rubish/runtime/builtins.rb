@@ -980,6 +980,7 @@ module Rubish
       # Check if we're done
       if optind > parse_args.length
         set_var(varname, '?')
+        delete_var('OPTARG') # no more options: OPTARG is unset (bash)
         return false
       end
 
@@ -990,12 +991,14 @@ module Rubish
       if arg == '--'
         set_var('OPTIND', (optind + 1).to_s)
         set_var(varname, '?')
+        delete_var('OPTARG') # no more options: OPTARG is unset (bash)
         return false
       end
 
       # Check if it's an option
       if arg.nil? || !arg.start_with?('-') || arg == '-'
         set_var(varname, '?')
+        delete_var('OPTARG') # no more options: OPTARG is unset (bash)
         return false
       end
 
