@@ -6960,7 +6960,10 @@ module Rubish
       end
       if args.length > 1
         $stderr.puts 'rubish: exit: too many arguments'
-        return ExitStatus.new(1)
+        # An interactive shell goes on; a script or -c string exits with 1 (bash 5.3)
+        return ExitStatus.new(1) if Builtins.interactive_mode?
+
+        args = ['1']
       end
 
       # nil when no argument: callers fall back to $? (the last status)

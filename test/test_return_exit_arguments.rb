@@ -28,9 +28,11 @@ class TestReturnExitArguments < Test::Unit::TestCase
     assert_match(/exit: abc: numeric argument required/, err)
   end
 
-  def test_exit_with_too_many_arguments_does_not_exit
-    out, err, = run_shell('exit 1 2; echo "not $?"')
-    assert_equal "not 1\n", out
+  def test_exit_with_too_many_arguments_exits_a_non_interactive_shell
+    # bash 5.3 goes on only in an interactive shell; -c exits with 1
+    out, err, status = run_shell('exit 1 2; echo "not $?"')
+    assert_equal '', out
+    assert_equal 1, status
     assert_match(/exit: too many arguments/, err)
   end
 end
