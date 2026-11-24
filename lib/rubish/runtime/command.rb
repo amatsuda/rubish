@@ -235,10 +235,12 @@ module Rubish
 
     def self.safe_exec(cmd_name, cmd_path, *args, fd_options: nil)
       child_pre_exec_hook&.call
+      # The [path, argv0] form keeps Ruby from splitting a path with a
+      # space in it (`"./s p.sh"`) into words
       if fd_options && !fd_options.empty?
-        exec(cmd_path, *args, fd_options)
+        exec([cmd_path, cmd_name], *args, fd_options)
       else
-        exec(cmd_path, *args)
+        exec([cmd_path, cmd_name], *args)
       end
     rescue Errno::ENOENT
       $stderr.puts "rubish: #{cmd_name}: command not found"
