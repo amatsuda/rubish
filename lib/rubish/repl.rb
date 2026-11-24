@@ -56,6 +56,7 @@ module Rubish
       @positional_params = []
       @functions = {}
       @heredoc_contents = nil  # Bodies of the heredocs of the command being run, in order
+      correct_inherited_pwd
       @seconds_base = Time.now  # For SECONDS variable
       @random_generator = Random.new  # For RANDOM variable
       @lineno = 1  # For LINENO variable
@@ -2562,6 +2563,19 @@ module Rubish
       # Expand variables in heredoc content. Heredocs follow DQ backslash
       # rules — `\X` for any X not in $/`/"/\/newline is preserved.
       expand_string_content(content, quoted: true, heredoc: true)
+    end
+
+    # PWD from the environment is kept when it names the working directory
+    # (so a path through a symlink stays), and replaced by the real one
+    # otherwise (bash)
+    def correct_inherited_pwd
+      cwd = Dir.pwd
+      inherited = ENV['PWD']
+      return if inherited && !inherited.empty? && File.directory?(inherited) && File.realpath(inherited) == File.realpath(cwd)
+
+      ENV['PWD'] = cwd
+    rescue SystemCallError
+      nil
     end
 
     # Every heredoc node in the tree, in source order (the order the
