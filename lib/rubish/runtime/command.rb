@@ -305,6 +305,10 @@ module Rubish
       @stdout = nil
       @stderr = nil
       @block = block
+      @pipe_stdout = nil
+      @redirect_seq = 0
+      @stdout_seq = nil
+      @stderr_seq = nil
       @ran = false
       @skip_functions = skip_functions
       # Lazy-set elsewhere; pre-init so Ruby 2.6's stricter -W doesn't
@@ -1379,6 +1383,9 @@ module Rubish
       @stdin = nil
       @stdout = nil
       @stderr = nil
+      @redirect_seq = 0
+      @stdout_seq = nil
+      @stderr_seq = nil
       @ran = false
       @noclobber_failed = false
       @restricted_failed = false

@@ -57,6 +57,8 @@ module Rubish
     attr_accessor :next_varname_fd, :varname_fds
 
     def initialize(state)
+      @proc_sub_fds = nil
+      @pipestatus_from_negation = false
       @state = state
       @last_status = 0
       @last_bg_pid = nil

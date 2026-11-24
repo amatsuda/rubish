@@ -89,7 +89,7 @@ module Rubish
       # Nesting level of subshells, for BASH_SUBSHELL. One counter for the
       # REPL and its execution context alike; a fork takes a copy
       def subshell_level
-        @subshell_level || 0
+        defined?(@subshell_level) ? @subshell_level : 0
       end
 
       def subshell_level=(level)
@@ -99,7 +99,7 @@ module Rubish
       # How many loops enclose the command that is running; a function body
       # starts from 0
       def loop_depth
-        @loop_depth || 0
+        defined?(@loop_depth) ? @loop_depth : 0
       end
 
       def loop_depth=(depth)
@@ -109,7 +109,7 @@ module Rubish
       # Nesting of command substitutions and evals: a trace line from inside
       # repeats the first character of PS4 once per level (bash)
       def xtrace_depth
-        @xtrace_depth || 0
+        defined?(@xtrace_depth) ? @xtrace_depth : 0
       end
 
       def xtrace_depth=(depth)
@@ -4527,7 +4527,7 @@ module Rubish
             # zsh-style: wrap content in function definition
             # The file contains just the function body
             func_def = "#{name}() {\n#{content}\n}"
-            @source_executor&.call(nil, func_def)
+            @source_executor&.call(nil, func_def) if defined?(@source_executor)
           end
 
           @state.autoload_functions[name] = info.merge(loaded: true)

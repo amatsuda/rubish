@@ -97,6 +97,7 @@ module Rubish
     def initialize(input)
       @input = remove_line_continuations(input)
       @pos = 0
+      @cond_depth = 0
       @last_token_type = nil
       @prev_token_type = nil
       @last_word_value = nil

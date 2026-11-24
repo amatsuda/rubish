@@ -65,6 +65,7 @@ module Rubish
       @get_array_element = get_array_element || ->(_name, _index) { nil }
       @set_array_element = set_array_element || ->(_name, _index, _value) {}
       @positional = positional || ->(_n) { nil }
+      @tokens = @pos = @source = nil
       @var_set = var_set || ->(name) { !@get_var.call(name).nil? }
       @subst = subst
       @depth = 0

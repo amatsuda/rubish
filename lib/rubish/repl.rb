@@ -37,6 +37,10 @@ module Rubish
     include Runtime
 
     def initialize(login_shell: false, no_profile: false, no_rc: false, restricted: false, rcfile: nil, frontend: nil)
+      @execute_depth = 0
+      @original_termios = nil
+      @proc_sub_fds = nil
+      @pipestatus_from_negation = false
       # Without LANG/LC_* (e.g. when launched from launchd / a .app
       # bundle, not from a terminal), Ruby's default external encoding
       # falls back to US-ASCII, and reading user-authored files like

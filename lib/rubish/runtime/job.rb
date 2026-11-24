@@ -11,6 +11,8 @@ module Rubish
       @pgid = pgid
       @command = command
       @status = :running
+      @termsig = nil
+      @process_status = nil
     end
 
     def running?
