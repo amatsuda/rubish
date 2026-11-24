@@ -82,7 +82,7 @@ module Rubish
       return 0 if peek.type == :eof
 
       value = parse_comma
-      error("syntax error: unexpected token \"#{peek.text}\"") unless peek.type == :eof
+      error("arithmetic syntax error: unexpected token \"#{peek.text}\"") unless peek.type == :eof
       value
     ensure
       @tokens, @pos, @source = saved
@@ -120,7 +120,7 @@ module Rubish
           tokens << Token.new(:op, op, op)
           i += op.length
         else
-          error("syntax error: invalid arithmetic operator (error token is \"#{src[i..]}\")")
+          error("arithmetic syntax error: invalid arithmetic operator (error token is \"#{src[i..]}\")")
         end
       end
       tokens << Token.new(:eof, nil, '')
@@ -130,15 +130,15 @@ module Rubish
       nxt = src[i + 1]
       if nxt == '(' && src[i + 2] == '('
         close = matching_close(src, i + 2, '(', ')')
-        error('syntax error: unterminated $((') unless close && src[close + 1] == ')'
+        error('arithmetic syntax error: unterminated $((') unless close && src[close + 1] == ')'
         [Token.new(:arith, src[(i + 3)...close], src[i..(close + 1)]), close + 2]
       elsif nxt == '('
         close = matching_close(src, i + 1, '(', ')')
-        error('syntax error: unterminated $(') unless close
+        error('arithmetic syntax error: unterminated $(') unless close
         [Token.new(:subst, src[(i + 2)...close], src[i..close]), close + 1]
       elsif nxt == '{'
         close = matching_close(src, i + 1, '{', '}')
-        error('syntax error: unterminated ${') unless close
+        error('arithmetic syntax error: unterminated ${') unless close
         [Token.new(:braced, src[(i + 2)...close], src[i..close]), close + 1]
       elsif nxt =~ /[0-9]/
         j = i + 1
@@ -149,7 +149,7 @@ module Rubish
         j += 1 while j < src.length && src[j] =~ /[a-zA-Z0-9_]/
         [Token.new(:dollar_ident, src[(i + 1)...j], src[i...j]), j]
       else
-        error("syntax error: operand expected (error token is \"#{src[i..]}\")")
+        error("arithmetic syntax error: operand expected (error token is \"#{src[i..]}\")")
       end
     end
 
@@ -177,7 +177,7 @@ module Rubish
       elsif text =~ /\A[0-9]+\z/
         text.to_i
       else
-        error("syntax error: invalid number (error token is \"#{text}\")")
+        error("arithmetic syntax error: invalid number (error token is \"#{text}\")")
       end
     end
 
@@ -217,7 +217,7 @@ module Rubish
     end
 
     def expect(op)
-      accept(op) || error("syntax error: expected \"#{op}\" (error token is \"#{peek.text}\")")
+      accept(op) || error("arithmetic syntax error: expected \"#{op}\" (error token is \"#{peek.text}\")")
     end
 
     def parse_comma
@@ -376,7 +376,7 @@ module Rubish
       elsif accept('~')
         wrap(~parse_unary.to_i)
       elsif (op = accept('++') || accept('--'))
-        lvalue = try_parse_lvalue || error('syntax error: operand expected after ' + op.value)
+        lvalue = try_parse_lvalue || error('arithmetic syntax error: operand expected after ' + op.value)
         value = binary(op.value[0], read_lvalue(lvalue), 1)
         write_lvalue(lvalue, value)
         value
@@ -429,10 +429,10 @@ module Rubish
           expect(')')
           [value, nil]
         else
-          error("syntax error: operand expected (error token is \"#{tok.text}\")")
+          error("arithmetic syntax error: operand expected (error token is \"#{tok.text}\")")
         end
       else
-        error('syntax error: operand expected')
+        error('arithmetic syntax error: operand expected')
       end
     end
 
@@ -475,7 +475,7 @@ module Rubish
       elsif content =~ /\A[0-9]+\z/
         to_value(@positional.call(content.to_i))
       else
-        error("syntax error: unsupported expansion \"${#{content}}\"")
+        error("arithmetic syntax error: unsupported expansion \"${#{content}}\"")
       end
     end
 
@@ -604,7 +604,7 @@ module Rubish
     end
 
     def error(message)
-      raise Error, "#{@source}: #{message}"
+      raise Error, "#{@source.lstrip}: #{message}" # bash shows the expression without its leading whitespace
     end
   end
 end
