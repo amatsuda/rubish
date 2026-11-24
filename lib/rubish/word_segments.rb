@@ -191,6 +191,12 @@ module Rubish
       false
     end
 
+    # Does an unquoted part of the word have a glob character?
+    def self.bare_glob?(str)
+      each_segment(str) { |type, content| return true if type == :bare && content.match?(/[*?\[]/) }
+      false
+    end
+
     def self.multi_segment?(str)
       return false unless str.match?(/['"]/)
       return false if str.start_with?("$'") && str.end_with?("'")

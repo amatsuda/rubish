@@ -229,6 +229,11 @@ module Rubish
     end
 
     def generate_string_arg_with_glob(str)
+      # A partly quoted word globs on its unquoted part: `"d/"*`
+      if WordSegments.multi_segment?(str) && WordSegments.bare_glob?(str) && !has_brace_expansion?(str)
+        return "__glob(__expand_pattern_word(#{str.inspect}))"
+      end
+
       # Quoted strings (any form) are handled entirely by generate_string_arg.
       # Glob and brace expansion only apply to unquoted words, but an
       # alternative inside braces may be quoted: `{a,"b c"}`

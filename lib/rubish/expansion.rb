@@ -165,6 +165,11 @@ module Rubish
       words = expand_quoted_array_word(arg)
       return words if words
 
+      # A partly quoted word globs on its unquoted part: `"d/"*`
+      if WordSegments.multi_segment?(arg) && WordSegments.bare_glob?(arg) && !(Builtins.set_option?('B') && WordSegments.brace_list?(arg))
+        return __glob(__expand_pattern_word(arg))
+      end
+
       # Handle quoted strings; a word with a brace list goes on to brace
       # expansion even when an alternative is quoted (`{a,"b c"}`)
       result = expand_quoted_string(arg) { nil } unless Builtins.set_option?('B') && WordSegments.brace_list?(arg)
