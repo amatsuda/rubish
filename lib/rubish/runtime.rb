@@ -724,6 +724,18 @@ module Rubish
 
     # === REPL methods ===
 
+    # One element of a pipeline. An expansion error in it ends only that
+    # element, as bash runs each in a subshell: the error is reported and a
+    # failing command stands in for it
+    def __pipe_elem
+      yield
+    rescue ArithmeticEvaluator::Error, ParameterExpansionError => e
+      $stderr.puts "rubish: #{e.message}"
+      Command.new('false')
+    rescue NounsetError, FailglobError
+      Command.new('false')
+    end
+
     def __cmd(name, *args, __prefix_env: nil, &block)
       cmd = Command.new(name, *args, &block)
       cmd.prefix_env = __prefix_env if __prefix_env

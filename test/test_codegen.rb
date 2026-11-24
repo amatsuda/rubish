@@ -21,12 +21,12 @@ class TestCodegen < Test::Unit::TestCase
 
   def test_pipeline
     code = generate('ls | grep foo')
-    assert_equal '__cmd("ls") | __cmd("grep", *["foo"].flatten)', code
+    assert_equal '__pipe_elem { __cmd("ls") } | __pipe_elem { __cmd("grep", *["foo"].flatten) }', code
   end
 
   def test_pipeline_three_commands
     code = generate('ls | grep foo | wc -l')
-    assert_equal '__cmd("ls") | __cmd("grep", *["foo"].flatten) | __cmd("wc", *["-l"].flatten)', code
+    assert_equal '__pipe_elem { __cmd("ls") } | __pipe_elem { __cmd("grep", *["foo"].flatten) } | __pipe_elem { __cmd("wc", *["-l"].flatten) }', code
   end
 
   def test_redirect_out

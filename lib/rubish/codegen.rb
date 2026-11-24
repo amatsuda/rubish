@@ -684,6 +684,9 @@ module Rubish
           parts << element
         end
       end
+      # An expansion error in one element must not take the whole pipeline
+      # down: each element is built in its own guard
+      parts.map! { |part| "__pipe_elem { #{part} }" } if parts.length > 1
       parts.join(' | ')
     end
 
