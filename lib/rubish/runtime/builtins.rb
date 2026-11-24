@@ -1990,7 +1990,7 @@ module Rubish
         pairs = get_assoc_array(name).map { |key, value| "[#{key}]=#{value.inspect} " }
         "(#{pairs.join})"
       else
-        pairs = (get_array(name) || []).each_with_index.filter_map { |value, i| "[#{i}]=#{value.inspect}" unless value.nil? }
+        pairs = (get_array(name) || []).each_with_index.map { |value, i| "[#{i}]=#{value.inspect}" unless value.nil? }.compact
         "(#{pairs.join(' ')})"
       end
     end

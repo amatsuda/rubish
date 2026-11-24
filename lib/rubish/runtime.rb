@@ -361,7 +361,7 @@ module Rubish
         pairs = if Builtins.assoc_array?(name)
                   Builtins.get_assoc_array(name).map { |k, v| "#{k} #{v.inspect}" }
                 else
-                  (Builtins.get_array(name) || []).each_with_index.filter_map { |v, i| "#{i} #{v.inspect}" unless v.nil? }
+                  (Builtins.get_array(name) || []).each_with_index.map { |v, i| "#{i} #{v.inspect}" unless v.nil? }.compact
                 end
         # bash ends each pair of an associative array with a space
         return Builtins.assoc_array?(name) ? pairs.map { |pair| "#{pair} " }.join : pairs.join(' ')
