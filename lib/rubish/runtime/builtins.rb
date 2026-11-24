@@ -6410,19 +6410,23 @@ module Rubish
           end
         else
           # Convert signal number to name or vice versa
+          ok = true
           args[1..].each do |arg|
             if arg =~ /\A\d+\z/
               # Number to name
-              num = arg.to_i
-              name = Signal.list.key(num)
-              puts name || num
+              name = Signal.list.key(arg.to_i)
             else
               # Name to number
-              sig_name = arg.upcase.delete_prefix('SIG')
-              num = Signal.list[sig_name]
-              puts num || arg
+              name = Signal.list[arg.upcase.delete_prefix('SIG')]
+            end
+            if name
+              puts name
+            else
+              $stderr.puts "rubish: kill: #{arg}: invalid signal specification"
+              ok = false
             end
           end
+          return ok
         end
         return true
       end
@@ -6458,8 +6462,8 @@ module Rubish
       end
 
       if pids.empty?
-        puts 'kill: usage: kill [-s signal | -signal] pid|%jobspec ...'
-        return false
+        $stderr.puts 'kill: usage: kill [-s sigspec | -n signum | -sigspec] pid | jobspec ... or kill -l [sigspec]'
+        return ExitStatus.new(2)
       end
 
       # Normalize signal
@@ -6488,7 +6492,17 @@ module Rubish
               all_success = false
               next
             end
-            Process.kill(sig, -job.pgid)
+            # The job's own process group when it has one (job control),
+            # else the process itself
+            if job.pgid && job.pgid != Process.getpgrp
+              begin
+                Process.kill(sig, -job.pgid)
+              rescue Errno::ESRCH
+                Process.kill(sig, job.pid) # the job never got a group of its own
+              end
+            else
+              Process.kill(sig, job.pid)
+            end
           else
             # PID
             pid = pid_arg.to_i
