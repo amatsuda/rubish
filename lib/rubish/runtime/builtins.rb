@@ -7851,11 +7851,25 @@ module Rubish
       terminator = null_terminated ? "\0" : "\n"
 
       args.each do |name|
-        result = File.dirname(name)
-        print "#{result}#{terminator}"
+        print "#{posix_dirname(name)}#{terminator}"
       end
 
       true
+    end
+
+    # dirname as POSIX describes it: trailing slashes go, then the last
+    # component; a leading `//` stays (`dirname //a//b//` is //a)
+    def posix_dirname(path)
+      return '.' if path.empty?
+
+      dir = path.sub(%r{(?<=[^/])/+\z}, '')
+      return '/' if dir.match?(%r{\A/+\z})
+      return '.' unless dir.include?('/')
+
+      dir = dir.sub(%r{/+[^/]+\z}, '')
+      return '/' if dir.empty?
+
+      dir.sub(%r{(?<=[^/])/+\z}, '')
     end
 
     def realpath(args)
