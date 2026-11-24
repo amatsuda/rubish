@@ -69,8 +69,8 @@ module Rubish
     end
 
     def add(pid:, pgid:, command:)
-      id = @next_id
-      @next_id += 1
+      # Numbers start over once the table is empty (bash)
+      id = (@jobs.keys.max || 0) + 1
       job = Job.new(id: id, pid: pid, pgid: pgid, command: command)
       @jobs[id] = job
       job

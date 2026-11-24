@@ -27,7 +27,8 @@ class TestKillArguments < Test::Unit::TestCase
   end
 
   def test_job_spec
-    out, = run_shell('sleep 5 & kill -9 %1; wait %1; echo $?; sleep 5 & kill %2; wait %2; echo $?')
+    # the second job is %1 again once the first has been waited for (bash)
+    out, = run_shell('sleep 5 & kill -9 %1; wait %1; echo $?; sleep 5 & kill %1; wait %1; echo $?')
     assert_equal "137\n143\n", out
   end
 end
