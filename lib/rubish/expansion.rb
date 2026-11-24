@@ -920,7 +920,8 @@ module Rubish
 
       expanded_value = expand_assignment_value(value)
 
-      case var_name
+      # an unset special variable is assigned like any other
+      case (Builtins.current_state.unset_special_vars.include?(var_name) ? nil : var_name)
       when 'SECONDS' then reset_seconds(expanded_value.to_i)
       when 'RANDOM' then seed_random(expanded_value.to_i)
       when 'LINENO' then @lineno = expanded_value.to_i
@@ -1018,6 +1019,8 @@ module Rubish
     end
 
     def get_special_var_value(var_name)
+      return nil if Builtins.current_state.unset_special_vars.include?(var_name) # made ordinary by unset
+
       case var_name
       when 'SECONDS' then seconds.to_s
       when 'RANDOM' then random.to_s

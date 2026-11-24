@@ -39,6 +39,8 @@ module Rubish
 
     # Execution callbacks
     attr_accessor :executor, :command_executor, :last_status_setter, :last_status_getter
+    # Names such as SECONDS or RANDOM that `unset` stripped of their special meaning
+    attr_accessor :unset_special_vars
     # [pid, ExitStatus] of the last child `wait` reaped, for a repeated `wait pid`
     attr_accessor :last_async_status
 
@@ -142,6 +144,7 @@ module Rubish
       @executor = nil
       @command_executor = nil
       @last_async_status = nil
+      @unset_special_vars = Set.new
 
       # Script/position callbacks
       @script_name_getter = nil

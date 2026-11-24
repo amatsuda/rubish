@@ -1183,6 +1183,8 @@ module Rubish
     end
 
     def __fetch_var(var_name)
+      return (Builtins.get_var(var_name) || '').to_s if Builtins.current_state.unset_special_vars.include?(var_name)
+
       # Special handling for SECONDS, RANDOM, LINENO, PPID, UID, EUID, GROUPS, HOSTNAME, RUBISHPID, BASHPID, HISTCMD, and EPOCHSECONDS
       return (@funcname_stack || []).first.to_s if var_name == 'FUNCNAME'
       return (@pipestatus || []).first.to_s if var_name == 'PIPESTATUS' # $PIPESTATUS is its first element

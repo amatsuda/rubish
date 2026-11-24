@@ -1283,6 +1283,10 @@ module Rubish
       $stderr.puts "local: warning: #{name}: shadows variable in outer scope"
     end
 
+    # Variables whose value is computed on each reference, until `unset` makes
+    # them ordinary (bash)
+    SPECIAL_DYNAMIC_VARS = %w[SECONDS RANDOM SRANDOM LINENO EPOCHSECONDS EPOCHREALTIME BASHPID].freeze
+
     def unset(args)
       # unset [-fv] name [name ...]
       # -f: treat names as function names
@@ -1378,7 +1382,9 @@ module Rubish
           end
 
           # Standard behavior: remove from shell_vars and ENV (if exported),
-          # and an array of that name with them
+          # and an array of that name with them; a special variable loses
+          # its special meaning
+          @state.unset_special_vars << name if SPECIAL_DYNAMIC_VARS.include?(name)
           delete_var(name)
           unset_array(name)
           unset_assoc_array(name)
