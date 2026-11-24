@@ -687,6 +687,19 @@ module Rubish
       cmd
     end
 
+    # `$cmd args` with an unquoted expansion as the command: its words are
+    # split, the first is the command. An empty expansion alone runs
+    # nothing; `$empty cmd` runs cmd (bash)
+    def __cmd_from_words(value, args, __prefix_env: nil, &block)
+      words = Builtins.split_by_ifs(value.to_s)
+      if words.empty?
+        return ExitStatus.new(0) if args.empty?
+
+        words = [args.shift]
+      end
+      __cmd(words.first, *words[1..], *args, __prefix_env: __prefix_env, &block)
+    end
+
     def __and_cmd(left_proc, right_proc)
       # Per POSIX: all commands in an AND-OR list except the last are exempt from errexit.
       # Restore the flag in an ensure so an exception escaping the left operand

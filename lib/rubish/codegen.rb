@@ -103,7 +103,11 @@ module Rubish
                    "{#{pairs.join(', ')}}"
                  end
 
-      cmd = if args.empty? && env_code.nil?
+      cmd = if node.name.match?(/\A(\$[a-zA-Z_{(]|`)/)
+              # `$cmd args`: the unquoted expansion is split into words, the
+              # first of which is the command (bash)
+              "__cmd_from_words(#{name}, [#{args}].flatten#{env_code ? ", __prefix_env: #{env_code}" : ''})"
+            elsif args.empty? && env_code.nil?
               "__cmd(#{name})"
             elsif args.empty?
               "__cmd(#{name}, __prefix_env: #{env_code})"
