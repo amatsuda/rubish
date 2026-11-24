@@ -86,6 +86,7 @@ module Rubish
         @context = ctx
       end
 
+
       # Delegate commonly-used methods to the context for backward compatibility
       # These allow code like `Builtins.run(...)` to work
       def method_missing(method_name, *args, **kwargs, &block)
@@ -2436,15 +2437,116 @@ module Rubish
       # expand_aliases: when disabled, don't expand aliases
       return line unless shopt_enabled?('expand_aliases')
 
-      # The first word of the expansion is checked for an alias in turn,
-      # except for one already being expanded (bash)
+      return line if @state.aliases.empty?
+
+      # Every word in command position is checked: the first word of the
+      # line and of each command after `;`, `&&`, `||`, `|`, `&`, `(` or a
+      # newline, and the word after a keyword such as `then` or `do`; an
+      # alias whose value ends in a space makes the next word a candidate
+      # too (bash)
+      result = +''
+      i = 0
+      command_position = true
+      while i < line.length
+        char = line[i]
+        case char
+        when "'"
+          close = line.index("'", i + 1) || line.length - 1
+          result << line[i..close]
+          i = close + 1
+          command_position = false
+        when '"'
+          j = i + 1
+          while j < line.length && line[j] != '"'
+            j += 1 if line[j] == '\\'
+            j += 1
+          end
+          result << line[i..j]
+          i = j + 1
+          command_position = false
+        when '\\'
+          result << line[i, 2]
+          i += 2
+          command_position = false
+        when '$', '`'
+          # A command substitution is expanded when it runs: copy it whole
+          close = if char == '`'
+                    line.index('`', i + 1)
+                  elsif line[i + 1] == '('
+                    depth = 0
+                    j = i + 1
+                    while j < line.length
+                      depth += 1 if line[j] == '('
+                      depth -= 1 if line[j] == ')'
+                      break if depth == 0
+                      j += 1
+                    end
+                    j < line.length ? j : nil
+                  end
+          if close
+            result << line[i..close]
+            i = close + 1
+          else
+            result << char
+            i += 1
+          end
+          command_position = false
+        when ';', '|', '&', '(', ')', "\n"
+          result << char
+          i += 1
+          command_position = true
+        when ' ', "\t"
+          result << char
+          i += 1
+        else
+          j = i
+          while j < line.length
+            if line[j] == '$' && line[j + 1] == '('
+              # `x=$(cmd)`: the substitution is part of the word, expanded when it runs
+              depth = 0
+              k = j + 1
+              while k < line.length
+                depth += 1 if line[k] == '('
+                depth -= 1 if line[k] == ')'
+                break if depth == 0
+
+                k += 1
+              end
+              j = k + 1
+              next
+            end
+            break if line[j] =~ /[\s;|&()'"\\]/
+
+            j += 1
+          end
+          word = line[i...j]
+          if command_position
+            word = expand_alias_word(word)
+            command_position = word.end_with?(' ') || ALIAS_COMMAND_KEYWORDS.include?(word)
+          else
+            command_position = ALIAS_COMMAND_KEYWORDS.include?(word)
+          end
+          result << word
+          i = j
+        end
+      end
+      result
+    end
+
+    # Words after which the next word is in command position
+    ALIAS_COMMAND_KEYWORDS = %w[if then else elif while until do { ! time coproc].freeze
+
+    # The first word of the expansion is checked for an alias in turn,
+    # except for one already being expanded (bash)
+    def expand_alias_word(word)
       expanded = []
+      text = word
       loop do
-        first_word = line.split(/\s/, 2).first
-        return line unless first_word && @state.aliases.key?(first_word) && !expanded.include?(first_word)
+        first_word = text.split(/\s/, 2).first
+        return text unless first_word && @state.aliases.key?(first_word) && !expanded.include?(first_word)
 
         expanded << first_word
-        line = "#{@state.aliases[first_word]}#{line[first_word.length..]}"
+        text = "#{@state.aliases[first_word]}#{text[first_word.length..]}"
       end
     end
 
