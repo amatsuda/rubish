@@ -974,7 +974,11 @@ module Rubish
             # !(pattern) - anything except
             end_idx = find_matching_paren(pattern, i + 1)
             inner = pattern[i + 2...end_idx]
-            result << "(?!(?:#{extglob_alternatives_to_regex(inner)})\\z).*"
+            # `a!(X)b` must not match aXb: the part that may not match here
+            # is the inner pattern followed by whatever the pattern has after
+            # the group, up to the end
+            rest = extglob_to_regex(pattern[end_idx + 1..]).source.delete_prefix('\A').delete_suffix('\z')
+            result << "(?!(?:#{extglob_alternatives_to_regex(inner)})#{rest}\\z).*"
             i = end_idx + 1
           else
             result << Regexp.escape(char)
