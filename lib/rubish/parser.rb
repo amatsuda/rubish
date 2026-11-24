@@ -98,10 +98,11 @@ module Rubish
     # pipeline : ['!'] [time [-p]] command (('|' | '|&') command)*
     def parse_pipeline
       # Check for ! negation prefix
+      # Each `!` negates again: `! ! cmd` has cmd's status
       negated = false
-      if peek(:WORD) && current.value == '!'
+      while peek(:WORD) && current.value == '!'
         consume(:WORD)
-        negated = true
+        negated = !negated
       end
 
       # Check for time prefix
