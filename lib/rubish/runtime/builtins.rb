@@ -106,6 +106,16 @@ module Rubish
         @loop_depth = depth
       end
 
+      # Nesting of command substitutions and evals: a trace line from inside
+      # repeats the first character of PS4 once per level (bash)
+      def xtrace_depth
+        @xtrace_depth || 0
+      end
+
+      def xtrace_depth=(depth)
+        @xtrace_depth = depth
+      end
+
 
       # Delegate commonly-used methods to the context for backward compatibility
       # These allow code like `Builtins.run(...)` to work
@@ -7164,7 +7174,12 @@ module Rubish
       begin
         # A syntax error gives eval the status 2; otherwise it has the
         # status of the last command the text ran
-        return ExitStatus.new(2) if process_script_lines(command.split("\n", -1), '(eval)') == 2
+        Builtins.xtrace_depth += 1 # the commands trace one level deeper
+        begin
+          return ExitStatus.new(2) if process_script_lines(command.split("\n", -1), '(eval)') == 2
+        ensure
+          Builtins.xtrace_depth -= 1
+        end
 
         ExitStatus.new(@state.last_status_getter&.call || 0)
       rescue => e

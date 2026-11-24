@@ -84,7 +84,7 @@ module Rubish
       # PS4 undergoes parameter expansion (`+${LINENO}+ `) and prompt escapes
       ps4 = expand_string_content(ps4, quoted: true) if respond_to?(:expand_string_content, true)
       expanded_ps4 = expand_prompt(ps4)
-      output = "#{expanded_ps4}#{line}"
+      output = "#{expanded_ps4[0].to_s * Builtins.xtrace_depth}#{expanded_ps4}#{line}"
 
       # Check RUBISH_XTRACEFD (or BASH_XTRACEFD for compatibility)
       xtracefd = ENV['RUBISH_XTRACEFD'] || ENV['BASH_XTRACEFD']

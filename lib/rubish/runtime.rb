@@ -55,6 +55,13 @@ module Rubish
     SUBST_IN_PROCESS_BUILTINS = %w[echo printf pwd basename dirname realpath true false].freeze
 
     def __run_subst(cmd)
+      Builtins.xtrace_depth += 1 # a trace line from inside gets one more PS4 character
+      __run_subst_body(cmd)
+    ensure
+      Builtins.xtrace_depth -= 1
+    end
+
+    def __run_subst_body(cmd)
       # A command substitution is a subshell level for BASH_SUBSHELL, even
       # when its builtin runs in this process
       Builtins.subshell_level += 1
