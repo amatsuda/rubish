@@ -12,4 +12,12 @@ class TestGlobCaseSensitive < Test::Unit::TestCase
       assert_equal "Abc\n[[:lower:]]*\n[a-c]*\nAbc\na*\nAbc\n", out
     end
   end
+
+  # Dir.glob ignores FNM_CASEFOLD, so nocaseglob rewrites the pattern
+  def test_casefold_pattern
+    context = Rubish::REPL.new.instance_variable_get(:@context)
+    assert_equal '[aA]*', context.send(:casefold_glob_pattern, 'a*')
+    assert_equal '[a-cA-C]*[xX]/[!dD]?.[rR][bB]', context.send(:casefold_glob_pattern, '[a-c]*x/[!d]?.rb')
+    assert_equal '\\a[bB]', context.send(:casefold_glob_pattern, '\\ab')
+  end
 end

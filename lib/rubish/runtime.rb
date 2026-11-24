@@ -1352,6 +1352,33 @@ module Rubish
       words.flat_map { |w| w.match?(/[*?\[]|[+@!]\(/) ? __glob(w) : [w] }
     end
 
+    # The pattern with each ASCII letter matching either case, for nocaseglob
+    # on a case-sensitive filesystem; a bracket expression gets its letters
+    # in the other case appended
+    def casefold_glob_pattern(pattern)
+      out = +''
+      i = 0
+      while i < pattern.length
+        c = pattern[i]
+        if c == '\\' && i + 1 < pattern.length
+          out << c << pattern[i + 1]
+          i += 2
+        elsif c == '[' && (close = pattern.index(']', i + 2))
+          inner = pattern[i + 1...close]
+          negation = inner.start_with?('!', '^') ? inner.slice!(0) : ''
+          out << '[' << negation << inner << inner.swapcase << ']'
+          i = close + 1
+        elsif c.match?(/[a-zA-Z]/)
+          out << '[' << c.downcase << c.upcase << ']'
+          i += 1
+        else
+          out << c
+          i += 1
+        end
+      end
+      out
+    end
+
     def __glob(pattern)
       # If noglob is set, return pattern as-is (no expansion)
       return [pattern] if Builtins.set_option?('f')
@@ -1384,6 +1411,10 @@ module Rubish
 
       # Expand POSIX character classes (e.g., [[:digit:]] -> [0-9])
       glob_pattern = expand_posix_classes(glob_pattern)
+
+      # Dir.glob ignores FNM_CASEFOLD: nocaseglob folds the pattern's letters
+      # into both cases instead (`a*` becomes `[aA]*`)
+      glob_pattern = casefold_glob_pattern(glob_pattern) if Builtins.shopt_enabled?('nocaseglob')
 
       # Expand glob pattern, return original if no matches (unless nullglob)
       # Check for extended globs if extglob is enabled
