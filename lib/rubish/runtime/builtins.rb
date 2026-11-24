@@ -8238,8 +8238,9 @@ module Rubish
           # Skip escaped character
           i += 2
         elsif !in_single_quotes && !in_double_quotes
-          if char == '#'
-            # Start of comment - stop processing the rest of the line
+          if char == '#' && current_word.empty?
+            # Start of comment - stop processing the rest of the line (a `#`
+            # inside a word, as in `$#`, is not one)
             flush.call
             break
           elsif char =~ /\s/
