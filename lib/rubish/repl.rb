@@ -1320,7 +1320,7 @@ module Rubish
       return ExitStatus.new(1) unless func_info
 
       # Check FUNCNEST limit
-      funcnest = ENV['FUNCNEST']
+      funcnest = Builtins.get_var('FUNCNEST') # a shell variable, exported or not
       if funcnest && !funcnest.empty?
         max_depth = funcnest.to_i
         if max_depth > 0 && @funcname_stack.length >= max_depth
