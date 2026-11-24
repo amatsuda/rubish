@@ -1985,12 +1985,15 @@ module Rubish
       @state.assoc_arrays.each_key { |name| vars_to_print << name }
       @state.readonly_vars.each_key { |name| vars_to_print << name }
       @state.namerefs.each_key { |name| vars_to_print << name }
+      # `declare -x`: inherited environment variables are exported too
+      ENV.each_key { |name| vars_to_print << name } if filter_attrs.include?(:export)
 
       vars_to_print.each do |name|
         attrs = @state.var_attributes[name] || Set.new
         attrs = attrs.dup
         attrs << :readonly if readonly?(name)
         attrs << :nameref if nameref?(name)
+        attrs << :export if ENV.key?(name)
 
         # Filter by attributes if specified
         if filter_attrs.empty? || filter_attrs.subset?(attrs)
