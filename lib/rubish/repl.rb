@@ -168,11 +168,15 @@ module Rubish
     attr_reader :frontend
 
     def run
+      # Take the terminal before anything reads it: setup_job_control may
+      # move the shell into its own process group, and a read from there
+      # before tcsetpgrp gets SIGTTIN and stops the shell. Keys typed in
+      # the meantime wait in the terminal's input queue.
+      prof('setup_job_control') { setup_job_control }
       # Start buffering stdin immediately so typed input during slow startup is preserved
       start_stdin_buffering
 
       begin
-        prof('setup_job_control') { setup_job_control }
         prof('setup_reline') { setup_reline }
         prof('setup_signals') { setup_signals }
         prof('setup_terminal_title') { setup_terminal_title }
