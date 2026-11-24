@@ -31,9 +31,10 @@ class TestStartupTypeaheadJobControl < Test::Unit::TestCase
       # The trailing `true` keeps sh from exec'ing, so rubish is forked
       # into sh's process group instead of leading one
       argv = [RbConfig.ruby, '-I', LIB]
-      # reline is a default gem from Ruby 2.7; before that the child, which
-      # runs without Bundler, is handed the bundled copy
-      if RUBY_VERSION < '2.7' && (reline = Gem.loaded_specs['reline'])
+      # The child runs without Bundler, where Ruby's own reline may be
+      # missing (2.6) or too old for setup_reline (3.0 ships 0.2); hand it
+      # the bundled copy
+      if (reline = Gem.loaded_specs['reline'])
         argv += ['-I', File.join(reline.full_gem_path, 'lib')]
       end
       cmd = "#{(argv + [EXE, '--norc']).shelljoin}; true"
