@@ -21,9 +21,15 @@ module Rubish
       end.join(' ')
     end
 
+    TRACE_ESCAPES = { "\a" => '\a', "\b" => '\b', "\e" => '\E', "\f" => '\f', "\n" => '\n', "\r" => '\r', "\t" => '\t', "\v" => '\v', '\\' => '\\\\', "'" => "\\'" }.freeze
+
     def self.trace_word(word)
       return "''" if word.empty?
       return word if word.match?(%r{\A[\w%+,./:=@^-]+\z})
+      if word.match?(/[\x00-\x1f\x7f]/)
+        # control characters are shown in $'...' form (bash)
+        return "$'" + word.gsub(/[\x00-\x1f\x7f\\']/) { |c| TRACE_ESCAPES[c] || format('\\%03o', c.ord) } + "'"
+      end
 
       "'" + word.gsub("'", "'\\\\''") + "'"
     end
@@ -58,6 +64,8 @@ module Rubish
       # Print trace with PS4 prefix (default: '+ ')
       # PS4 supports the same escape sequences as PS1
       ps4 = Builtins.get_var('PS4') || '+ ' # a shell variable, exported or not
+      # PS4 undergoes parameter expansion (`+${LINENO}+ `) and prompt escapes
+      ps4 = expand_string_content(ps4, quoted: true) if respond_to?(:expand_string_content, true)
       expanded_ps4 = expand_prompt(ps4)
       output = "#{expanded_ps4}#{line}"
 
