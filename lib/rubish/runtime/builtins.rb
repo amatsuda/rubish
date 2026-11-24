@@ -3010,7 +3010,7 @@ module Rubish
     rescue UncaughtThrowError
       # No enclosing function or sourced script is catching :return
       $stderr.puts "rubish: return: can only `return' from a function or sourced script"
-      false
+      ExitStatus.new(2)
     end
 
     # The count given to break/continue: 1 when absent; a non-number is an

@@ -16,7 +16,7 @@ class TestReturnBreakOutside < Test::Unit::TestCase
   def test_return_outside_function_reports_error_and_fails
     err = capture_stderr { execute('return 5') }
     assert_match(/return: can only `return' from a function or sourced script/, err)
-    assert_equal 1, last_status
+    assert_equal 2, last_status # the usage status, as in bash
   end
 
   def test_return_outside_function_does_not_stop_the_list
