@@ -37,6 +37,7 @@ module Rubish
       # Evaluate (( )) arithmetic command
       # Returns exit status 0 if result is non-zero, 1 if result is zero
       # Supports variable assignments like x=1, x++, x--, ++x, --x, x+=1, etc.
+      announce_texts(["(( #{expr} ))"])
       result = eval_arithmetic_expr(expr)
       ExitStatus.new(result != 0 ? 0 : 1)
     end
@@ -1843,6 +1844,7 @@ module Rubish
     def __cond_test(parts)
       # Evaluate [[ ]] conditional expression
       # Returns ExitStatus based on expression result
+      announce_texts(["[[ #{parts.map { |p| p.respond_to?(:source) ? p.source : p.to_s }.join(' ')} ]]"])
       result = eval_cond_expr(parts, 0, parts.length)
       ExitStatus.new(result ? 0 : 1)
     rescue RegexpError => e
