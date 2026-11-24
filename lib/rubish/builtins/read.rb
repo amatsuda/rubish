@@ -95,6 +95,7 @@ module Rubish
       end
       line = read_input_line(opts)
       return ExitStatus.new(142) if line == :timeout # 128 + SIGALRM, as bash
+      return line == :available if line == :available || line == :unavailable # -t 0 asks only
       if line.nil?
         # End of file: the variables are emptied, as bash does, so a
         # `while read x || [ -n "$x" ]` loop sees the end
@@ -173,6 +174,11 @@ module Rubish
 
       # Handle timeout (-t option or TMOUT environment variable)
       timeout = opts[:timeout] || tmout
+      if opts[:timeout]&.zero?
+        # -t 0: succeed if input is available, without reading any (bash); a
+        # TMOUT of 0 means no timeout
+        return IO.select([input_stream], nil, nil, 0) ? :available : :unavailable
+      end
       if timeout && timeout > 0
         opts[:timeout] = timeout
         return read_with_timeout(input_stream, opts)
