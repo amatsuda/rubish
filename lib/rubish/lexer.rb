@@ -230,6 +230,8 @@ module Rubish
                         when /\A[a-zA-Z_][a-zA-Z0-9_]*\s*(\+\+|--|[=+\-*\/%<>&|^]=?|\[)/ then true  # Identifier with operator
                         when /\A\(\s*[\d$!~(+-]/ then true  # Grouped expression starting with arith
                         when /\A;/ then true  # Empty init in for ((; cond; update))
+                        when /\A[a-zA-Z_][a-zA-Z0-9_]*\s*\)\s*\)/ then true  # Bare variable: (( x )); not the regex ((abc)(123))
+                        when /\A["']/ then @last_word_value != '=~'  # Quoted expression: (( "" ))
                         else false
                         end
         if is_arithmetic
