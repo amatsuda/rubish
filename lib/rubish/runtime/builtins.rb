@@ -2724,7 +2724,8 @@ module Rubish
         # below can't match, so counting `((` as an open would leave depth
         # forever incremented and break source on any script using `(( … ))`
         # inside an if/while/function body (e.g. `starship init zsh`).
-        if line =~ /\A\s*\((?!\()/
+        # `(cmd) & ...` closes on its own line and opens nothing
+        if line =~ /\A\s*\((?!\()/ && !paren_closes_on_line?(line)
           depth += 1
           open_structures << ['(', line_number]
         end
@@ -6934,6 +6935,8 @@ module Rubish
               last_status = wait_exit_status(status)
               @state.last_async_status = [wpid, last_status]
             rescue Errno::ECHILD
+              # already reaped (by `jobs`): its status was kept
+              last_status = wait_exit_status(job.process_status) if job.process_status
               manager.remove(job.id)
             end
           end
@@ -7248,7 +7251,9 @@ module Rubish
         end
       end
 
-      jobs = JobManager.instance.active
+      # Finished jobs are reported once, as Done or Exit N, then forgotten (bash)
+      JobManager.instance.poll
+      jobs = JobManager.instance.all
       jobs = jobs.select(&:running?) if running_only
       jobs = jobs.select(&:stopped?) if stopped_only
       jobs.each do |job|
@@ -7256,10 +7261,11 @@ module Rubish
           puts job.pid
         elsif long
           # bash: `[1]+ 12345 Running                 sleep 1 &`
-          puts format('[%d]%s %d %-24s%s', job.id, JobManager.instance.marker(job), job.pid, job.status_string, job.command)
+          puts format('[%d]%s %d %-27s%s', job.id, JobManager.instance.marker(job), job.pid, job.status_string, job.running? ? "#{job.command} &" : job.command)
         else
           puts job
         end
+        JobManager.instance.remove(job.id) if job.done?
       end
       true
     end
@@ -8129,6 +8135,32 @@ module Rubish
       status.success?
     rescue Errno::ENOENT
       $stderr.puts "#{cmd}: command not found"
+      false
+    end
+
+    # Does the `(` that opens the line find its `)` on the same line, outside
+    # quotes? `(exit 3) & wait` does; a subshell spread over lines does not
+    def paren_closes_on_line?(line)
+      depth = 0
+      quote = nil
+      i = 0
+      while i < line.length
+        char = line[i]
+        if quote
+          quote = nil if char == quote
+          i += 2 if char == '\\' && quote == '"'
+        elsif char == '\\'
+          i += 1
+        elsif char == "'" || char == '"'
+          quote = char
+        elsif char == '('
+          depth += 1
+        elsif char == ')'
+          depth -= 1
+          return true if depth == 0
+        end
+        i += 1
+      end
       false
     end
 

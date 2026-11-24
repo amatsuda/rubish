@@ -3,7 +3,7 @@
 module Rubish
   class Job
     attr_reader :id, :pid, :pgid, :command
-    attr_accessor :status, :termsig
+    attr_accessor :status, :termsig, :process_status
 
     def initialize(id:, pid:, pgid:, command:)
       @id = id
@@ -39,7 +39,8 @@ module Rubish
       when :running then 'Running'
       when :stopped then 'Stopped'
       when :done
-        return 'Done' unless @termsig
+        # a non-zero exit is shown as `Exit N` (bash)
+        return (@process_status && @process_status.exitstatus.to_i != 0 ? "Exit #{@process_status.exitstatus}" : 'Done') unless @termsig
 
         name = Signal.signame(@termsig) || @termsig.to_s
         "#{SIGNAL_DESCRIPTIONS.fetch(name, "Signal #{name}")}: #{@termsig}"
@@ -50,7 +51,8 @@ module Rubish
     # bash's layout: `[1]+  Running                 sleep 1 &`, with + for the
     # current job and - for the previous one
     def to_s
-      format('[%d]%s  %-24s%s', @id, JobManager.instance.marker(self), status_string, @command)
+      # a running job is listed with its `&` (bash)
+      format('[%d]%s  %-27s%s', @id, JobManager.instance.marker(self), status_string, running? ? "#{@command} &" : @command)
     end
   end
 
@@ -108,9 +110,23 @@ module Rubish
         job.status = :stopped
       elsif status.exited? || status.signaled?
         job.status = :done
+        job.process_status = status
         job.termsig = status.termsig if status.signaled?
       end
       job
+    end
+
+    # Reap the jobs that have finished without waiting, so that `jobs` can
+    # report them Done; their statuses are kept for `wait`
+    def poll
+      @jobs.each_value do |job|
+        next if job.done?
+
+        pid, status = Process.wait2(job.pid, Process::WNOHANG)
+        update_status(pid, status) if pid
+      rescue Errno::ECHILD
+        nil # not our child here (`jobs | wc -l` runs in a fork): leave it as it was
+      end
     end
 
     # `+` for the most recent job, `-` for the one before it, as bash marks

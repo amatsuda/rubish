@@ -46,7 +46,8 @@ class TestCodegen < Test::Unit::TestCase
 
   def test_background
     code = generate('sleep 10 &')
-    assert_equal '__background { __cmd("sleep", *["10"].flatten) }', code
+    # the job's own text goes along, for `jobs`
+    assert_equal '__background("sleep 10") { __cmd("sleep", *["10"].flatten) }', code
   end
 
   def test_list

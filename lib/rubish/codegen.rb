@@ -944,7 +944,7 @@ module Rubish
     end
 
     def generate_background(node)
-      "__background { #{generate(node.command)} }"
+      "__background(#{to_shell(node.command).inspect}) { #{generate(node.command)} }"
     end
 
     def generate_and(node)

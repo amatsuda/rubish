@@ -745,7 +745,7 @@ module Rubish
       __run_cmd(&right_proc)
     end
 
-    def __background(&block)
+    def __background(text = nil, &block)
       # Wait if CHILD_MAX limit is reached
       JobManager.instance.wait_for_child_slot if Builtins.set_option?('m')
 
@@ -784,7 +784,7 @@ module Rubish
       job = JobManager.instance.add(
         pid: pid,
         pgid: pid,
-        command: @current_line || @last_line
+        command: text || @current_line || @last_line # the job's own text, as jobs lists it
       )
       # The notice is for interactive shells only, as in bash
       puts "[#{job.id}] #{pid}" if Builtins.interactive_mode?

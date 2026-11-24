@@ -19,7 +19,7 @@ class TestJobCommandText < Test::Unit::TestCase
   def test_job_records_the_command_line
     capture_stdout { execute('sleep 5 &') }
     job = Rubish::JobManager.instance.all.last
-    assert_equal 'sleep 5 &', job.command
+    assert_equal 'sleep 5', job.command # the job's own text; jobs adds the & while it runs
     out = capture_stdout { execute('jobs') }
     assert_match(/sleep 5 &/, out)
   end
