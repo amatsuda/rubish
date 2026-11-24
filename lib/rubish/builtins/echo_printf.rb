@@ -484,16 +484,19 @@ module Rubish
                when 'o'
                  # Octal
                  num = printf_integer(numeric_arg)
+                 num &= 0xFFFFFFFFFFFFFFFF if num < 0 # 64-bit, as in bash
                  prefix = flags.include?('#') ? '0' : ''
                  "#{prefix}#{num.to_s(8)}"
                when 'x'
                  # Hexadecimal lowercase
                  num = printf_integer(numeric_arg)
+                 num &= 0xFFFFFFFFFFFFFFFF if num < 0
                  prefix = flags.include?('#') ? '0x' : ''
                  "#{prefix}#{num.to_s(16)}"
                when 'X'
                  # Hexadecimal uppercase
                  num = printf_integer(numeric_arg)
+                 num &= 0xFFFFFFFFFFFFFFFF if num < 0
                  prefix = flags.include?('#') ? '0X' : ''
                  "#{prefix}#{num.to_s(16).upcase}"
                when 'f', 'F'
