@@ -1082,7 +1082,9 @@ module Rubish
             cmd.run
             exit(cmd.success? ? 0 : 1)
           elsif cmd.assignment_only?
-            exit(0) # `x=1 | cmd`: the assignment happens in the subshell (bash)
+            # `x=1 | cmd`: the assignment happens in the subshell; a readonly
+            # variable is still reported (bash)
+            exit(Builtins.context.handle_bare_assignments([cmd.name]) ? 0 : 1)
           elsif Command.function?(cmd.name)
             exit(Command.child_status(cmd.name) { Command.call_function(cmd.name, cmd.args) })
           elsif Builtins.builtin?(cmd.name)
@@ -1270,7 +1272,7 @@ module Rubish
             cmd.run
             exit(cmd.success? ? 0 : 1)
           elsif cmd.assignment_only?
-            exit(0) # the assignment happens in the subshell (bash)
+            exit(Builtins.context.handle_bare_assignments([cmd.name]) ? 0 : 1) # in the subshell (bash)
           elsif Command.function?(cmd.name)
             result = Command.call_function(cmd.name, cmd.args)
             exit(result ? 0 : 1)
