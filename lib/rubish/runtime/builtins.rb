@@ -2404,8 +2404,9 @@ module Rubish
 
     def source(args)
       if args.empty?
-        puts 'source: usage: source filename [arguments]'
-        return false
+        $stderr.puts 'rubish: source: filename argument required'
+        $stderr.puts 'source: usage: source [-p path] filename [arguments]'
+        return ExitStatus.new(2)
       end
 
       file = args.first
