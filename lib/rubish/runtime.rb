@@ -1087,6 +1087,8 @@ module Rubish
     def __evaluate_condition(&block)
       @last_subst_status = nil
       result = block.call
+      # The condition is a command like any other to set -x
+      announce_command(result) if result.is_a?(Command) || result.is_a?(Pipeline)
       if __bare_assignment_command?(result)
         # `if x=$(cmd); then` tests the substitution's status
         __run_bare_assignment(result) == 0
