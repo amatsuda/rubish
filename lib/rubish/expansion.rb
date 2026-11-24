@@ -493,7 +493,7 @@ module Rubish
       return __param_indirect_rest($1, $2) if content =~ %r{\A!([a-zA-Z_][a-zA-Z0-9_]*)((?::|[-=+?#%/^,@]).*)\z}m
 
       # ${!var} - indirect expansion
-      return __param_indirect($1) if content =~ /\A!([a-zA-Z_][a-zA-Z0-9_]*)\z/
+      return __param_indirect($1) if content =~ /\A!([a-zA-Z_][a-zA-Z0-9_]*|#)\z/ # ${!name}, ${!#}
 
       # ${var:-default}, ${var-default}, etc.
       # Also handles positional parameters: ${1:-default}, ${10:-default}, etc.

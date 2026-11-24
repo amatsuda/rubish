@@ -522,6 +522,9 @@ module Rubish
     end
 
     def __param_indirect(var_name)
+      # ${!#}: the last positional parameter
+      return (positional_params.last || '') if var_name == '#'
+
       # ${!ref} of a nameref gives the name it refers to (bash)
       return Builtins.resolve_nameref(var_name) || '' if Builtins.nameref?(var_name)
 

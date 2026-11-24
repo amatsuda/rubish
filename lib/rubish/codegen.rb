@@ -1593,7 +1593,7 @@ module Rubish
       end
 
       # Handle ${!var} - indirect expansion
-      if content =~ /\A!([a-zA-Z_][a-zA-Z0-9_]*)\z/
+      if content =~ /\A!([a-zA-Z_][a-zA-Z0-9_]*|#)\z/ # ${!name}, ${!#}
         var_name = $1
         return "__param_indirect(#{var_name.inspect})"
       end
