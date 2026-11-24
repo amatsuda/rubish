@@ -1385,6 +1385,9 @@ module Rubish
       end
 
       begin
+        # The loops around the call do not enclose the function's body (bash)
+        saved_loop_depth = Builtins.loop_depth
+        Builtins.loop_depth = 0
         return_code = catch(:return) do
           begin
             result = func_block.call
@@ -1396,6 +1399,7 @@ module Rubish
         @last_status = return_code
         ExitStatus.new(return_code)
       ensure
+        Builtins.loop_depth = saved_loop_depth
         # Run RETURN trap before leaving function (if functrace is on, trap exists)
         Builtins.return_trap
 

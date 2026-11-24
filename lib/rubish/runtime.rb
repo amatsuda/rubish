@@ -1107,6 +1107,15 @@ module Rubish
       __binding__.eval(expression)
     end
 
+    # Count loop nesting, so break and continue know whether a loop encloses
+    # them (a function body starts the count afresh, as in bash)
+    def __in_loop
+      Builtins.loop_depth += 1
+      yield
+    ensure
+      Builtins.loop_depth -= 1
+    end
+
     def __for_loop(variable, items, &block)
       items.each do |item|
         Builtins.set_var(variable, item)

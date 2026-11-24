@@ -96,6 +96,16 @@ module Rubish
         @subshell_level = level
       end
 
+      # How many loops enclose the command that is running; a function body
+      # starts from 0
+      def loop_depth
+        @loop_depth || 0
+      end
+
+      def loop_depth=(depth)
+        @loop_depth = depth
+      end
+
 
       # Delegate commonly-used methods to the context for backward compatibility
       # These allow code like `Builtins.run(...)` to work
@@ -3246,6 +3256,12 @@ module Rubish
 
     # The count given to break/continue: 1 when absent; a non-number is an
     # error (status 2) and 0 is out of range (status 1), as in bash
+    # bash warns and goes on with status 0
+    def loop_control_outside_loop(name)
+      $stderr.puts "rubish: #{name}: only meaningful in a `for', `while', or `until' loop"
+      true
+    end
+
     def loop_control_count(name, args)
       return 1 if args.first.nil?
 
@@ -3262,6 +3278,8 @@ module Rubish
     end
 
     def break_(args)
+      return loop_control_outside_loop('break') if Builtins.loop_depth.zero?
+
       # Optional: break N to break out of N levels (default 1)
       levels = loop_control_count('break', args)
       return levels if levels.is_a?(ExitStatus)
@@ -3274,6 +3292,8 @@ module Rubish
     end
 
     def continue(args)
+      return loop_control_outside_loop('continue') if Builtins.loop_depth.zero?
+
       # Optional: continue N to continue Nth enclosing loop (default 1)
       levels = loop_control_count('continue', args)
       return levels if levels.is_a?(ExitStatus)

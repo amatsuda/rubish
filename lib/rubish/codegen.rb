@@ -710,7 +710,7 @@ module Rubish
 
       # Generate the each loop
       parts = []
-      parts << '__loop_break = catch(:break_loop) do'
+      parts << '__loop_break = __in_loop { catch(:break_loop) do'
       parts << "__each_loop(#{var_name.inspect}, -> { #{source_code} }, #{body.inspect}) do |__line|"
       parts << '__loop_cont = catch(:continue_loop) do'
       parts << "#{var_name} = __line"
@@ -740,6 +740,7 @@ module Rubish
       parts << 'next if __loop_cont'
       parts << 'end'
       parts << 'nil; end'
+      parts << '}'
       parts << 'throw(:break_loop, __loop_break - 1) if __loop_break.is_a?(Integer) && __loop_break > 1'
       each_code = parts.join("\n")
 
@@ -1002,7 +1003,7 @@ module Rubish
 
     def generate_while(node)
       parts = []
-      parts << '__loop_break = catch(:break_loop) do'
+      parts << '__loop_break = __in_loop { catch(:break_loop) do'
       parts << "while __condition { #{generate(node.condition)} }"
       parts << '__loop_cont = catch(:continue_loop) do'
       parts << generate_loop_body(node.body)
@@ -1011,13 +1012,14 @@ module Rubish
       parts << 'next if __loop_cont'
       parts << 'end'
       parts << 'nil; end'
+      parts << '}'
       parts << 'throw(:break_loop, __loop_break - 1) if __loop_break.is_a?(Integer) && __loop_break > 1'
       parts.join("\n")
     end
 
     def generate_until(node)
       parts = []
-      parts << '__loop_break = catch(:break_loop) do'
+      parts << '__loop_break = __in_loop { catch(:break_loop) do'
       parts << "until __condition { #{generate(node.condition)} }"
       parts << '__loop_cont = catch(:continue_loop) do'
       parts << generate_loop_body(node.body)
@@ -1026,6 +1028,7 @@ module Rubish
       parts << 'next if __loop_cont'
       parts << 'end'
       parts << 'nil; end'
+      parts << '}'
       parts << 'throw(:break_loop, __loop_break - 1) if __loop_break.is_a?(Integer) && __loop_break > 1'
       parts.join("\n")
     end
@@ -1033,7 +1036,7 @@ module Rubish
     def generate_for(node)
       items = node.items.map { |i| generate_for_item(i) }.join(', ')
       parts = []
-      parts << '__loop_break = catch(:break_loop) do'
+      parts << '__loop_break = __in_loop { catch(:break_loop) do'
       parts << "__for_loop(#{escape_string(node.variable)}, [#{items}].flatten) do"
       parts << '__loop_cont = catch(:continue_loop) do'
       parts << generate_loop_body(node.body)
@@ -1042,6 +1045,7 @@ module Rubish
       parts << 'next if __loop_cont'
       parts << 'end'
       parts << 'nil; end'
+      parts << '}'
       parts << 'throw(:break_loop, __loop_break - 1) if __loop_break.is_a?(Integer) && __loop_break > 1'
       parts.join("\n")
     end
@@ -1049,7 +1053,7 @@ module Rubish
     def generate_arith_for(node)
       # C-style for loop: for ((init; cond; update)); do body; done
       parts = []
-      parts << '__loop_break = catch(:break_loop) do'
+      parts << '__loop_break = __in_loop { catch(:break_loop) do'
       parts << "__arith_for_loop(#{node.init.inspect}, #{node.condition.inspect}, #{node.update.inspect}) do"
       parts << '__loop_cont = catch(:continue_loop) do'
       parts << generate_loop_body(node.body)
@@ -1058,6 +1062,7 @@ module Rubish
       parts << 'next if __loop_cont'
       parts << 'end'
       parts << 'nil; end'
+      parts << '}'
       parts << 'throw(:break_loop, __loop_break - 1) if __loop_break.is_a?(Integer) && __loop_break > 1'
       parts.join("\n")
     end
@@ -1105,7 +1110,7 @@ module Rubish
     def generate_select(node)
       items = node.items.map { |i| generate_for_item(i) }.join(', ')
       parts = []
-      parts << '__loop_break = catch(:break_loop) do'
+      parts << '__loop_break = __in_loop { catch(:break_loop) do'
       parts << "__select_loop(#{escape_string(node.variable)}, [#{items}].flatten) do"
       parts << '__loop_cont = catch(:continue_loop) do'
       parts << generate_loop_body(node.body)
@@ -1114,6 +1119,7 @@ module Rubish
       parts << 'next if __loop_cont'
       parts << 'end'
       parts << 'nil; end'
+      parts << '}'
       parts << 'throw(:break_loop, __loop_break - 1) if __loop_break.is_a?(Integer) && __loop_break > 1'
       parts.join("\n")
     end
