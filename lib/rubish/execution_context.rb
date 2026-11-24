@@ -834,6 +834,17 @@ module Rubish
       when '-x' then File.executable?(arg)
       when '-s' then File.exist?(arg) && File.size(arg) > 0
       when '-L', '-h' then File.symlink?(arg)
+      when '-a' then File.exist?(arg)
+      when '-p' then File.exist?(arg) && File.stat(arg).pipe?
+      when '-S' then File.exist?(arg) && File.stat(arg).socket?
+      when '-c' then File.exist?(arg) && File.stat(arg).chardev?
+      when '-b' then File.exist?(arg) && File.stat(arg).blockdev?
+      when '-O' then File.exist?(arg) && File.stat(arg).owned?
+      when '-G' then File.exist?(arg) && File.stat(arg).grpowned?
+      when '-k' then File.exist?(arg) && File.stat(arg).sticky?
+      when '-g' then File.exist?(arg) && File.stat(arg).setgid?
+      when '-u' then File.exist?(arg) && File.stat(arg).setuid?
+      when '-N' then File.exist?(arg) && File.stat(arg).mtime > File.stat(arg).atime
       when '-v' then Builtins.var_set?(arg)
       else false
       end
