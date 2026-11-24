@@ -329,6 +329,13 @@ module Rubish
     # u: Uppercase first character
     # L: Lowercase entire value
     # K: For associative arrays, show key-value pairs
+    # ${x@P}: the value as a prompt; promptvars (on by default) then expands
+    # the parameters in it, as for PS1
+    def __prompt_transform(value)
+      text = expand_prompt(value)
+      Builtins.shopt_enabled?('promptvars') ? expand_string_content(text, quoted: true) : text
+    end
+
     def __param_transform(var_name, operator)
       # @k: the key/value pairs of @K, unquoted
       if operator == 'k' && var_name =~ /\A([a-zA-Z_][a-zA-Z0-9_]*)\[[@*]\]\z/
@@ -361,7 +368,7 @@ module Rubish
       case operator
       when 'Q' then value.nil? ? '' : __shell_quote_value(value)
       when 'E' then value.nil? ? '' : Builtins.process_escape_sequences(value)
-      when 'P' then value.nil? ? '' : expand_prompt(value)
+      when 'P' then value.nil? ? '' : __prompt_transform(value)
       when 'A'
         # An assignment that recreates the variable: `x='v'`, `declare -i n='3'`
         # when it has attributes, or a compound assignment for an array
