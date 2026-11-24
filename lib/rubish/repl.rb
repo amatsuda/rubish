@@ -1460,7 +1460,8 @@ module Rubish
       ensure
         @last_status = @context.last_status unless eval_completed
       end
-      announce_command(result)
+      # A command __run_cmd already ran (the last of a list) was announced there
+      announce_command(result) unless result.respond_to?(:ran?) && result.ran?
       if result.is_a?(Command) && result.name == 'exec'
         # Don't auto-run exec - it's handled specially in execute method
         # to support redirections without command replacement
