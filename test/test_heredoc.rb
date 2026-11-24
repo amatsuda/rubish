@@ -316,13 +316,14 @@ class TestHeredoc < Test::Unit::TestCase
   end
 
   # Helper tests
-  def test_detect_heredoc
-    assert_equal ['EOF', false], Rubish::Builtins.detect_heredoc('cat <<EOF')
-    assert_equal ['END', false], Rubish::Builtins.detect_heredoc('cat << END')
-    assert_equal ['EOF', true], Rubish::Builtins.detect_heredoc('cat <<-EOF')
-    assert_equal ['MARKER', false], Rubish::Builtins.detect_heredoc("cat <<'MARKER'")
-    assert_equal ['MARKER', false], Rubish::Builtins.detect_heredoc('cat <<"MARKER"')
-    assert_nil Rubish::Builtins.detect_heredoc('cat <<< hello')  # herestring
-    assert_nil Rubish::Builtins.detect_heredoc('echo hello')     # no heredoc
+  def test_detect_heredocs
+    assert_equal [['EOF', false]], Rubish::Builtins.detect_heredocs('cat <<EOF')
+    assert_equal [['END', false]], Rubish::Builtins.detect_heredocs('cat << END')
+    assert_equal [['EOF', true]], Rubish::Builtins.detect_heredocs('cat <<-EOF')
+    assert_equal [['MARKER', false]], Rubish::Builtins.detect_heredocs("cat <<'MARKER'")
+    assert_equal [['MARKER', false]], Rubish::Builtins.detect_heredocs('cat <<"MARKER"')
+    assert_equal [['A', false], ['B', true]], Rubish::Builtins.detect_heredocs('cat <<A <<-B')
+    assert_equal [], Rubish::Builtins.detect_heredocs('cat <<< hello')  # herestring
+    assert_equal [], Rubish::Builtins.detect_heredocs('echo hello')     # no heredoc
   end
 end

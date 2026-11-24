@@ -55,7 +55,7 @@ module Rubish
       @script_name = 'rubish'
       @positional_params = []
       @functions = {}
-      @heredoc_content = nil  # Content for current heredoc
+      @heredoc_contents = nil  # Bodies of the heredocs of the command being run, in order
       @seconds_base = Time.now  # For SECONDS variable
       @random_generator = Random.new  # For RANDOM variable
       @lineno = 1  # For LINENO variable
@@ -106,7 +106,6 @@ module Rubish
       @state.function_remover = ->(name) { @functions.delete(name) }
       @state.function_lister = -> { @functions.transform_values { |v| {source: v[:source_code], file: v[:source], lineno: v[:lineno]} } }
       @state.function_getter = ->(name) { f = @functions[name]; f ? {source: f[:source_code], file: f[:source], lineno: f[:lineno]} : nil }
-      @state.heredoc_content_setter = ->(content) { @heredoc_content = content }
       @state.command_executor = ->(args) { execute_command_directly(args) }
       @state.source_file_getter = -> { @current_source_file }
       @state.source_file_setter = ->(file) { @current_source_file = file }
@@ -1061,13 +1060,12 @@ module Rubish
       end
 
       # Variable expansion now happens at runtime in generated Ruby code
-      # If input has embedded heredoc body (eg. from execute() or source), strip the body
-      # before lexing so it isn't tokenized as additional commands, and pre-set the content.
+      # If the input has heredoc bodies in it (a -c string, a script, eval),
+      # take them out before lexing so they are not tokenized as commands,
+      # and queue them for the heredocs in order
       lex_line = line
-      if line.include?("\n") && @heredoc_content.nil? && (m = line.match(/(?<!<)<<(?!<)(-?)\s*(['"]?)(\w+)\2/))
-        strip_tabs = m[1] == '-'
-        delimiter  = m[3]
-        lex_line, @heredoc_content = extract_heredoc_from_string(line, delimiter, strip_tabs)
+      if line.include?("\n") && @heredoc_contents.nil? && line.match?(HEREDOC_OPERATOR)
+        lex_line, @heredoc_contents = extract_heredocs_from_string(line)
       end
 
       # Handle multi-line commands (cmdhist): collect continuation lines if parse fails
@@ -1115,11 +1113,15 @@ module Rubish
         end
       end
 
-      # Check for heredocs and collect content if needed
-      # Skip if content was already set (e.g., by source command)
-      if (heredoc = find_heredoc(ast)) && @heredoc_content.nil?
-        @heredoc_content = collect_heredoc_content(heredoc.delimiter, heredoc.strip_tabs)
-        update_history_with_heredoc(line, heredoc.delimiter, @heredoc_content)
+      # Each heredoc takes the next queued body, or reads one from the
+      # frontend; the bodies are then baked into the generated code, so a
+      # function keeps its heredoc text after this command is over
+      heredocs = find_heredocs(ast)
+      heredoc_contents = heredocs.map do |heredoc|
+        @heredoc_contents&.shift || collect_heredoc_content(heredoc.delimiter, heredoc.strip_tabs)
+      end
+      if heredocs.any? && !line.include?("\n")
+        update_history_with_heredoc(line, heredocs.first.delimiter, heredoc_contents.first)
       end
 
       # Check for bare variable assignment (VAR=value or VAR=value VAR2=value2 ...)
@@ -1223,7 +1225,7 @@ module Rubish
         end
       end
 
-      code = @codegen.generate(ast)
+      code = Codegen.new(heredoc_contents: heredoc_contents).generate(ast)
       result = eval_in_context(code)
 
       # Special handling for exec with redirections
@@ -1256,7 +1258,7 @@ module Rubish
       @execute_depth -= 1
       # The outermost command is over: its process substitutions are too
       cleanup_all_proc_subs if @execute_depth == 0
-      @heredoc_content = nil
+      @heredoc_contents = nil if @execute_depth == 0
     end
 
     # Process substitutions are registered on whichever object evaluated
@@ -1414,7 +1416,6 @@ module Rubish
       @context.lineno = @lineno
       @context.pipestatus = @pipestatus
       @context.functions = @functions
-      @context.heredoc_content = @heredoc_content
       @context.instance_variable_set(:@positional_params, @positional_params)
       @context.instance_variable_set(:@argv0, @script_name)
       @context.instance_variable_set(:@script_name, @script_name)
@@ -2563,48 +2564,51 @@ module Rubish
       expand_string_content(content, quoted: true, heredoc: true)
     end
 
-    def find_heredoc(ast)
+    # Every heredoc node in the tree, in source order (the order the
+    # bodies follow their lines in the input)
+    def find_heredocs(ast, found = [])
       case ast
       when AST::Heredoc
-        ast
-      when AST::Redirect
-        find_heredoc(ast.command)
-      when AST::Pipeline
-        ast.commands.each do |cmd|
-          if (h = find_heredoc(cmd))
-            return h
-          end
-        end
-        nil
-      when AST::List
-        ast.commands.each do |cmd|
-          if (h = find_heredoc(cmd))
-            return h
-          end
-        end
-        nil
-      else
-        nil
+        # `cat <<A <<B` nests B around A: the inner node is the earlier operator
+        find_heredocs(ast.command, found)
+        found << ast
+      when Array
+        ast.each { |node| find_heredocs(node, found) }
+      when Data
+        ast.to_h.each_value { |value| find_heredocs(value, found) }
       end
+      found
     end
 
-    def extract_heredoc_from_string(input, delimiter, strip_tabs)
-      first_line, *rest = input.split("\n", -1)
-      body = []
-      remainder = []
-      past_delim = false
-      rest&.each do |l|
-        if past_delim
-          remainder << l
-        else
-          check = strip_tabs ? l.sub(/\A\t+/, '') : l
-          past_delim = (check == delimiter)
-          body << l unless past_delim
+    # A heredoc operator and its delimiter word; not a herestring
+    HEREDOC_OPERATOR = /(?<![<>])<<(?!<)(-?)\s*(['"]?)(\w+)\2/
+
+    # Split input that carries heredoc bodies into the text to lex and the
+    # bodies, in order: each line's operators are followed by their bodies
+    def extract_heredocs_from_string(input)
+      lines = input.split("\n", -1)
+      lex_lines = []
+      contents = []
+      i = 0
+      while i < lines.length
+        line = lines[i]
+        i += 1
+        lex_lines << line
+        line.scan(HEREDOC_OPERATOR).each do |dash, _quote, delimiter|
+          strip_tabs = dash == '-'
+          body = []
+          while i < lines.length
+            candidate = lines[i]
+            i += 1
+            check = strip_tabs ? candidate.sub(/\A\t+/, '') : candidate
+            break if check == delimiter
+
+            body << candidate
+          end
+          contents << (body.empty? ? '' : body.join("\n") + "\n")
         end
       end
-      content  = body.empty? ? '' : body.join("\n") + "\n"
-      lex_line = remainder.empty? ? first_line : "#{first_line}\n#{remainder.join("\n")}"
-      [lex_line, content]
+      [lex_lines.join("\n"), contents]
     end
 
     def collect_heredoc_content(delimiter, strip_tabs)

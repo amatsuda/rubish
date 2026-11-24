@@ -1522,8 +1522,12 @@ module Rubish
       [@stdin, @stdout, err]
     end
 
-    attr_reader :status
+    attr_reader :status, :block
     attr_accessor :stdin, :stdout, :stderr, :pipe_stdout
+
+    def compound?
+      @compound
+    end
 
     # compound: the block is a compound command (brace group, loop,
     # conditional) that runs when called, rather than one that builds a
@@ -1565,6 +1569,14 @@ module Rubish
       return run_compound if @compound
 
       cmd = @block.call
+      # `cat <<A <<B` nests A's heredoc inside B's: the later one, this, is
+      # the command's stdin, so take over the inner one's command
+      while cmd.is_a?(HeredocCommand)
+        @block = cmd.block
+        return run_compound if cmd.compound?
+
+        cmd = @block.call
+      end
       if cmd.is_a?(Command) || cmd.is_a?(Pipeline)
         # Create a pipe for heredoc content
         reader, writer = IO.pipe

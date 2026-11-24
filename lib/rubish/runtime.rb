@@ -1468,8 +1468,8 @@ module Rubish
       ExitStatus.new(status ? 1 : 0)
     end
 
-    def __heredoc(delimiter, expand, strip_tabs, compound = false, &block)
-      content = @heredoc_content || ''
+    def __heredoc(delimiter, expand, strip_tabs, compound = false, content = nil, &block)
+      content ||= ''
 
       # Apply tab stripping if <<- was used
       if strip_tabs

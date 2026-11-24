@@ -2477,6 +2477,7 @@ module Rubish
     # diagnostics (file path for source, `(eval)` for eval).
     def process_script_lines(lines, file_label)
       buffer = +''
+      statement = +'' # the buffer with its heredoc bodies
       depth = 0
       pending_function_def = false  # Track if we're waiting for { after ()
       # Track open control structures for better error messages: [[keyword, line_number], ...]
@@ -2515,25 +2516,18 @@ module Rubish
           next
         end
 
-        # Check for heredoc in this line
-        heredoc_info = detect_heredoc(line)
-        if heredoc_info
-          delimiter, strip_tabs = heredoc_info
-          heredoc_lines = []
-          # Collect heredoc content from subsequent lines
+        # The bodies of this line's heredocs go with the statement, verbatim,
+        # for execute to take out again; they take no part in the depth and
+        # quote tracking below
+        heredoc_text = +''
+        detect_heredocs(line).each do |delimiter, strip_tabs|
           while i < lines.length
             heredoc_line = lines[i]
             i += 1
-            # Check for delimiter (possibly with leading tabs if strip_tabs)
+            heredoc_text << "\n" << heredoc_line
             check_line = strip_tabs ? heredoc_line.sub(/\A\t+/, '') : heredoc_line
-            if check_line.strip == delimiter
-              break
-            end
-            heredoc_lines << heredoc_line
+            break if check_line.strip == delimiter
           end
-          # Set heredoc content before executing
-          content = heredoc_lines.join("\n") + (heredoc_lines.empty? ? '' : "\n")
-          @state.heredoc_content_setter&.call(content)
         end
 
         # Remember if we're waiting for function body BEFORE processing this line
@@ -2599,8 +2593,10 @@ module Rubish
         # the parser). starship's init has both shapes.
         if buffer.empty?
           buffer = line
+          statement = line + heredoc_text
         else
           buffer = "#{buffer}\n#{line}"
+          statement = "#{statement}\n#{line}#{heredoc_text}"
         end
 
         # Execute when we have a complete statement
@@ -2610,7 +2606,7 @@ module Rubish
         # - no unclosed quotes in the buffer
         if depth == 0 && !pending_function_def && !has_unclosed_quotes(buffer) && !statement_continues?(buffer)
           begin
-            execute_sourced_command(buffer, file_label, buffer_start_line)
+            execute_sourced_command(statement, file_label, buffer_start_line)
           rescue SyntaxError, StandardError => e
             # rubish's parser raises plain RuntimeError ("Expected fi …"),
             # not SyntaxError — catch both so a malformed statement in the
@@ -2647,7 +2643,7 @@ module Rubish
         end
 
         begin
-          execute_sourced_command(buffer, file_label, buffer_start_line)
+          execute_sourced_command(statement, file_label, buffer_start_line)
         rescue ShellSyntaxError => e
           # The rest of the file is not run, as in bash; $? is already 2
           $stderr.puts "#{file_label}: line #{buffer_start_line}: #{e.message}"
@@ -8063,27 +8059,12 @@ module Rubish
       false
     end
 
-    def detect_heredoc(line)
-      # Detect heredoc in a line: <<WORD, <<-WORD, <<'WORD', <<"WORD"
-      # Does not match herestrings (<<<)
-      # Returns [delimiter, strip_tabs] or nil
-      return nil unless line.include?('<<')
-      return nil if line.include?('<<<')  # Skip herestrings
+    # The heredocs a line opens, as [delimiter, strip_tabs] pairs in order
+    # (<<WORD, <<-WORD, <<'WORD', <<"WORD"; not herestrings)
+    def detect_heredocs(line)
+      return [] unless line.include?('<<')
 
-      # Match heredoc patterns
-      # <<-'DELIM' or <<-"DELIM" or <<-DELIM (strip tabs)
-      if line =~ /<<-\s*(['"])([^'"]+)\1/
-        return [$2, true]
-      elsif line =~ /<<-\s*([a-zA-Z_][a-zA-Z0-9_]*)/
-        return [$1, true]
-      # <<'DELIM' or <<"DELIM" or <<DELIM (no strip tabs)
-      elsif line =~ /<<\s*(['"])([^'"]+)\1/
-        return [$2, false]
-      elsif line =~ /<<\s*([a-zA-Z_][a-zA-Z0-9_]*)/
-        return [$1, false]
-      end
-
-      nil
+      line.scan(REPL::HEREDOC_OPERATOR).map { |dash, _quote, delimiter| [delimiter, dash == '-'] }
     end
   end
 end

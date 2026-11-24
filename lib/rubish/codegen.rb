@@ -4,6 +4,13 @@ require_relative 'word_segments'
 
 module Rubish
   class Codegen
+    # The bodies of the heredocs in the input, in source order; each
+    # generated __heredoc call embeds its own body
+    def initialize(heredoc_contents: nil)
+      @heredoc_contents = heredoc_contents
+      @heredoc_index = 0
+    end
+
     def generate(node)
       case node
       when AST::Command
@@ -1286,9 +1293,9 @@ module Rubish
     # built by the block and run afterwards
     def generate_heredoc(node)
       cmd_code = generate(node.command)
-      # Content is set by REPL/source before execution
-      # At codegen time, we generate a call to __heredoc with placeholder
-      "__heredoc(#{node.delimiter.inspect}, #{node.expand}, #{node.strip_tabs}, #{compound_command?(node.command)}) { #{cmd_code} }"
+      content = @heredoc_contents && @heredoc_contents[@heredoc_index]
+      @heredoc_index += 1
+      "__heredoc(#{node.delimiter.inspect}, #{node.expand}, #{node.strip_tabs}, #{compound_command?(node.command)}, #{content.inspect}) { #{cmd_code} }"
     end
 
     def generate_herestring(node)

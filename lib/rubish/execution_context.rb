@@ -52,7 +52,7 @@ module Rubish
 
     attr_reader :state
     attr_accessor :last_status, :last_bg_pid, :lineno, :pipestatus
-    attr_accessor :functions, :heredoc_content, :command_number
+    attr_accessor :functions, :command_number
     attr_accessor :subshell_level, :rubish_command
     attr_accessor :next_varname_fd, :varname_fds
 
@@ -63,7 +63,6 @@ module Rubish
       @lineno = 1
       @pipestatus = []
       @functions = {}
-      @heredoc_content = nil
       @command_number = 1
       @subshell_level = 0
       @next_varname_fd = 10
