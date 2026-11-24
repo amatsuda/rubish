@@ -159,7 +159,14 @@ module Rubish
     def get_array_element(name, index)
       arr = @state.arrays[name]
       return '' unless arr
-      arr[index.to_i] || ''
+
+      index = index.to_i
+      if index.negative? && index.abs > arr.length
+        # Before the start of the array (bash)
+        $stderr.puts "rubish: #{name}: bad array subscript"
+        return ''
+      end
+      arr[index] || ''
     end
 
     def set_array_element(name, index, value)
