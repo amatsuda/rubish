@@ -2380,15 +2380,15 @@ module Rubish
       # expand_aliases: when disabled, don't expand aliases
       return line unless shopt_enabled?('expand_aliases')
 
-      # Extract the first word
-      first_word = line.split(/\s/, 2).first
-      return line unless first_word
+      # The first word of the expansion is checked for an alias in turn,
+      # except for one already being expanded (bash)
+      expanded = []
+      loop do
+        first_word = line.split(/\s/, 2).first
+        return line unless first_word && @state.aliases.key?(first_word) && !expanded.include?(first_word)
 
-      if @state.aliases.key?(first_word)
-        rest = line[first_word.length..]
-        "#{@state.aliases[first_word]}#{rest}"
-      else
-        line
+        expanded << first_word
+        line = "#{@state.aliases[first_word]}#{line[first_word.length..]}"
       end
     end
 
