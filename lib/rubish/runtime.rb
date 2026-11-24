@@ -908,6 +908,8 @@ module Rubish
         __with_stdout_redirect(target, 'a') { yield }
       when '<'
         __with_stdin_redirect(target) { yield }
+      when '<>'
+        __with_stdin_redirect(target, File::RDWR | File::CREAT) { yield }
       when '2>'
         __with_stderr_redirect(target) { yield }
       when '2>>'
@@ -993,8 +995,8 @@ module Rubish
       end
     end
 
-    def __with_stdin_redirect(file)
-      io = __open_redirect_target(file, 'r') or return ExitStatus.new(1)
+    def __with_stdin_redirect(file, mode = 'r')
+      io = __open_redirect_target(file, mode) or return ExitStatus.new(1)
       old_stdin = $stdin
       begin
         $stdin = io

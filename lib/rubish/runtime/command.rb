@@ -410,8 +410,13 @@ module Rubish
       self
     end
 
-    def redirect_in(file)
-      @stdin = File.open(file, 'r')
+    # `<>file`: stdin opened for reading and writing (bash)
+    def redirect_rw(file)
+      redirect_in(file, File::RDWR | File::CREAT)
+    end
+
+    def redirect_in(file, mode = 'r')
+      @stdin = File.open(file, mode)
       self
     rescue SystemCallError => e
       $stderr.puts "rubish: #{file}: #{e.class.new.message}"
@@ -595,6 +600,7 @@ module Rubish
       when '>', '>|' then [target, 'w']
       when '>>' then [target, 'a']
       when '<' then [target, 'r']
+      when '<>' then [target, File::RDWR | File::CREAT] # read and write
       when '<<<' then content_file("#{target}\n")
       when '>&', '<&'
         if target == '-'
@@ -945,8 +951,13 @@ module Rubish
       self
     end
 
-    def redirect_in(file)
-      @commands.first.redirect_in(file)
+    # `<>file`: stdin opened for reading and writing (bash)
+    def redirect_rw(file)
+      redirect_in(file, File::RDWR | File::CREAT)
+    end
+
+    def redirect_in(file, mode = 'r')
+      @commands.first.redirect_in(file, mode)
       self
     end
 
@@ -1467,8 +1478,13 @@ module Rubish
       self
     end
 
-    def redirect_in(file)
-      @stdin = File.open(file, 'r')
+    # `<>file`: stdin opened for reading and writing (bash)
+    def redirect_rw(file)
+      redirect_in(file, File::RDWR | File::CREAT)
+    end
+
+    def redirect_in(file, mode = 'r')
+      @stdin = File.open(file, mode)
       self
     rescue SystemCallError => e
       $stderr.puts "rubish: #{file}: #{e.class.new.message}"
@@ -1757,7 +1773,12 @@ module Rubish
       self
     end
 
-    def redirect_in(file)
+    # `<>file`: stdin opened for reading and writing (bash)
+    def redirect_rw(file)
+      redirect_in(file, File::RDWR | File::CREAT)
+    end
+
+    def redirect_in(file, mode = 'r')
       # For heredoc, stdin comes from content, so this is ignored
       self
     end

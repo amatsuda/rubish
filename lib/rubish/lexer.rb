@@ -23,6 +23,7 @@ module Rubish
       '2>>' => :REDIRECT_ERR_APPEND,  # Append stderr to file
       '&>' => :REDIRECT_BOTH,         # Both stdout and stderr to file
       '&>>' => :REDIRECT_BOTH_APPEND, # Append both to file
+      '<>' => :REDIRECT_RW,           # Open for reading and writing
       '>&' => :DUP_OUT,       # Duplicate output FD
       '2>&' => :DUP_ERR,      # Duplicate stderr FD (2>&1, 2>&-, etc.)
       '<&' => :DUP_IN,        # Duplicate input FD
@@ -74,7 +75,7 @@ module Rubish
       AND OR AMPERSAND NEWLINE LPAREN LBRACE
       REDIRECT_OUT REDIRECT_CLOBBER REDIRECT_APPEND
       REDIRECT_IN REDIRECT_ERR
-      DUP_OUT DUP_IN DUP_ERR REDIRECT_ERR_APPEND FD_REDIRECT REDIRECT_BOTH REDIRECT_BOTH_APPEND
+      DUP_OUT DUP_IN DUP_ERR REDIRECT_ERR_APPEND FD_REDIRECT REDIRECT_BOTH REDIRECT_BOTH_APPEND REDIRECT_RW
       HEREDOC HEREDOC_INDENT HERESTRING
       VARNAME_REDIRECT
     ].freeze
@@ -297,14 +298,14 @@ module Rubish
       # the runtime can open / dup / close that specific descriptor.
       # Whitespace already got skipped before read_token, so `echo 1
       # >file` (with the space) still keeps `1` as an arg.
-      if (md = @input[@pos..].match(/\A(\d+)(<<<|>>|>\||>&|>|<&|<)/))
+      if (md = @input[@pos..].match(/\A(\d+)(<<<|>>|>\||>&|>|<&|<>|<)/))
         fd_str, op = md[1], md[2]
         fd = fd_str.to_i
         if fd == 0 && op == '<<<'
           # `0<<< word` is the plain herestring
           @pos += fd_str.length + 3
           return read_herestring
-        elsif fd == 0 && %w[< <&].include?(op)
+        elsif fd == 0 && %w[< <& <>].include?(op)
           @pos += fd_str.length  # alias for bare op; fall through to operator match
         elsif fd == 1 && %w[> >> >| >&].include?(op)
           @pos += fd_str.length
@@ -316,7 +317,7 @@ module Rubish
         # operator checks above before we get here.
       end
       two_char = @input[@pos, 2]  # refresh after possibly consuming a digit prefix
-      if %w[>> >| 2> >& <& &> && || () ;; ;& |&].include?(two_char)
+      if %w[>> >| 2> >& <& &> <> && || () ;; ;& |&].include?(two_char)
         @pos += 2
         return Token.new(OPERATORS[two_char], two_char)
       end

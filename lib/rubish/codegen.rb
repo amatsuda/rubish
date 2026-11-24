@@ -870,6 +870,7 @@ module Rubish
                   when '2>>' then 'redirect_err_append'
                   when '&>' then 'redirect_both'
                   when '&>>' then 'redirect_both_append'
+                  when '<>' then 'redirect_rw'
                   when '>&' then 'dup_out'
                   when '2>&' then 'dup_err'
                   when '<&' then 'dup_in'
