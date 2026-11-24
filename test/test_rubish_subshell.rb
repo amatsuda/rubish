@@ -102,12 +102,9 @@ class TestRUBISH_SUBSHELL < Test::Unit::TestCase
 
   def test_rubish_subshell_in_command_substitution
     output_file = File.join(@tempdir, 'output.txt')
-    # Command substitution runs via system shell, not through REPL
-    # So RUBISH_SUBSHELL is not visible there (returns empty/0)
+    # A command substitution is one subshell level down (bash)
     execute("echo $(echo $RUBISH_SUBSHELL) > #{output_file}")
-    value = File.read(output_file).strip
-    # System shell doesn't know about RUBISH_SUBSHELL, so it's empty or 0
-    assert(value == '' || value == '0', "Expected empty or 0, got #{value}")
+    assert_equal '1', File.read(output_file).strip
   end
 
   def test_rubish_subshell_in_pipeline_subshell

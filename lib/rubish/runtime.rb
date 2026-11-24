@@ -54,7 +54,14 @@ module Rubish
     SUBST_IN_PROCESS_BUILTINS = %w[echo printf pwd basename dirname realpath true false].freeze
 
     def __run_subst(cmd)
-      in_process = __subst_in_process(cmd)
+      # A command substitution is a subshell level for BASH_SUBSHELL, even
+      # when its builtin runs in this process
+      Builtins.subshell_level += 1
+      begin
+        in_process = __subst_in_process(cmd)
+      ensure
+        Builtins.subshell_level -= 1
+      end
       return in_process unless in_process.nil?
 
       reader, writer = IO.pipe
@@ -63,6 +70,7 @@ module Rubish
 
       pid = fork do
         reader.close
+        Builtins.subshell_level += 1
         @proc_sub_fds = nil # the parent owns the pipe ends it keeps
         # Redirect stdout to the pipe using the constant STDOUT
         # This works even if $stdout has been redirected to a StringIO (for testing)
@@ -1198,8 +1206,7 @@ module Rubish
       return RUBY_PLATFORM if var_name == 'MACHTYPE'
       return @state.bash_command if var_name == 'RUBISH_COMMAND'
       return @state.bash_command if var_name == 'BASH_COMMAND'
-      return @subshell_level.to_s if var_name == 'RUBISH_SUBSHELL'
-      return @subshell_level.to_s if var_name == 'BASH_SUBSHELL'
+      return Builtins.subshell_level.to_s if var_name == 'RUBISH_SUBSHELL' || var_name == 'BASH_SUBSHELL'
       return terminal_columns.to_s if var_name == 'COLUMNS'
       return terminal_lines.to_s if var_name == 'LINES'
       return Builtins.comp_line if var_name == 'COMP_LINE'
@@ -1509,7 +1516,7 @@ module Rubish
       # Create a Subshell object that can be run, redirected, or piped
       # Wrap the block to increment subshell level before executing (in the forked process)
       Subshell.new do
-        @subshell_level += 1
+        Builtins.subshell_level += 1
         # The parent's traps are not inherited (ignored signals aside); an
         # EXIT trap set inside runs when the subshell ends, as in bash
         Builtins.reset_traps_for_subshell

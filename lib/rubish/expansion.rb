@@ -1036,7 +1036,7 @@ module Rubish
       when 'RUBISH_COMMAND', 'BASH_COMMAND' then @state.bash_command
       when 'FUNCNAME' then (@funcname_stack || []).first
       when 'RUBISH_SOURCE', 'BASH_SOURCE' then get_special_array_values(var_name).first # the array's first element
-      when 'RUBISH_SUBSHELL', 'BASH_SUBSHELL' then @subshell_level.to_s
+      when 'RUBISH_SUBSHELL', 'BASH_SUBSHELL' then Builtins.subshell_level.to_s
       when 'COLUMNS' then terminal_columns.to_s
       when 'LINES' then terminal_lines.to_s
       when 'COMP_LINE' then Builtins.comp_line

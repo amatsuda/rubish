@@ -86,6 +86,16 @@ module Rubish
         @context = ctx
       end
 
+      # Nesting level of subshells, for BASH_SUBSHELL. One counter for the
+      # REPL and its execution context alike; a fork takes a copy
+      def subshell_level
+        @subshell_level || 0
+      end
+
+      def subshell_level=(level)
+        @subshell_level = level
+      end
+
 
       # Delegate commonly-used methods to the context for backward compatibility
       # These allow code like `Builtins.run(...)` to work
