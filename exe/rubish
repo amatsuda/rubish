@@ -174,7 +174,7 @@ if command_string
   Rubish::Builtins.enable_restricted_mode if restricted
 
   exit_code = begin
-    catch(:exit) { repl.send(:execute, command_string) }
+    catch(:exit) { Rubish::Builtins.run_command_string(command_string) }
   rescue Rubish::ShellSyntaxError => e
     $stderr.puts "rubish: #{e.message}"
     2

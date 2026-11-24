@@ -732,7 +732,8 @@ module Rubish
         # (Ruby-style — enables `ls().sort` chaining).
         if @input[@pos + 1] == ')'
           peek = @pos + 2
-          peek += 1 while peek < @input.length && @input[peek] =~ /[ \t]/
+          # the body may start on the next line: `f()` newline `{` (bash)
+          peek += 1 while peek < @input.length && @input[peek] =~ /[ \t\n]/
           return read_func_call(value) unless function_body_start?(peek)
         else
           return read_func_call(value)

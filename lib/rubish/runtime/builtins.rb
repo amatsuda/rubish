@@ -2715,6 +2715,19 @@ module Rubish
       syntax_error ? 2 : nil
     end
 
+    # `rubish -c text`: the text is read a statement at a time, as bash
+    # reads it, so a line can turn on an option (extglob, expand_aliases)
+    # that the parsing of the next line relies on. 2 for a syntax error,
+    # else the last command's status.
+    def run_command_string(text)
+      old_sourcing = @state.sourcing_file
+      @state.sourcing_file = true
+      result = process_script_lines(text.split("\n", -1), 'rubish')
+      result == 2 ? 2 : (@state.last_status_getter&.call || 0)
+    ensure
+      @state.sourcing_file = old_sourcing
+    end
+
     # Execute a command from a sourced file, with optional profiling
     # The text so far cannot be a whole statement: it ends with a list or
     # pipe operator, with a backslash that joins the next line, or it has

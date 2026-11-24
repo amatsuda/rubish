@@ -526,6 +526,7 @@ module Rubish
     # redirections that apply to every call (`f() { ...; } > log`), or any
     # other compound command (`f() ( ... )`, `f() if ...; fi`)
     def parse_function_body(name)
+      skip_newline_tokens # `f()` newline `{` (bash)
       unless peek(:LBRACE)
         body = parse_command if compound_command_start?
         raise 'Expected "{" for function body' unless body
