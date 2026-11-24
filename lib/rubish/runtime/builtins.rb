@@ -1311,7 +1311,7 @@ module Rubish
 
             # Check if readonly
             if readonly?(var_name)
-              $stderr.puts "unset: #{var_name}: readonly variable"
+              $stderr.puts "rubish: unset: #{var_name}: cannot unset: readonly variable"
               had_error = true
               next
             end
@@ -1329,7 +1329,7 @@ module Rubish
 
           # Check if readonly
           if readonly?(name)
-            $stderr.puts "unset: #{name}: readonly variable"
+            $stderr.puts "rubish: unset: #{name}: cannot unset: readonly variable"
             had_error = true
             next
           end
@@ -2086,12 +2086,14 @@ module Rubish
       end
 
       args = args.drop(1) if args.first == '--'
+      ok = true # a readonly variable makes export fail (bash)
       begin
         args.each do |arg|
           if arg.include?('=')
             key, value = arg.split('=', 2)
             if readonly?(key)
-              $stderr.puts "export: #{key}: readonly variable"
+              $stderr.puts "rubish: #{key}: readonly variable"
+              ok = false
               next
             end
             if restricted_mode? && RESTRICTED_VARIABLES.include?(key)
@@ -2114,7 +2116,7 @@ module Rubish
           end
         end
       end
-      true
+      ok
     end
 
     def pwd(args)
