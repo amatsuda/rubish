@@ -163,9 +163,9 @@ class TestIFS < Test::Unit::TestCase
     end
     $stdin = STDIN
 
-    assert_equal 'hello', ENV['a']
-    assert_equal 'world', ENV['b']
-    assert_equal 'test', ENV['c']
+    assert_equal 'hello', Rubish::Builtins.get_var('a')
+    assert_equal 'world', Rubish::Builtins.get_var('b')
+    assert_equal 'test', Rubish::Builtins.get_var('c')
   end
 
   def test_read_with_colon_ifs
@@ -178,9 +178,9 @@ class TestIFS < Test::Unit::TestCase
     end
     $stdin = STDIN
 
-    assert_equal 'one', ENV['a']
-    assert_equal 'two', ENV['b']
-    assert_equal 'three:four', ENV['c']
+    assert_equal 'one', Rubish::Builtins.get_var('a')
+    assert_equal 'two', Rubish::Builtins.get_var('b')
+    assert_equal 'three:four', Rubish::Builtins.get_var('c')
   end
 
   def test_read_single_var_with_default_ifs
@@ -193,7 +193,7 @@ class TestIFS < Test::Unit::TestCase
     end
     $stdin = STDIN
 
-    assert_equal 'hello   world', ENV['result']
+    assert_equal 'hello   world', Rubish::Builtins.get_var('result')
   end
 
   def test_read_array_with_colon_ifs

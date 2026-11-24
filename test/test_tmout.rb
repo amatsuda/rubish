@@ -56,7 +56,7 @@ class TestTMOUT < Test::Unit::TestCase
       result = Rubish::Builtins.read(['var'])
       $stdin = STDIN
       assert_equal true, result
-      assert_equal 'hello', ENV['var']
+      assert_equal 'hello', Rubish::Builtins.get_var('var')
     end
   end
 
@@ -113,7 +113,7 @@ class TestTMOUT < Test::Unit::TestCase
       result = Rubish::Builtins.read(['var'])
       $stdin = STDIN
       assert_equal true, result
-      assert_equal 'data', ENV['var']
+      assert_equal 'data', Rubish::Builtins.get_var('var')
     end
   end
 
@@ -126,7 +126,7 @@ class TestTMOUT < Test::Unit::TestCase
       result = Rubish::Builtins.read(['var'])
       $stdin = STDIN
       assert_equal true, result
-      assert_equal 'value', ENV['var']
+      assert_equal 'value', Rubish::Builtins.get_var('var')
     end
   end
 
@@ -139,7 +139,7 @@ class TestTMOUT < Test::Unit::TestCase
       result = Rubish::Builtins.read(['-n', '3', 'var'])
       $stdin = STDIN
       assert_equal true, result
-      assert_equal 'abc', ENV['var']
+      assert_equal 'abc', Rubish::Builtins.get_var('var')
     end
   end
 
@@ -167,7 +167,7 @@ class TestTMOUT < Test::Unit::TestCase
       result = Rubish::Builtins.read(['var'])
       $stdin = STDIN
       assert_equal true, result
-      assert_equal 'test', ENV['var']
+      assert_equal 'test', Rubish::Builtins.get_var('var')
     end
   end
 end

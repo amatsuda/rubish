@@ -48,40 +48,40 @@ class TestRead < Test::Unit::TestCase
     with_stdin("hello\n") do
       Rubish::Builtins.run('read', ['VAR'])
     end
-    assert_equal 'hello', ENV['VAR']
+    assert_equal 'hello', Rubish::Builtins.get_var('VAR')
   end
 
   def test_read_default_reply
     with_stdin("test input\n") do
       Rubish::Builtins.run('read', [])
     end
-    assert_equal 'test input', ENV['REPLY']
+    assert_equal 'test input', Rubish::Builtins.get_var('REPLY')
   end
 
   def test_read_multiple_variables
     with_stdin("one two three\n") do
       Rubish::Builtins.run('read', %w[A B C])
     end
-    assert_equal 'one', ENV['A']
-    assert_equal 'two', ENV['B']
-    assert_equal 'three', ENV['C']
+    assert_equal 'one', Rubish::Builtins.get_var('A')
+    assert_equal 'two', Rubish::Builtins.get_var('B')
+    assert_equal 'three', Rubish::Builtins.get_var('C')
   end
 
   def test_read_last_variable_gets_rest
     with_stdin("one two three four five\n") do
       Rubish::Builtins.run('read', %w[FIRST REST])
     end
-    assert_equal 'one', ENV['FIRST']
-    assert_equal 'two three four five', ENV['REST']
+    assert_equal 'one', Rubish::Builtins.get_var('FIRST')
+    assert_equal 'two three four five', Rubish::Builtins.get_var('REST')
   end
 
   def test_read_more_variables_than_words
     with_stdin("only\n") do
       Rubish::Builtins.run('read', %w[A B C])
     end
-    assert_equal 'only', ENV['A']
-    assert_equal '', ENV['B']
-    assert_equal '', ENV['C']
+    assert_equal 'only', Rubish::Builtins.get_var('A')
+    assert_equal '', Rubish::Builtins.get_var('B')
+    assert_equal '', Rubish::Builtins.get_var('C')
   end
 
   def test_read_with_prompt
@@ -90,7 +90,7 @@ class TestRead < Test::Unit::TestCase
       Rubish::Builtins.run('read', ['-p', 'Enter value: ', 'VAR'])
     end
     assert_equal 'Enter value: ', $stderr.string
-    assert_equal 'answer', ENV['VAR']
+    assert_equal 'answer', Rubish::Builtins.get_var('VAR')
   end
 
   def test_read_prompt_with_multiple_vars
@@ -98,15 +98,15 @@ class TestRead < Test::Unit::TestCase
     with_stdin("foo bar\n") do
       Rubish::Builtins.run('read', ['-p', 'Input: ', 'X', 'Y'])
     end
-    assert_equal 'foo', ENV['X']
-    assert_equal 'bar', ENV['Y']
+    assert_equal 'foo', Rubish::Builtins.get_var('X')
+    assert_equal 'bar', Rubish::Builtins.get_var('Y')
   end
 
   def test_read_empty_line
     with_stdin("\n") do
       Rubish::Builtins.run('read', ['VAR'])
     end
-    assert_equal '', ENV['VAR']
+    assert_equal '', Rubish::Builtins.get_var('VAR')
   end
 
   def test_read_returns_false_on_eof
@@ -127,8 +127,8 @@ class TestRead < Test::Unit::TestCase
     with_stdin("no newline in value\n") do
       Rubish::Builtins.run('read', ['VAR'])
     end
-    assert_equal 'no newline in value', ENV['VAR']
-    assert_no_match(/\n/, ENV['VAR'])
+    assert_equal 'no newline in value', Rubish::Builtins.get_var('VAR')
+    assert_no_match(/\n/, Rubish::Builtins.get_var('VAR'))
   end
 
   # -r raw mode tests
@@ -136,28 +136,28 @@ class TestRead < Test::Unit::TestCase
     with_stdin("hello\\tworld\n") do
       Rubish::Builtins.run('read', ['VAR'])
     end
-    assert_equal 'hellotworld', ENV['VAR']  # Backslash escapes next char
+    assert_equal 'hellotworld', Rubish::Builtins.get_var('VAR')  # Backslash escapes next char
   end
 
   def test_read_raw_mode_preserves_backslashes
     with_stdin("hello\\tworld\n") do
       Rubish::Builtins.run('read', ['-r', 'VAR'])
     end
-    assert_equal 'hello\\tworld', ENV['VAR']
+    assert_equal 'hello\\tworld', Rubish::Builtins.get_var('VAR')
   end
 
   def test_read_raw_mode_preserves_trailing_backslash
     with_stdin("hello\\\n") do
       Rubish::Builtins.run('read', ['-r', 'VAR'])
     end
-    assert_equal 'hello\\', ENV['VAR']
+    assert_equal 'hello\\', Rubish::Builtins.get_var('VAR')
   end
 
   def test_read_without_raw_removes_trailing_backslash
     with_stdin("hello\\\n") do
       Rubish::Builtins.run('read', ['VAR'])
     end
-    assert_equal 'hello', ENV['VAR']
+    assert_equal 'hello', Rubish::Builtins.get_var('VAR')
   end
 
   # -d delimiter tests
@@ -165,21 +165,21 @@ class TestRead < Test::Unit::TestCase
     with_stdin('hello:world:test') do
       Rubish::Builtins.run('read', ['-d', ':', 'VAR'])
     end
-    assert_equal 'hello', ENV['VAR']
+    assert_equal 'hello', Rubish::Builtins.get_var('VAR')
   end
 
   def test_read_with_delimiter_reads_until_first_match
     with_stdin('first|second|third') do
       Rubish::Builtins.run('read', ['-d', '|', 'VAR'])
     end
-    assert_equal 'first', ENV['VAR']
+    assert_equal 'first', Rubish::Builtins.get_var('VAR')
   end
 
   def test_read_with_delimiter_only_uses_first_char
     with_stdin('hello::world') do
       Rubish::Builtins.run('read', ['-d', '::', 'VAR'])
     end
-    assert_equal 'hello', ENV['VAR']  # Only first : is used
+    assert_equal 'hello', Rubish::Builtins.get_var('VAR')  # Only first : is used
   end
 
   # -n nchars tests
@@ -187,21 +187,21 @@ class TestRead < Test::Unit::TestCase
     with_stdin('hello world') do
       Rubish::Builtins.run('read', ['-n', '5', 'VAR'])
     end
-    assert_equal 'hello', ENV['VAR']
+    assert_equal 'hello', Rubish::Builtins.get_var('VAR')
   end
 
   def test_read_nchars_stops_at_newline
     with_stdin("hi\nthere") do
       Rubish::Builtins.run('read', ['-n', '10', 'VAR'])
     end
-    assert_equal 'hi', ENV['VAR']
+    assert_equal 'hi', Rubish::Builtins.get_var('VAR')
   end
 
   def test_read_nchars_with_less_input
     with_stdin("abc\n") do
       Rubish::Builtins.run('read', ['-n', '10', 'VAR'])
     end
-    assert_equal 'abc', ENV['VAR']
+    assert_equal 'abc', Rubish::Builtins.get_var('VAR')
   end
 
   # -N nchars (exact) tests
@@ -209,14 +209,14 @@ class TestRead < Test::Unit::TestCase
     with_stdin("hello\nworld") do
       Rubish::Builtins.run('read', ['-N', '7', 'VAR'])
     end
-    assert_equal "hello\nw", ENV['VAR']  # Includes newline
+    assert_equal "hello\nw", Rubish::Builtins.get_var('VAR')  # Includes newline
   end
 
   def test_read_exact_nchars_ignores_delimiter
     with_stdin('ab:cd:ef') do
       Rubish::Builtins.run('read', ['-N', '5', '-d', ':', 'VAR'])
     end
-    assert_equal 'ab:cd', ENV['VAR']  # Delimiter ignored with -N
+    assert_equal 'ab:cd', Rubish::Builtins.get_var('VAR')  # Delimiter ignored with -N
   end
 
   # -a array tests
@@ -250,7 +250,7 @@ class TestRead < Test::Unit::TestCase
     with_stdin("one two\n") do
       Rubish::Builtins.run('read', ['-a', 'arr'])
     end
-    assert_nil ENV['REPLY']
+    assert_nil Rubish::Builtins.get_var('REPLY')
   end
 
   # -t timeout tests
@@ -258,7 +258,7 @@ class TestRead < Test::Unit::TestCase
     with_stdin("quick\n") do
       result = Rubish::Builtins.run('read', ['-t', '5', 'VAR'])
       assert_true result
-      assert_equal 'quick', ENV['VAR']
+      assert_equal 'quick', Rubish::Builtins.get_var('VAR')
     end
   end
 
@@ -278,21 +278,21 @@ class TestRead < Test::Unit::TestCase
     with_stdin("test\\nvalue\n") do
       Rubish::Builtins.run('read', ['-r', '-p', 'Input: ', 'VAR'])
     end
-    assert_equal 'test\\nvalue', ENV['VAR']
+    assert_equal 'test\\nvalue', Rubish::Builtins.get_var('VAR')
   end
 
   def test_read_nchars_with_delimiter
     with_stdin('abc:defgh') do
       Rubish::Builtins.run('read', ['-n', '5', '-d', ':', 'VAR'])
     end
-    assert_equal 'abc', ENV['VAR']  # Stops at delimiter before nchars
+    assert_equal 'abc', Rubish::Builtins.get_var('VAR')  # Stops at delimiter before nchars
   end
 
   def test_read_timeout_with_nchars
     with_stdin('ab') do
       result = Rubish::Builtins.run('read', ['-t', '1', '-n', '2', 'VAR'])
       assert_true result
-      assert_equal 'ab', ENV['VAR']
+      assert_equal 'ab', Rubish::Builtins.get_var('VAR')
     end
   end
 
@@ -305,15 +305,15 @@ class TestRead < Test::Unit::TestCase
 
   def test_store_read_variables
     Rubish::Builtins.store_read_variables(%w[a b c], 'one two three')
-    assert_equal 'one', ENV['a']
-    assert_equal 'two', ENV['b']
-    assert_equal 'three', ENV['c']
+    assert_equal 'one', Rubish::Builtins.get_var('a')
+    assert_equal 'two', Rubish::Builtins.get_var('b')
+    assert_equal 'three', Rubish::Builtins.get_var('c')
   end
 
   def test_store_read_variables_remainder
     Rubish::Builtins.store_read_variables(%w[a b], 'one two three four')
-    assert_equal 'one', ENV['a']
-    assert_equal 'two three four', ENV['b']
+    assert_equal 'one', Rubish::Builtins.get_var('a')
+    assert_equal 'two three four', Rubish::Builtins.get_var('b')
   end
 
   def test_store_read_array
@@ -327,15 +327,15 @@ class TestRead < Test::Unit::TestCase
     with_stdin("   \n") do
       Rubish::Builtins.run('read', ['VAR'])
     end
-    assert_equal '', ENV['VAR']
+    assert_equal '', Rubish::Builtins.get_var('VAR')
   end
 
   def test_read_preserves_inner_whitespace_in_last_var
     with_stdin("one   two   three\n") do
       Rubish::Builtins.run('read', %w[A B])
     end
-    assert_equal 'one', ENV['A']
-    assert_equal 'two   three', ENV['B']
+    assert_equal 'one', Rubish::Builtins.get_var('A')
+    assert_equal 'two   three', Rubish::Builtins.get_var('B')
   end
 
   # `IFS= read` (temp env prefix) must apply IFS='' to the read builtin, so

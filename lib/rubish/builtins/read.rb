@@ -364,7 +364,8 @@ module Rubish
         return false if readonly_read_error(vars[0])
         ws_chars = ifs_whitespace
         escaped = Regexp.escape(ws_chars)
-        ENV[vars[0]] = ws_chars.empty? ? line : line.gsub(/\A[#{escaped}]+|[#{escaped}]+\z/, '')
+        # A shell variable, like any assignment: not exported (bash)
+        set_var(vars[0], ws_chars.empty? ? line : line.gsub(/\A[#{escaped}]+|[#{escaped}]+\z/, ''))
       else
         # Split into at most N parts (last var keeps the remaining delimiters).
         # bash assigns left-to-right and stops at the first readonly target,
@@ -372,7 +373,7 @@ module Rubish
         words = split_by_ifs_n(line, vars.length)
         vars.each_with_index do |var, idx|
           return false if readonly_read_error(var)
-          ENV[var] = words[idx]&.strip || ''
+          set_var(var, words[idx]&.strip || '')
         end
       end
 
