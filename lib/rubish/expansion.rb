@@ -131,6 +131,11 @@ module Rubish
     def expand_array_element(value)
       return [''] if value.nil? || value.empty?
 
+      # "${arr[@]}", possibly with text around it: one word per element
+      if (words = expand_quoted_array_word(value))
+        return words
+      end
+
       # Pure ${arr[@]} / ${arr[*]} / $arr[@] / $arr[*] — each element of
       # the source array becomes a separate word. Bash/zsh do the same
       # for unquoted array expansion in array-literal context, so
