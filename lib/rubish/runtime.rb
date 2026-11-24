@@ -282,7 +282,10 @@ module Rubish
       return rest if length.nil?
 
       length = __slice_index(length)
-      length < 0 ? rest[0...(rest.length + length)] || [] : rest.first(length)
+      # A negative length is an error for an array (bash)
+      raise ParameterExpansionError.new("#{length}: substring expression < 0", status: 1) if length < 0
+
+      rest.first(length)
     end
 
     # Unquoted / "${arr[*]:...}" form: elements joined like ${arr[@]} / ${arr[*]}
