@@ -3326,6 +3326,9 @@ module Rubish
               puts 'function'
             elsif !path_only
               puts "#{name} is a function"
+              # followed by its definition (bash)
+              info = @state.function_getter&.call(name)
+              print_function(name, info, false) if info
             end
             next unless show_all
           end
