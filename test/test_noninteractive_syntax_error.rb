@@ -17,14 +17,14 @@ class TestNoninteractiveSyntaxError < Test::Unit::TestCase
 
   def test_incomplete_command_is_a_syntax_error_not_a_prompt
     out, status = run_rubish('-c', 'if')
-    assert_match(/rubish: syntax error: unexpected end of file/, out)
+    assert_match(/rubish: -c: line \d+: syntax error: unexpected end of file/, out) # bash's wording
     assert_no_match(/^> /, out)
     assert_equal 2, status
   end
 
   def test_unexpected_token_is_a_syntax_error
     out, status = run_rubish('-c', 'echo )')
-    assert_match(/rubish: syntax error near unexpected token `\)'/, out)
+    assert_match(/rubish: -c: line 1: syntax error near unexpected token `\)'/, out)
     assert_equal 2, status
   end
 

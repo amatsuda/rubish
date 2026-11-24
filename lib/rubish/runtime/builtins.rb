@@ -2783,7 +2783,7 @@ module Rubish
             # not SyntaxError — catch both so a malformed statement in the
             # middle of a script reports one error and the rest of the
             # script keeps running.
-            $stderr.puts "#{file_label}:#{buffer_start_line}: syntax error: #{e.message}"
+            $stderr.puts "#{syntax_error_prefix(file_label, buffer_start_line)}: #{syntax_error_message(e)}"
             syntax_error = true
           end
           buffer = +''
@@ -2818,10 +2818,10 @@ module Rubish
           execute_sourced_command(statement, file_label, buffer_start_line)
         rescue ShellSyntaxError => e
           # The rest of the file is not run, as in bash; $? is already 2
-          $stderr.puts "#{file_label}: line #{buffer_start_line}: #{e.message}"
+          $stderr.puts "#{syntax_error_prefix(file_label, buffer_start_line)}: #{syntax_error_message(e)}"
           return 2
         rescue SyntaxError, StandardError => e
-          puts "#{file_label}: syntax error (starting at line #{buffer_start_line}): #{e.message}"
+          $stderr.puts "#{syntax_error_prefix(file_label, buffer_start_line)}: #{syntax_error_message(e)}"
         end
       end
 
@@ -8173,6 +8173,16 @@ module Rubish
         i += 1
       end
       false
+    end
+
+    # Where a syntax error is reported, as bash words it: `rubish: -c: line N`
+    # for a -c string, `file: line N` for a sourced file
+    def syntax_error_prefix(file_label, line_number)
+      file_label == 'rubish' ? "rubish: -c: line #{line_number}" : "#{file_label}: line #{line_number}"
+    end
+
+    def syntax_error_message(error)
+      error.message.start_with?('syntax error') ? error.message : "syntax error: #{error.message}"
     end
 
     # Words after which the next word is in command position
