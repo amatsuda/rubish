@@ -409,13 +409,6 @@ module Rubish
     end
 
     def __param_replace(var_name, operator, pattern, replacement)
-      if (words = __each_param_element(var_name) { |scratch| __param_replace(scratch, operator, pattern, replacement) })
-        return words.join(' ')
-      end
-
-      value = __param_value(var_name) || ''
-      return '' if value.empty?
-
       if pattern.start_with?('#')
         position = :prefix
         pattern = pattern[1..]
@@ -426,6 +419,19 @@ module Rubish
         position = :any
       end
 
+      # The pattern and the replacement are words: variables expand in
+      # them, and a quoted part of the pattern matches literally
+      __param_replace_with(var_name, operator, position, __expand_pattern_word(pattern), __expand_replacement_word(replacement))
+    end
+
+    def __param_replace_with(var_name, operator, position, pattern, replacement)
+      if (words = __each_param_element(var_name) { |scratch| __param_replace_with(scratch, operator, position, pattern, replacement) })
+        return words.join(' ')
+      end
+
+      value = __param_value(var_name) || ''
+      return '' if value.empty?
+
       regex = pattern_to_regex(pattern, position, :longest)
       replacement_proc = build_replacement_proc(replacement)
 
@@ -434,6 +440,41 @@ module Rubish
       when '/' then replacement_proc ? value.sub(regex, &replacement_proc) : value.sub(regex, replacement)
       else value
       end
+    end
+
+    # Expand a word used as a pattern: an unquoted part expands and keeps
+    # its pattern characters, a quoted part is matched literally
+    def __expand_pattern_word(word)
+      result = +''
+      WordSegments.each_segment(word) do |type, content|
+        result << case type
+                  when :single then __quote_pattern(content)
+                  when :ansi_c then __quote_pattern(Builtins.process_escape_sequences(content))
+                  when :double then __quote_pattern(expand_string_content(content, quoted: true))
+                  when :bare then expand_string_content(content)
+                  end
+      end
+      result
+    end
+
+    # Expand the replacement word: a quoted `&` is literal, an unquoted one
+    # stands for the match under patsub_replacement, and `\&` stays for the
+    # replacement to read
+    def __expand_replacement_word(word)
+      result = +''
+      WordSegments.each_segment(word) do |type, content|
+        result << case type
+                  when :single then content.gsub('&') { '\\&' }
+                  when :ansi_c then Builtins.process_escape_sequences(content).gsub('&') { '\\&' }
+                  when :double then expand_string_content(content, quoted: true).gsub('&') { '\\&' }
+                  when :bare then content.split(/(\\&)/).map { |part| part == '\\&' ? part : expand_string_content(part) }.join
+                  end
+      end
+      result
+    end
+
+    def __quote_pattern(text)
+      text.gsub(/[*?\[\]\\]/) { |c| "\\#{c}" }
     end
 
     # Case modification operators
