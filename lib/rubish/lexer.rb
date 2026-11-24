@@ -1319,31 +1319,36 @@ module Rubish
     def read_herestring
       skip_whitespace
 
-      # Read the string (can be quoted or unquoted)
-      if @input[@pos] == '$' && (@input[@pos + 1] == "'" || @input[@pos + 1] == '"')
-        # $'...' / $"..."
-        start = @pos
-        @pos += 1
-        @input[@pos] == "'" ? read_ansi_c_quoted_string : read_double_quoted_string
-        value = @input[start...@pos]
-      elsif @input[@pos] == '"'
-        start = @pos
-        read_double_quoted_string
-        value = @input[start...@pos]
-      elsif @input[@pos] == "'"
-        start = @pos
-        read_single_quoted_string
-        value = @input[start...@pos]
-      else
-        # Unquoted - read until whitespace or operator
-        start = @pos
-        while @pos < @input.length
-          char = @input[@pos]
-          break if char =~ /[ \t]/ || OPERATORS.key?(char)
+      # The word: quoted parts, `$(...)`, `${...}` and backticks are read
+      # whole, so `<<< $(cmd)` and `<<< a"b c"` are one word
+      start = @pos
+      while @pos < @input.length
+        char = @input[@pos]
+        if char == '$' && @input[@pos + 1] == "'"
+          @pos += 1
+          read_ansi_c_quoted_string
+        elsif char == '$' && @input[@pos + 1] == '"'
+          @pos += 1
+          read_double_quoted_string
+        elsif char == '"'
+          read_double_quoted_string
+        elsif char == "'"
+          read_single_quoted_string
+        elsif char == '`'
+          read_backtick_substitution
+        elsif char == '$' && @input[@pos + 1] == '('
+          read_command_substitution
+        elsif char == '$' && @input[@pos + 1] == '{'
+          read_braced_variable
+        elsif char == '\\'
+          @pos += 2
+        elsif char =~ /[ \t\n]/ || OPERATORS.key?(char)
+          break
+        else
           @pos += 1
         end
-        value = @input[start...@pos]
       end
+      value = @input[start...@pos]
 
       Token.new(:HERESTRING, value)
     end
