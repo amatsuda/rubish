@@ -1807,9 +1807,9 @@ module Rubish
 
       append = var_part.end_with?('+=')
       var_name = var_part.chomp(append ? '+=' : '=')
-      Builtins.assign_array_literal(var_name, elements, append: append)
+      ok = Builtins.assign_array_literal(var_name, elements, append: append)
 
-      ExitStatus.new(0)
+      ExitStatus.new(ok == false ? 1 : 0)
     end
 
     # `name=(elements)` given as an argument, e.g. `declare -a name=(1 2)`

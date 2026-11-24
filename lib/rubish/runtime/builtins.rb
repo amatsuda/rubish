@@ -208,6 +208,11 @@ module Rubish
     # pairs; indexed arrays may give an element its index with `[i]=value`,
     # after which unsubscripted elements continue from i + 1, as in bash.
     def assign_array_literal(name, elements, append: false)
+      if readonly?(name)
+        $stderr.puts "rubish: #{name}: readonly variable"
+        return false
+      end
+
       if assoc_array?(name)
         pairs = {}
         elements.each do |element|

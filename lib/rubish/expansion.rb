@@ -78,7 +78,7 @@ module Rubish
         end
 
         if assignment =~ /\A([a-zA-Z_][a-zA-Z0-9_]*)\+?=\((.*)\)\z/m
-          handle_array_assignment($1, $2, assignment.include?('+='))
+          ok = false if handle_array_assignment($1, $2, assignment.include?('+=')) == false
         elsif assignment =~ /\A([a-zA-Z_][a-zA-Z0-9_]*)\[([^\]]+)\]=(.*)\z/
           handle_array_element_assignment($1, $2, $3)
         elsif assignment =~ /\A([a-zA-Z_][a-zA-Z0-9_]*)=(.*)\z/m
