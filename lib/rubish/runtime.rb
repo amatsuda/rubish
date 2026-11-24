@@ -1277,6 +1277,7 @@ module Rubish
       return Builtins.comp_key.to_s if var_name == 'COMP_KEY'
       return Builtins.comp_wordbreaks if var_name == 'COMP_WORDBREAKS'
       return Builtins.bashopts if var_name == 'BASHOPTS'
+      return Builtins.shellopts if var_name == 'SHELLOPTS'
       return Builtins.bash_compat if var_name == 'BASH_COMPAT'
       return ENV['RUBISH_EXECUTION_STRING'] || '' if var_name == 'RUBISH_EXECUTION_STRING' || var_name == 'BASH_EXECUTION_STRING'
       return rubish_path if var_name == 'RUBISH' || var_name == 'BASH'
