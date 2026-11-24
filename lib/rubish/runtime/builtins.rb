@@ -1118,12 +1118,15 @@ module Rubish
 
       current_scope = @state.local_scope_stack.last
       nameref_mode = false
+      print_mode = false
       remaining_args = []
 
       # Parse options
       args.each do |arg|
         if arg == '-n'
           nameref_mode = true
+        elsif arg == '-p'
+          print_mode = true
         elsif arg == '--'
           # End of options, rest are variable names
           next
@@ -1134,6 +1137,12 @@ module Rubish
         else
           remaining_args << arg
         end
+      end
+
+      # `local -p name`: print the declaration (bash)
+      if print_mode
+        remaining_args.each { |name| print_declaration(name) }
+        return true
       end
 
       # `local` alone lists the function's local variables (bash)
