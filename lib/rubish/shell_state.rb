@@ -98,6 +98,7 @@ module Rubish
 
       # Variables state; IFS is set from the start, as in bash
       @shell_vars = { 'IFS' => " \t\n", 'OPTIND' => '1' }
+      @shell_vars['PS4'] = '+ ' unless ENV.key?('PS4') # the default, unless one was inherited
       @arrays = {}
       @assoc_arrays = {}
       @namerefs = {}

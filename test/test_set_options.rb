@@ -185,7 +185,7 @@ class TestSetOptions < Test::Unit::TestCase
 
   def test_xtrace_uses_ps4
     stderr_file = File.join(@tempdir, 'stderr.txt')
-    ENV['PS4'] = '>>> '
+    execute("PS4='>>> '") # set as a shell variable, as a user would
     execute('set -x')
     old_stderr = $stderr
     $stderr = File.open(stderr_file, 'w')
@@ -372,7 +372,7 @@ class TestSetOptions < Test::Unit::TestCase
 
     trace_io = File.open(trace_file, 'w')
     ENV['RUBISH_XTRACEFD'] = trace_io.fileno.to_s
-    ENV['PS4'] = '### '
+    execute("PS4='### '") # set as a shell variable, as a user would
 
     execute('set -x')
     execute("echo withps4 > #{output_file}")

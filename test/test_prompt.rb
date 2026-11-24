@@ -375,7 +375,7 @@ class TestPrompt < Test::Unit::TestCase
   end
 
   def test_ps4_custom
-    ENV['PS4'] = '>>> '
+    @repl.send(:execute, %q{PS4='>>> '}) # a shell variable, as a user would set it
     output = capture_stderr do
       @repl.send(:xtrace, 'echo hello')
     end
@@ -383,7 +383,7 @@ class TestPrompt < Test::Unit::TestCase
   end
 
   def test_ps4_with_escapes
-    ENV['PS4'] = '[\t] + '
+    @repl.send(:execute, %q{PS4='[\t] + '}) # a shell variable, as a user would set it
     output = capture_stderr do
       @repl.send(:xtrace, 'echo hello')
     end
@@ -392,7 +392,7 @@ class TestPrompt < Test::Unit::TestCase
   end
 
   def test_ps4_with_shell_name
-    ENV['PS4'] = '\s: '
+    @repl.send(:execute, %q{PS4='\s: '}) # a shell variable, as a user would set it
     output = capture_stderr do
       @repl.send(:xtrace, 'ls')
     end
@@ -400,7 +400,7 @@ class TestPrompt < Test::Unit::TestCase
   end
 
   def test_ps4_with_command_number
-    ENV['PS4'] = '+(\#) '
+    @repl.send(:execute, %q{PS4='+(\#) '}) # a shell variable, as a user would set it
     output = capture_stderr do
       @repl.send(:xtrace, 'echo test')
     end
@@ -408,7 +408,7 @@ class TestPrompt < Test::Unit::TestCase
   end
 
   def test_ps4_integration_with_set_x
-    ENV['PS4'] = '+ '
+    @repl.send(:execute, %q{PS4='+ '}) # a shell variable, as a user would set it
     # Enable xtrace
     Rubish::Builtins.run('set', ['-x'])
 
