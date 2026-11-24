@@ -2370,14 +2370,16 @@ module Rubish
         return false
       end
 
+      ok = true
       args.each do |name|
         if @state.aliases.key?(name)
           @state.aliases.delete(name)
         else
-          puts "unalias: #{name}: not found"
+          $stderr.puts "rubish: unalias: #{name}: not found"
+          ok = false
         end
       end
-      true
+      ok
     end
 
     def expand_alias(line)
