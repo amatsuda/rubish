@@ -1009,6 +1009,12 @@ module Rubish
 
       # Method call with parens: .method(args)
       if lookahead < @input.length && @input[lookahead] == '('
+        # `a.b() { ...; }` defines a function named a.b (bash), not a call
+        if @input[lookahead + 1] == ')'
+          after = lookahead + 2
+          after += 1 while after < @input.length && @input[after] =~ /[ \t]/
+          return false if function_body_start?(after)
+        end
         return !looks_like_ruby_method_chain?(lookahead)
       end
 
