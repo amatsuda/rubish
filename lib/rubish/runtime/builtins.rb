@@ -1342,8 +1342,11 @@ module Rubish
             @state.bash_argv0_unsetter&.call
           end
 
-          # Standard behavior: remove from shell_vars and ENV (if exported)
+          # Standard behavior: remove from shell_vars and ENV (if exported),
+          # and an array of that name with them
           delete_var(name)
+          unset_array(name)
+          unset_assoc_array(name)
         end
       end
 
