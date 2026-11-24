@@ -2533,6 +2533,7 @@ module Rubish
     def process_script_lines(lines, file_label)
       buffer = +''
       statement = +'' # the buffer with its heredoc bodies
+      syntax_error = false # the result is 2 when a statement failed to parse
       depth = 0
       pending_function_def = false  # Track if we're waiting for { after ()
       # Track open control structures for better error messages: [[keyword, line_number], ...]
@@ -2667,7 +2668,8 @@ module Rubish
             # not SyntaxError — catch both so a malformed statement in the
             # middle of a script reports one error and the rest of the
             # script keeps running.
-            puts "#{file_label}:#{buffer_start_line}: syntax error: #{e.message}"
+            $stderr.puts "#{file_label}:#{buffer_start_line}: syntax error: #{e.message}"
+            syntax_error = true
           end
           buffer = +''
         end
@@ -2708,7 +2710,7 @@ module Rubish
         end
       end
 
-      nil
+      syntax_error ? 2 : nil
     end
 
     # Execute a command from a sourced file, with optional profiling
@@ -6957,8 +6959,10 @@ module Rubish
       old_sourcing = @state.sourcing_file
       @state.sourcing_file = true
       begin
-        process_script_lines(command.split("\n", -1), '(eval)')
-        # The status of the last command the text ran
+        # A syntax error gives eval the status 2; otherwise it has the
+        # status of the last command the text ran
+        return ExitStatus.new(2) if process_script_lines(command.split("\n", -1), '(eval)') == 2
+
         ExitStatus.new(@state.last_status_getter&.call || 0)
       rescue => e
         puts "eval: #{e.message}"
