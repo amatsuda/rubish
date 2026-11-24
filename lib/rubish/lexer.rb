@@ -1192,7 +1192,10 @@ module Rubish
       depth = 1
       while @pos < @input.length && depth > 0
         char = @input[@pos]
-        if char == '('
+        if char == '\\'
+          @pos += 2 # an escaped character, such as \" (bash)
+          next
+        elsif char == '('
           depth += 1
         elsif char == ')'
           depth -= 1
