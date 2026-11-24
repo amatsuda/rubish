@@ -7828,12 +7828,13 @@ module Rubish
 
       # Read input
       input = if fd
-                begin
-                  IO.new(fd).read
-                rescue Errno::EBADF
-                  puts "mapfile: #{fd}: invalid file descriptor"
+                # a descriptor opened with `exec N<file`, or a standard one
+                io = Command.standard_or_shell_fd(fd)
+                unless io
+                  $stderr.puts "rubish: mapfile: #{fd}: invalid file descriptor: Bad file descriptor"
                   return false
                 end
+                io.read
               else
                 $stdin.read
               end
