@@ -39,6 +39,8 @@ module Rubish
 
     # Execution callbacks
     attr_accessor :executor, :command_executor, :last_status_setter, :last_status_getter
+    # [pid, ExitStatus] of the last child `wait` reaped, for a repeated `wait pid`
+    attr_accessor :last_async_status
 
     # Script/position callbacks
     attr_accessor :script_name_getter, :script_name_setter
@@ -139,6 +141,7 @@ module Rubish
       # Execution callbacks (nil by default, set by REPL)
       @executor = nil
       @command_executor = nil
+      @last_async_status = nil
 
       # Script/position callbacks
       @script_name_getter = nil

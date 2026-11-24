@@ -6741,8 +6741,15 @@ module Rubish
                 wpid, status = Process.wait2(pid)
                 ENV[pid_var] = wpid.to_s if pid_var
                 last_status = wait_exit_status(status)
+                @state.last_async_status = [wpid, last_status]
                 next
               rescue Errno::ECHILD
+                # The last reaped child's status is remembered (bash)
+                remembered = @state.last_async_status
+                if remembered && remembered[0] == pid
+                  last_status = remembered[1]
+                  next
+                end
                 $stderr.puts "rubish: wait: pid #{pid} is not a child of this shell"
                 last_status = ExitStatus.new(127)
                 next
@@ -6757,6 +6764,7 @@ module Rubish
               manager.update_status(job.pid, status)
               manager.remove(job.id)
               last_status = wait_exit_status(status)
+              @state.last_async_status = [wpid, last_status]
             rescue Errno::ECHILD
               manager.remove(job.id)
             end
