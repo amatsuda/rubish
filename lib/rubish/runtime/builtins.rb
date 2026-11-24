@@ -8017,15 +8017,29 @@ module Rubish
       false
     end
 
+    # Words after which the next word is in command position
+    COMMAND_POSITION_WORDS = %w[if then else elif while until do { ! time coproc def unless].freeze
+
     def extract_unquoted_keywords(line)
       # Extract shell keywords and braces from a line while respecting quotes
       # Returns array of keywords found outside of quoted sections
       # This prevents counting { } inside awk scripts like: awk '{ print $1 }'
       # Also handles inline comments: echo foo # for  (the 'for' is in a comment)
+      # A keyword counts only in command position: the first word of a
+      # command, after a separator or after a keyword such as `then`, so
+      # `test $val != done` holds no `done` (bash)
       keywords = []
       in_single_quotes = false
       in_double_quotes = false
       current_word = +''
+      command_position = true
+      flush = lambda do
+        unless current_word.empty?
+          keywords << current_word if command_position
+          command_position = COMMAND_POSITION_WORDS.include?(current_word)
+          current_word = +''
+        end
+      end
       i = 0
 
       while i < line.length
@@ -8046,9 +8060,11 @@ module Rubish
 
         if char == "'" && !in_double_quotes
           in_single_quotes = !in_single_quotes
+          command_position = false # a quoted word fills the position
           i += 1
         elsif char == '"' && !in_single_quotes
           in_double_quotes = !in_double_quotes
+          command_position = false
           i += 1
         elsif char == '\\' && !in_single_quotes
           # Skip escaped character
@@ -8056,22 +8072,37 @@ module Rubish
         elsif !in_single_quotes && !in_double_quotes
           if char == '#'
             # Start of comment - stop processing the rest of the line
-            keywords << current_word unless current_word.empty?
+            flush.call
             break
           elsif char =~ /\s/
             # End of word
-            keywords << current_word unless current_word.empty?
-            current_word = +''
+            flush.call
             i += 1
-          elsif (char == '{' || char == '}') && !current_word.end_with?('$')
-            # `{`/`}` adjacent to other chars (`};`, `foo(){`, `}fi`) are
-            # token boundaries the depth tracker needs to see. Flush the
-            # word in progress and emit the brace itself.
-            # `${...}` parameter expansion is preserved by the `$`-prefix
-            # check: a `{` right after `$` joins the word instead.
-            keywords << current_word unless current_word.empty?
-            current_word = +''
+          elsif char == '(' && !current_word.empty?
+            # `@(a|b)`, `$(cmd)`, `f()`: a group glued to a word is part of
+            # it, whatever it holds
+            depth = 0
+            while i < line.length
+              depth += 1 if line[i] == '('
+              depth -= 1 if line[i] == ')'
+              i += 1
+              break if depth == 0
+            end
+            current_word << '()'
+          elsif char =~ /[\s;|&()]/
+            # A separator ends the word (`esac;`) and starts a command
+            flush.call
+            command_position = true
+            i += 1
+          elsif (char == '{' && (line[i + 1].nil? || line[i + 1] =~ /\s/) && !current_word.end_with?('$')) ||
+                (char == '}' && current_word.empty? && (line[i + 1].nil? || line[i + 1] =~ /[\s;&|)]/))
+            # A brace that is a word of its own (`{ `, `};`, `foo(){`) is a
+            # token the depth tracker needs to see; glued to other
+            # characters (`{a,b`, `ab}c`, `${x}`) it is part of the word.
+            # Flush the word in progress and emit the brace itself.
+            flush.call
             keywords << char
+            command_position = char == '{'
             i += 1
           else
             current_word << char
@@ -8084,7 +8115,7 @@ module Rubish
       end
 
       # Don't forget the last word (if we didn't hit a comment)
-      keywords << current_word unless current_word.empty?
+      flush.call
 
       # Filter to only control structure keywords and braces
       keywords.select { |w| %w[if unless while until for case def fi done esac end { }].include?(w) }
