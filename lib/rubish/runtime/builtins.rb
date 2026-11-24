@@ -855,6 +855,9 @@ module Rubish
     rescue Errno::ENOENT
       $stderr.puts "rubish: cd: #{args.reject { |a| a.start_with?('-') }.first}: No such file or directory"
       false
+    rescue Errno::ENOTDIR
+      $stderr.puts "rubish: cd: #{args.reject { |a| a.start_with?('-') }.first}: Not a directory"
+      false
     end
 
     # Correct minor spelling errors in directory path for cdspell
