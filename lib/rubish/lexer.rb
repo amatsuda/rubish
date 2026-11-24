@@ -780,7 +780,10 @@ module Rubish
         # Stop at whitespace or closing paren
         break if char =~ /[ \t\n]/ || char == ')'
 
-        if char == '"'
+        if char == '[' && @pos == start && (close = @input.index(']', @pos))
+          # A leading `[subscript]` may hold spaces: `([a b]=v)`
+          @pos = close + 1
+        elsif char == '"'
           read_double_quoted_string
         elsif char == '$' && @input[@pos + 1] == "'"
           read_ansi_c_quoted_string
