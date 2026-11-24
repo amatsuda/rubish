@@ -1311,6 +1311,8 @@ module Rubish
           mode = :function
         when '-v'
           mode = :variable
+        when '-n'
+          mode = :nameref # unset the reference itself, not what it refers to
         when '-fv', '-vf'
           # Last one wins in bash, but typically -v is ignored when -f present
           mode = :function
@@ -1330,6 +1332,17 @@ module Rubish
           # Remove function
           @state.function_remover&.call(name)
         else
+          # A nameref: `unset ref` unsets the variable it refers to, `unset -n ref`
+          # the reference itself (bash)
+          if nameref?(name)
+            if mode == :nameref
+              unset_nameref(name)
+              delete_var(name)
+              next
+            end
+            name = resolve_nameref(name) || name
+          end
+
           # `unset a[@]` and `unset a[*]` remove the whole array (bash)
           name = $1 if name =~ /\A([a-zA-Z_][a-zA-Z0-9_]*)\[[@*]\]\z/
 
