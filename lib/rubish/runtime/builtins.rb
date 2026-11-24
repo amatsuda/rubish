@@ -1851,15 +1851,16 @@ module Rubish
 
     def declaration_flags(name)
       attrs = @state.var_attributes[name] || Set.new
+      # In bash's order: i n r t x l u
       flags = +''
       flags << 'i' if attrs.include?(:integer)
-      flags << 'l' if attrs.include?(:lowercase)
       flags << 'n' if attrs.include?(:nameref)
       flags << 'r' if readonly?(name)
       flags << 't' if attrs.include?(:trace)
-      flags << 'u' if attrs.include?(:uppercase)
       # Exported variables live in ENV, whether exported here or inherited
       flags << 'x' if attrs.include?(:export) || ENV.key?(name)
+      flags << 'l' if attrs.include?(:lowercase)
+      flags << 'u' if attrs.include?(:uppercase)
       flags
     end
 
