@@ -1609,8 +1609,13 @@ module Rubish
       remove_attrs = Set.new
       names = []
 
+      options_done = false
       args.each do |arg|
-        if arg.start_with?('-')
+        if arg == '--' && !options_done
+          options_done = true # what follows are names, even ones starting with - (bash)
+          next
+        end
+        if arg.start_with?('-') && !options_done
           if arg == '-p'
             print_mode = true
           else
@@ -1634,7 +1639,7 @@ module Rubish
               end
             end
           end
-        elsif arg.start_with?('+')
+        elsif arg.start_with?('+') && !options_done
           # Remove attributes
           arg[1..].each_char do |c|
             case c
@@ -1734,6 +1739,12 @@ module Rubish
         else
           name = arg
           value = nil
+        end
+
+        unless name.match?(/\A[a-zA-Z_][a-zA-Z0-9_]*(\[.*\])?\z/)
+          $stderr.puts "rubish: declare: `#{arg}': not a valid identifier"
+          had_error = true
+          next
         end
 
         # Check readonly
