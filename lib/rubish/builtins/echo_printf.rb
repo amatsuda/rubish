@@ -80,6 +80,17 @@ module Rubish
               i += 1
             end
             result << (octal.empty? ? "\0" : octal.to_i(8).chr)
+          when 'u', 'U'
+            # Unicode escapes \uHHHH and \UHHHHHHHH (1 to 4 or 8 hex digits)
+            width = str[i + 1] == 'u' ? 4 : 8
+            hex = str[i + 2, width].to_s[/\A[0-9a-fA-F]+/].to_s
+            if hex.empty?
+              result << str[i, 2]
+              i += 2
+            else
+              result << [hex.to_i(16)].pack('U')
+              i += 2 + hex.length
+            end
           when 'x'
             # Hex escape \xHH (1 or 2 hex digits)
             i += 2
