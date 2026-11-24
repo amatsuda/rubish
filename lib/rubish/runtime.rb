@@ -330,7 +330,7 @@ module Rubish
       value = __param_value(var_name)
 
       case operator
-      when 'Q' then value.nil? ? '' : "'" + value.gsub("'") { "'\\''" } + "'"
+      when 'Q' then value.nil? ? '' : __shell_quote_value(value)
       when 'E' then value.nil? ? '' : Builtins.process_escape_sequences(value)
       when 'P' then value.nil? ? '' : expand_prompt(value)
       when 'A'
@@ -475,6 +475,19 @@ module Rubish
 
     def __quote_pattern(text)
       text.gsub(/[*?\[\]\\]/) { |c| "\\#{c}" }
+    end
+
+    ANSI_C_ESCAPES = { "\a" => '\a', "\b" => '\b', "\e" => '\E', "\f" => '\f', "\n" => '\n', "\r" => '\r', "\t" => '\t', "\v" => '\v', '\\' => '\\\\', "'" => "\\'" }.freeze
+
+    # ${var@Q}: single quotes, or $'...' when the value has control
+    # characters (bash)
+    def __shell_quote_value(value)
+      if value.match?(/[\x00-\x1f\x7f]/)
+        escaped = value.gsub(/[\x00-\x1f\x7f\\']/) { |c| ANSI_C_ESCAPES[c] || format('\\%03o', c.ord) }
+        "$'#{escaped}'"
+      else
+        "'" + value.gsub("'") { "'\\''" } + "'"
+      end
     end
 
     # Case modification operators
