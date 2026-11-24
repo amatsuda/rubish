@@ -2031,7 +2031,9 @@ module Rubish
     end
 
     def __run_cmd(&block)
-      __closing_proc_subs { __run_cmd_body(&block) }
+      result = __closing_proc_subs { __run_cmd_body(&block) }
+      result.reported = true if result.is_a?(ExitStatus)
+      result
     end
 
     def __run_cmd_body(&block)
@@ -2108,6 +2110,9 @@ module Rubish
         check_errexit
         ExitStatus.new(status)
       else
+        # A command an inner __run_cmd already ran (a list in a group) had
+        # its ERR trap and errexit handled there
+        handled = result.respond_to?(:ran?) && result.ran?
         result.run if result.is_a?(Command) || result.is_a?(Pipeline) || result.is_a?(Subshell) || result.is_a?(HeredocCommand)
         if result.respond_to?(:status)
           @last_status = ExitStatus.code_of(result.status)
@@ -2117,16 +2122,20 @@ module Rubish
           else
             @pipestatus = [@last_status]
           end
-          run_err_trap_if_failed
-          check_errexit
+          unless handled
+            run_err_trap_if_failed
+            check_errexit
+          end
         elsif result.respond_to?(:exitstatus)
           # Handle ExitStatus objects (from __cond_test, etc.)
           @last_status = result.exitstatus || 0
           # `! a | b` keeps the pipeline's statuses (bash)
           @pipestatus = [@last_status] unless @pipestatus_from_negation
           @pipestatus_from_negation = false
-          run_err_trap_if_failed
-          check_errexit
+          unless result.respond_to?(:reported) && result.reported
+            run_err_trap_if_failed
+            check_errexit
+          end
         end
         result
       end

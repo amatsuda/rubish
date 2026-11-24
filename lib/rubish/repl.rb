@@ -1486,6 +1486,8 @@ module Rubish
         # Hand back the status, not the unrun Command, so execute keeps it
         result = ExitStatus.new(@last_status)
       elsif result.is_a?(Command) || result.is_a?(Pipeline) || result.is_a?(Subshell) || result.is_a?(HeredocCommand)
+        # Run by __run_cmd already: the ERR trap ran there
+        handled = result.respond_to?(:ran?) && result.ran?
         result.run
         # Update PIPESTATUS array
         if result.respond_to?(:status)
@@ -1495,7 +1497,7 @@ module Rubish
           else
             set_pipestatus([@last_status])
           end
-          run_err_trap_if_failed
+          run_err_trap_if_failed unless handled
         end
       end
 

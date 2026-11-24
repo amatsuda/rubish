@@ -48,6 +48,10 @@ module Rubish
       exitstatus == 0
     end
 
+    # Set once the ERR trap and errexit were handled for this status, so an
+    # enclosing __run_cmd leaves them alone
+    attr_accessor :reported
+
     # The shell's view of a Process::Status (or anything with #exitstatus):
     # the exit code, or 128+signal when the process was killed, as bash
     # reports it in $? and PIPESTATUS. nil means "no status": 0.
