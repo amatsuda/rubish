@@ -2333,8 +2333,12 @@ module Rubish
       true
     end
 
+    # Characters that cannot appear in an alias name (bash)
+    INVALID_ALIAS_NAME_CHARS = %r{[\s/$`=|&;()<>'"]}
+
     def alias(args)
       ok = true
+      args = args.reject { |arg| arg == '-p' } # -p lists in reusable form, as a bare alias does
       if args.empty?
         # List all aliases
         @state.aliases.each { |name, value| puts "alias #{name}='#{value}'" }
@@ -2342,6 +2346,11 @@ module Rubish
         args.each do |arg|
           if arg.include?('=')
             name, value = arg.split('=', 2)
+            if name.empty? || name.match?(INVALID_ALIAS_NAME_CHARS)
+              $stderr.puts "rubish: alias: `#{name}': invalid alias name"
+              ok = false
+              next
+            end
             # Remove surrounding quotes if present
             value = value.sub(/\A(['"])(.*)\1\z/, '\2')
             @state.aliases[name] = value
