@@ -186,6 +186,19 @@ class MultiLineRubyTest < Test::Unit::TestCase
     refute ctx.send(:ruby_input_incomplete_ast?, "Reline::Face.config(:x) { |c| c.define :default, foreground: :red }")
   end
 
+  def test_incomplete_ast_detects_open_heredoc
+    omit 'needs a prism with ParseResult#continuable? (2.0 or later)' unless prism_continuable?
+    ctx = Rubish::Builtins.context
+    assert ctx.send(:ruby_input_incomplete_ast?, "X = <<~E\n  abc")
+  end
+
+  def prism_continuable?
+    require 'prism'
+    Prism::ParseResult.method_defined?(:continuable?)
+  rescue LoadError
+    false
+  end
+
   def test_source_does_not_p_block_result
     Tempfile.create(['rubishrc', '.rb']) do |t|
       t.write(<<~RUBY)

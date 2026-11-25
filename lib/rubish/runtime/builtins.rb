@@ -8453,10 +8453,15 @@ module Rubish
     # we should read more lines before handing to execute(). Anything
     # that's not a "needs-more-input" error (real syntax problem, or
     # successful parse) returns false so we stop accumulating.
-    # "expecting end-of-input" means stray content AFTER complete code,
-    # so it's a real error — explicitly NOT treated as incomplete.
+    # A prism that has ParseResult#continuable? (2.0 or later) answers
+    # this directly, as IRB asks it, and works where RubyVM does not
+    # exist (Fluxpinel). Otherwise the messages of RubyVM's parser are
+    # matched: "expecting end-of-input" means stray content AFTER
+    # complete code, so it's a real error — explicitly NOT treated as
+    # incomplete.
     def ruby_input_incomplete_ast?(code)
       return false if code.nil? || code.strip.empty?
+      return Prism.parse(code).continuable? if prism_continuable?
       RubyVM::AbstractSyntaxTree.parse(code)
       false
     rescue SyntaxError => e
@@ -8467,6 +8472,17 @@ module Rubish
          msg =~ /expecting `end'/)
     rescue
       false
+    end
+
+    # Whether a prism with ParseResult#continuable? loads; asked once.
+    def prism_continuable?
+      return @prism_continuable if defined?(@prism_continuable)
+      @prism_continuable = begin
+        Rubish.require_library('prism')
+        Prism::ParseResult.method_defined?(:continuable?)
+      rescue LoadError
+        false
+      end
     end
 
     # The heredocs a line opens, as [delimiter, strip_tabs] pairs in order
