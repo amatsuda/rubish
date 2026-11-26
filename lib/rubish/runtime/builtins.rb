@@ -8500,10 +8500,15 @@ module Rubish
     def prism_continuable?
       return @prism_continuable if defined?(@prism_continuable)
       @prism_continuable = begin
+        # RubyGems warns on Ruby 4.1 that prism is no default gem any more
+        # before the LoadError; this is a probe, so the warning is noise
+        verbose, $VERBOSE = $VERBOSE, nil
         Rubish.require_library('prism')
         Prism::ParseResult.method_defined?(:continuable?)
       rescue LoadError
         false
+      ensure
+        $VERBOSE = verbose
       end
     end
 
