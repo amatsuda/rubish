@@ -168,6 +168,25 @@ class MultiLineRubyTest < Test::Unit::TestCase
     ENV.delete('RUBISH_TEST_ASSIGN')
   end
 
+  def test_source_runs_lines_after_a_misparsed_ruby_line
+    # One `end` too many is a real syntax error, but prism calls it
+    # continuable (more input could still close the block). The line is
+    # run alone, like any other bad line, and the script goes on.
+    Tempfile.create(['rubishrc', '.rb']) do |t|
+      t.write(<<~RUBY)
+        Foo.times do |x| x end end
+        export RUBISH_TEST_AFTER_MISPARSE=1
+      RUBY
+      t.flush
+
+      capture_stderr { capture_stdout { Rubish::Builtins.run('source', [t.path]) } }
+    end
+
+    assert_equal '1', ENV['RUBISH_TEST_AFTER_MISPARSE']
+  ensure
+    ENV.delete('RUBISH_TEST_AFTER_MISPARSE')
+  end
+
   # ----- ruby_input_incomplete_ast? helper -----------------------------
 
   def test_incomplete_ast_detects_open_do_block

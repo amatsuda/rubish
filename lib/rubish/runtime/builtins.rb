@@ -2742,10 +2742,20 @@ module Rubish
         # parser to detect completeness.
         if buffer.empty? && ruby_block_start_line?(line)
           ruby_buffer = line
+          resume_at = i
           while ruby_input_incomplete_ast?(ruby_buffer) && i < lines.length
             next_raw = lines[i]
             i += 1
             ruby_buffer = "#{ruby_buffer}\n#{next_raw}"
+          end
+          if i > resume_at && !ruby_input_parses?(ruby_buffer)
+            # The lines taken made no Ruby block: the start line is a shell
+            # line that reads as open Ruby (`Xvfb :99 &`, `Foo(1,`) or a
+            # real syntax error, and the file ended or a later line closed
+            # the chunk without mending it. Run the start line alone, as
+            # any other bad line, and go on from the line after it.
+            ruby_buffer = line
+            i = resume_at
           end
           begin
             execute_sourced_command(ruby_buffer, file_label, buffer_start_line)
@@ -8472,6 +8482,18 @@ module Rubish
          msg =~ /expecting `end'/)
     rescue
       false
+    end
+
+    # Whether the Ruby chunk parses, by the parser ruby_input_incomplete_ast?
+    # asks. Where neither is there the answer is true: the chunk runs whole.
+    def ruby_input_parses?(code)
+      return Prism.parse(code).success? if prism_continuable?
+      RubyVM::AbstractSyntaxTree.parse(code)
+      true
+    rescue SyntaxError
+      false
+    rescue StandardError
+      true
     end
 
     # Whether a prism with ParseResult#continuable? loads; asked once.
