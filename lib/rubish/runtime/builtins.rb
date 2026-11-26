@@ -2742,10 +2742,20 @@ module Rubish
         # parser to detect completeness.
         if buffer.empty? && ruby_block_start_line?(line)
           ruby_buffer = line
+          resume_at = i
           while ruby_input_incomplete_ast?(ruby_buffer) && i < lines.length
             next_raw = lines[i]
             i += 1
             ruby_buffer = "#{ruby_buffer}\n#{next_raw}"
+          end
+          if i > resume_at && !ruby_input_parses?(ruby_buffer)
+            # The lines taken made no Ruby block: the start line is a shell
+            # line that reads as open Ruby (`Xvfb :99 &`, `Foo(1,`) or a
+            # real syntax error, and the file ended or a later line closed
+            # the chunk without mending it. Run the start line alone, as
+            # any other bad line, and go on from the line after it.
+            ruby_buffer = line
+            i = resume_at
           end
           begin
             execute_sourced_command(ruby_buffer, file_label, buffer_start_line)
@@ -8453,10 +8463,15 @@ module Rubish
     # we should read more lines before handing to execute(). Anything
     # that's not a "needs-more-input" error (real syntax problem, or
     # successful parse) returns false so we stop accumulating.
-    # "expecting end-of-input" means stray content AFTER complete code,
-    # so it's a real error — explicitly NOT treated as incomplete.
+    # A prism that has ParseResult#continuable? (2.0 or later) answers
+    # this directly, as IRB asks it, and works where RubyVM does not
+    # exist (Fluxpinel). Otherwise the messages of RubyVM's parser are
+    # matched: "expecting end-of-input" means stray content AFTER
+    # complete code, so it's a real error — explicitly NOT treated as
+    # incomplete.
     def ruby_input_incomplete_ast?(code)
       return false if code.nil? || code.strip.empty?
+      return Prism.parse(code).continuable? if prism_continuable?
       RubyVM::AbstractSyntaxTree.parse(code)
       false
     rescue SyntaxError => e
@@ -8467,6 +8482,34 @@ module Rubish
          msg =~ /expecting `end'/)
     rescue
       false
+    end
+
+    # Whether the Ruby chunk parses, by the parser ruby_input_incomplete_ast?
+    # asks. Where neither is there the answer is true: the chunk runs whole.
+    def ruby_input_parses?(code)
+      return Prism.parse(code).success? if prism_continuable?
+      RubyVM::AbstractSyntaxTree.parse(code)
+      true
+    rescue SyntaxError
+      false
+    rescue StandardError
+      true
+    end
+
+    # Whether a prism with ParseResult#continuable? loads; asked once.
+    def prism_continuable?
+      return @prism_continuable if defined?(@prism_continuable)
+      @prism_continuable = begin
+        # RubyGems warns on Ruby 4.1 that prism is no default gem any more
+        # before the LoadError; this is a probe, so the warning is noise
+        verbose, $VERBOSE = $VERBOSE, nil
+        Rubish.require_library('prism')
+        Prism::ParseResult.method_defined?(:continuable?)
+      rescue LoadError
+        false
+      ensure
+        $VERBOSE = verbose
+      end
     end
 
     # The heredocs a line opens, as [delimiter, strip_tabs] pairs in order

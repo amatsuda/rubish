@@ -168,6 +168,25 @@ class MultiLineRubyTest < Test::Unit::TestCase
     ENV.delete('RUBISH_TEST_ASSIGN')
   end
 
+  def test_source_runs_lines_after_a_misparsed_ruby_line
+    # One `end` too many is a real syntax error, but prism calls it
+    # continuable (more input could still close the block). The line is
+    # run alone, like any other bad line, and the script goes on.
+    Tempfile.create(['rubishrc', '.rb']) do |t|
+      t.write(<<~RUBY)
+        Foo.times do |x| x end end
+        export RUBISH_TEST_AFTER_MISPARSE=1
+      RUBY
+      t.flush
+
+      capture_stderr { capture_stdout { Rubish::Builtins.run('source', [t.path]) } }
+    end
+
+    assert_equal '1', ENV['RUBISH_TEST_AFTER_MISPARSE']
+  ensure
+    ENV.delete('RUBISH_TEST_AFTER_MISPARSE')
+  end
+
   # ----- ruby_input_incomplete_ast? helper -----------------------------
 
   def test_incomplete_ast_detects_open_do_block
@@ -184,6 +203,22 @@ class MultiLineRubyTest < Test::Unit::TestCase
     ctx = Rubish::Builtins.context
     refute ctx.send(:ruby_input_incomplete_ast?, 'Time.now')
     refute ctx.send(:ruby_input_incomplete_ast?, "Reline::Face.config(:x) { |c| c.define :default, foreground: :red }")
+  end
+
+  def test_incomplete_ast_detects_open_heredoc
+    ctx = Rubish::Builtins.context
+    omit 'needs a prism with ParseResult#continuable? (2.0 or later)' unless ctx.send(:prism_continuable?)
+    assert ctx.send(:ruby_input_incomplete_ast?, "X = <<~E\n  abc")
+  end
+
+  def test_incomplete_ast_without_prism_uses_rubyvm
+    omit 'needs RubyVM::AbstractSyntaxTree (CRuby)' unless defined?(RubyVM::AbstractSyntaxTree)
+    ctx = Rubish::Builtins.context
+    ctx.instance_variable_set(:@prism_continuable, false)
+    assert ctx.send(:ruby_input_incomplete_ast?, 'Reline::Face.config(:x) do |c|')
+    refute ctx.send(:ruby_input_incomplete_ast?, 'Reline::Face.config(:x) { |c| c }')
+  ensure
+    ctx.remove_instance_variable(:@prism_continuable) if ctx.instance_variable_defined?(:@prism_continuable)
   end
 
   def test_source_does_not_p_block_result
