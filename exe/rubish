@@ -9,31 +9,30 @@ if rubish_prof
   Rubish::StartupProfiler.start!
 end
 
-# For system Ruby where reline isn't bundled,
-# add user-installed reline path directly to bypass dependency checks
-if rubish_prof
-  Rubish::StartupProfiler.measure('require reline') do
-    begin
-      require 'reline'
-    rescue LoadError
-      require 'rubygems'
-      reline_lib = Dir.glob(File.join(Gem.user_dir, 'gems', 'reline-*', 'lib')).max
-      $LOAD_PATH.unshift(reline_lib) if reline_lib
-    end
-  end
-
-  Rubish::StartupProfiler.measure('require rubish') do
-    require_relative '../lib/rubish'
-  end
-else
-  begin
-    require 'reline'
-  rescue LoadError
-    require 'rubygems'
+# Load reline. On a system Ruby where reline isn't bundled, RubyGems finds
+# the user-installed gem, bypassing dependency checks. A Ruby whose Gem is
+# a stub with no user_dir (Fluxpinel) gets told what is missing and how to
+# name it, instead of a NoMethodError.
+load_reline = lambda do
+  require 'reline'
+rescue LoadError
+  require 'rubygems'
+  if Gem.respond_to?(:user_dir)
     reline_lib = Dir.glob(File.join(Gem.user_dir, 'gems', 'reline-*', 'lib')).max
     $LOAD_PATH.unshift(reline_lib) if reline_lib
   end
+  begin
+    require 'reline'
+  rescue LoadError => e
+    abort "rubish: #{e.message}. Install the reline gem, or name its lib directory in RUBYLIB."
+  end
+end
 
+if rubish_prof
+  Rubish::StartupProfiler.measure('require reline') { load_reline.call }
+  Rubish::StartupProfiler.measure('require rubish') { require_relative '../lib/rubish' }
+else
+  load_reline.call
   require_relative '../lib/rubish'
 end
 
