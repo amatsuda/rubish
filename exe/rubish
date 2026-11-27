@@ -45,6 +45,11 @@ login_shell = $0.start_with?('-')
 shell_basename = File.basename($0).sub(/\A-/, '')  # Remove leading '-' for login shells
 restricted = shell_basename == 'rbash' || shell_basename == 'rrubish'
 
+# Show up in process listings as the shell rather than as `ruby exe/rubish`,
+# with a leading '-' for a login shell, as other shells do. setproctitle
+# leaves $0 alone, which locates this executable for $BASH and friends.
+Process.setproctitle(["#{'-' if login_shell}#{shell_basename}", *ARGV].join(' '))
+
 # Parse command line options
 command_string = nil
 script_file = nil
