@@ -162,6 +162,10 @@ module Rubish
           cmd = arg[2...-1]
           return "Builtins.split_by_ifs(__run_subst(#{cmd.inspect}))"
         end
+        # A standalone unquoted `cmd` is split the same way
+        if arg.start_with?('`') && (subst = parse_backtick_substitution(arg, 0)) && subst[1] == arg.length
+          return "Builtins.split_by_ifs(#{subst[0]})"
+        end
         # Special case: quoted "$varname" as standalone arg
         # In bash, quoted empty variable expansion is preserved as empty string
         # so "$empty_var" becomes "" (one empty string argument)
@@ -274,8 +278,10 @@ module Rubish
       end
 
       # Check for abbreviated path (contains / but not a glob)
-      # Route through __glob which handles abbreviated path expansion
-      if str.include?('/') && !str.start_with?('/') && !str.include?('$')
+      # Route through __glob which handles abbreviated path expansion. A word
+      # with an expansion in it is not a path yet: a backtick with a slash
+      # inside (`echo "/a"`) expands first
+      if str.include?('/') && !str.start_with?('/') && !str.include?('$') && !str.include?('`')
         return "__glob(#{str.inspect})"
       end
 
