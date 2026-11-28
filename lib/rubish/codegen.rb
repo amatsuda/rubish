@@ -178,6 +178,9 @@ module Rubish
         if (quoted_array = generate_quoted_array_word(arg))
           return quoted_array
         end
+        if (fields = generate_field_split_word(arg))
+          return fields
+        end
         generate_string_arg_with_glob(arg)
       when AST::ArrayLiteral
         arg.value  # Already valid Ruby: [1, 2, 3]
@@ -189,6 +192,33 @@ module Rubish
       else
         arg.inspect
       end
+    end
+
+    # An unquoted word whose expansions sit next to other text: only the
+    # expansions' results are split into fields, so X$(echo "a b")Y is the
+    # two words Xa and bY. Returns nil for any other word, including one
+    # shaped like an assignment (`export A=X$x` keeps A whole), a brace
+    # list, and one holding $@ or an array's [@].
+    def generate_field_split_word(arg)
+      return nil unless WordSegments.bare_expansion?(arg)
+      return nil if arg.match?(/\A[A-Za-z_][A-Za-z0-9_]*(\[[^\]]*\])?\+?=/)
+      return nil if has_brace_expansion?(arg)
+
+      parts = WordSegments.field_parts(arg)
+      return nil if parts.length < 2
+      return nil if parts.any? { |kind, text| kind == :expansion && text.match?(/\A\$[@*]\z|\A\$\{[@*]|\[[@*]\]/) }
+
+      code = parts.map do |kind, text|
+        type = case kind
+               when :quoted then ':quoted'
+               # A backslash-quoted glob character is not a pattern
+               when :literal then text.match?(/\\[*?\[\]]/) ? ':quoted' : ':literal'
+               when :expansion
+                 text.start_with?('`') || (text.start_with?('$(') && !text.start_with?('$((')) ? ':subst' : ':var'
+               end
+        "[(#{generate_string_arg(text)}).to_s, #{type}]"
+      end
+      "__split_word_fields([#{code.join(', ')}])"
     end
 
     # For a plain double-quoted word containing "${arr[@]}", generate a call
@@ -1104,9 +1134,9 @@ module Rubish
         # Braces and a variable: braces first, then the results expand
         "expand_single_arg_with_brace_and_glob(#{item.inspect})"
       elsif item.include?('$') || item.include?('`')
-        # Mixed content with a variable or a backtick substitution - expand
-        # as string, then word-split by IFS
-        "Builtins.split_by_ifs(#{generate_interpolated_string(item)})"
+        # Mixed content with a variable or a backtick substitution - expand,
+        # then word-split the expansions' results by IFS
+        generate_field_split_word(item) || "Builtins.split_by_ifs(#{generate_interpolated_string(item)})"
       elsif has_brace_expansion?(item)
         # Brace expansion - may also have glob
         if has_glob_chars?(item)

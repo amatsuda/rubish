@@ -1352,6 +1352,65 @@ module Rubish
       words.flat_map { |w| w.match?(/[*?\[]|[+@!]\(/) ? __glob(w) : [w] }
     end
 
+    # Split a word into fields as bash does, given its parts as [value, kind]
+    # pairs: only :subst parts, and :var parts under shwordsplit, are split
+    # by IFS; :literal and :quoted text joins the field it touches. A field
+    # is globbed when an unquoted part brought a pattern character into it,
+    # with the quoted parts' pattern characters escaped. A word left with no
+    # text from a quoted or non-empty part vanishes.
+    def __split_word_fields(parts)
+      ws = Builtins.ifs_whitespace
+      non_ws = Builtins.ifs_non_whitespace
+      split_vars = Builtins.zsh_option_enabled?('sh_word_split')
+      meta = /[*?\[]|[+@!]\(/
+      fields = []
+      text = +''
+      pattern = +''
+      globbed = false
+      started = false
+      pending_break = false
+      finish = lambda do
+        fields << [text, pattern, globbed]
+        text = +''
+        pattern = +''
+        globbed = false
+        started = false
+        pending_break = false
+      end
+
+      parts.each do |value, kind|
+        unless kind == :subst || (kind == :var && split_vars)
+          finish.call if pending_break
+          text << value
+          if kind == :quoted
+            pattern << value.gsub(/[*?\[\]\\]/) { |c| "\\#{c}" }
+          else
+            pattern << value
+            globbed ||= value.match?(meta)
+          end
+          started ||= kind == :quoted || !value.empty?
+          next
+        end
+
+        value.each_char do |c|
+          if ws.include?(c)
+            pending_break = true if started
+          elsif non_ws.include?(c)
+            finish.call
+          else
+            finish.call if pending_break
+            text << c
+            pattern << (c == '\\' ? '\\\\' : c)
+            globbed ||= '*?['.include?(c) || (c == '(' && '+@!'.include?(text[-2].to_s))
+            started = true
+          end
+        end
+      end
+      finish.call if started
+
+      fields.flat_map { |t, pat, glob| glob && pat.match?(meta) ? __glob(pat) : [t] }
+    end
+
     # The pattern with each ASCII letter matching either case, for nocaseglob
     # on a case-sensitive filesystem; a bracket expression gets its letters
     # in the other case appended

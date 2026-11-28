@@ -218,6 +218,52 @@ module Rubish
       false
     end
 
+    # The parts of a word for field splitting, as [kind, text] pairs in
+    # order: :quoted (a quoted segment, quotes kept), :literal (unquoted
+    # text, backslash escapes kept) and :expansion (an unquoted $name, ${...},
+    # $(...), $((...)) or `...`). Only the expansions' results are split.
+    def self.field_parts(str)
+      parts = []
+      each_segment(str) do |type, content|
+        case type
+        when :single then parts << [:quoted, "'#{content}'"]
+        when :double then parts << [:quoted, "\"#{content}\""]
+        when :ansi_c then parts << [:quoted, "$'#{content}'"]
+        else bare_field_parts(content, parts)
+        end
+      end
+      parts
+    end
+
+    def self.bare_field_parts(str, parts)
+      literal = +''
+      i = 0
+      while i < str.length
+        c = str[i]
+        j = if c == '\\'
+              literal << str[i, 2]
+              i += 2
+              next
+            elsif c == '`' || (c == '$' && (str[i + 1] == '(' || str[i + 1] == '{'))
+              skip_expansion(str, i)
+            elsif c == '$' && str[i + 1].to_s.match?(/[A-Za-z_]/)
+              i + 1 + str[i + 1..][/\A\w+/].length
+            elsif c == '$' && str[i + 1].to_s.match?(/[0-9?#$!@*-]/)
+              i + 2
+            end
+        if j
+          parts << [:literal, literal] unless literal.empty?
+          literal = +''
+          parts << [:expansion, str[i...j]]
+          i = j
+        else
+          literal << c
+          i += 1
+        end
+      end
+      parts << [:literal, literal] unless literal.empty?
+    end
+
     def self.multi_segment?(str)
       return false unless str.match?(/['"]/)
       return false if str.start_with?("$'") && str.end_with?("'")

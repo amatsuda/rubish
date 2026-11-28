@@ -94,9 +94,10 @@ class TestCodegen < Test::Unit::TestCase
   end
 
   def test_escaped_space_with_variable_in_word
-    # \ before space + $VAR later: space is escaped, var still expands
+    # \ before space + $VAR later: space is escaped, var still expands, and
+    # only the expansion's result is split into fields
     code = generate('echo a\\ $HOME')
-    assert_equal '__cmd("echo", *["a #{__fetch_var("HOME")}"].flatten)', code
+    assert_equal '__cmd("echo", *[__split_word_fields([[("a ").to_s, :literal], [(__fetch_var("HOME")).to_s, :var]])].flatten)', code
   end
 
   def test_single_quoted_preserves_backslash
