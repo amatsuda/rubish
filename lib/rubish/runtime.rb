@@ -119,7 +119,7 @@ module Rubish
       output = reader.read.sub(/\n+\z/, '')
       reader.close
 
-      Process.wait(pid)
+      Command.wait_for(pid)
       @last_status = ExitStatus.code_of($?)
       # Remembered so a bare assignment (`x=$(cmd)`) can report this status
       @last_subst_status = @last_status
@@ -1193,7 +1193,7 @@ module Rubish
       end
 
       read_io.close
-      Process.wait(pid)
+      Command.wait_for(pid)
     end
 
     def __eval_shell_code(code_string)
