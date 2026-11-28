@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require_relative 'test_helper'
+require 'timeout'
 
 # POSIX: in a shell without job control, a command run asynchronously
 # ignores SIGINT and SIGQUIT, so a Ctrl-C meant for the foreground command
@@ -28,5 +29,21 @@ class TestBackgroundJobSignals < Test::Unit::TestCase
   def test_a_background_job_still_dies_of_sigterm
     out, = rubish('sleep 2 & kill -TERM $!; sleep 0.3; jobs')
     assert_match(/\[1\]\+\s+Terminated/, out, out)
+  end
+  # A terminal's Ctrl-C goes to the whole process group: the external
+  # command the job runs inherits the ignore through exec and runs on
+  def test_the_jobs_commands_ignore_a_sigint_sent_to_the_process_group
+    reader, writer = IO.pipe
+    script = '(sleep 1 && echo slept-through) & sleep 3'
+    pid = Process.spawn(RbConfig.ruby, '-I', LIB, EXE, '-c', script, out: writer, err: writer, in: :close, pgroup: true)
+    writer.close
+    sleep 0.5
+    Process.kill('INT', -pid)
+    Process.wait(pid)
+    # The pipe reaches EOF once the job, which holds it too, has ended
+    out = Timeout.timeout(10) { reader.read }
+    assert_include out, 'slept-through'
+  ensure
+    reader&.close
   end
 end
