@@ -137,10 +137,6 @@ module Rubish
       # privileged mode: don't read startup files
       return if Builtins.set_option?('p')
 
-      # Ensure system PATH is set on macOS.
-      # /etc/profile runs `eval \`/usr/libexec/path_helper -s\`` but rubish's eval
-      # doesn't correctly handle the semicolon-separated output from path_helper,
-      # so we initialize system PATH directly via Ruby.
       if @login_shell
         load_login_config
         load_interactive_config
@@ -158,11 +154,6 @@ module Rubish
 
       # System-wide profile
       source_if_exists('/etc/profile')
-
-      # Fix PATH after /etc/profile: its `eval \`path_helper\`` produces broken output
-      # in rubish ("; export PATH;" gets appended to the value). Re-run path_helper
-      # via Ruby and update both ENV and shell variables.
-      ensure_system_path
 
       # Try rubish-specific profile first
       xdg_profile = File.join(xdg_config_dir, 'profile')
@@ -245,35 +236,6 @@ module Rubish
       else
         # Fall back to bash logout for compatibility
         source_if_exists(File.expand_path('~/.bash_logout'))
-      end
-    end
-
-    # Initialize system PATH via path_helper on macOS.
-    #
-    # /etc/profile runs `eval `/usr/libexec/path_helper -s`` which produces
-    # a multi-statement script (`PATH="..."; export PATH;\nMANPATH="..."; ...`).
-    # Rubish's eval does not split that on the embedded `;` and `\n`, so the
-    # whole script ends up assigned literally to PATH (and MANPATH). When we
-    # then re-invoke path_helper to recover, it appends the existing PATH to
-    # its output — and the embedded `; export PATH;\n...` from PATH's value
-    # ends up inside path_helper's quoted PATH value, defeating the regex.
-    #
-    # Sanitize PATH and MANPATH (strip from the first `;`, which is never
-    # legitimate in a Unix path entry) before invoking path_helper, and run
-    # path_helper with the cleaned env so its output is well-formed.
-    def ensure_system_path
-      return unless File.executable?('/usr/libexec/path_helper')
-
-      strip_garbage = ->(val) { val.to_s.split(';', 2).first.to_s }
-      clean_env = ENV.to_h.merge(
-        'PATH' => strip_garbage.call(ENV['PATH']),
-        'MANPATH' => strip_garbage.call(ENV['MANPATH']),
-      )
-      output = IO.popen(clean_env, ['/usr/libexec/path_helper', '-s'], &:read).to_s
-
-      output.scan(/(\w+)="([^"]*)"; export \1;/) do |name, value|
-        ENV[name] = value
-        @state.shell_vars[name] = value if @state.shell_vars.key?(name)
       end
     end
 
