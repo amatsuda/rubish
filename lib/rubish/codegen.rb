@@ -156,15 +156,16 @@ module Rubish
           always_split = arg.match?(/\A\$\{!?[a-zA-Z_][a-zA-Z0-9_]*\[[@*]\]/) ? 'true' : 'false'
           return "__split_unquoted_expansion(#{generate_string_arg(arg)}, #{always_split})"
         end
-        # Special case: standalone unquoted $(cmd) - word-split output by IFS
+        # Special case: standalone unquoted $(cmd) - word-split output by IFS,
+        # and each word is a pattern, as in bash
         # Exclude $((arith)) which also starts with $(
         if !arg.start_with?('$((') && pure_command_substitution?(arg)
           cmd = arg[2...-1]
-          return "Builtins.split_by_ifs(__run_subst(#{cmd.inspect}))"
+          return "__split_unquoted_expansion(__run_subst(#{cmd.inspect}), true)"
         end
         # A standalone unquoted `cmd` is split the same way
         if arg.start_with?('`') && (subst = parse_backtick_substitution(arg, 0)) && subst[1] == arg.length
-          return "Builtins.split_by_ifs(#{subst[0]})"
+          return "__split_unquoted_expansion(#{subst[0]}, true)"
         end
         # Special case: quoted "$varname" as standalone arg
         # In bash, quoted empty variable expansion is preserved as empty string
@@ -1093,9 +1094,9 @@ module Rubish
         # word per element. generate_arg handles both.
         generate_arg(item)
       elsif pure_command_substitution?(item)
-        # Pure command substitution - word-split output by IFS
+        # Pure command substitution - word-split output by IFS and glob it
         cmd = item[2...-1]
-        "Builtins.split_by_ifs(__run_subst(#{cmd.inspect}))"
+        "__split_unquoted_expansion(__run_subst(#{cmd.inspect}), true)"
       elsif item =~ /\A\$\{([^}]+)\}\z/
         # Braced variable - expand and word-split by IFS
         "Builtins.split_by_ifs(#{generate_interpolated_string(item)})"
