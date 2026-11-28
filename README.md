@@ -40,6 +40,39 @@ bundle exec exe/rubish
 ECHOES_RUBY=/opt/homebrew/opt/ruby@3.4/bin/ruby ./bin/rubish   # explicit override
 ```
 
+### On Spinel (Fluxpinel)
+
+Rubish also runs on [Spinel](https://github.com/matz/spinel), through [Fluxpinel](https://github.com/hasumikin/fluxpinel), the Ruby interpreter that lives inside the Spinel runtime, so a rubish session needs no CRuby at all.
+
+Build Fluxpinel first. The build needs git, a C compiler, libffi and a Ruby for the build tools (Fluxpinel's CI uses Ruby 4.0). On macOS, install libffi and OpenSSL with Homebrew; the Makefile finds them there:
+
+```sh
+brew install libffi openssl   # macOS only
+
+git clone https://github.com/hasumikin/fluxpinel.git
+cd fluxpinel
+make deps   # fetches spinel at the pinned commit into deps/spinel and builds it
+make gems   # installs the reline and prism gems, and builds prism's shared library
+make        # build/fluxpinel
+```
+
+The build records where `make gems` put reline and prism, the two gems rubish needs, so Fluxpinel requires them with no RubyGems and no `RUBYLIB`. Start rubish through `bin/rubish` with `RUBY` pointing at the Fluxpinel binary:
+
+```sh
+RUBY=/path/to/fluxpinel/build/fluxpinel ./bin/rubish
+```
+
+To check which engine you are on:
+
+```
+rubish$ -> { RUBY_ENGINE }
+"spinel"
+```
+
+A different copy of reline or prism, named in `RUBYLIB`, comes before the gems of the build.
+
+The rubish test suite runs on Fluxpinel as well, with Fluxpinel as the test runner and as the `ruby` of every rubish it starts: `RUBY=/path/to/fluxpinel/build/fluxpinel` and a `ruby` on `PATH` that is the same binary.
+
 ## Usage
 
 Start an interactive shell:
