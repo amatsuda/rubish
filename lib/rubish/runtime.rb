@@ -807,16 +807,26 @@ module Rubish
 
       # Fork and run in background
       pid = fork do
-        # Reset signal handlers in child
         @proc_sub_fds = nil # the parent owns the pipe ends it keeps
-        Kernel.trap('INT', 'DEFAULT')
         Kernel.trap('TSTP', 'DEFAULT')
 
-        # Create new process group if job control is enabled, then run the
-        # job without job control: its commands must not take the terminal
         if Builtins.set_option?('m')
+          # A job of its own process group: a SIGINT sent to it ends it
+          # like any process, rather than raising Interrupt in the Ruby
+          # running the job and printing a backtrace
+          Kernel.trap('INT', 'SYSTEM_DEFAULT')
+          # Create the new process group, then run the job without job
+          # control: its commands must not take the terminal
           Process.setpgid(0, 0)
           Builtins.disable_job_control
+        else
+          # POSIX: an asynchronous list in a shell without job control
+          # ignores SIGINT and SIGQUIT, so a Ctrl-C meant for the foreground
+          # command (the whole process group gets it) does not take the job
+          # with it. SIG_IGN survives exec, so the job's commands ignore
+          # them too, as in bash.
+          Kernel.trap('INT', 'IGNORE')
+          Kernel.trap('QUIT', 'IGNORE')
         end
 
         # Execute the command. `exit N` inside the job ends only the job,
