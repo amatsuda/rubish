@@ -1475,6 +1475,18 @@ module Rubish
       self
     end
 
+    # Run the subshell in this process, which must be one forked for it
+    # already (a background job's), and answer its exit code: `( ... ) &` is
+    # a single process, as in bash, so a signal sent to $! reaches the
+    # subshell's own traps
+    def run_in_place
+      return NoclobberStatus.new.exitstatus if @noclobber_failed
+      return RestrictedStatus.new.exitstatus if @restricted_failed
+
+      Subshell.apply_streams(*effective_streams)
+      Subshell.exit_code_for(@block.call)
+    end
+
     def |(other)
       Pipeline.new(self, other)
     end

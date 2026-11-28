@@ -2,6 +2,7 @@
 
 require_relative 'test_helper'
 require 'timeout'
+require 'tmpdir'
 
 # POSIX: in a shell without job control, a command run asynchronously
 # ignores SIGINT and SIGQUIT, so a Ctrl-C meant for the foreground command
@@ -45,5 +46,18 @@ class TestBackgroundJobSignals < Test::Unit::TestCase
     assert_include out, 'slept-through'
   ensure
     reader&.close
+  end
+  # `( ... ) &` is a single process, as in bash, so $! is the subshell and
+  # a signal sent to it reaches the trap the subshell set
+  def test_a_signal_to_a_background_subshell_reaches_its_trap
+    out, = rubish('( trap "echo trapped" INT; sleep 1; echo done ) & sleep 0.3; kill -INT $!; wait')
+    assert_equal "trapped\ndone\n", out
+  end
+
+  def test_a_background_subshell_keeps_its_redirect_and_status
+    Dir.mktmpdir('rubish_bg_subshell') do |dir|
+      out, = rubish("cd #{dir}; (echo in-sub) > out & wait; cat out; (exit 3) & wait $!; echo $?")
+      assert_equal "in-sub\n3\n", out
+    end
   end
 end

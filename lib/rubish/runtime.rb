@@ -838,7 +838,9 @@ module Rubish
           value
         end
         Kernel.exit(result || @last_status || 0) if exited
-        result.run if result.is_a?(Command) || result.is_a?(Pipeline) || result.is_a?(Subshell)
+        # A subshell runs in the job's own process rather than in a fork of it
+        Kernel.exit(result.run_in_place) if result.is_a?(Subshell)
+        result.run if result.is_a?(Command) || result.is_a?(Pipeline)
         Kernel.exit(Subshell.exit_code_for(result))
       end
 
