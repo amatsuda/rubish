@@ -36,6 +36,19 @@ else
   require_relative '../lib/rubish'
 end
 
+# A Ruby process of the shell, the shell itself or a child it forked for a
+# subshell or a substitution, that an untrapped SIGINT interrupts dies of the
+# signal, as a shell process does, rather than printing Interrupt's backtrace
+at_exit do
+  if $!.is_a?(Interrupt)
+    $stdout.flush rescue nil
+    $stderr.flush rescue nil
+    trap('INT', 'SYSTEM_DEFAULT')
+    Process.kill('INT', Process.pid)
+    sleep
+  end
+end
+
 # Detect login shell from $0 (starts with '-')
 # This is the traditional way shells detect login mode
 login_shell = $0.start_with?('-')
@@ -156,6 +169,15 @@ def source_rubish_env(repl)
   end
 end
 
+# A SIGINT the script does not trap ends a non-interactive shell as it ends
+# bash: the EXIT trap runs, with $? the last finished command's status, and
+# then the shell dies of the signal (see the at_exit hook above)
+def die_of_interrupt(repl, interrupt)
+  repl.send(:run_exit_trap, nil)
+  repl.send(:cleanup_all_proc_subs)
+  raise interrupt
+end
+
 if command_string
   # -c mode: execute command string
   ENV['RUBISH_EXECUTION_STRING'] = command_string
@@ -182,6 +204,8 @@ if command_string
   rescue Rubish::ShellSyntaxError => e
     $stderr.puts "rubish: #{e.message}"
     2
+  rescue Interrupt => e
+    die_of_interrupt(repl, e)
   end
   last_status = repl.send(:run_exit_trap, exit_code)
   repl.send(:cleanup_all_proc_subs)
@@ -218,6 +242,8 @@ elsif read_stdin
   rescue Rubish::ShellSyntaxError => e
     $stderr.puts "rubish: #{e.message}"
     2
+  rescue Interrupt => e
+    die_of_interrupt(repl, e)
   end
 
   last_status = repl.send(:run_exit_trap, exit_code)
@@ -237,7 +263,11 @@ elsif script_file && !force_interactive
 
   # Use source to execute the script (handles multi-line strings properly)
   # Pass script_args so they become positional params in the script
-  Rubish::Builtins.source([script_file] + script_args)
+  begin
+    Rubish::Builtins.source([script_file] + script_args)
+  rescue Interrupt => e
+    die_of_interrupt(repl, e)
+  end
   last_status = repl.send(:run_exit_trap, nil)
   repl.send(:cleanup_all_proc_subs)
   exit(last_status)
@@ -257,7 +287,11 @@ elsif script_file && force_interactive
   Rubish::Builtins.enable_restricted_mode if restricted
 
   # Use source to execute the script (handles multi-line strings properly)
-  Rubish::Builtins.source([script_file] + script_args)
+  begin
+    Rubish::Builtins.source([script_file] + script_args)
+  rescue Interrupt => e
+    die_of_interrupt(repl, e)
+  end
 
   last_status = repl.send(:run_exit_trap, nil)
   repl.send(:cleanup_all_proc_subs)
