@@ -245,6 +245,26 @@ module Rubish
       1
     end
 
+    # Wait for a child through an Interrupt. A Ctrl-C that raises here
+    # (in a program embedding the REPL, say; the interactive shell traps
+    # SIGINT while a command runs) went to the child as well, which shares
+    # the shell's process group without job control: keep waiting until
+    # the child has ended, as bash does, or it is left a zombie, then let
+    # the interrupt go on unwinding the command.
+    def self.wait_for(pid)
+      interrupt = nil
+      loop do
+        begin
+          Process.wait(pid)
+          break
+        rescue Interrupt => e
+          interrupt ||= e
+        end
+      end
+      raise interrupt if interrupt
+      $?
+    end
+
     def self.safe_exec(cmd_name, cmd_path, *args, fd_options: nil)
       child_pre_exec_hook&.call
       # The [path, argv0] form keeps Ruby from splitting a path with a
@@ -767,7 +787,7 @@ module Rubish
           $stderr.puts "\n[#{job.id}]+  Stopped                 #{command_str}"
         end
       else
-        Process.wait(@pid)
+        Command.wait_for(@pid)
         @status = $?
       end
       self
@@ -811,7 +831,7 @@ module Rubish
       end
       reader.close
 
-      Process.wait(@pid)
+      Command.wait_for(@pid)
       @status = $?
       self
     end
@@ -1168,7 +1188,7 @@ module Rubish
               $stderr.reopen(last_cmd.stderr) if last_cmd.stderr
               Command.safe_exec(last_cmd.name, last_cmd.name, *last_cmd.args, fd_options: Command.child_fd_options(last_cmd.fd_redirects))
             end
-            Process.wait(pid)
+            Command.wait_for(pid)
             last_status = $?
           end
         ensure
@@ -1218,7 +1238,7 @@ module Rubish
       else
         # Wait for all forked children and collect statuses
         statuses = pids.map do |pid|
-          Process.wait(pid)
+          Command.wait_for(pid)
           $?
         end
       end
@@ -1313,7 +1333,7 @@ module Rubish
 
       # Wait for all children and collect statuses
       statuses = pids.map do |pid|
-        Process.wait(pid)
+        Command.wait_for(pid)
         $?
       end
       @statuses = statuses
@@ -1440,7 +1460,7 @@ module Rubish
       @stdin&.close unless @stdin == $stdin || @stdin.is_a?(Symbol)
       @stdout&.close unless @stdout == $stdout || @stdout.is_a?(Symbol)
 
-      Process.wait(pid)
+      Command.wait_for(pid)
       @status = $?
       self
     end
