@@ -28,4 +28,16 @@ class TestBacktickWordSplit < Test::Unit::TestCase
     # /etc/profile's `eval `/usr/libexec/path_helper -s``
     assert_equal "/a/b\n", run_shell(%q{eval `echo "P=/a/b; export P;"`; echo "$P"})
   end
+
+  def test_for_word_list_splits_backtick_output
+    assert_equal "<p><q>\n", run_shell(%q{for w in `echo "p q"`; do printf "<%s>" $w; done; echo})
+  end
+
+  def test_for_word_list_splits_backtick_output_inside_a_word
+    assert_equal "<xp><qy>\n", run_shell(%q{for w in x`echo "p q"`y; do printf "<%s>" $w; done; echo})
+  end
+
+  def test_for_word_list_keeps_an_escaped_backtick
+    assert_equal "<a`b>\n", run_shell(%q{for w in a\`b; do printf "<%s>" $w; done; echo})
+  end
 end

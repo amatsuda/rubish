@@ -1102,8 +1102,9 @@ module Rubish
       elsif has_brace_expansion?(item) && (item.include?('$') || item.include?('`'))
         # Braces and a variable: braces first, then the results expand
         "expand_single_arg_with_brace_and_glob(#{item.inspect})"
-      elsif item.include?('$')
-        # Mixed content with variable - expand as string, then word-split by IFS
+      elsif item.include?('$') || item.include?('`')
+        # Mixed content with a variable or a backtick substitution - expand
+        # as string, then word-split by IFS
         "Builtins.split_by_ifs(#{generate_interpolated_string(item)})"
       elsif has_brace_expansion?(item)
         # Brace expansion - may also have glob
