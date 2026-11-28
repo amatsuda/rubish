@@ -8,10 +8,10 @@ require_relative 'test_helper'
 # nothing else would collect its end
 class TestInterruptedCommand < Test::Unit::TestCase
   def children_named(name)
-    IO.popen(['ps', '-axo', 'pid=,ppid=,stat=,comm='], &:read).lines.filter_map do |line|
+    IO.popen(['ps', '-axo', 'pid=,ppid=,stat=,comm='], &:read).lines.map do |line|
       pid, ppid, stat, comm = line.split
       [pid.to_i, stat] if ppid.to_i == Process.pid && File.basename(comm) == name
-    end
+    end.compact
   end
 
   def wait_for_child(name)
