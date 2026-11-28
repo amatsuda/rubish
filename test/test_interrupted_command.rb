@@ -4,8 +4,8 @@ require_relative 'test_helper'
 
 # An Interrupt raised while the shell waits for a command (a Ctrl-C in a
 # program embedding the REPL, which runs rubish without its own INT trap)
-# must not abandon the child: the same SIGINT went to the child, and
-# nothing else would collect its end
+# must not abandon the children: the same SIGINT went to them, and
+# nothing else would collect their end
 class TestInterruptedCommand < Test::Unit::TestCase
   def children_named(name)
     IO.popen(['ps', '-axo', 'pid=,ppid=,stat=,comm='], &:read).lines.map do |line|
@@ -24,32 +24,32 @@ class TestInterruptedCommand < Test::Unit::TestCase
     end
   end
 
-  def interrupt_while_waiting(runnable, child_name)
+  # Runs the command on a thread, raises Interrupt into its wait, then sends
+  # the children the SIGINT a terminal's Ctrl-C would have; answers their pids
+  def interrupt_while_waiting(runnable, *child_names)
     runner = Thread.new { runnable.run }
     runner.report_on_exception = false
-    pid = wait_for_child(child_name)
+    pids = child_names.map { |name| wait_for_child(name) }
     runner.raise(Interrupt)
     sleep 0.1
-    Process.kill('INT', pid)
+    pids.each { |pid| Process.kill('INT', pid) }
     assert_raise(Interrupt) { runner.join }
-    pid
+    pids
   end
 
-  def assert_collected(pid)
+  def assert_collected(pids)
     sleep 0.2
-    zombies = children_named('sleep').select { |p, stat| p == pid && stat.start_with?('Z') }
-    assert_empty zombies, 'the interrupted child was left a zombie'
-    assert_raise(Errno::ECHILD, 'the child should have been waited for') { Process.waitpid(pid, Process::WNOHANG) }
+    pids.each do |pid|
+      assert_raise(Errno::ECHILD, "child #{pid} should have been waited for") { Process.waitpid(pid, Process::WNOHANG) }
+    end
   end
 
   def test_an_interrupt_during_the_wait_still_collects_the_command
-    pid = interrupt_while_waiting(Rubish::Command.new('sleep', '5'), 'sleep')
-    assert_collected(pid)
+    assert_collected interrupt_while_waiting(Rubish::Command.new('sleep', '5'), 'sleep')
   end
 
-  def test_an_interrupt_during_the_wait_still_collects_a_pipeline
+  def test_an_interrupt_during_the_wait_still_collects_every_member_of_a_pipeline
     pipeline = Rubish::Pipeline.new(Rubish::Command.new('sleep', '5'), Rubish::Command.new('cat'))
-    pid = interrupt_while_waiting(pipeline, 'sleep')
-    assert_collected(pid)
+    assert_collected interrupt_while_waiting(pipeline, 'sleep', 'cat')
   end
 end

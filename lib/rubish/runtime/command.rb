@@ -265,6 +265,22 @@ module Rubish
       $?
     end
 
+    # Wait for all of a pipeline's children through an Interrupt: hold the
+    # first one until every child has been collected, then re-raise it.
+    def self.wait_all(pids)
+      interrupt = nil
+      statuses = pids.map do |pid|
+        begin
+          Command.wait_for(pid)
+        rescue Interrupt => e
+          interrupt ||= e
+          $?
+        end
+      end
+      raise interrupt if interrupt
+      statuses
+    end
+
     def self.safe_exec(cmd_name, cmd_path, *args, fd_options: nil)
       child_pre_exec_hook&.call
       # The [path, argv0] form keeps Ruby from splitting a path with a
@@ -1237,10 +1253,7 @@ module Rubish
         end
       else
         # Wait for all forked children and collect statuses
-        statuses = pids.map do |pid|
-          Command.wait_for(pid)
-          $?
-        end
+        statuses = Command.wait_all(pids)
       end
 
       # If any process was stopped (Ctrl-Z), add the pipeline as a stopped job
@@ -1332,10 +1345,7 @@ module Rubish
       last_reader.close
 
       # Wait for all children and collect statuses
-      statuses = pids.map do |pid|
-        Command.wait_for(pid)
-        $?
-      end
+      statuses = Command.wait_all(pids)
       @statuses = statuses
       @status = determine_pipeline_status(statuses)
       self
